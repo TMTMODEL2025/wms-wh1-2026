@@ -2230,15 +2230,14 @@ export function SlitFilmManagement({
   const modalScannerInputRef = useRef<HTMLInputElement>(null);
   const [isCameraActive, setIsCameraActive] = useState<boolean>(true);
 
-  // Auto-focus barcode input when Batch Scanner Modal opens
+  // When Batch Scanner Modal opens, ensure camera starts without showing virtual keyboard
   useEffect(() => {
     if (isScannerModalOpen) {
       setIsCameraActive(true);
-      const timer = setTimeout(() => {
-        modalScannerInputRef.current?.focus();
-        modalScannerInputRef.current?.select();
-      }, 120);
-      return () => clearTimeout(timer);
+      // Explicitly blur active element so mobile virtual keyboard does not pop up to block the camera
+      if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
     }
   }, [isScannerModalOpen]);
 
@@ -3888,7 +3887,6 @@ export function SlitFilmManagement({
         batch: trimmed,
       });
       setBarcodeInput("");
-      modalScannerInputRef.current?.focus();
       return;
     }
 
@@ -3905,7 +3903,6 @@ export function SlitFilmManagement({
         batch: trimmed,
       });
       setBarcodeInput("");
-      modalScannerInputRef.current?.focus();
       return;
     }
 
@@ -3931,7 +3928,6 @@ export function SlitFilmManagement({
           batch: trimmed,
         });
         setBarcodeInput("");
-        modalScannerInputRef.current?.focus();
         return;
       }
 
@@ -3990,7 +3986,6 @@ export function SlitFilmManagement({
           batch: trimmed,
         });
         setBarcodeInput("");
-        modalScannerInputRef.current?.focus();
         return;
       }
 
@@ -4005,7 +4000,6 @@ export function SlitFilmManagement({
           batch: trimmed,
         });
         setBarcodeInput("");
-        modalScannerInputRef.current?.focus();
         return;
       }
 
@@ -4020,7 +4014,6 @@ export function SlitFilmManagement({
           batch: trimmed,
         });
         setBarcodeInput("");
-        modalScannerInputRef.current?.focus();
         return;
       }
 
@@ -4218,8 +4211,6 @@ export function SlitFilmManagement({
           location: `${machineLoc} · แคร่ ${rackResult.rackNameTh || ""}`,
           timestamp: new Date().toLocaleString(isThai ? "th-TH" : "en-GB"),
         });
-      } else {
-        modalScannerInputRef.current?.focus();
       }
 
       setNotificationToast({
@@ -4249,7 +4240,6 @@ export function SlitFilmManagement({
         batch: trimmed,
       });
       setBarcodeInput("");
-      modalScannerInputRef.current?.focus();
       return;
     }
 
@@ -4265,7 +4255,6 @@ export function SlitFilmManagement({
         batch: trimmed,
       });
       setBarcodeInput("");
-      modalScannerInputRef.current?.focus();
       return;
     }
 
@@ -4346,9 +4335,8 @@ export function SlitFilmManagement({
       "In-Progress"
     );
 
-    // Auto-clear input & maintain focus for rapid continuous scanning
+    // Auto-clear input
     setBarcodeInput("");
-    modalScannerInputRef.current?.focus();
   };
 
   // Auto-submit when user reaches exactly 10 characters or barcode gun fires
