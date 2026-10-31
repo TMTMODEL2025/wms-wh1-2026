@@ -63,7 +63,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           if (html5QrCodeRef.current.isScanning) {
             await html5QrCodeRef.current.stop();
           }
-          await html5QrCodeRef.current.clear();
+          html5QrCodeRef.current.clear();
         } catch {
           // ignore
         }
@@ -85,13 +85,12 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           fps: 15,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
             const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-            // Industrial wide barcode target box
             return {
-              width: Math.min(Math.floor(viewfinderWidth * 0.85), 320),
-              height: Math.min(Math.floor(minEdge * 0.45), 180),
+              width: Math.min(Math.floor(viewfinderWidth * 0.88), 300),
+              height: Math.min(Math.floor(minEdge * 0.5), 150),
             };
           },
-          aspectRatio: 1.777778, // 16:9
+          aspectRatio: 1.6,
         };
 
         await qrCode.start(
@@ -230,90 +229,114 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   };
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden bg-slate-950 border border-slate-700 shadow-2xl flex flex-col items-center">
-      {/* Video Viewfinder Container */}
-      <div className="relative w-full max-h-[340px] bg-black flex items-center justify-center overflow-hidden">
-        <div id={containerId} className="w-full h-full min-h-[220px]" />
+    <div className="relative w-full rounded-2xl overflow-hidden bg-[#0c1930] border border-slate-700/80 shadow-xl flex flex-col">
+      {/* Suppress html5-qrcode internal shaded region border to prevent double-bracket clutter */}
+      <style>{`
+        #${containerId} #qr-shaded-region {
+          border: none !important;
+          box-shadow: none !important;
+        }
+        #${containerId} video {
+          object-fit: cover !important;
+          width: 100% !important;
+          border-radius: 1rem 1rem 0 0 !important;
+        }
+      `}</style>
 
-        {/* Overlay Aiming Frame */}
+      {/* Video Viewfinder Container */}
+      <div className="relative w-full h-[230px] sm:h-[260px] bg-black flex items-center justify-center overflow-hidden">
+        <div id={containerId} className="w-full h-full" />
+
+        {/* Top-Right Compact Red Ghost Button: "ปิดกล้อง" (Unobtrusive inside camera container) */}
+        {onClose && (
+          <button
+            type="button"
+            onClick={() => {
+              stopScanner().then(() => onClose());
+            }}
+            className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 rounded-lg text-xs font-medium text-rose-300 hover:text-white bg-black/50 hover:bg-rose-950/70 border border-rose-500/50 backdrop-blur-md flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all shadow-md"
+          >
+            <Camera size={13} className="text-rose-400" />
+            <span>{isThai ? "ปิดกล้อง" : "Close Cam"}</span>
+          </button>
+        )}
+
+        {/* Overlay Aiming Frame: Clean white corner bracket overlays and thin red horizontal laser line */}
         {isScanning && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4">
-            <div className="relative w-[85%] max-w-[320px] h-[140px] border-2 border-emerald-400 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)]">
-              {/* Corner Accents */}
-              <div className="absolute -top-1.5 -left-1.5 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl-sm" />
-              <div className="absolute -top-1.5 -right-1.5 w-4 h-4 border-t-4 border-r-4 border-emerald-400 rounded-tr-sm" />
-              <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 border-b-4 border-l-4 border-emerald-400 rounded-bl-sm" />
-              <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 border-b-4 border-r-4 border-emerald-400 rounded-br-sm" />
+            <div className="relative w-[82%] max-w-[290px] h-[130px]">
+              {/* Subtle Clean White Corner Brackets */}
+              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white rounded-tl" />
+              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white rounded-tr" />
+              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white rounded-bl" />
+              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-white rounded-br" />
 
-              {/* Scanning Red Laser Line */}
-              <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-0.5 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)] animate-pulse" />
+              {/* Thin Horizontal Red Aiming Laser Line */}
+              <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-[1.5px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.95)] animate-pulse" />
             </div>
 
-            <p className="mt-3 text-[11px] font-semibold text-emerald-300 bg-slate-900/80 px-3 py-1 rounded-full border border-emerald-500/30 backdrop-blur-xs">
-              {placeholderText || (isThai ? "เล็งบาร์โค้ดให้อยู่ในกรอบเพื่อสแกนอัตโนมัติ" : "Align barcode within frame to scan")}
-            </p>
+            {/* Bottom Dark Semi-Transparent Badge Overlay */}
+            <div className="absolute bottom-2.5 inset-x-0 flex justify-center pointer-events-none">
+              <span className="text-[11px] font-medium text-slate-100 bg-black/60 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/15 shadow-md">
+                {placeholderText || (isThai ? "เล็งกล้องไปที่บาร์โค้ด Batch 10 หลัก" : "Aim at the 10-digit Batch barcode")}
+              </span>
+            </div>
           </div>
         )}
 
         {/* Error Fallback */}
         {errorMessage && (
-          <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-6 text-center text-rose-300">
-            <AlertCircle size={36} className="text-rose-400 mb-2" />
-            <p className="text-xs font-semibold max-w-sm">{errorMessage}</p>
+          <div className="absolute inset-0 bg-[#0a1526]/95 flex flex-col items-center justify-center p-5 text-center text-rose-300 z-10">
+            <AlertCircle size={32} className="text-rose-400 mb-2" />
+            <p className="text-xs font-medium max-w-xs">{errorMessage}</p>
             <button
               type="button"
               onClick={() => startScanner(selectedCameraId || undefined)}
-              className="mt-4 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md cursor-pointer flex items-center gap-1.5"
+              className="mt-3 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md cursor-pointer flex items-center gap-1.5 active:scale-95"
             >
-              <RefreshCw size={14} />
+              <RefreshCw size={13} />
               <span>{isThai ? "ลองใหม่อีกครั้ง" : "Try Again"}</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* Camera Controls Bar */}
-      <div className="w-full px-4 py-2.5 bg-slate-900/95 border-t border-slate-800 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {cameras.length > 1 && (
-            <button
-              type="button"
-              onClick={switchCamera}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-              title={isThai ? "สลับกล้องหน้า/หลัง" : "Switch camera"}
-            >
-              <RefreshCw size={13} />
-              <span>{isThai ? "สลับกล้อง" : "Flip Cam"}</span>
-            </button>
-          )}
+      {/* Camera Action Buttons Bar: Directly underneath viewport on a single balanced row */}
+      <div className="w-full px-3 py-2 bg-[#0a1526] border-t border-slate-800/80 flex items-center gap-2.5">
+        <button
+          type="button"
+          onClick={switchCamera}
+          className="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+        >
+          <RefreshCw size={13} className="text-slate-300" />
+          <span>{isThai ? "🔄 สลับกล้อง" : "🔄 Switch"}</span>
+        </button>
 
-          {hasTorch && (
-            <button
-              type="button"
-              onClick={toggleTorch}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all ${
-                isTorchOn
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-                  : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-              }`}
-            >
-              {isTorchOn ? <ZapOff size={13} /> : <Zap size={13} />}
-              <span>{isThai ? (isTorchOn ? "ปิดไฟฉาย" : "เปิดไฟฉาย") : isTorchOn ? "Flash Off" : "Flash"}</span>
-            </button>
-          )}
-        </div>
+        {hasTorch && (
+          <button
+            type="button"
+            onClick={toggleTorch}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all ${
+              isTorchOn
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                : "bg-slate-800/80 text-slate-300 border-slate-700/70 hover:bg-slate-700"
+            }`}
+            title={isThai ? (isTorchOn ? "ปิดไฟฉาย" : "เปิดไฟฉาย") : isTorchOn ? "Flash Off" : "Flash"}
+          >
+            {isTorchOn ? <ZapOff size={13} /> : <Zap size={13} />}
+            <span>{isThai ? (isTorchOn ? "ปิดไฟ" : "ไฟฉาย") : isTorchOn ? "Off" : "On"}</span>
+          </button>
+        )}
 
         {onClose && (
           <button
             type="button"
             onClick={() => {
-              stopScanner().then(() => {
-                onClose();
-              });
+              stopScanner().then(() => onClose());
             }}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 cursor-pointer active:scale-95 transition-all"
+            className="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
           >
-            {isThai ? "ปิดกล้อง" : "Close Camera"}
+            <span>{isThai ? "ปิดกล้อง" : "Turn off Camera"}</span>
           </button>
         )}
       </div>
