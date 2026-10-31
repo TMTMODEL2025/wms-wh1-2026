@@ -218,11 +218,46 @@ export async function savePickListToCloud(order: PickListOrder): Promise<void> {
 }
 
 /**
+ * Batch save multiple pick list orders to Firestore
+ */
+export async function batchSavePickListsToCloud(orders: PickListOrder[]): Promise<void> {
+  if (orders.length === 0) return;
+  const batch = writeBatch(db);
+  for (const order of orders) {
+    const docId = sanitizeDocId(order.id || `ORD-${order.orderNo}`);
+    const payload = {
+      ...order,
+      id: docId,
+      updatedAt: new Date().toISOString(),
+    };
+    batch.set(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true });
+  }
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, PICKLIST_COLLECTION);
+  }
+}
+
+/**
+ * Delete pick list order from Firestore
+ */
+export async function deletePickListFromCloud(orderIdOrNo: string): Promise<void> {
+  const docId = sanitizeDocId(orderIdOrNo.startsWith("ORD-") ? orderIdOrNo : `ORD-${orderIdOrNo}`);
+  try {
+    await deleteDoc(doc(db, PICKLIST_COLLECTION, docId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${PICKLIST_COLLECTION}/${docId}`);
+  }
+}
+
+/**
  * Initial sync / migration helper: If Firestore is empty and local data exists, seed to Firestore
  */
 export async function syncLocalDataToFirestoreIfEmpty(
   localInbound: SlitBarcodeRecord[],
-  localOutbound: SlitBarcodeRecord[]
+  localOutbound: SlitBarcodeRecord[],
+  localPickLists?: PickListOrder[]
 ): Promise<void> {
   try {
     const inboundSnap = await getDocs(collection(db, INBOUND_COLLECTION));
@@ -233,6 +268,13 @@ export async function syncLocalDataToFirestoreIfEmpty(
     const outboundSnap = await getDocs(collection(db, OUTBOUND_COLLECTION));
     if (outboundSnap.empty && localOutbound.length > 0) {
       await batchSaveOutboundToCloud(localOutbound);
+    }
+
+    if (localPickLists && localPickLists.length > 0) {
+      const pickListSnap = await getDocs(collection(db, PICKLIST_COLLECTION));
+      if (pickListSnap.empty) {
+        await batchSavePickListsToCloud(localPickLists);
+      }
     }
   } catch {
     // If offline or permission check, ignore initial seed

@@ -76,6 +76,8 @@ import {
   batchSaveOutboundToCloud,
   deleteRecordFromCloud,
   savePickListToCloud,
+  batchSavePickListsToCloud,
+  deletePickListFromCloud,
   syncLocalDataToFirestoreIfEmpty,
 } from "../services/slitDataService";
 
@@ -1553,7 +1555,7 @@ export function SlitFilmManagement({
     let isMounted = true;
 
     // Seed local data to Firestore if Firestore is fresh
-    syncLocalDataToFirestoreIfEmpty(inboundList, outboundList);
+    syncLocalDataToFirestoreIfEmpty(inboundList, outboundList, pickLists);
 
     // Subscribe to Inbound collection in real-time
     const unsubscribeInbound = subscribeToSlitInbound((cloudInbound) => {
@@ -2006,6 +2008,9 @@ export function SlitFilmManagement({
     }
 
     setPickLists((prev) => [...createdOrders, ...prev]);
+    if (createdOrders.length > 0) {
+      batchSavePickListsToCloud(createdOrders).catch(console.error);
+    }
     setSelectedOutboundMachine(importMachineId);
     setActiveCategory(mType);
     if (createdOrders.length > 0) {
@@ -2091,41 +2096,37 @@ export function SlitFilmManagement({
 
     // Mark item as verified safely across all items in the order
     const nowTime = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-    const updatedActiveItems = activePickListOrder.items.map((itm, idx) =>
-      idx === matchingItemIndex
+    const nextItems = activePickListOrder.items.map((itm) =>
+      itm.batch.trim().toUpperCase() === trimmed
         ? { ...itm, status: "verified" as const, scannedAt: nowTime, machineIssued: false, machineIssuedAt: undefined }
         : itm
     );
-    const verifiedCountNow = updatedActiveItems.filter((i) => i.status === "verified").length;
+    const validNextItems = nextItems.filter((itm) =>
+      Boolean(itm.batch && /^[A-Za-z0-9]{10}$/.test(itm.batch.trim()))
+    );
+    const checkPool = validNextItems.length > 0 ? validNextItems : nextItems;
+    const isAllVerified = checkPool.length > 0 && checkPool.every((itm) => itm.status === "verified");
+    const updatedActiveOrder: PickListOrder = {
+      ...activePickListOrder,
+      status: isAllVerified ? ("completed" as const) : ("in_progress" as const),
+      items: nextItems,
+    };
+    const verifiedCountNow = nextItems.filter((i) => i.status === "verified").length;
 
     setPickLists((prev) =>
-      prev.map((o) => {
-        if (o.orderNo !== activePickListOrder.orderNo) return o;
-        const nextItems = o.items.map((itm) =>
-          itm.batch.trim().toUpperCase() === trimmed
-            ? { ...itm, status: "verified" as const, scannedAt: nowTime, machineIssued: false, machineIssuedAt: undefined }
-            : itm
-        );
-        const validNextItems = nextItems.filter((itm) =>
-          Boolean(itm.batch && /^[A-Za-z0-9]{10}$/.test(itm.batch.trim()))
-        );
-        const checkPool = validNextItems.length > 0 ? validNextItems : nextItems;
-        const isAllVerified = checkPool.length > 0 && checkPool.every((itm) => itm.status === "verified");
-        return {
-          ...o,
-          status: isAllVerified ? ("completed" as const) : ("in_progress" as const),
-          items: nextItems,
-        };
-      })
+      prev.map((o) => (o.orderNo === activePickListOrder.orderNo ? updatedActiveOrder : o))
     );
+
+    // Sync updated Pick List order with verified batch immediately to Cloud Firestore
+    savePickListToCloud(updatedActiveOrder).catch(console.error);
 
     if (soundEnabled) playScanSound(true);
 
     setOutboundScanStatus({
       type: "success",
       message: isThai
-        ? `สแกนสำเร็จ: Batch [${trimmed}] ตรวจสอบถูกต้อง (${verifiedCountNow}/${updatedActiveItems.length})`
-        : `Scan Success: Batch [${trimmed}] verified (${verifiedCountNow}/${updatedActiveItems.length})`,
+        ? `สแกนสำเร็จ: Batch [${trimmed}] ตรวจสอบถูกต้อง (${verifiedCountNow}/${updatedActiveOrder.items.length})`
+        : `Scan Success: Batch [${trimmed}] verified (${verifiedCountNow}/${updatedActiveOrder.items.length})`,
     });
 
     onLogTransaction?.(
@@ -2144,13 +2145,15 @@ export function SlitFilmManagement({
     const targetOrder = pickLists.find((o) => o.orderNo === oNo);
     if (!targetOrder) return;
 
+    const updatedOrder: PickListOrder = { ...targetOrder, status: "in_progress" };
     setPickLists((prev) =>
       prev.map((o) =>
         o.orderNo === targetOrder.orderNo
-          ? { ...o, status: "in_progress" }
+          ? updatedOrder
           : o
       )
     );
+    savePickListToCloud(updatedOrder).catch(console.error);
 
     const validItems = targetOrder.items.filter((i) => Boolean(i.batch && i.batch.trim().length > 0));
     const verifiedCount = validItems.filter((i) => i.status === "verified").length;
@@ -2192,6 +2195,7 @@ export function SlitFilmManagement({
     const nowStr = new Date().toLocaleString(isThai ? "th-TH" : "en-GB");
 
     // Update inboundList records with order reference while preserving warehouse basket location until จ่ายหน้าเครื่อง
+    const updatedInboundToSync: SlitBarcodeRecord[] = [];
     setInboundList((prevInbound) => {
       let updated = [...prevInbound];
       verifiedItems.forEach((item) => {
@@ -2222,19 +2226,27 @@ export function SlitFilmManagement({
               coilNo: matchedSap.coilNo,
             } : {})
           };
-          updated[idx] = mergeSlitBarcodeRecords(updated[idx], updateData, sapMasterMap);
+          const merged = mergeSlitBarcodeRecords(updated[idx], updateData, sapMasterMap);
+          updated[idx] = merged;
+          updatedInboundToSync.push(merged);
         }
       });
       return updated;
     });
 
+    if (updatedInboundToSync.length > 0) {
+      batchSaveInboundToCloud(updatedInboundToSync).catch(console.error);
+    }
+
+    const updatedOrder: PickListOrder = { ...targetOrder, status: "completed" };
     setPickLists((prev) =>
       prev.map((o) =>
         o.orderNo === targetOrder.orderNo
-          ? { ...o, status: "completed" }
+          ? updatedOrder
           : o
       )
     );
+    savePickListToCloud(updatedOrder).catch(console.error);
 
     setNotificationToast({
       type: "success",
@@ -2260,6 +2272,7 @@ export function SlitFilmManagement({
     if (selectedOrderNo === ordNo) {
       setSelectedOrderNo(null);
     }
+    deletePickListFromCloud(ordNo).catch(console.error);
     setDeleteModalOrderNo(null);
 
     if (soundEnabled) playScanSound(true);
@@ -4113,11 +4126,13 @@ export function SlitFilmManagement({
               }
               return itm;
             });
-            return {
+            const updatedOrd: PickListOrder = {
               ...ord,
               status: allOrderIssued ? ("completed" as const) : ("in_progress" as const),
               items: updatedItems,
             };
+            savePickListToCloud(updatedOrd).catch(console.error);
+            return updatedOrd;
           }
           return ord;
         })

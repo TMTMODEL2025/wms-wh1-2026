@@ -1,6 +1,6 @@
 {
-  "summary":  "แผนสถาปัตยกรรมและการเชื่อมต่อฐานข้อมูล Firebase Firestore (Free Spark Plan) แบบ Real-time สำหรับระบบคลังสินค้า WMS Warehouse 1 รองรับการทำงานหลายคนพร้อมกันผ่าน Vercel และเริ่มทดสอบเฉพาะส่วนงานสลิต (Slit Film) เป็นลำดับแรก",
-  "updatedAt":  "2026-10-31T08:11:25.357706503Z",
+  "summary":  "แผนงานและผลการเชื่อมต่อระบบเตรียมเบิก (Outbound Preparation & Pick Lists) ของงานสลิตเข้าสู่ Firebase Firestore Cloud Database สำเร็จเสร็จสมบูรณ์ 100% เรียบร้อยแล้ว",
+  "updatedAt":  "2026-10-31T08:58:07.158271555Z",
   "requestFeedback":  true,
   "userFacing":  true
 }
