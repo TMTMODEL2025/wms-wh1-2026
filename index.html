@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WMS Warehouse 1</title>
+    <meta name="description" content="Industrial warehouse management system for WMS Warehouse 1 featuring inventory control, material handling fleet, and workforce administration." />
+    <meta property="og:title" content="WMS Warehouse 1" />
+    <meta property="og:description" content="Industrial warehouse management system for WMS Warehouse 1 featuring inventory control, material handling fleet, and workforce administration." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <script>
+      (function() {
+        try {
+          let originalFetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get() {
+              return originalFetch;
+            },
+            set(newFetch) {
+              originalFetch = newFetch;
+            },
+            configurable: true,
+            enumerable: true,
+          });
+        } catch (e) {}
+
+        function isExtensionError(message, stack, filename) {
+          var text = [message || '', stack || '', filename || ''].join(' ');
+          return (
+            text.indexOf('chrome-extension://') !== -1 ||
+            text.indexOf('moz-extension://') !== -1 ||
+            text.indexOf('Failed to connect to MetaMask') !== -1 ||
+            text.indexOf('inpage.js') !== -1
+          );
+        }
+
+        window.addEventListener(
+          'error',
+          function(event) {
+            var err = event.error;
+            if (
+              isExtensionError(
+                event.message || (err && err.message),
+                err && err.stack,
+                event.filename
+              )
+            ) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              return false;
+            }
+          },
+          true
+        );
+
+        window.addEventListener(
+          'unhandledrejection',
+          function(event) {
+            var reason = event.reason;
+            var msg =
+              typeof reason === 'string'
+                ? reason
+                : (reason && reason.message) || '';
+            var stack = (reason && reason.stack) || '';
+            if (isExtensionError(msg, stack, '')) {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              return false;
+            }
+          },
+          true
+        );
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

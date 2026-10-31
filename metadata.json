@@ -1,0 +1,8 @@
+{
+  "name": "Remix TMT WMS - Warehouse 1 Management System",
+  "description": "Industrial warehouse management system for TMT Steel featuring inventory control for Slit steel, RM sheets, Coils, material handling fleet, and workforce administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
