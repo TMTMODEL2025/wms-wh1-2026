@@ -146,39 +146,6 @@ export function resetAllMachineStagingToEmpty(): MachineStagingConfig[] {
     }))
   }));
   saveStoredMachineStaging(clearedState);
-
-  try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      const pickListsSaved = localStorage.getItem("tmt_wms_slit_pick_lists");
-      if (pickListsSaved) {
-        const parsedPL = JSON.parse(pickListsSaved);
-        if (Array.isArray(parsedPL)) {
-          const clearedPL = parsedPL.map((ord: any) => ({
-            ...ord,
-            items: (ord.items || []).map((itm: any) => ({
-              ...itm,
-              machineIssued: false,
-              machineIssuedAt: undefined,
-              status: "pending"
-            }))
-          }));
-          localStorage.setItem("tmt_wms_slit_pick_lists", JSON.stringify(clearedPL));
-        }
-      }
-
-      const outboundSaved = localStorage.getItem("tmt_wms_slit_outbound_records");
-      if (outboundSaved) {
-        const parsedOB = JSON.parse(outboundSaved);
-        if (Array.isArray(parsedOB)) {
-          const clearedOB = parsedOB.filter((o: any) => !(o.conditionText && o.conditionText.includes("รับงานหน้าเครื่อง")));
-          localStorage.setItem("tmt_wms_slit_outbound_records", JSON.stringify(clearedOB));
-        }
-      }
-    }
-  } catch (e) {
-    console.error("Failed to clear return items in localStorage:", e);
-  }
-
   return clearedState;
 }
 

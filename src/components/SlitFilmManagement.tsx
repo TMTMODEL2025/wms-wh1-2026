@@ -80,7 +80,10 @@ import {
   savePickListToCloud,
   batchSavePickListsToCloud,
   deletePickListFromCloud,
-  syncLocalDataToFirestoreIfEmpty,
+  deleteOutboundByOrderOrBatchesFromCloud,
+  deleteInboundByBatchesFromCloud,
+  clearAllSlitDataFromCloud,
+  clearLegacySlitLocalStorage,
 } from "../services/slitDataService";
 
 export interface SapMasterItem {
@@ -1319,6 +1322,7 @@ export function SlitFilmManagement({
         localStorage.setItem(STORAGE_KEY_SAP_MASTER, JSON.stringify(Array.from(map.values())));
       } catch {}
 
+      const updatedInboundForCloud: SlitBarcodeRecord[] = [];
       setInboundList((prev) =>
         prev.map((rec) => {
           const match = map.get(rec.batch.trim().toUpperCase());
@@ -1334,7 +1338,7 @@ export function SlitFilmManagement({
               isLocMissing && match.storageLocation && match.storageLocation !== "-"
                 ? match.storageLocation
                 : rec.location;
-            return {
+            const enriched: SlitBarcodeRecord = {
               ...rec,
               hasSapData: true,
               salesDoc: match.salesDoc,
@@ -1353,16 +1357,22 @@ export function SlitFilmManagement({
               coilNo: match.coilNo,
               conditionText: rec.conditionText || match.conditionText,
             };
+            updatedInboundForCloud.push(enriched);
+            return enriched;
           }
           return rec;
         })
       );
+      if (updatedInboundForCloud.length > 0) {
+        batchSaveInboundToCloud(updatedInboundForCloud).catch(console.error);
+      }
 
+      const updatedOutboundForCloud: SlitBarcodeRecord[] = [];
       setOutboundList((prev) =>
         prev.map((rec) => {
           const match = map.get(rec.batch.trim().toUpperCase());
           if (match) {
-            return {
+            const enriched: SlitBarcodeRecord = {
               ...rec,
               hasSapData: true,
               salesDoc: match.salesDoc,
@@ -1380,10 +1390,15 @@ export function SlitFilmManagement({
               coilNo: match.coilNo,
               conditionText: match.conditionText,
             };
+            updatedOutboundForCloud.push(enriched);
+            return enriched;
           }
           return rec;
         })
       );
+      if (updatedOutboundForCloud.length > 0) {
+        batchSaveOutboundToCloud(updatedOutboundForCloud).catch(console.error);
+      }
 
       // Calculate matched count across shopfloor batches
       const allShopfloorBatches = new Set([
@@ -1448,208 +1463,91 @@ export function SlitFilmManagement({
 
   const DEFAULT_INITIAL_INBOUND: SlitBarcodeRecord[] = useMemo(() => [], []);
 
-  // Scanned lists, outbound lists, and pick lists initialized with full localStorage persistence & deduplication
-  const [inboundList, setInboundList] = useState<SlitBarcodeRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_INBOUND);
-      if (saved) {
-        const parsed: SlitBarcodeRecord[] = JSON.parse(saved);
-        let hasSanitized = false;
-        const map = new Map<string, SlitBarcodeRecord>();
-        parsed.forEach((r) => {
-          if (!r.batch) return;
-          const bKey = r.batch.trim().toUpperCase();
-          const safeWeight = sanitizeWeightKg(r.weightKg, r.unrestricted);
-          const sanitizedR = safeWeight !== r.weightKg || (r.unrestricted && r.unrestricted.includes("2,000,000,000"))
-            ? { ...r, weightKg: safeWeight, unrestricted: `${safeWeight.toLocaleString()} kg` }
-            : r;
-          if (map.has(bKey)) {
-            hasSanitized = true;
-            map.set(bKey, mergeSlitBarcodeRecords(map.get(bKey)!, sanitizedR));
-          } else {
-            map.set(bKey, sanitizedR);
-          }
-        });
-        const cleaned = Array.from(map.values());
-        if (hasSanitized || cleaned.length !== parsed.length) {
-          localStorage.setItem(STORAGE_KEY_INBOUND, JSON.stringify(cleaned));
-        }
-        return cleaned;
-      }
-    } catch {}
-    return [];
-  });
-
-  const [outboundList, setOutboundList] = useState<SlitBarcodeRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_OUTBOUND);
-      if (saved) {
-        const parsed: SlitBarcodeRecord[] = JSON.parse(saved);
-        let hasSanitized = false;
-        const map = new Map<string, SlitBarcodeRecord>();
-        parsed.forEach((r) => {
-          if (!r.batch) return;
-          const bKey = r.batch.trim().toUpperCase();
-          const safeWeight = sanitizeWeightKg(r.weightKg, r.unrestricted);
-          const sanitizedR = safeWeight !== r.weightKg || (r.unrestricted && r.unrestricted.includes("2,000,000,000"))
-            ? { ...r, weightKg: safeWeight, unrestricted: `${safeWeight.toLocaleString()} kg` }
-            : r;
-          if (map.has(bKey)) {
-            hasSanitized = true;
-            map.set(bKey, mergeSlitBarcodeRecords(map.get(bKey)!, sanitizedR));
-          } else {
-            map.set(bKey, sanitizedR);
-          }
-        });
-        const cleaned = Array.from(map.values());
-        if (hasSanitized || cleaned.length !== parsed.length) {
-          localStorage.setItem(STORAGE_KEY_OUTBOUND, JSON.stringify(cleaned));
-        }
-        return cleaned;
-      }
-    } catch {}
-    return [];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_INBOUND, JSON.stringify(inboundList));
-    } catch {
-      // ignore
-    }
-  }, [inboundList]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_OUTBOUND, JSON.stringify(outboundList));
-    } catch {
-      // ignore
-    }
-  }, [outboundList]);
-
-  // Pick List Orders state (Officer import & Inspector scanning)
-  const [pickLists, setPickLists] = useState<PickListOrder[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_PICK_LISTS);
-      if (saved) {
-        const parsed: PickListOrder[] = JSON.parse(saved);
-        return parsed.map((ord) => ({
-          ...ord,
-          items: ord.items.filter((item) => Boolean(item.batch && /^[A-Za-z0-9]{10}$/.test(item.batch.trim()))),
-        }));
-      }
-    } catch {}
-    return INITIAL_PICK_LISTS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_PICK_LISTS, JSON.stringify(pickLists));
-    } catch {
-      // ignore
-    }
-  }, [pickLists]);
-
-  // Cloud Database Real-time Synchronization (Firebase Firestore)
+  // 100% Firebase Firestore Single Source of Truth (no localStorage caching or mock data)
+  const [inboundList, setInboundList] = useState<SlitBarcodeRecord[]>([]);
+  const [outboundList, setOutboundList] = useState<SlitBarcodeRecord[]>([]);
+  const [pickLists, setPickLists] = useState<PickListOrder[]>([]);
+  const [isCloudLoading, setIsCloudLoading] = useState<boolean>(true);
   const [isCloudSyncing] = useState<boolean>(true);
 
   useEffect(() => {
     let isMounted = true;
-    let hasReconciledInitialPickLists = false;
+    let loadedInbound = false;
+    let loadedOutbound = false;
+    let loadedPickLists = false;
 
-    // Seed local data to Firestore if Firestore is fresh
-    syncLocalDataToFirestoreIfEmpty(inboundList, outboundList, pickLists);
+    const checkAllLoaded = () => {
+      if (isMounted && loadedInbound && loadedOutbound && loadedPickLists) {
+        setIsCloudLoading(false);
+      }
+    };
 
-    // Subscribe to Inbound collection in real-time
-    const unsubscribeInbound = subscribeToSlitInbound((cloudInbound) => {
-      if (!isMounted) return;
-      if (cloudInbound) {
+    // Purge any legacy localStorage keys so old browser data never contaminates live Firestore state
+    clearLegacySlitLocalStorage();
+
+    // Subscribe to Inbound collection in real-time (100% Cloud Source of Truth, including empty [])
+    const unsubscribeInbound = subscribeToSlitInbound(
+      (cloudInbound) => {
+        if (!isMounted || !Array.isArray(cloudInbound)) return;
+        loadedInbound = true;
         setInboundList(cloudInbound);
+        checkAllLoaded();
+      },
+      () => {
+        loadedInbound = true;
+        checkAllLoaded();
       }
-    });
+    );
 
-    // Subscribe to Outbound collection in real-time
-    const unsubscribeOutbound = subscribeToSlitOutbound((cloudOutbound) => {
-      if (!isMounted) return;
-      if (cloudOutbound) {
+    // Subscribe to Outbound collection in real-time (100% Cloud Source of Truth, including empty [])
+    const unsubscribeOutbound = subscribeToSlitOutbound(
+      (cloudOutbound) => {
+        if (!isMounted || !Array.isArray(cloudOutbound)) return;
+        loadedOutbound = true;
         setOutboundList(cloudOutbound);
+        checkAllLoaded();
+      },
+      () => {
+        loadedOutbound = true;
+        checkAllLoaded();
       }
-    });
+    );
 
-    // Subscribe to Pick Lists collection in real-time
-    const unsubscribePickLists = subscribeToSlitPickLists((cloudPickLists) => {
-      if (!isMounted) return;
-      if (cloudPickLists) {
-        if (!hasReconciledInitialPickLists) {
-          hasReconciledInitialPickLists = true;
-          setPickLists((prev) => {
-            const localMap = new Map<string, PickListOrder>();
-            prev.forEach((o) => {
-              if (o.orderNo) localMap.set(o.orderNo.trim().toUpperCase(), o);
-            });
+    // Subscribe to Pick Lists collection in real-time (100% Cloud Source of Truth, including empty [])
+    const unsubscribePickLists = subscribeToSlitPickLists(
+      (cloudPickLists) => {
+        if (!isMounted || !Array.isArray(cloudPickLists)) return;
+        loadedPickLists = true;
 
-            return cloudPickLists.map((cloudOrd) => {
-              const localOrd = localMap.get((cloudOrd.orderNo || "").trim().toUpperCase());
-              if (!localOrd) return cloudOrd;
-
-              const localVerifiedBatches = new Map<string, PickListItem>();
-              (localOrd.items || []).forEach((li) => {
-                if (li.batch && (li.status === "verified" || li.machineIssued)) {
-                  localVerifiedBatches.set(li.batch.trim().toUpperCase(), li);
+        setPickLists((prev) => {
+          const cloudOrderNoSet = new Set(
+            cloudPickLists.map((o) => (o.orderNo || "").trim().toUpperCase()).filter(Boolean)
+          );
+          const removedOrders = prev.filter(
+            (o) => o.orderNo && !cloudOrderNoSet.has(o.orderNo.trim().toUpperCase())
+          );
+          if (removedOrders.length > 0) {
+            removedOrders.forEach((remOrd) => {
+              (remOrd.items || []).forEach((itm) => {
+                if (itm.batch) {
+                  removeCoilByBatch(itm.batch.trim().toUpperCase());
                 }
               });
-
-              let hasLocalUnsyncedVerify = false;
-              const mergedItems = (cloudOrd.items || []).map((ci) => {
-                const bKey = (ci.batch || "").trim().toUpperCase();
-                const localVerified = localVerifiedBatches.get(bKey);
-                if (
-                  localVerified &&
-                  (ci.status !== "verified" || (Boolean(localVerified.machineIssued) && !ci.machineIssued))
-                ) {
-                  hasLocalUnsyncedVerify = true;
-                  const { machineIssuedAt, scannedAt, ...restCi } = ci;
-                  return {
-                    ...restCi,
-                    status: "verified" as const,
-                    ...(localVerified.scannedAt || scannedAt
-                      ? { scannedAt: localVerified.scannedAt || scannedAt }
-                      : {}),
-                    machineIssued: Boolean(localVerified.machineIssued || ci.machineIssued),
-                    ...(localVerified.machineIssuedAt || machineIssuedAt
-                      ? { machineIssuedAt: localVerified.machineIssuedAt || machineIssuedAt }
-                      : {}),
-                  };
-                }
-                return ci;
-              });
-
-              if (hasLocalUnsyncedVerify || (localOrd.status === "completed" && cloudOrd.status !== "completed")) {
-                const validPool = mergedItems.filter((itm) =>
-                  Boolean(itm.batch && /^[A-Za-z0-9]{10}$/.test(itm.batch.trim()))
-                );
-                const checkPool = validPool.length > 0 ? validPool : mergedItems;
-                const isAllVerified = checkPool.length > 0 && checkPool.every((itm) => itm.status === "verified");
-                const mergedOrd: PickListOrder = {
-                  ...cloudOrd,
-                  status:
-                    isAllVerified || localOrd.status === "completed"
-                      ? "completed"
-                      : "in_progress",
-                  items: mergedItems,
-                };
-                savePickListToCloud(mergedOrd).catch(console.error);
-                return mergedOrd;
-              }
-
-              return cloudOrd;
             });
-          });
-        } else {
-          setPickLists(cloudPickLists);
-        }
+          }
+          if (cloudPickLists.length === 0 && prev.length > 0) {
+            resetAllMachineStagingToEmpty();
+          }
+          return cloudPickLists;
+        });
+
+        checkAllLoaded();
+      },
+      () => {
+        loadedPickLists = true;
+        checkAllLoaded();
       }
-    });
+    );
 
     return () => {
       isMounted = false;
@@ -1887,9 +1785,25 @@ export function SlitFilmManagement({
     });
 
     if (result.isConfirmed) {
-      setPickLists((prev) =>
-        prev.map((o) => (o.orderNo === orderNo ? { ...o, operatorDismissed: true } : o))
-      );
+      let dismissedOrder: PickListOrder | null = null;
+      setPickLists((prev) => {
+        const next = prev.map((o) => {
+          if (o.orderNo === orderNo) {
+            dismissedOrder = { ...o, operatorDismissed: true };
+            return dismissedOrder;
+          }
+          return o;
+        });
+        try {
+          localStorage.setItem(STORAGE_KEY_PICK_LISTS, JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+      if (dismissedOrder) {
+        savePickListToCloud(dismissedOrder).catch(console.error);
+      }
       Swal.fire({
         icon: "success",
         title: isThai ? "นำออกจากคิวสำเร็จ" : "Removed successfully",
@@ -2401,12 +2315,110 @@ export function SlitFilmManagement({
 
   const handleConfirmDeleteOrder = () => {
     if (!deleteModalOrderNo) return;
-    const ordNo = deleteModalOrderNo;
-    setPickLists((prev) => prev.filter((o) => o.orderNo !== ordNo));
+    const ordNo = deleteModalOrderNo.trim();
+    const cleanOrdNoUpper = ordNo.toUpperCase();
+
+    // Find the target order and its batches before removing
+    const targetOrders = pickLists.filter(
+      (o) => (o.orderNo || "").trim().toUpperCase() === cleanOrdNoUpper
+    );
+    const deletedBatchSet = new Set<string>();
+    targetOrders.forEach((ord) => {
+      (ord.items || []).forEach((itm) => {
+        if (itm.batch) {
+          deletedBatchSet.add(itm.batch.trim().toUpperCase());
+        }
+      });
+    });
+    const deletedBatches = Array.from(deletedBatchSet);
+
+    // 1. Remove order from pickLists & localStorage & Cloud Firestore
+    setPickLists((prev) => {
+      const next = prev.filter(
+        (o) => (o.orderNo || "").trim().toUpperCase() !== cleanOrdNoUpper
+      );
+      try {
+        localStorage.setItem(STORAGE_KEY_PICK_LISTS, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
     if (selectedOrderNo === ordNo) {
       setSelectedOrderNo(null);
     }
     deletePickListFromCloud(ordNo).catch(console.error);
+
+    // 2. Remove any outbound records linked to this orderNo or its batches from outboundList & Cloud Firestore
+    setOutboundList((prev) => {
+      const next = prev.filter((r) => {
+        const rOrd = (r.orderNo || "").trim().toUpperCase();
+        const rBatch = (r.batch || "").trim().toUpperCase();
+        if (rOrd === cleanOrdNoUpper) return false;
+        if (rBatch && deletedBatchSet.has(rBatch)) return false;
+        return true;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_OUTBOUND, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    deleteOutboundByOrderOrBatchesFromCloud(ordNo, deletedBatches).catch(console.error);
+
+    // 3. Reset any inbound records linked to this orderNo or its batches back to normal available warehouse status
+    const resetInboundRecords: SlitBarcodeRecord[] = [];
+    setInboundList((prev) => {
+      const next = prev.map((r) => {
+        const rOrd = (r.orderNo || "").trim().toUpperCase();
+        const rBatch = (r.batch || "").trim().toUpperCase();
+        const isLinked =
+          rOrd === cleanOrdNoUpper ||
+          (rBatch && deletedBatchSet.has(rBatch)) ||
+          (r.conditionText && r.conditionText.includes(`#${ordNo}`));
+        if (!isLinked) return r;
+
+        const curLoc = (r.location || "").trim();
+        const upperLoc = curLoc.toUpperCase();
+        const isDispatchedLoc =
+          curLoc.includes("เบิก") ||
+          curLoc.startsWith("เบิก") ||
+          ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc);
+        const restoredLoc = isDispatchedLoc
+          ? (r.previousLocation && !r.previousLocation.includes("เบิก")
+              ? r.previousLocation
+              : r.storageLocation && !r.storageLocation.includes("เบิก")
+              ? r.storageLocation
+              : "WH1")
+          : curLoc || "WH1";
+
+        const cleanedRecord: SlitBarcodeRecord = {
+          ...r,
+          orderNo: "",
+          location: restoredLoc,
+          storageLocation: restoredLoc,
+          conditionText: "รับเข้าแล้วพร้อมใช้งาน",
+        };
+        resetInboundRecords.push(cleanedRecord);
+        return cleanedRecord;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_INBOUND, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    if (resetInboundRecords.length > 0) {
+      batchSaveInboundToCloud(resetInboundRecords).catch(console.error);
+    }
+
+    // 4. Remove any staged coils on machine racks for these batches
+    deletedBatches.forEach((b) => {
+      removeCoilByBatch(b);
+    });
+
     setDeleteModalOrderNo(null);
 
     if (soundEnabled) playScanSound(true);
@@ -3215,6 +3227,7 @@ export function SlitFilmManagement({
       if (result.isConfirmed) {
         const timestamp = `${new Date().toISOString().slice(0, 10)} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
 
+        const relocatedRecordsForCloud: SlitBarcodeRecord[] = [];
         setInboundList((prevInbound) => {
           let updated = [...prevInbound];
           relocateBatchList.forEach((relocItem) => {
@@ -3222,7 +3235,7 @@ export function SlitFilmManagement({
             const sourceLoc = relocItem.sourceLayout || (existsIdx !== -1 ? updated[existsIdx].location : "");
             if (existsIdx !== -1) {
               const prevLoc = sourceLoc || updated[existsIdx].location;
-              updated[existsIdx] = {
+              const updatedRecord: SlitBarcodeRecord = {
                 ...updated[existsIdx],
                 previousLocation: prevLoc,
                 location: destLayout,
@@ -3230,13 +3243,19 @@ export function SlitFilmManagement({
                 scanTimestamp: timestamp,
                 conditionText: `ย้าย Layout จาก ${relocItem.sourceLayout} ➔ ${destLayout}`,
               };
+              updated[existsIdx] = updatedRecord;
+              relocatedRecordsForCloud.push(updatedRecord);
             } else {
               const record = generateRecordFromBatch(relocItem.batch, "inbound", destLayout);
               record.previousLocation = sourceLoc;
               record.conditionText = `ย้าย Layout จาก ${relocItem.sourceLayout} ➔ ${destLayout}`;
               updated.unshift(record);
+              relocatedRecordsForCloud.push(record);
             }
           });
+          if (relocatedRecordsForCloud.length > 0) {
+            batchSaveInboundToCloud(relocatedRecordsForCloud).catch(console.error);
+          }
           return updated;
         });
 
@@ -3283,19 +3302,7 @@ export function SlitFilmManagement({
   const [returnCurrentPage, setReturnCurrentPage] = useState<number>(1);
   const returnBarcodeInputRef = useRef<HTMLInputElement>(null);
 
-  const [deletedReturnBatchIds, setDeletedReturnBatchIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DELETED_RETURN_BATCHES);
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return [];
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_DELETED_RETURN_BATCHES, JSON.stringify(deletedReturnBatchIds));
-    } catch {}
-  }, [deletedReturnBatchIds]);
+  const [deletedReturnBatchIds, setDeletedReturnBatchIds] = useState<string[]>([]);
 
   // Auto-focus barcode input when in return_warehouse mode
   useEffect(() => {
@@ -3751,32 +3758,42 @@ export function SlitFilmManagement({
         const filteredPrev = prev.filter((r) => !returnedBatchesSet.has(r.batch.trim().toUpperCase()));
         return [...newInboundRecords, ...filteredPrev];
       });
+      deleteInboundByBatchesFromCloud(Array.from(returnedBatchesSet))
+        .then(() => batchSaveInboundToCloud(newInboundRecords))
+        .catch(console.error);
 
       // 3. Remove returned items from outboundList so remaining items stay with the machine
       setOutboundList((prev) => prev.filter((o) => !returnedBatchesSet.has(o.batch.trim().toUpperCase())));
+      deleteOutboundByOrderOrBatchesFromCloud("", Array.from(returnedBatchesSet)).catch(console.error);
 
       // 4. Update pickLists: mark items in the order as returned (remaining batches untouched)
-      setPickLists((prev) =>
-        prev.map((ord) => {
+      const updatedOrdersForCloud: PickListOrder[] = [];
+      setPickLists((prev) => {
+        const next = prev.map((ord) => {
           const hasMatch = ord.items.some((i) => returnedBatchesSet.has(i.batch?.trim().toUpperCase()));
           if (!hasMatch) return ord;
-          return {
+          const updatedOrd: PickListOrder = {
             ...ord,
             items: ord.items.map((i) => {
               if (returnedBatchesSet.has(i.batch?.trim().toUpperCase())) {
+                const { machineIssuedAt, scannedAt, ...restItem } = i;
                 return {
-                  ...i,
+                  ...restItem,
                   status: "pending" as const,
                   machineIssued: false,
-                  machineIssuedAt: undefined,
-                  scannedAt: undefined,
                 };
               }
               return i;
             }),
           };
-        })
-      );
+          updatedOrdersForCloud.push(updatedOrd);
+          return updatedOrd;
+        });
+        if (updatedOrdersForCloud.length > 0) {
+          batchSavePickListsToCloud(updatedOrdersForCloud).catch(console.error);
+        }
+        return next;
+      });
 
       // 5. Clear selections
       setReturnSelectedBatchIds([]);
@@ -3828,21 +3845,33 @@ export function SlitFilmManagement({
     }).then((result) => {
       if (!result.isConfirmed) return;
       resetAllMachineStagingToEmpty();
-      setPickLists((prev) =>
-        prev.map((ord) => ({
+      setPickLists((prev) => {
+        const next = prev.map((ord) => ({
           ...ord,
-          items: (ord.items || []).map((i) => ({
-            ...i,
-            machineIssued: false,
-            machineIssuedAt: undefined,
-            scannedAt: undefined,
-            status: "pending" as const,
-          })),
-        }))
-      );
-      setOutboundList((prev) =>
-        prev.filter((o) => !(o.conditionText && o.conditionText.includes("รับงานหน้าเครื่อง")))
-      );
+          status: "pending" as const,
+          items: (ord.items || []).map((i) => {
+            const { machineIssuedAt, scannedAt, ...restItem } = i;
+            return {
+              ...restItem,
+              machineIssued: false,
+              status: "pending" as const,
+            };
+          }),
+        }));
+        if (next.length > 0) {
+          batchSavePickListsToCloud(next).catch(console.error);
+        }
+        return next;
+      });
+      setOutboundList((prev) => {
+        const toDeleteIds = prev
+          .filter((o) => Boolean(o.conditionText && o.conditionText.includes("รับงานหน้าเครื่อง")))
+          .map((o) => o.id);
+        toDeleteIds.forEach((id) => {
+          deleteRecordFromCloud("slit_outbound", id).catch(console.error);
+        });
+        return prev.filter((o) => !(o.conditionText && o.conditionText.includes("รับงานหน้าเครื่อง")));
+      });
       setReturnSelectedBatchIds([]);
       setDeletedReturnBatchIds([]);
       setCustomReturnLocations({});
@@ -3908,25 +3937,43 @@ export function SlitFilmManagement({
       // Remove from physical machine staging rack if present
       removeCoilByBatch(row.batch, row.machineId);
 
-      // Unmark machineIssued from pick lists if item matches
-      setPickLists((prev) =>
-        prev.map((ord) => ({
-          ...ord,
-          items: (ord.items || []).map((i) => {
+      // Unmark machineIssued from pick lists if item matches and sync to Cloud
+      const updatedOrders: PickListOrder[] = [];
+      setPickLists((prev) => {
+        const next = prev.map((ord) => {
+          let changed = false;
+          const nextItems = (ord.items || []).map((i) => {
             if (i.batch && i.batch.trim().toUpperCase() === bKey) {
-              return { ...i, machineIssued: false, machineIssuedAt: undefined };
+              changed = true;
+              const { machineIssuedAt, ...restItem } = i;
+              return { ...restItem, machineIssued: false };
             }
             return i;
-          }),
-        }))
-      );
+          });
+          if (changed) {
+            const updatedOrd = { ...ord, items: nextItems };
+            updatedOrders.push(updatedOrd);
+            return updatedOrd;
+          }
+          return ord;
+        });
+        if (updatedOrders.length > 0) {
+          batchSavePickListsToCloud(updatedOrders).catch(console.error);
+        }
+        return next;
+      });
 
-      // Filter out from machine-scanned outbound records
-      setOutboundList((prev) =>
-        prev.filter(
+      // Filter out from machine-scanned outbound records and delete from Cloud
+      setOutboundList((prev) => {
+        prev.forEach((ob) => {
+          if (ob.batch.trim().toUpperCase() === bKey && ob.conditionText?.includes("รับงานหน้าเครื่อง")) {
+            deleteRecordFromCloud("slit_outbound", ob.id).catch(console.error);
+          }
+        });
+        return prev.filter(
           (ob) => !(ob.batch.trim().toUpperCase() === bKey && ob.conditionText?.includes("รับงานหน้าเครื่อง"))
-        )
-      );
+        );
+      });
 
       if (soundEnabled) playScanSound(true);
 
@@ -3992,25 +4039,43 @@ export function SlitFilmManagement({
         removeCoilByBatch(b, item?.machineId);
       });
 
-      // Unmark machineIssued in pickLists
-      setPickLists((prev) =>
-        prev.map((ord) => ({
-          ...ord,
-          items: (ord.items || []).map((i) => {
+      // Unmark machineIssued in pickLists and sync to Cloud
+      const updatedOrders: PickListOrder[] = [];
+      setPickLists((prev) => {
+        const next = prev.map((ord) => {
+          let changed = false;
+          const nextItems = (ord.items || []).map((i) => {
             if (i.batch && bSet.has(i.batch.trim().toUpperCase())) {
-              return { ...i, machineIssued: false, machineIssuedAt: undefined };
+              changed = true;
+              const { machineIssuedAt, ...restItem } = i;
+              return { ...restItem, machineIssued: false };
             }
             return i;
-          }),
-        }))
-      );
+          });
+          if (changed) {
+            const updatedOrd = { ...ord, items: nextItems };
+            updatedOrders.push(updatedOrd);
+            return updatedOrd;
+          }
+          return ord;
+        });
+        if (updatedOrders.length > 0) {
+          batchSavePickListsToCloud(updatedOrders).catch(console.error);
+        }
+        return next;
+      });
 
-      // Filter out from machine-scanned outbound records
-      setOutboundList((prev) =>
-        prev.filter(
+      // Filter out from machine-scanned outbound records and delete from Cloud
+      setOutboundList((prev) => {
+        prev.forEach((ob) => {
+          if (bSet.has(ob.batch.trim().toUpperCase()) && ob.conditionText?.includes("รับงานหน้าเครื่อง")) {
+            deleteRecordFromCloud("slit_outbound", ob.id).catch(console.error);
+          }
+        });
+        return prev.filter(
           (ob) => !(bSet.has(ob.batch.trim().toUpperCase()) && ob.conditionText?.includes("รับงานหน้าเครื่อง"))
-        )
-      );
+        );
+      });
 
       setReturnSelectedBatchIds([]);
 
@@ -4631,11 +4696,25 @@ export function SlitFilmManagement({
   const handleMachineChange = (id: string, newMachine: string) => {
     if (activeMode === "inbound") {
       setInboundList((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, machine: newMachine } : r))
+        prev.map((r) => {
+          if (r.id === id) {
+            const updated = { ...r, machine: newMachine };
+            saveInboundRecordToCloud(updated).catch(console.error);
+            return updated;
+          }
+          return r;
+        })
       );
     } else {
       setOutboundList((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, machine: newMachine } : r))
+        prev.map((r) => {
+          if (r.id === id) {
+            const updated = { ...r, machine: newMachine };
+            saveOutboundRecordToCloud(updated).catch(console.error);
+            return updated;
+          }
+          return r;
+        })
       );
     }
   };
@@ -5093,7 +5172,9 @@ export function SlitFilmManagement({
               title={isThai ? "เชื่อมต่อฐานข้อมูล Firebase Firestore แบบ Real-time สำเร็จ" : "Connected to Firebase Firestore Real-time"}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="hidden sm:inline">Cloud Real-time</span>
+              <span className="hidden sm:inline">
+                {isCloudLoading ? (isThai ? "กำลังโหลด Cloud..." : "Syncing Cloud...") : "Cloud Real-time"}
+              </span>
               <span className="sm:hidden">Cloud</span>
             </div>
 
@@ -5120,16 +5201,14 @@ export function SlitFilmManagement({
                   confirmButtonColor: "#dc2626",
                 }).then((result) => {
                   if (result.isConfirmed) {
-                    localStorage.removeItem(STORAGE_KEY_INBOUND);
-                    localStorage.removeItem(STORAGE_KEY_OUTBOUND);
-                    localStorage.removeItem(STORAGE_KEY_PICK_LISTS);
+                    clearLegacySlitLocalStorage();
                     localStorage.removeItem(STORAGE_KEY_SAP_MASTER);
-                    localStorage.removeItem("tmt_wms_space_management_data_v1");
                     resetAllMachineStagingToEmpty();
                     setInboundList([]);
                     setOutboundList([]);
                     setPickLists([]);
                     setSapMasterMap(new Map());
+                    clearAllSlitDataFromCloud().catch(console.error);
                     Swal.fire({
                       icon: "success",
                       title: isThai ? "ล้างข้อมูลสำเร็จ" : "Reset Successful",
@@ -5167,7 +5246,13 @@ export function SlitFilmManagement({
 
       {/* Space Management View (พื้นที่) */}
       {activeMode === "space_management" && (
-        <SpaceManagementView isThai={isThai} />
+        <SpaceManagementView
+          isThai={isThai}
+          inboundList={inboundList}
+          outboundList={outboundList}
+          pickLists={pickLists}
+          sapMasterMap={sapMasterMap}
+        />
       )}
 
       {/* Transfer Car Monthly Report View (รายงาน Transfer Car ประจำเดือน TM06 & TM07) */}
@@ -5742,7 +5827,7 @@ export function SlitFilmManagement({
                               e.stopPropagation();
                               setDeleteModalOrderNo(order.orderNo);
                             }}
-                            className="hidden p-1 sm:p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950/50 hover:text-rose-700 cursor-pointer"
+                            className="p-1 sm:p-1.5 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950/50 hover:text-rose-700 cursor-pointer"
                             title="ลบใบสั่งนี้"
                           >
                             <Trash2 size={14} />

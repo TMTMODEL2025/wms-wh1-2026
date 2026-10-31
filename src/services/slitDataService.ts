@@ -18,6 +18,24 @@ function sanitizeDocId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
 }
 
+function stripUndefinedDeep<T>(obj: T): T {
+  if (Array.isArray(obj)) {
+    return obj
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as unknown as T;
+  }
+  if (obj !== null && typeof obj === "object") {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (value !== undefined) {
+        cleaned[key] = stripUndefinedDeep(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return obj;
+}
+
 // Convert Firestore document or raw record to clean SlitBarcodeRecord
 function sanitizeRecordPayload(r: SlitBarcodeRecord): Record<string, unknown> {
   const payload: Record<string, unknown> = {
@@ -32,8 +50,8 @@ function sanitizeRecordPayload(r: SlitBarcodeRecord): Record<string, unknown> {
     updatedAt: new Date().toISOString(),
   };
 
-  if (r.previousLocation) payload.previousLocation = String(r.previousLocation).slice(0, 64);
-  if (r.orderNo) payload.orderNo = String(r.orderNo).slice(0, 64);
+  payload.previousLocation = r.previousLocation ? String(r.previousLocation).slice(0, 64) : "";
+  payload.orderNo = r.orderNo ? String(r.orderNo).slice(0, 64) : "";
   if (r.certThickness) payload.certThickness = String(r.certThickness).slice(0, 32);
   if (r.width) payload.width = String(r.width).slice(0, 32);
   if (r.unrestricted) payload.unrestricted = String(r.unrestricted).slice(0, 64);
@@ -46,13 +64,40 @@ function sanitizeRecordPayload(r: SlitBarcodeRecord): Record<string, unknown> {
   if (r.qualityClass) payload.qualityClass = String(r.qualityClass).slice(0, 32);
   if (r.description) payload.description = String(r.description).slice(0, 256);
   if (r.coilNo) payload.coilNo = String(r.coilNo).slice(0, 64);
-  if (r.conditionText) payload.conditionText = String(r.conditionText).slice(0, 128);
+  payload.conditionText = r.conditionText ? String(r.conditionText).slice(0, 128) : "";
 
-  return payload;
+  return stripUndefinedDeep(payload);
+}
+
+const LEGACY_SLIT_LOCAL_STORAGE_KEYS = [
+  "tmt_wms_slit_inbound_records",
+  "tmt_wms_slit_outbound_records",
+  "tmt_wms_slit_pick_lists",
+  "tmt_wms_space_management_data_v1",
+  "tmt_wms_synced_picklist_orders_v1",
+  "tmt_wms_cloud_picklists_init_v1",
+  "tmt_wms_cloud_outbound_init_v1",
+  "tmt_wms_cloud_inbound_init_v1",
+  "tmt_wms_slit_deleted_return_batches",
+];
+
+/**
+ * Clear all legacy localStorage keys for Slit Film Management so only Firebase Firestore is used.
+ */
+export function clearLegacySlitLocalStorage(): void {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      for (const key of LEGACY_SLIT_LOCAL_STORAGE_KEYS) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
 }
 
 /**
- * Real-time listener for Slit Inbound records
+ * Real-time listener for Slit Inbound records (100% Cloud Firestore Single Source of Truth)
  */
 export function subscribeToSlitInbound(
   onData: (records: SlitBarcodeRecord[]) => void,
@@ -78,7 +123,7 @@ export function subscribeToSlitInbound(
 }
 
 /**
- * Real-time listener for Slit Outbound records
+ * Real-time listener for Slit Outbound records (100% Cloud Firestore Single Source of Truth)
  */
 export function subscribeToSlitOutbound(
   onData: (records: SlitBarcodeRecord[]) => void,
@@ -103,7 +148,7 @@ export function subscribeToSlitOutbound(
 }
 
 /**
- * Real-time listener for Slit Pick Lists
+ * Real-time listener for Slit Pick Lists (100% Cloud Firestore Single Source of Truth)
  */
 export function subscribeToSlitPickLists(
   onData: (orders: PickListOrder[]) => void,
@@ -231,7 +276,7 @@ function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unkn
     if (item.machineIssuedAt) {
       cleanItem.machineIssuedAt = String(item.machineIssuedAt);
     }
-    return cleanItem;
+    return stripUndefinedDeep(cleanItem);
   });
 
   const validCheckPool = cleanItems.filter((i) =>
@@ -261,7 +306,7 @@ function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unkn
     updatedAt: new Date().toISOString(),
   };
 
-  return payload;
+  return stripUndefinedDeep(payload);
 }
 
 /**
@@ -296,77 +341,139 @@ export async function batchSavePickListsToCloud(orders: PickListOrder[]): Promis
 }
 
 /**
- * Delete pick list order from Firestore
+ * Delete pick list order from Firestore (removes by docId and any matching orderNo document)
  */
 export async function deletePickListFromCloud(orderIdOrNo: string): Promise<void> {
-  const docId = sanitizeDocId(orderIdOrNo.startsWith("ORD-") ? orderIdOrNo : `ORD-${orderIdOrNo}`);
+  const trimmed = orderIdOrNo.trim();
+  const rawOrderNo = trimmed.startsWith("ORD-") ? trimmed.slice(4) : trimmed;
+  const primaryDocId = sanitizeDocId(trimmed.startsWith("ORD-") ? trimmed : `ORD-${trimmed}`);
   try {
-    await deleteDoc(doc(db, PICKLIST_COLLECTION, docId));
+    await deleteDoc(doc(db, PICKLIST_COLLECTION, primaryDocId));
+    // Also clean up any document in slit_picklists with matching orderNo or id
+    const snap = await getDocs(collection(db, PICKLIST_COLLECTION));
+    const batch = writeBatch(db);
+    let hasExtra = false;
+    snap.forEach((d) => {
+      const data = d.data() as PickListOrder;
+      const docOrderNo = (data?.orderNo || "").trim().toUpperCase();
+      if (
+        d.id === sanitizeDocId(trimmed) ||
+        docOrderNo === rawOrderNo.toUpperCase()
+      ) {
+        batch.delete(d.ref);
+        hasExtra = true;
+      }
+    });
+    if (hasExtra) {
+      await batch.commit();
+    }
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${PICKLIST_COLLECTION}/${docId}`);
+    handleFirestoreError(error, OperationType.DELETE, `${PICKLIST_COLLECTION}/${primaryDocId}`);
   }
 }
 
 /**
- * Initial sync / migration helper: If Firestore is empty and local data exists, seed to Firestore.
- * Also reconciles any local Pick List orders that have more verified scan progress than their existing cloud document.
+ * Delete outbound records linked to a deleted Pick List Order (by orderNo or batch list)
  */
-export async function syncLocalDataToFirestoreIfEmpty(
-  localInbound: SlitBarcodeRecord[],
-  localOutbound: SlitBarcodeRecord[],
-  localPickLists?: PickListOrder[]
+export async function deleteOutboundByOrderOrBatchesFromCloud(
+  orderNo: string,
+  batches: string[]
 ): Promise<void> {
+  const cleanOrderNo = orderNo.trim().toUpperCase();
+  const batchSet = new Set(batches.map((b) => b.trim().toUpperCase()).filter(Boolean));
+  if (!cleanOrderNo && batchSet.size === 0) return;
+
   try {
-    const inboundSnap = await getDocs(collection(db, INBOUND_COLLECTION));
-    if (inboundSnap.empty && localInbound.length > 0) {
-      await batchSaveInboundToCloud(localInbound);
-    }
-
-    const outboundSnap = await getDocs(collection(db, OUTBOUND_COLLECTION));
-    if (outboundSnap.empty && localOutbound.length > 0) {
-      await batchSaveOutboundToCloud(localOutbound);
-    }
-
-    if (localPickLists && localPickLists.length > 0) {
-      const pickListSnap = await getDocs(collection(db, PICKLIST_COLLECTION));
-      if (pickListSnap.empty) {
-        await batchSavePickListsToCloud(localPickLists);
-      } else {
-        const cloudMap = new Map<string, PickListOrder>();
-        pickListSnap.forEach((d) => {
-          const data = d.data() as PickListOrder;
-          if (data?.orderNo) {
-            cloudMap.set(data.orderNo.trim().toUpperCase(), data);
-          }
-        });
-
-        const ordersToUpdate: PickListOrder[] = [];
-        for (const localOrd of localPickLists) {
-          if (!localOrd?.orderNo) continue;
-          const cloudOrd = cloudMap.get(localOrd.orderNo.trim().toUpperCase());
-          if (!cloudOrd) continue; // Do not re-upload orders deleted from cloud
-
-          const localVerifiedCount = (localOrd.items || []).filter((i) => i.status === "verified").length;
-          const cloudVerifiedCount = (cloudOrd.items || []).filter((i) => i.status === "verified").length;
-          const localIssuedCount = (localOrd.items || []).filter((i) => Boolean(i.machineIssued)).length;
-          const cloudIssuedCount = (cloudOrd.items || []).filter((i) => Boolean(i.machineIssued)).length;
-
-          if (
-            localVerifiedCount > cloudVerifiedCount ||
-            localIssuedCount > cloudIssuedCount ||
-            (localOrd.status === "completed" && cloudOrd.status !== "completed")
-          ) {
-            ordersToUpdate.push(localOrd);
-          }
-        }
-
-        if (ordersToUpdate.length > 0) {
-          await batchSavePickListsToCloud(ordersToUpdate);
-        }
+    const snap = await getDocs(collection(db, OUTBOUND_COLLECTION));
+    const batch = writeBatch(db);
+    let hasDeletes = false;
+    snap.forEach((d) => {
+      const data = d.data() as SlitBarcodeRecord;
+      const recOrderNo = (data?.orderNo || "").trim().toUpperCase();
+      const recBatch = (data?.batch || "").trim().toUpperCase();
+      if (
+        (cleanOrderNo && recOrderNo === cleanOrderNo) ||
+        (recBatch && batchSet.has(recBatch))
+      ) {
+        batch.delete(d.ref);
+        hasDeletes = true;
       }
+    });
+    if (hasDeletes) {
+      await batch.commit();
     }
-  } catch {
-    // If offline or permission check, ignore initial seed
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, OUTBOUND_COLLECTION);
   }
 }
+
+/**
+ * Delete inbound records by batch list from Firestore
+ */
+export async function deleteInboundByBatchesFromCloud(batches: string[]): Promise<void> {
+  const batchSet = new Set(batches.map((b) => b.trim().toUpperCase()).filter(Boolean));
+  if (batchSet.size === 0) return;
+
+  try {
+    const snap = await getDocs(collection(db, INBOUND_COLLECTION));
+    const batch = writeBatch(db);
+    let hasDeletes = false;
+    snap.forEach((d) => {
+      const data = d.data() as SlitBarcodeRecord;
+      const recBatch = (data?.batch || "").trim().toUpperCase();
+      if (recBatch && batchSet.has(recBatch)) {
+        batch.delete(d.ref);
+        hasDeletes = true;
+      }
+    });
+    if (hasDeletes) {
+      await batch.commit();
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, INBOUND_COLLECTION);
+  }
+}
+
+/**
+ * Clear all documents in slit_picklists, slit_outbound, and slit_inbound on full reset
+ */
+export async function clearAllSlitDataFromCloud(): Promise<void> {
+  clearLegacySlitLocalStorage();
+  try {
+    const [pickSnap, outSnap, inSnap] = await Promise.all([
+      getDocs(collection(db, PICKLIST_COLLECTION)),
+      getDocs(collection(db, OUTBOUND_COLLECTION)),
+      getDocs(collection(db, INBOUND_COLLECTION)),
+    ]);
+
+    const allRefs = [
+      ...pickSnap.docs.map((d) => d.ref),
+      ...outSnap.docs.map((d) => d.ref),
+      ...inSnap.docs.map((d) => d.ref),
+    ];
+
+    // Commit in chunks of 400 to respect Firestore 500-op batch limit
+    for (let i = 0; i < allRefs.length; i += 400) {
+      const chunk = allRefs.slice(i, i + 400);
+      const batch = writeBatch(db);
+      chunk.forEach((ref) => batch.delete(ref));
+      await batch.commit();
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, PICKLIST_COLLECTION);
+  }
+}
+
+/**
+ * Legacy auto-migration is disabled: clears legacy localStorage keys and relies 100% on Firestore.
+ */
+export async function syncLocalDataToFirestoreIfEmpty(
+  _localInbound?: SlitBarcodeRecord[],
+  _localOutbound?: SlitBarcodeRecord[],
+  _localPickLists?: PickListOrder[]
+): Promise<void> {
+  clearLegacySlitLocalStorage();
+}
+
+
 

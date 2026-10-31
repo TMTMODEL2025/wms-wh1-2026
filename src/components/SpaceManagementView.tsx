@@ -48,6 +48,15 @@ import {
   MASTER_BASKET_LAYOUT_UPDATED_EVENT,
   BuildingId,
 } from "../data/masterBasketStorage";
+import type { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
+import {
+  subscribeToSlitInbound,
+  subscribeToSlitOutbound,
+  subscribeToSlitPickLists,
+  saveInboundRecordToCloud,
+  deleteInboundByBatchesFromCloud,
+  clearLegacySlitLocalStorage,
+} from "../services/slitDataService";
 
 export interface SlitCoilItem {
   batch: string;
@@ -212,97 +221,71 @@ function parseWarehouseBasketLocation(rawLoc: string): {
   };
 }
 
-function getRawInventoryStorageSignature(): string {
+function loadSpaceDataFromInventory(
+  records: SlitBarcodeRecord[] = [],
+  pickLists: PickListOrder[] = [],
+  outboundRecs: SlitBarcodeRecord[] = [],
+  externalSapMasterMap?: Map<string, SapMasterItem>,
+  statusOverrides: Record<string, { status: string; notes?: string; lastUpdated?: string }> = {}
+): BuildingSpaceData[] {
   try {
-    return [
-      localStorage.getItem("tmt_wms_slit_inbound_records") || "",
-      localStorage.getItem("tmt_wms_slit_sap_master_records") || "",
-      localStorage.getItem("tmt_wms_slit_pick_lists") || "",
-      localStorage.getItem("tmt_wms_slit_outbound_records") || "",
-      localStorage.getItem(STORAGE_KEY_SPACE_DATA) || "",
-      localStorage.getItem(STORAGE_KEY_MASTER_BASKET_LAYOUT) || "",
-    ].join("||");
-  } catch {
-    return "";
-  }
-}
-
-function loadSpaceDataFromInventory(): BuildingSpaceData[] {
-  try {
-    let recordsStr = localStorage.getItem("tmt_wms_slit_inbound_records");
-    let records = [];
-    if (recordsStr) {
-      try {
-        records = JSON.parse(recordsStr);
-      } catch {}
-    }
-    if (!Array.isArray(records)) {
-      records = [];
-    }
-
     // Load SAP master records as fallback for location, thickness, width, grade, and weight
     const sapMasterMap = new Map<string, any>();
-    try {
-      const sapStr = localStorage.getItem("tmt_wms_slit_sap_master_records");
-      if (sapStr) {
-        const sapArr = JSON.parse(sapStr);
-        if (Array.isArray(sapArr)) {
-          sapArr.forEach((item: any) => {
-            if (item?.batch) {
-              sapMasterMap.set(String(item.batch).trim().toUpperCase(), item);
-            }
-          });
+    if (externalSapMasterMap && externalSapMasterMap.size > 0) {
+      externalSapMasterMap.forEach((val, key) => {
+        sapMasterMap.set(String(key).trim().toUpperCase(), val);
+      });
+    } else {
+      try {
+        const sapStr = localStorage.getItem("tmt_wms_slit_sap_master_records");
+        if (sapStr) {
+          const sapArr = JSON.parse(sapStr);
+          if (Array.isArray(sapArr)) {
+            sapArr.forEach((item: any) => {
+              if (item?.batch) {
+                sapMasterMap.set(String(item.batch).trim().toUpperCase(), item);
+              }
+            });
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
 
     // Track batches issued at machine (จ่ายหน้าเครื่อง) along with their latest issue timestamp
     const issuedAtMachineMap = new Map<string, string>();
-    try {
-      const pickListsStr = localStorage.getItem("tmt_wms_slit_pick_lists");
-      if (pickListsStr) {
-        const pickLists = JSON.parse(pickListsStr);
-        if (Array.isArray(pickLists)) {
-          pickLists.forEach((pl: any) => {
-            (pl.items || []).forEach((item: any) => {
-              if (item?.batch && item?.machineIssued === true) {
-                const bKey = String(item.batch).trim().toUpperCase();
-                const ts = String(item.machineIssuedAt || pl.createdAt || "");
-                const prevTs = issuedAtMachineMap.get(bKey) || "";
-                if (ts >= prevTs) {
-                  issuedAtMachineMap.set(bKey, ts);
-                }
-              }
-            });
-          });
-        }
-      }
-    } catch {}
-
-    try {
-      const outboundStr = localStorage.getItem("tmt_wms_slit_outbound_records");
-      if (outboundStr) {
-        const outboundRecs = JSON.parse(outboundStr);
-        if (Array.isArray(outboundRecs)) {
-          outboundRecs.forEach((ob: any) => {
-            if (!ob?.batch) return;
-            const loc = String(ob.location || ob.storageLocation || "").trim().toUpperCase();
-            if (
-              loc.startsWith("เบิก") ||
-              loc.includes("เบิก") ||
-              (ob.conditionText && String(ob.conditionText).includes("รับงานหน้าเครื่อง"))
-            ) {
-              const bKey = String(ob.batch).trim().toUpperCase();
-              const ts = String(ob.scanTimestamp || "");
-              const prevTs = issuedAtMachineMap.get(bKey) || "";
-              if (ts >= prevTs) {
-                issuedAtMachineMap.set(bKey, ts);
-              }
+    if (Array.isArray(pickLists)) {
+      pickLists.forEach((pl: any) => {
+        (pl.items || []).forEach((item: any) => {
+          if (item?.batch && item?.machineIssued === true) {
+            const bKey = String(item.batch).trim().toUpperCase();
+            const ts = String(item.machineIssuedAt || pl.createdAt || "");
+            const prevTs = issuedAtMachineMap.get(bKey) || "";
+            if (ts >= prevTs) {
+              issuedAtMachineMap.set(bKey, ts);
             }
-          });
+          }
+        });
+      });
+    }
+
+    if (Array.isArray(outboundRecs)) {
+      outboundRecs.forEach((ob: any) => {
+        if (!ob?.batch) return;
+        const loc = String(ob.location || ob.storageLocation || "").trim().toUpperCase();
+        if (
+          loc.startsWith("เบิก") ||
+          loc.includes("เบิก") ||
+          (ob.conditionText && String(ob.conditionText).includes("รับงานหน้าเครื่อง"))
+        ) {
+          const bKey = String(ob.batch).trim().toUpperCase();
+          const ts = String(ob.scanTimestamp || "");
+          const prevTs = issuedAtMachineMap.get(bKey) || "";
+          if (ts >= prevTs) {
+            issuedAtMachineMap.set(bKey, ts);
+          }
         }
-      }
-    } catch {}
+      });
+    }
 
     const buildingMap: Record<string, Record<string, Record<string, any[]>>> = {
       H: {},
@@ -416,27 +399,10 @@ function loadSpaceDataFromInventory(): BuildingSpaceData[] {
       masterLayout = getStoredMasterBasketLayout();
     }
 
-    // Load existing space data to preserve manual statuses (like maintenance)
-    const existingSpaceStr = localStorage.getItem(STORAGE_KEY_SPACE_DATA);
-    const existingStatusMap: Record<string, { status: string; notes?: string; lastUpdated?: string }> = {};
-    if (existingSpaceStr) {
-      try {
-        const parsedExisting = JSON.parse(existingSpaceStr);
-        if (Array.isArray(parsedExisting)) {
-          parsedExisting.forEach((b: any) => {
-            (b.rows || []).forEach((r: any) => {
-              (r.baskets || []).forEach((bk: any) => {
-                if (bk.id) {
-                  existingStatusMap[bk.id] = { status: bk.status, notes: bk.notes, lastUpdated: bk.lastUpdated };
-                }
-              });
-            });
-          });
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
+    // Preserve manual statuses (like maintenance) passed in statusOverrides
+    const existingStatusMap: Record<string, { status: string; notes?: string; lastUpdated?: string }> = {
+      ...statusOverrides,
+    };
 
     const result: BuildingSpaceData[] = masterLayout.map((masterBuilding) => {
       const bId = masterBuilding.buildingId;
@@ -502,14 +468,54 @@ function loadSpaceDataFromInventory(): BuildingSpaceData[] {
 
 export interface SpaceManagementViewProps {
   isThai?: boolean;
+  inboundList?: SlitBarcodeRecord[];
+  outboundList?: SlitBarcodeRecord[];
+  pickLists?: PickListOrder[];
+  sapMasterMap?: Map<string, SapMasterItem>;
 }
 
-export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai: externalIsThai }) => {
+export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
+  isThai: externalIsThai,
+  inboundList: propInboundList,
+  outboundList: propOutboundList,
+  pickLists: propPickLists,
+  sapMasterMap: propSapMasterMap,
+}) => {
   const { language } = useLanguage();
   const isThai = externalIsThai ?? (language === "th");
-  const [spaceData, setSpaceData] = useState<BuildingSpaceData[]>(() => {
-    return loadSpaceDataFromInventory();
-  });
+
+  const [cloudInbound, setCloudInbound] = useState<SlitBarcodeRecord[]>(propInboundList || []);
+  const [cloudOutbound, setCloudOutbound] = useState<SlitBarcodeRecord[]>(propOutboundList || []);
+  const [cloudPickLists, setCloudPickLists] = useState<PickListOrder[]>(propPickLists || []);
+  const [statusOverrides, setStatusOverrides] = useState<
+    Record<string, { status: string; notes?: string; lastUpdated?: string }>
+  >({});
+
+  useEffect(() => {
+    clearLegacySlitLocalStorage();
+    const unsubIn = subscribeToSlitInbound((records) => setCloudInbound(records));
+    const unsubOut = subscribeToSlitOutbound((records) => setCloudOutbound(records));
+    const unsubPick = subscribeToSlitPickLists((orders) => setCloudPickLists(orders));
+    return () => {
+      unsubIn();
+      unsubOut();
+      unsubPick();
+    };
+  }, []);
+
+  const effectiveInbound = propInboundList ?? cloudInbound;
+  const effectiveOutbound = propOutboundList ?? cloudOutbound;
+  const effectivePickLists = propPickLists ?? cloudPickLists;
+
+  const [spaceData, setSpaceData] = useState<BuildingSpaceData[]>(() =>
+    loadSpaceDataFromInventory(
+      effectiveInbound,
+      effectivePickLists,
+      effectiveOutbound,
+      propSapMasterMap,
+      statusOverrides
+    )
+  );
 
   const [spaceSubView, setSpaceSubView] = useState<"warehouse_baskets" | "machine_staging">("warehouse_baskets");
   const [activeBuildingId, setActiveBuildingId] = useState<"H" | "F" | "E9" | "E10" | "I">("H");
@@ -537,31 +543,16 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
   const [newCoilWeight, setNewCoilWeight] = useState<number>(0);
   const [newCoilMachine, setNewCoilMachine] = useState<string>("SM01");
 
-  const lastSyncSignatureRef = useRef<string>(getRawInventoryStorageSignature());
-
-  // Save to LocalStorage only when serialized data actually changes
-  useEffect(() => {
-    try {
-      const serialized = JSON.stringify(spaceData);
-      const currentStored = localStorage.getItem(STORAGE_KEY_SPACE_DATA);
-      if (currentStored !== serialized) {
-        localStorage.setItem(STORAGE_KEY_SPACE_DATA, serialized);
-      }
-      lastSyncSignatureRef.current = getRawInventoryStorageSignature();
-    } catch (e) {
-      console.error("Failed to save space data:", e);
-    }
-  }, [spaceData]);
-
-  // Synchronize basket contents strictly with live inventory stock database records
+  // Recompute basket contents directly from live Cloud Firestore data
   useEffect(() => {
     const syncData = () => {
-      const currentSig = getRawInventoryStorageSignature();
-      if (currentSig === lastSyncSignatureRef.current) {
-        return;
-      }
-      lastSyncSignatureRef.current = currentSig;
-      const liveData = loadSpaceDataFromInventory();
+      const liveData = loadSpaceDataFromInventory(
+        effectiveInbound,
+        effectivePickLists,
+        effectiveOutbound,
+        propSapMasterMap,
+        statusOverrides
+      );
       setSpaceData((prev) => {
         if (JSON.stringify(prev) === JSON.stringify(liveData)) {
           return prev;
@@ -570,18 +561,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
       });
     };
 
-    window.addEventListener("storage", syncData);
+    syncData();
     window.addEventListener(MACHINE_STAGING_UPDATED_EVENT, syncData);
     window.addEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, syncData);
-    const interval = setInterval(syncData, 2000);
 
     return () => {
-      window.removeEventListener("storage", syncData);
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, syncData);
       window.removeEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, syncData);
-      clearInterval(interval);
     };
-  }, []);
+  }, [effectiveInbound, effectivePickLists, effectiveOutbound, propSapMasterMap, statusOverrides]);
 
   // Keep selectedBasket modal in sync when coils are cut/removed upon จ่ายหน้าเครื่อง
   useEffect(() => {
@@ -819,6 +807,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
 
   // Handler: Change Basket Status
   const handleUpdateBasketStatus = (basketId: string, newStatus: "available" | "occupied" | "full" | "maintenance") => {
+    const nowStr = new Date().toISOString().replace("T", " ").slice(0, 16);
+    setStatusOverrides((prev) => ({
+      ...prev,
+      [basketId]: {
+        status: newStatus,
+        notes: prev[basketId]?.notes,
+        lastUpdated: nowStr,
+      },
+    }));
     setSpaceData((prev) =>
       prev.map((b) => {
         if (b.buildingId !== activeBuildingId) return b;
@@ -831,7 +828,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
                 const updated = {
                   ...bk,
                   status: newStatus,
-                  lastUpdated: new Date().toISOString().replace("T", " ").slice(0, 16)
+                  lastUpdated: nowStr
                 };
                 if (selectedBasket?.id === basketId) setSelectedBasket(updated);
                 return updated;
@@ -867,6 +864,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
       cancelButtonText: "ยกเลิก"
     }).then((result) => {
       if (result.isConfirmed) {
+        deleteInboundByBatchesFromCloud([batchNo]).catch(console.error);
         setSpaceData((prev) =>
           prev.map((b) => {
             if (b.buildingId !== activeBuildingId) return b;
@@ -923,12 +921,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
       return;
     }
 
+    const nowStr = new Date().toISOString().replace("T", " ").slice(0, 16);
     const newCoil: SlitCoilItem = {
       batch: newCoilBatch.trim().toUpperCase(),
       spec: newCoilSpec,
       grade: newCoilGrade,
       weightKg: Number(newCoilWeight) || 900,
-      inboundDate: new Date().toISOString().replace("T", " ").slice(0, 16),
+      inboundDate: nowStr,
       machine: newCoilMachine
     };
 
@@ -945,6 +944,26 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
       });
       return;
     }
+
+    const specParts = (newCoilSpec || "").split("x");
+    const certThickness = specParts[0]?.trim() || "-";
+    const widthVal = specParts[1]?.trim() || "-";
+    saveInboundRecordToCloud({
+      id: `IN-${newCoil.batch}-${Date.now()}`,
+      mode: "inbound",
+      scanTimestamp: nowStr,
+      batch: newCoil.batch,
+      machine: newCoilMachine || "SM01",
+      location: selectedBasket.id,
+      storageLocation: selectedBasket.id,
+      weightKg: newCoil.weightKg,
+      unrestricted: `${newCoil.weightKg.toLocaleString()} kg`,
+      certThickness,
+      width: widthVal,
+      grade: newCoilGrade || "-",
+      hasSapData: false,
+      conditionText: "รับเข้าคลังเรียบร้อย",
+    }).catch(console.error);
 
     setSpaceData((prev) =>
       prev.map((b) => {
@@ -964,7 +983,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
                   ...bk,
                   coils: updatedCoils,
                   status: newStatus,
-                  lastUpdated: new Date().toISOString().replace("T", " ").slice(0, 16)
+                  lastUpdated: nowStr
                 };
                 setSelectedBasket(updated);
                 return updated;
@@ -1034,7 +1053,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
         });
         return;
       }
-      setSpaceData(loadSpaceDataFromInventory());
+      setSpaceData(
+        loadSpaceDataFromInventory(
+          effectiveInbound,
+          effectivePickLists,
+          effectiveOutbound,
+          propSapMasterMap,
+          statusOverrides
+        )
+      );
       Swal.fire({
         icon: "success",
         title: "เพิ่มแถวสำเร็จ",
@@ -1051,7 +1078,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
   const handleAddBasketToRow = (rowId: string) => {
     const newBasket = addBasketToRow(activeBuildingId, rowId);
     if (newBasket) {
-      setSpaceData(loadSpaceDataFromInventory());
+      setSpaceData(
+        loadSpaceDataFromInventory(
+          effectiveInbound,
+          effectivePickLists,
+          effectiveOutbound,
+          propSapMasterMap,
+          statusOverrides
+        )
+      );
       Swal.fire({
         icon: "success",
         title: "เพิ่มตะกร้าสำเร็จ",
@@ -1089,7 +1124,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
         removeBasketFromRow(activeBuildingId, rowId, basketId);
         setIsDetailModalOpen(false);
         setSelectedBasket(null);
-        setSpaceData(loadSpaceDataFromInventory());
+        setSpaceData(
+          loadSpaceDataFromInventory(
+            effectiveInbound,
+            effectivePickLists,
+            effectiveOutbound,
+            propSapMasterMap,
+            statusOverrides
+          )
+        );
         Swal.fire({
           icon: "success",
           title: "ลบตะกร้าเรียบร้อย",
@@ -1122,7 +1165,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({ isThai
     }
 
     ensureBasketInMasterLayout(activeBuildingId, newBasketRowId, newBasketId);
-    setSpaceData(loadSpaceDataFromInventory());
+    setSpaceData(
+      loadSpaceDataFromInventory(
+        effectiveInbound,
+        effectivePickLists,
+        effectiveOutbound,
+        propSapMasterMap,
+        statusOverrides
+      )
+    );
 
     setIsAddBasketModalOpen(false);
     setNewBasketNo("");

@@ -1397,34 +1397,10 @@ export function DailyReportView({
       return val < 10 ? val * 1000 : val;
     };
 
-    // Load saved basket overrides / custom baskets from localStorage
     const existingStatusMap: Record<
       string,
       { status: "available" | "occupied" | "full" | "maintenance"; notes?: string; maxCapacityKg?: number }
     > = {};
-    try {
-      const savedSpaceStr = localStorage.getItem("tmt_wms_space_management_data_v1");
-      if (savedSpaceStr) {
-        const parsed = JSON.parse(savedSpaceStr);
-        if (Array.isArray(parsed)) {
-          parsed.forEach((b: any) => {
-            (b.rows || []).forEach((r: any) => {
-              (r.baskets || []).forEach((bk: any) => {
-                if (bk?.id) {
-                  existingStatusMap[bk.id] = {
-                    status: bk.status || "available",
-                    notes: bk.notes,
-                    maxCapacityKg: bk.maxCapacityKg || 2500,
-                  };
-                }
-              });
-            });
-          });
-        }
-      }
-    } catch {
-      // ignore
-    }
 
     // Group active inbound records by Building -> Row -> Basket
     const buildingGroupMap: Record<
