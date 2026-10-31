@@ -1,168 +1,134 @@
-# รายงานปริมาณการใช้งาน Transfer Car ทั้งเดือน (TM06 / TM07)
+# แผนการเชื่อมต่อฐานข้อมูล Cloud Database (Free Plan) สำหรับ WMS Warehouse 1
 
-ระบบรายงานวิเคราะห์ปริมาณการใช้งานเครื่องจักร **Transfer Car** ประจำเดือน สำหรับการขนย้ายเหล็กสลิตเบิกเข้าเครื่องจักรผลิตท่อ **TM06** และ **TM07** โดยประมวลผลตามช่วงเวลา จำนวนแถบ น้ำหนักจริงจากสต็อกคงคลัง และจำนวนรอบการขนย้าย พร้อมสรุปภาพรวม KPI กราฟแนวโน้ม และการส่งออกข้อมูล Excel
+แผนงานแนะนำและออกแบบสถาปัตยกรรมฐานข้อมูลคลาวด์แบบใช้งานฟรี 100% (Free Tier) รองรับการซิงค์ข้อมูลแบบ Real-time ทันทีระหว่างอุปกรณ์มือถือ (Mobile Barcode Scanner) และคอมพิวเตอร์ (Desktop Warehouse Monitor) เพื่อทดสอบการทำงานของระบบส่วนงานสลิต (Slit Film) เป็นลำดับแรก ก่อนขยายผลสู่ 4 ส่วนงานที่เหลือ
 
----
+## User Review & Critical Decisions
 
-### User Review & Critical Decisions
-
-> [!IMPORTANT]
-> สรุปแนวทางการออกแบบและเงื่อนไขที่ได้รับคำยืนยันจากผู้ใช้งานใน Phase 1:
-> - **การคำนวณและแบ่งรอบ (Trip Grouping)**: จัดกลุ่มรอบการย้ายของ Transfer Car โดยจับคู่ตามช่วงเวลาการสแกนจ่ายหน้าเครื่องที่ใกล้เคียงกัน (Time-Window Clustering ภายในคำสั่งผลิตเดียวกัน หรือรอบเวลาที่ต่อเนื่องกัน) และคิดน้ำหนักสะสมจริงตาม Stock
-> - **แหล่งข้อมูลน้ำหนัก**: ใช้น้ำหนักจริงตาม Stock ที่พนักงานสแกนที่หน้างาน "จ่ายหน้าเครื่อง" (อิงข้อมูล SAP / Stock Balance จริง ไม่ใช้ข้อมูล Mock)
-> - **ตำแหน่งในระบบ**: เพิ่มแท็บ **"รายงาน Transfer Car"** (Transfer Car Report) ให้อยู่ในแถบเมนูนำทางของโมดูลเหล็กสลิต (Slit Steel Navigation) เคียงคู่กับ "รายงาน", "พื้นที่", และ "สต็อกคงคลัง"
-
----
-
-### 1. Overview & Core Concept
-
-- **What It Does**:
-  - เป็นหน้าจอรายงานสรุปและบันทึกประวัติการทำงานของเครื่อง Transfer Car ตลอดทั้งเดือน สำหรับ 2 เครื่องจักรหลักคือ TM06 และ TM07
-  - คำนวณจำนวนรอบ (Rounds / Trips) ที่ Transfer Car ต้องวิ่งขนย้ายงาน เช่น 1 ใบสั่งผลิตมี 10 แถบ แต่น้ำหนักมากหรือเบิกต่างเวลา Transfer Car จะแบ่งการวิ่งเป็น 2 รอบ (รอบที่ 1: 5 แถบ เวลา 10:00 น. น้ำหนัก 4.2 ตัน, รอบที่ 2: 5 แถบ เวลา 11:00 น. น้ำหนัก 4.1 ตัน)
-  - แสดงตัวชี้วัดสำคัญ (KPIs): จำนวนรอบวิ่งรวมทั้งเดือน, จำนวนแถบเหล็กรวม, น้ำหนักขนย้ายรวม (กก./ตัน), น้ำหนักเฉลี่ยต่อรอบ, และสัดส่วนระหว่าง TM06 กับ TM07
-  - รองรับการคัดกรองตามเดือน/ปี, ช่วงวันที่, และเลือกเฉพาะเครื่องจักร TM06 หรือ TM07 หรือทั้งหมด
-  - ส่งออกรายงานเป็นไฟล์ Excel (`.xlsx`) ตามมาตรฐานรายงานคลังสินค้า
-
-- **Target Audience & Context**:
-  - หัวหน้าแผนกผลิต, เจ้าหน้าที่วางแผนการผลิต (PP), และหัวหน้าคลังสินค้า เพื่อตรวจสอบความหนาแน่นและภาระงานของ Transfer Car รวมถึงประเมินประสิทธิภาพการไหลของวัตถุดิบ (Material Flow Bottleneck)
-
-- **Key Value**:
-  - ตรวจสอบได้ว่าในแต่ละวันและแต่ละเดือน Transfer Car ทำงานหนักเพียงใด มีการแบ่งรอบเหมาะสมกับพิกัดน้ำหนักหรือไม่ และช่วยวางแผนคิวการเบิกจ่ายเหล็กสลิตเข้าเครื่อง TM06/TM07 ได้อย่างแม่นยำ
+> [!IMPORTANT] สรุปผลการตัดสินใจและข้อแนะนำตามความต้องการของผู้ใช้งาน:
+> 1. **บริการฐานข้อมูลที่เลือกใช้**: **Firebase Firestore (Spark Plan - ฟรี 100% ไม่ต้องผูกบัตรเครดิต)**
+>    - *เหตุผล*: ปริมาณงาน 500 รายการ/วัน คิดเป็นเพียง ~2.5% ของโควตาฟรีต่อวัน (Firestore ให้ฟรี 20,000 Writes/วัน และ 50,000 Reads/วัน)
+>    - *จุดเด่นสำคัญ*: มีฟีเจอร์ Real-time Sync (`onSnapshot`) ในตัวจาก Client SDK โดยตรง ทำให้แอปพลิเคชันที่ Deploy บน **Vercel** สามารถซิงค์ข้อมูลระหว่างมือถือและคอมพิวเตอร์ได้ทันทีในระดับมิลลิวินาที โดยไม่ต้องสร้าง WebSocket Server เพิ่มเติม
+> 2. **ขอบเขตการทดสอบระยะแรก**: เชื่อมต่อและทดสอบเฉพาะ **ส่วนงานสลิต (Slit Film Management)** ซึ่งครอบคลุม:
+>    - รายการรับเข้า (Inbound Records)
+>    - รายการเบิกจ่าย / จ่ายออก (Outbound / Operator Receive Records)
+>    - ประวัติการเคลื่อนย้ายและย้าย Layout (Movement & Relocation History)
+>    - สต็อกคงคลังและพื้นที่จัดเก็บ (Stock Balance & Space Allocation)
+> 3. **กลยุทธ์รักษาความปลอดภัยและระบบสำรอง (Zero Downtime / Offline Fallback)**:
+>    - หากเกิดเหตุขัดข้องหรือไม่มีสัญญาณอินเทอร์เน็ต ระบบจะยังคงทำงานต่อได้ด้วย Local Persistence แคชของ Firestore ร่วมกับ LocalStorage เดิม ทำให้การทำงานในคลังสินค้าไม่หยุดชะงัก
 
 ---
 
-### 2. User Experience & Visual Design
+## 1. Overview & Core Concept
 
-ตามข้อกำหนด **Universal Frontend Design Constitution** และแนวทาง **SaaS & Industrial Dashboard**:
-
-#### Key User Flows
-1. **การเข้าสู่หน้าจอ**: ผู้ใช้คลิกเมนู "เหล็กสลิต" จากแถบด้านข้าง (Sidebar) และเลือกแท็บ **"รายงาน Transfer Car"**
-2. **การเลือกช่วงเวลา**:
-   - กล่องเลือกเดือน/ปี (Month Picker เช่น มีนาคม 2026) ค่าเริ่มต้นเป็นเดือนปัจจุบัน
-   - ตัวกรองเครื่องจักร: ปุ่ม Segmented Control ให้เลือก `ทั้งหมด`, `TM06`, `TM07`
-3. **การอ่านสรุปภาพรวม (KPI Cards)**:
-   - 4 กล่องสถิติหลักด้านบน ใช้ตัวเลขอ่านง่ายแบบ Tabular Figures (`tabular-nums`)
-   - 1) จำนวนรอบรวม (Total Trips)
-   - 2) จำนวนแถบรวม (Total Strips)
-   - 3) น้ำหนักรวม (Total Tons & Kg)
-   - 4) น้ำหนักเฉลี่ย/รอบ (Avg Kg/Trip)
-4. **การดูแนวโน้มการใช้งาน (Analytics Breakdown)**:
-   - ตารางเปรียบเทียบภาระงาน TM06 vs TM07 (จำนวนรอบ, จำนวนแถบ, น้ำหนักรวม, %)
-   - แถบแสดงการกระจายตัวตามช่วงเวลาการทำงานของวัน (Hourly / Daily Load)
-5. **ตารางบันทึกการขนย้ายรายรอบ (Detailed Trips Table)**:
-   - คอลัมน์: ลำดับรอบ, วันที่, ช่วงเวลา (Timestamp), เครื่องจักรเป้าหมาย (TM06 / TM07), เลขที่ใบสั่งเบิก (Order No.), จำนวนแถบ, น้ำหนักรวม (กก.), น้ำหนักรวม (ตัน), รายการแถบเหล็ก
-   - ฟังก์ชัน Expandable Row: คลิกเพื่อเปิดดูรายละเอียดแถบเหล็กสลิตย่อยในแต่ละรอบ (Batch No., Spec ขนาดหนาxกว้าง, เกรด, น้ำหนักแต่ละแถบ)
-6. **การส่งออกรายงาน**: ปุ่ม "ส่งออก Excel" ดาวน์โหลดไฟล์ตารางสรุปครบถ้วน
-
-#### Visual Identity & Theme
-- **Typographic Hierarchy**: ฟอนต์ภาษาไทย **Noto Sans Thai** เป็นหลัก ตัวเลขอุณหภูมิ/น้ำหนัก/เวลาใช้ `tabular-nums` เพื่อให้จัดแนวตรงกันในตาราง
-- **Color Palette & Discipline (60-30-10)**:
-  - พื้นหลังโทนสี Slate ผิวอุตสาหกรรม รองรับทั้ง Light Mode (`#F4F6F8`) และ Dark Mode (`#0B1329`)
-  - Accent Color: สีฟ้าอมน้ำเงิน Industrial Blue (`#0284C7` / `#38BDF8`) สำหรับ Transfer Car และ TM06/TM07
-  - Highlighting: สีเขียวมรกต (`#059669` / `#10B981`) สำหรับสถานะเสร็จสิ้น และสีส้มอำพัน (`#D97706`) สำหรับรอบที่น้ำหนักสูง
-- **Zero-Pill Discipline & Anti-AI Slop**:
-  - เมทาดาทาวันที่และเวลาใช้การเว้นวรรคด้วยจุดคั่น (`·`) ไม่ใช้ป้ายแคปซูลตกแต่ง
-  - ตารางแถวจัดชิดซ้ายสำหรับข้อความ และจัดชิดขวาสำหรับตัวเลขน้ำหนัก/จำนวน
-- **Empty State**:
-  - หากเดือนที่เลือกยังไม่มีรายการเบิกจ่ายเข้า TM06/TM07 จะแสดง Empty State ที่สะอาด พร้อมระบุว่า "ไม่พบข้อมูลการใช้งาน Transfer Car ในเดือนที่เลือก" โดยไม่มีข้อมูลจำลอง (Strictly No Mock Data)
+- **เป้าหมาย**: ปรับเปลี่ยนจากการจัดเก็บข้อมูลชั่วคราวใน LocalStorage/Mock Data ไปสู่ Cloud Database จริงที่มีประสิทธิภาพสูง ปลอดภัย และซิงค์ข้อมูลทันทีระหว่างผู้ใช้งานหลายคน
+- **ผู้ใช้งานและบริบทการใช้งาน**:
+  - เจ้าหน้าที่หน้างาน (Forklift Operator / Material Handler): ใช้มือถือยิงบาร์โค้ดรับเข้า/จ่ายออก
+  - เจ้าหน้าที่คลังและหัวหน้างาน (Warehouse Controller / Supervisor): เปิดคอมพิวเตอร์ดู Dashboard, Layout, และสต็อกคงคลังที่อัปเดตสดทันที
+- **ปริมาณการใช้งาน**: ประมาณ 500 รายการ/วัน อยู่ในเกณฑ์ Free Tier ของ Firestore อย่างปลอดภัยตลอดอายุการใช้งาน
 
 ---
 
-### 3. Key Product Decisions & Trade-Offs
-
-- **การตรวจจับรอบการย้าย (Trip Inference Logic)**:
-  - *Chosen Approach*: รวมข้อมูลการสแกนจ่ายหน้าเครื่อง TM06/TM07 ที่เกิดขึ้นในช่วงเวลาต่อเนื่องกัน (Batch Scanning Window ภายในใบสั่งเดียวกัน หรือมี Timestamp ห่างกันไม่เกิน 20-30 นาที) จัดเป็น 1 รอบ (1 Trip)
-  - *Why*: ในหน้างานจริง พนักงานจะยกเหล็กสลิตขึ้น Transfer Car เป็นรอบๆ แล้วสแกนบาร์โค้ดลงแคร่หน้าเครื่องจักร การจัดกลุ่มตามเวลาสแกนจริงสะท้อนพฤติกรรมการทำงานหน้างานได้ตรงที่สุด
-  - *Alternatives Considered*: การบังคับให้ผู้ใช้กดปุ่ม "เริ่มรอบ / ปิดรอบ" ด้วยมือ — ถูกตัดออกเพราะเพิ่มภาระให้ผู้ปฏิบัติงานหน้างานที่ใช้เครื่องยิงบาร์โค้ดเป็นหลัก
-
-- **การเชื่อมโยงข้อมูล (Data Model Integration)**:
-  - *Chosen Approach*: ดึงข้อมูลจากฐานข้อมูลจริงในระบบที่มีอยู่แล้ว ได้แก่ `tmt_wms_slit_pick_lists` (รายการที่ `machineIssued === true`), `tmt_wms_slit_outbound_records` (ที่จ่ายให้ TM06/TM07), และข้อมูลคอยล์ใน `machineStagingStorage`
-  - *Why*: ทำให้ข้อมูลในรายงาน Transfer Car สอดคล้อง 100% กับหน้า "จ่ายหน้าเครื่อง", "สต็อกคงคลัง", และ "ประวัติการเคลื่อนไหว" ทันที ไม่เกิดความขัดแย้งของตัวเลข
-
-- **Zero Regression Rule**:
-  - ไม่แก้ไข Flow เดิมของการรับเข้า (+ Inbound), การเตรียมเบิก (- Outbound), และการสแกนจ่ายหน้าเครื่อง เพียงอ่านข้อมูลมาประมวลผลสรุปในแท็บรายงานใหม่
-
----
-
-### 4. Technical Architecture & Data Strategy
+## 2. Technical Architecture & Real-Time Data Flow
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        Slit / Film Navigation                          │
-│  [+ รับเข้า]  [- เตรียมเบิก]  [จ่ายหน้าเครื่อง]  [สต็อกคงคลัง]  [พื้นที่] ...  │
-│                                           └─── [ รายงาน Transfer Car ] │
+│                        WMS Warehouse 1 Architecture                    │
 └────────────────────────────────────────────────────────────────────────┘
+
+  [ Mobile Device (Android/iOS) ]         [ Desktop PC (Control Room) ]
+  • กล้องสแกนบาร์โค้ด Batch               • Dashboard ตรวจสอบสต็อก
+  • รับเข้า / จ่ายออก หน้างาน              • บริหารจัดการผัง Layout / พื้นที่
+              │                                      ▲
+              │ (1) ยิงสแกน & บันทึก                    │ (3) onSnapshot Listener
+              ▼                                      │     อัปเดตสดทันที (<100ms)
+  ┌──────────────────────────────────────────────────┴───────────────────┐
+  │                 Vercel Deployment (Vite + React SPA)                 │
+  │  • src/services/firebase.ts (SDK Init & Configuration)               │
+  │  • src/services/slitDataService.ts (CRUD & Real-time Subscriptions)  │
+  └──────────────────────────────────┬───────────────────────────────────┘
                                      │
                                      ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                      TransferCarReport Component                       │
-│                                                                        │
-│  ┌───────────────────────┐ ┌────────────────────────────────────────┐ │
-│  │ Month / Date Selector │ │ Machine Filter Tabs (All / TM06 / TM07)│ │
-│  └───────────────────────┘ └────────────────────────────────────────┘ │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ KPI Metrics (Total Trips · Total Strips · Total Tons · Avg/Trip) │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                        │
-│  ┌─────────────────────────┐  ┌───────────────────────────────────┐    │
-│  │ Machine Load Comparison │  │ Daily Trend / Time Distribution   │    │
-│  │ (TM06 vs TM07 Share)    │  │ (Activity by Day of Month)        │    │
-│  └─────────────────────────┘  └───────────────────────────────────┘    │
-│                                                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │ Trips & Rounds Table (Expandable Coils, Weight in Kg & Ton)      │  │
-│  │  [Export Excel]  [Search Batch / Order]                          │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────────────┘
-                                     │
-                                     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                       Data Aggregation Pipeline                        │
-│  - Storage: localStorage ('tmt_wms_slit_pick_lists', staging, outbound)│
-│  - Filter: targetMachine in ['TM06', 'TM07']                           │
-│  - Cluster: Group items by Date + OrderNo + Time proximity (< 30 min)  │
-│  - Compute: Trip Index, Strips Count, Total Weight (Kg & Ton)          │
-│  - Empty State: When no records match month criteria                   │
-└────────────────────────────────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │               Google Cloud Firebase Firestore (Spark Plan)           │
+  │  ┌───────────────────────┐         ┌──────────────────────────────┐  │
+  │  │ slit_inventory        │         │ slit_movements               │  │
+  │  │ (สต็อกม้วนสลิตปัจจุบัน)   │         │ (ประวัติการย้ายและทำรายการ)       │  │
+  │  └───────────────────────┘         └──────────────────────────────┘  │
+  │  ┌───────────────────────┐         ┌──────────────────────────────┐  │
+  │  │ slit_inbound_sessions │         │ slit_space_layout            │  │
+  │  │ (รอบการสแกนรับเข้า)      │         │ (ตำแหน่งและพิกัด Bay คลัง 1)    │  │
+  │  └───────────────────────┘         └──────────────────────────────┘  │
+  └──────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Component & Data Structure
-- **Component File**: `src/components/TransferCarReport.tsx`
-- **Data Interface**:
-  ```typescript
-  export interface TransferCarTrip {
-    tripId: string;
-    tripNumber: number; // รอบที่ 1, 2, ... ในวันหรือในเดือน
-    date: string;       // YYYY-MM-DD
-    timePeriod: string; // เช่น "10:00 - 10:15" หรือ "10:00:24"
-    machineId: "TM06" | "TM07";
-    machineCode: string; // "TM 06" | "TM 07"
-    orderNo: string;
-    totalStrips: number;
-    totalWeightKg: number;
-    totalWeightTon: number;
-    items: {
-      batch: string;
-      spec: string;
-      grade: string;
-      weightKg: number;
-      issuedAt: string;
-    }[];
-  }
-  ```
+---
 
-#### Excel Export Format
-- ชื่อไฟล์: `Transfer_Car_Report_YYYY-MM.xlsx`
-- คอลัมน์รายงาน:
-  1. ลำดับรอบ (Trip No.)
-  2. วันที่ (Date)
-  3. ช่วงเวลา (Time Period)
-  4. เครื่องจักรปลายทาง (Machine: TM06 / TM07)
-  5. เลขที่ใบสั่งเบิก (Order No.)
-  6. Batch แถบเหล็ก (Coil Batch)
-  7. ขนาด หนา x กว้าง (Spec)
-  8. เกรด (Grade)
-  9. น้ำหนักแถบ (Weight Kg)
-  10. น้ำหนักรวมรอบนั้น (Trip Total Kg)
-  11. น้ำหนักรวมรอบนั้น (Trip Total Ton)
+## 3. Data Model Strategy (Slit Film Module)
+
+โครงสร้าง Collection สำหรับส่วนงานสลิตใน Firestore:
+
+1. **`slit_inventory`** (ข้อมูลม้วนสลิตที่อยู่ในคลัง):
+   - `id`: Document ID (สร้างจาก Batch Number เช่น `2603412001`)
+   - `batch`: string (10 หลัก)
+   - `coilNo`: string
+   - `materialCode`: string
+   - `spec`: string
+   - `thick`: number
+   - `width`: number
+   - `weight`: number
+   - `location`: string (เช่น `WH1-A01`, `HOLD-01`)
+   - `status`: `'Available' | 'Reserved' | 'In-Transit' | 'Hold'`
+   - `inboundAt`: timestamp
+   - `updatedAt`: timestamp
+   - `operator`: string
+
+2. **`slit_movements`** (ประวัติการเคลื่อนไหว Inbound/Outbound/Relocate):
+   - `id`: auto-generated UUID
+   - `batch`: string
+   - `action`: `'inbound' | 'outbound' | 'relocate' | 'return'`
+   - `fromLocation`: string
+   - `toLocation`: string
+   - `weight`: number
+   - `timestamp`: timestamp
+   - `operator`: string
+   - `remark`: string
+
+3. **`slit_inbound_sessions`** (บันทึกรอบการสแกนรับเข้าจากเครื่องจักร):
+   - `sessionId`: string
+   - `machine`: string (เช่น `SM03`)
+   - `totalItems`: number
+   - `totalWeight`: number
+   - `totalWidth`: number
+   - `scannedBatches`: array of batch objects
+   - `completedAt`: timestamp
+
+---
+
+## 4. Key Implementation Steps
+
+1. **ขั้นตอนที่ 1: ติดตั้ง Firebase Client SDK**
+   - ติดตั้ง `firebase` แพ็กเกจในโปรเจกต์
+   - ตั้งค่าตัวแปรสภาพแวดล้อม (Environment Variables) สำหรับเชื่อมต่อ Firebase Config ผ่าน `.env` และระบบ Environment ของ Vercel
+
+2. **ขั้นตอนที่ 2: สร้าง Service Layer (`slitDataService.ts`)**
+   - ฟังก์ชันบันทึกข้อมูลรับเข้า (Create Inbound)
+   - ฟังก์ชันบันทึกการเบิกจ่าย / คืนคลัง (Update/Issue Outbound)
+   - ฟังก์ชัน Real-time Subscription (`subscribeToSlitInventory`, `subscribeToSlitMovements`) ที่คืนค่า Unsubscribe เมื่อ Component Unmount เพื่อประหยัด Connection
+
+3. **ขั้นตอนที่ 3: เชื่อมต่อเข้ากับ `SlitFilmManagement.tsx`**
+   - เชื่อมต่อ State เดิมเข้ากับ Firestore Listener
+   - รองรับ Data Fallback อัตโนมัติ (หาก Offline จะดึง Local Cache และซิงค์ขึ้น Cloud เมื่อกลับมา Online)
+   - ทดสอบการสแกนบาร์โค้ดผ่านมือถือ และตรวจเช็คผลการแสดงผลบนคอมพิวเตอร์แบบทันที (Instant Sync)
+
+4. **ขั้นตอนที่ 4: การรักษาความปลอดภัย (Security Rules)**
+   - กำหนดสิทธิ์การอ่าน/เขียนข้อมูลตามมาตรฐานความปลอดภัย และป้องกันข้อมูลเสียหาย
+
+---
+
+## 5. แผนการขยายผลสู่อีก 4 ส่วนงานในอนาคต
+
+เมื่อทดสอบส่วนงานสลิตจนเสร็จสมบูรณ์และมั่นใจแล้ว สามารถนำ Service Pattern นี้ไปเชื่อมต่อกับอีก 4 ส่วนงานได้อย่างรวดเร็วและเป็นระบบ:
+- ส่วนงานเหล็กแผ่น (RM Steel Sheet)
+- ส่วนงานเหล็กม้วน (Steel Coil)
+- ส่วนงานยานพาหนะและเครื่องจักร (Transport & Material Handling)
+- ส่วนงานผู้ปฏิบัติงานและงานบริหาร (Admin Workforce)

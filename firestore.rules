@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidInboundRecord(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.batch is string && data.batch.size() <= 32
+        && data.location is string && data.location.size() <= 64;
+    }
+
+    function isValidOutboundRecord(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.batch is string && data.batch.size() <= 32
+        && data.location is string && data.location.size() <= 64;
+    }
+
+    function isValidPickList(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.orderNo is string && data.orderNo.size() <= 64;
+    }
+
+    match /slit_inbound/{recordId} {
+      allow read: if true;
+      allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
+      allow delete: if isValidId(recordId);
+    }
+
+    match /slit_outbound/{recordId} {
+      allow read: if true;
+      allow create, update: if isValidId(recordId) && isValidOutboundRecord(request.resource.data);
+      allow delete: if isValidId(recordId);
+    }
+
+    match /slit_picklists/{orderId} {
+      allow read: if true;
+      allow create, update: if isValidId(orderId) && isValidPickList(request.resource.data);
+      allow delete: if isValidId(orderId);
+    }
+  }
+}

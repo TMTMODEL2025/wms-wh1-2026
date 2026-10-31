@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "SlitInboundRecord": {
+      "title": "Slit Inbound Record",
+      "description": "Barcode scan record for inbound slit coil",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "mode": { "type": "string", "maxLength": 32 },
+        "scanTimestamp": { "type": "string", "maxLength": 64 },
+        "batch": { "type": "string", "maxLength": 32 },
+        "machine": { "type": "string", "maxLength": 32 },
+        "location": { "type": "string", "maxLength": 64 },
+        "previousLocation": { "type": "string", "maxLength": 64 },
+        "orderNo": { "type": "string", "maxLength": 64 },
+        "hasSapData": { "type": "boolean" },
+        "certThickness": { "type": "string", "maxLength": 32 },
+        "width": { "type": "string", "maxLength": 32 },
+        "weightKg": { "type": "number" },
+        "unrestricted": { "type": "string", "maxLength": 64 },
+        "grade": { "type": "string", "maxLength": 64 },
+        "manufacturer": { "type": "string", "maxLength": 64 },
+        "storageLocation": { "type": "string", "maxLength": 64 },
+        "salesDoc": { "type": "string", "maxLength": 64 },
+        "materialNo": { "type": "string", "maxLength": 64 },
+        "targetThickness": { "type": "string", "maxLength": 32 },
+        "qualityClass": { "type": "string", "maxLength": 32 },
+        "description": { "type": "string", "maxLength": 256 },
+        "coilNo": { "type": "string", "maxLength": 64 },
+        "conditionText": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "batch", "location"]
+    },
+    "SlitOutboundRecord": {
+      "title": "Slit Outbound Record",
+      "description": "Barcode scan record for outbound slit coil",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "mode": { "type": "string", "maxLength": 32 },
+        "scanTimestamp": { "type": "string", "maxLength": 64 },
+        "batch": { "type": "string", "maxLength": 32 },
+        "machine": { "type": "string", "maxLength": 32 },
+        "location": { "type": "string", "maxLength": 64 },
+        "previousLocation": { "type": "string", "maxLength": 64 },
+        "orderNo": { "type": "string", "maxLength": 64 },
+        "hasSapData": { "type": "boolean" },
+        "certThickness": { "type": "string", "maxLength": 32 },
+        "width": { "type": "string", "maxLength": 32 },
+        "weightKg": { "type": "number" },
+        "unrestricted": { "type": "string", "maxLength": 64 },
+        "grade": { "type": "string", "maxLength": 64 },
+        "manufacturer": { "type": "string", "maxLength": 64 },
+        "storageLocation": { "type": "string", "maxLength": 64 },
+        "salesDoc": { "type": "string", "maxLength": 64 },
+        "materialNo": { "type": "string", "maxLength": 64 },
+        "targetThickness": { "type": "string", "maxLength": 32 },
+        "qualityClass": { "type": "string", "maxLength": 32 },
+        "description": { "type": "string", "maxLength": 256 },
+        "coilNo": { "type": "string", "maxLength": 64 },
+        "conditionText": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "batch", "location"]
+    },
+    "SlitPickListOrder": {
+      "title": "Slit Pick List Order",
+      "description": "Pick list order with target items to dispatch",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderNo": { "type": "string", "maxLength": 64 },
+        "machine": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "maxLength": 32 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "orderNo"]
+    }
+  },
+  "firestore": {
+    "/slit_inbound/{recordId}": {
+      "schema": "SlitInboundRecord",
+      "description": "Collection of scanned inbound slit coils"
+    },
+    "/slit_outbound/{recordId}": {
+      "schema": "SlitOutboundRecord",
+      "description": "Collection of dispatched outbound slit coils"
+    },
+    "/slit_picklists/{orderId}": {
+      "schema": "SlitPickListOrder",
+      "description": "Collection of dispatch pick lists"
+    }
+  }
+}

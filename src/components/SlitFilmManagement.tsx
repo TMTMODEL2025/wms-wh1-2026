@@ -68,6 +68,16 @@ import {
 import { DailyReportView } from "./DailyReportView";
 import { EquipmentInspectionView } from "./EquipmentInspectionView";
 import { TransferCarReport } from "./TransferCarReport";
+import {
+  subscribeToSlitInbound,
+  subscribeToSlitOutbound,
+  subscribeToSlitPickLists,
+  batchSaveInboundToCloud,
+  batchSaveOutboundToCloud,
+  deleteRecordFromCloud,
+  savePickListToCloud,
+  syncLocalDataToFirestoreIfEmpty,
+} from "../services/slitDataService";
 
 export interface SapMasterItem {
   salesDoc: string;
@@ -133,6 +143,7 @@ export interface PickListItem {
 }
 
 export interface PickListOrder {
+  id?: string;
   orderNo: string;
   machineId: string;
   machineType: "pipe" | "c_channel" | "mini" | "lip_channel";
@@ -1534,6 +1545,62 @@ export function SlitFilmManagement({
       // ignore
     }
   }, [pickLists]);
+
+  // Cloud Database Real-time Synchronization (Firebase Firestore)
+  const [isCloudSyncing] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    // Seed local data to Firestore if Firestore is fresh
+    syncLocalDataToFirestoreIfEmpty(inboundList, outboundList);
+
+    // Subscribe to Inbound collection in real-time
+    const unsubscribeInbound = subscribeToSlitInbound((cloudInbound) => {
+      if (!isMounted) return;
+      if (cloudInbound && cloudInbound.length > 0) {
+        setInboundList((prev) => {
+          if (prev.length === cloudInbound.length && prev[0]?.id === cloudInbound[0]?.id) {
+            return prev;
+          }
+          return cloudInbound;
+        });
+      }
+    });
+
+    // Subscribe to Outbound collection in real-time
+    const unsubscribeOutbound = subscribeToSlitOutbound((cloudOutbound) => {
+      if (!isMounted) return;
+      if (cloudOutbound && cloudOutbound.length > 0) {
+        setOutboundList((prev) => {
+          if (prev.length === cloudOutbound.length && prev[0]?.id === cloudOutbound[0]?.id) {
+            return prev;
+          }
+          return cloudOutbound;
+        });
+      }
+    });
+
+    // Subscribe to Pick Lists collection in real-time
+    const unsubscribePickLists = subscribeToSlitPickLists((cloudPickLists) => {
+      if (!isMounted) return;
+      if (cloudPickLists && cloudPickLists.length > 0) {
+        setPickLists((prev) => {
+          if (prev.length === cloudPickLists.length && prev[0]?.orderNo === cloudPickLists[0]?.orderNo) {
+            return prev;
+          }
+          return cloudPickLists;
+        });
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribeInbound();
+      unsubscribeOutbound();
+      unsubscribePickLists();
+    };
+  }, []);
 
   // Outbound active machine category & active machine selection
   const [activeCategory, setActiveCategory] = useState<"pipe" | "c_channel" | "mini" | "lip_channel">("pipe");
@@ -4420,8 +4487,10 @@ export function SlitFilmManagement({
   const handleDeleteRecord = (id: string, batch: string) => {
     if (activeMode === "inbound") {
       setInboundList((prev) => prev.filter((r) => r.id !== id));
+      deleteRecordFromCloud("slit_inbound", id);
     } else {
       setOutboundList((prev) => prev.filter((r) => r.id !== id));
+      deleteRecordFromCloud("slit_outbound", id);
     }
     if (selectedRecord?.id === id) {
       setSelectedRecord(null);
@@ -4600,6 +4669,7 @@ export function SlitFilmManagement({
         }
         return updated;
       });
+      batchSaveInboundToCloud(committedBatches);
     } else {
       setOutboundList((prev) => {
         let updated = [...prev];
@@ -4614,6 +4684,7 @@ export function SlitFilmManagement({
         }
         return updated;
       });
+      batchSaveOutboundToCloud(committedBatches);
     }
 
     setSelectedLocation(finalLocation);
@@ -4858,8 +4929,17 @@ export function SlitFilmManagement({
             </button>
           </div>
 
-          {/* Utilities: Sound & Reset */}
+          {/* Utilities: Cloud Status, Sound & Reset */}
           <div className="flex items-center gap-1.5 ml-auto flex-shrink-0 pt-1 sm:pt-0">
+            <div
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 select-none"
+              title={isThai ? "เชื่อมต่อฐานข้อมูล Firebase Firestore แบบ Real-time สำเร็จ" : "Connected to Firebase Firestore Real-time"}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="hidden sm:inline">Cloud Real-time</span>
+              <span className="sm:hidden">Cloud</span>
+            </div>
+
             <button
               type="button"
               onClick={() => setSoundEnabled(!soundEnabled)}
