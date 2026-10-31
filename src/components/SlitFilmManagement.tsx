@@ -48,7 +48,10 @@ import {
   MapPin,
   RefreshCw,
   Loader2,
+  Camera,
 } from "lucide-react";
+import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
+import { cleanBarcode } from "../utils/barcodeUtils";
 import { SpaceManagementView } from "./SpaceManagementView";
 import * as XLSX from "xlsx";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -1782,6 +1785,7 @@ export function SlitFilmManagement({
 
   // Outbound Scanner Modal State
   const [isOutboundScannerOpen, setIsOutboundScannerOpen] = useState<boolean>(false);
+  const [isOutboundCameraActive, setIsOutboundCameraActive] = useState<boolean>(false);
   const [outboundBarcodeInput, setOutboundBarcodeInput] = useState<string>("");
   const [outboundScanStatus, setOutboundScanStatus] = useState<{
     type: "success" | "error" | "info";
@@ -1792,8 +1796,10 @@ export function SlitFilmManagement({
   // Auto-focus scanner input when Outbound Scanner Modal opens
   useEffect(() => {
     if (isOutboundScannerOpen) {
+      setIsOutboundCameraActive(false);
       const timer = setTimeout(() => {
         outboundScannerInputRef.current?.focus();
+        outboundScannerInputRef.current?.select();
       }, 120);
       return () => clearTimeout(timer);
     }
@@ -1960,7 +1966,7 @@ export function SlitFilmManagement({
 
   // Handler: Process Outbound Barcode Scan
   const processOutboundBarcodeScan = (rawCode: string) => {
-    const trimmed = rawCode.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+    const trimmed = cleanBarcode(rawCode);
     if (!trimmed || !activePickListOrder) return;
 
     // RULE: Check if Batch exists in Stock Balance (Stock คงคลัง) or current Pick List
@@ -2222,6 +2228,19 @@ export function SlitFilmManagement({
 
   // Scanner input ref for autofocus
   const modalScannerInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraActive, setIsCameraActive] = useState<boolean>(false);
+
+  // Auto-focus barcode input when Batch Scanner Modal opens
+  useEffect(() => {
+    if (isScannerModalOpen) {
+      setIsCameraActive(false);
+      const timer = setTimeout(() => {
+        modalScannerInputRef.current?.focus();
+        modalScannerInputRef.current?.select();
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [isScannerModalOpen]);
 
   // Auto-focus location input when Location Scanner Modal opens
   useEffect(() => {
@@ -2841,7 +2860,7 @@ export function SlitFilmManagement({
 
   // Handler: Scan & Add Batch to Relocate Accumulation Table
   const handleScanRelocateBatch = (rawCode: string) => {
-    const trimmed = rawCode.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+    const trimmed = cleanBarcode(rawCode);
     if (!trimmed) return;
 
     // Check if Batch exists in Movement History, Stock Balance, Inbound List, or SAP Master Data
@@ -3327,7 +3346,7 @@ export function SlitFilmManagement({
 
   // Handler: Scan Batch Barcode to quick-select
   const handleScanReturnBatchBarcode = (code: string) => {
-    const trimmed = code.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+    const trimmed = cleanBarcode(code);
     if (!trimmed) return;
 
     const matched = returnableBatches.find((b) => b.batch.toUpperCase() === trimmed);
@@ -3848,12 +3867,12 @@ export function SlitFilmManagement({
 
   // Process barcode input validation & submission
   const processBarcodeSubmission = (rawCode: string) => {
-    const trimmed = rawCode.replace(/[\r\n\t]+/g, "").trim().toUpperCase();
+    const trimmed = cleanBarcode(rawCode);
 
-    // STRICT VALIDATION 1: Reject QR Codes, URLs, or non-barcode inputs
+    // STRICT VALIDATION 1: Reject URLs or structured JSON inputs
     const isForbiddenQr =
-      trimmed.includes("HTTP") ||
-      trimmed.includes("://") ||
+      trimmed.includes("HTTP://") ||
+      trimmed.includes("HTTPS://") ||
       trimmed.includes("{") ||
       trimmed.includes(",") ||
       trimmed.includes(";") ||
@@ -4334,7 +4353,8 @@ export function SlitFilmManagement({
 
   // Auto-submit when user reaches exactly 10 characters or barcode gun fires
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+    const raw = e.target.value;
+    const val = cleanBarcode(raw);
     setBarcodeInput(val);
 
     if (val.length === 10) {
@@ -4344,10 +4364,56 @@ export function SlitFilmManagement({
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (barcodeInput.trim()) {
-      processBarcodeSubmission(barcodeInput);
+    const cleaned = cleanBarcode(barcodeInput);
+    if (cleaned) {
+      processBarcodeSubmission(cleaned);
     }
   };
+
+  // Global Hardware Scanner Listener: Captures rapid keystrokes from barcode guns even if focus temporarily drifted
+  useEffect(() => {
+    let keyBuffer = "";
+    let lastKeyTime = 0;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isInput = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+
+      if (target === modalScannerInputRef.current || target === outboundScannerInputRef.current) {
+        return;
+      }
+
+      if (isInput && (target as HTMLInputElement)?.value?.length > 0) {
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastKeyTime > 120) {
+        keyBuffer = "";
+      }
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        if (keyBuffer.length >= 8) {
+          const cleaned = cleanBarcode(keyBuffer);
+          if (cleaned.length === 10) {
+            e.preventDefault();
+            if (isScannerModalOpen) {
+              processBarcodeSubmission(cleaned);
+            } else if (isOutboundScannerOpen) {
+              processOutboundBarcodeScan(cleaned);
+            }
+          }
+        }
+        keyBuffer = "";
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        keyBuffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isScannerModalOpen, isOutboundScannerOpen]);
 
   // Change machine for a specific row in the table
   const handleMachineChange = (id: string, newMachine: string) => {
@@ -6330,17 +6396,51 @@ export function SlitFilmManagement({
               )}
               {/* 1. Barcode Scanner Input Form (Moved to Very Top) */}
               <form onSubmit={handleFormSubmit} className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {isThai
-                    ? "ยิงบาร์โค้ด Batch (10 หลัก):"
-                    : "Scan 10-Digit Batch Barcode:"}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {isThai
+                      ? "ยิงบาร์โค้ด Batch (10 หลัก):"
+                      : "Scan 10-Digit Batch Barcode:"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCameraActive((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border ${
+                      isCameraActive
+                        ? "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 hover:bg-emerald-100"
+                    }`}
+                  >
+                    <Camera size={14} />
+                    <span>{isCameraActive ? (isThai ? "ปิดกล้อง" : "Close Cam") : (isThai ? "เปิดกล้องสแกน" : "Camera Scan")}</span>
+                  </button>
+                </div>
+
+                {isCameraActive && (
+                  <div className="mb-2">
+                    <CameraBarcodeScanner
+                      isThai={isThai}
+                      placeholderText={isThai ? "เล็งกล้องไปที่บาร์โค้ด Batch 10 หลัก" : "Point camera at 10-digit Batch barcode"}
+                      onScan={(decoded) => {
+                        const cleaned = cleanBarcode(decoded);
+                        if (cleaned) {
+                          processBarcodeSubmission(cleaned);
+                        }
+                      }}
+                      onClose={() => setIsCameraActive(false)}
+                    />
+                  </div>
+                )}
 
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <input
                       ref={modalScannerInputRef}
                       type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       value={barcodeInput}
                       onChange={handleInputChange}
                       maxLength={10}
@@ -6703,9 +6803,13 @@ export function SlitFilmManagement({
                     <input
                       ref={locationInputRef}
                       type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       value={locationBarcode}
                       onChange={(e) => {
-                        setLocationBarcode(e.target.value.toUpperCase());
+                        setLocationBarcode(cleanBarcode(e.target.value));
                         if (locationScanError) setLocationScanError(null);
                       }}
                       placeholder={isThai ? "ยิงบาร์โค้ด Location จัดเก็บ..." : "Scan Location barcode..."}
@@ -7177,9 +7281,13 @@ export function SlitFilmManagement({
                     <input
                       ref={relocateInputRef}
                       type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       value={relocateBarcodeInput}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+                        const val = cleanBarcode(e.target.value);
                         setRelocateBarcodeInput(val);
                         if (val.length === 10) {
                           handleScanRelocateBatch(val);
@@ -7809,9 +7917,13 @@ export function SlitFilmManagement({
                   <input
                     ref={returnBarcodeInputRef}
                     type="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
                     value={returnBarcodeInput}
                     onChange={(e) => {
-                      const val = e.target.value.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+                      const val = cleanBarcode(e.target.value);
                       setReturnBarcodeInput(val);
                       if (val.length === 10) {
                         handleScanReturnBatchBarcode(val);
@@ -8761,18 +8873,52 @@ export function SlitFilmManagement({
                 }}
                 className="space-y-1.5"
               >
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  {isThai ? "ยิงบาร์โค้ด Batch" : "Scan Batch Barcode"}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {isThai ? "ยิงบาร์โค้ด Batch" : "Scan Batch Barcode"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsOutboundCameraActive((prev) => !prev)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 border ${
+                      isOutboundCameraActive
+                        ? "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                        : "bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800 hover:bg-amber-100"
+                    }`}
+                  >
+                    <Camera size={14} />
+                    <span>{isOutboundCameraActive ? (isThai ? "ปิดกล้อง" : "Close Cam") : (isThai ? "เปิดกล้องสแกน" : "Camera Scan")}</span>
+                  </button>
+                </div>
+
+                {isOutboundCameraActive && (
+                  <div className="mb-2">
+                    <CameraBarcodeScanner
+                      isThai={isThai}
+                      placeholderText={isThai ? "เล็งกล้องไปที่บาร์โค้ด Batch" : "Point camera at Batch barcode"}
+                      onScan={(decoded) => {
+                        const cleaned = cleanBarcode(decoded);
+                        if (cleaned) {
+                          processOutboundBarcodeScan(cleaned);
+                        }
+                      }}
+                      onClose={() => setIsOutboundCameraActive(false)}
+                    />
+                  </div>
+                )}
 
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <input
                       ref={outboundScannerInputRef}
                       type="text"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       value={outboundBarcodeInput}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[\r\n\t\s]+/g, "").toUpperCase();
+                        const val = cleanBarcode(e.target.value);
                         setOutboundBarcodeInput(val);
                         if (val.length === 10) {
                           processOutboundBarcodeScan(val);
