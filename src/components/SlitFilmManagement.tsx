@@ -72,6 +72,8 @@ import {
   subscribeToSlitInbound,
   subscribeToSlitOutbound,
   subscribeToSlitPickLists,
+  saveInboundRecordToCloud,
+  saveOutboundRecordToCloud,
   batchSaveInboundToCloud,
   batchSaveOutboundToCloud,
   deleteRecordFromCloud,
@@ -1553,6 +1555,7 @@ export function SlitFilmManagement({
 
   useEffect(() => {
     let isMounted = true;
+    let hasReconciledInitialPickLists = false;
 
     // Seed local data to Firestore if Firestore is fresh
     syncLocalDataToFirestoreIfEmpty(inboundList, outboundList, pickLists);
@@ -1577,7 +1580,74 @@ export function SlitFilmManagement({
     const unsubscribePickLists = subscribeToSlitPickLists((cloudPickLists) => {
       if (!isMounted) return;
       if (cloudPickLists) {
-        setPickLists(cloudPickLists);
+        if (!hasReconciledInitialPickLists) {
+          hasReconciledInitialPickLists = true;
+          setPickLists((prev) => {
+            const localMap = new Map<string, PickListOrder>();
+            prev.forEach((o) => {
+              if (o.orderNo) localMap.set(o.orderNo.trim().toUpperCase(), o);
+            });
+
+            return cloudPickLists.map((cloudOrd) => {
+              const localOrd = localMap.get((cloudOrd.orderNo || "").trim().toUpperCase());
+              if (!localOrd) return cloudOrd;
+
+              const localVerifiedBatches = new Map<string, PickListItem>();
+              (localOrd.items || []).forEach((li) => {
+                if (li.batch && (li.status === "verified" || li.machineIssued)) {
+                  localVerifiedBatches.set(li.batch.trim().toUpperCase(), li);
+                }
+              });
+
+              let hasLocalUnsyncedVerify = false;
+              const mergedItems = (cloudOrd.items || []).map((ci) => {
+                const bKey = (ci.batch || "").trim().toUpperCase();
+                const localVerified = localVerifiedBatches.get(bKey);
+                if (
+                  localVerified &&
+                  (ci.status !== "verified" || (Boolean(localVerified.machineIssued) && !ci.machineIssued))
+                ) {
+                  hasLocalUnsyncedVerify = true;
+                  const { machineIssuedAt, scannedAt, ...restCi } = ci;
+                  return {
+                    ...restCi,
+                    status: "verified" as const,
+                    ...(localVerified.scannedAt || scannedAt
+                      ? { scannedAt: localVerified.scannedAt || scannedAt }
+                      : {}),
+                    machineIssued: Boolean(localVerified.machineIssued || ci.machineIssued),
+                    ...(localVerified.machineIssuedAt || machineIssuedAt
+                      ? { machineIssuedAt: localVerified.machineIssuedAt || machineIssuedAt }
+                      : {}),
+                  };
+                }
+                return ci;
+              });
+
+              if (hasLocalUnsyncedVerify || (localOrd.status === "completed" && cloudOrd.status !== "completed")) {
+                const validPool = mergedItems.filter((itm) =>
+                  Boolean(itm.batch && /^[A-Za-z0-9]{10}$/.test(itm.batch.trim()))
+                );
+                const checkPool = validPool.length > 0 ? validPool : mergedItems;
+                const isAllVerified = checkPool.length > 0 && checkPool.every((itm) => itm.status === "verified");
+                const mergedOrd: PickListOrder = {
+                  ...cloudOrd,
+                  status:
+                    isAllVerified || localOrd.status === "completed"
+                      ? "completed"
+                      : "in_progress",
+                  items: mergedItems,
+                };
+                savePickListToCloud(mergedOrd).catch(console.error);
+                return mergedOrd;
+              }
+
+              return cloudOrd;
+            });
+          });
+        } else {
+          setPickLists(cloudPickLists);
+        }
       }
     });
 
@@ -1859,6 +1929,75 @@ export function SlitFilmManagement({
     }
   }, [isOutboundScannerOpen]);
 
+  // Set of batches/orders that have been scanned and issued at "จ่ายหน้าเครื่อง" (Operator Receive / Machine Issue)
+  const outboundIssuedBatchSet = useMemo(() => {
+    const set = new Set<string>();
+    outboundList.forEach((r) => {
+      if (!r.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      if (r.orderNo) {
+        set.add(`${bKey}::${r.orderNo}`);
+      }
+      const loc = (r.location || "").trim();
+      const upperLoc = loc.toUpperCase();
+      const cond = (r.conditionText || "").trim();
+      if (
+        loc.includes("เบิก") ||
+        loc.startsWith("เบิก") ||
+        ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc) ||
+        cond.includes("รับงานหน้าเครื่อง")
+      ) {
+        set.add(bKey);
+      }
+    });
+    inboundList.forEach((r) => {
+      if (!r.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      const loc = (r.location || "").trim();
+      const upperLoc = loc.toUpperCase();
+      const cond = (r.conditionText || "").trim();
+      if (
+        loc.includes("เบิก") ||
+        loc.startsWith("เบิก") ||
+        ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc) ||
+        cond.includes("รับงานหน้าเครื่อง")
+      ) {
+        set.add(bKey);
+        if (r.orderNo) {
+          set.add(`${bKey}::${r.orderNo}`);
+        }
+      }
+    });
+    return set;
+  }, [outboundList, inboundList]);
+
+  // Helper to check if all coils in a Pick List Order have been scanned and issued at "จ่ายหน้าเครื่อง"
+  const isOrderIssuedAtMachine = useCallback(
+    (order: PickListOrder): boolean => {
+      const items = order.items || [];
+      const validOrderItems = items.filter((i) =>
+        Boolean(i.batch && /^[A-Za-z0-9]{10}$/.test(i.batch.trim()))
+      );
+      const displayItems = validOrderItems.length > 0 ? validOrderItems : items;
+      if (displayItems.length === 0) return false;
+      return displayItems.every((item) => {
+        if (Boolean(item.machineIssued)) return true;
+        if (!item.batch) return false;
+        const bKey = item.batch.trim().toUpperCase();
+        return (
+          outboundIssuedBatchSet.has(bKey) ||
+          outboundIssuedBatchSet.has(`${bKey}::${order.orderNo}`)
+        );
+      });
+    },
+    [outboundIssuedBatchSet]
+  );
+
+  // Pick List Orders remaining in "- เตรียมเบิก" (excludes orders that have completed "จ่ายหน้าเครื่อง")
+  const outboundPickLists = useMemo(() => {
+    return pickLists.filter((o) => !isOrderIssuedAtMachine(o));
+  }, [pickLists, isOrderIssuedAtMachine]);
+
   // Active Pick List Order derived
   const activePickListOrder = useMemo(() => {
     if (!selectedOrderNo) return null;
@@ -1870,22 +2009,27 @@ export function SlitFilmManagement({
     };
   }, [pickLists, selectedOrderNo]);
 
-  // Orders filtered for selected outbound machine
+  // Orders filtered for selected outbound machine (All orders for Operator Receive queue)
   const machineOrders = useMemo(() => {
     return pickLists.filter((o) => o.machineId === selectedOutboundMachine);
   }, [pickLists, selectedOutboundMachine]);
 
-  // Auto select first order if machine changes or if no order is selected
+  // Orders filtered for selected outbound machine in "- เตรียมเบิก" (Excludes orders already completed at "จ่ายหน้าเครื่อง")
+  const outboundMachineOrders = useMemo(() => {
+    return outboundPickLists.filter((o) => o.machineId === selectedOutboundMachine);
+  }, [outboundPickLists, selectedOutboundMachine]);
+
+  // Auto select first remaining order in "- เตรียมเบิก" if machine changes or if current selected order completed machine issue
   useEffect(() => {
-    if (machineOrders.length > 0) {
-      const exists = machineOrders.some((o) => o.orderNo === selectedOrderNo);
+    if (outboundMachineOrders.length > 0) {
+      const exists = outboundMachineOrders.some((o) => o.orderNo === selectedOrderNo);
       if (!exists) {
-        setSelectedOrderNo(machineOrders[0].orderNo);
+        setSelectedOrderNo(outboundMachineOrders[0].orderNo);
       }
     } else {
       setSelectedOrderNo(null);
     }
-  }, [machineOrders, selectedOutboundMachine, selectedOrderNo]);
+  }, [outboundMachineOrders, selectedOutboundMachine, selectedOrderNo]);
 
   // Fast O(1) lookup map for inbound records by batch
   const inboundByBatchMap = useMemo(() => {
@@ -2081,11 +2225,13 @@ export function SlitFilmManagement({
 
     // Mark item as verified safely across all items in the order
     const nowTime = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-    const nextItems = activePickListOrder.items.map((itm) =>
-      itm.batch.trim().toUpperCase() === trimmed
-        ? { ...itm, status: "verified" as const, scannedAt: nowTime, machineIssued: false, machineIssuedAt: undefined }
-        : itm
-    );
+    const nextItems = activePickListOrder.items.map((itm) => {
+      if (itm.batch.trim().toUpperCase() === trimmed) {
+        const { machineIssuedAt: _unusedMachineIssuedAt, ...restItm } = itm;
+        return { ...restItm, status: "verified" as const, scannedAt: nowTime, machineIssued: false };
+      }
+      return itm;
+    });
     const validNextItems = nextItems.filter((itm) =>
       Boolean(itm.batch && /^[A-Za-z0-9]{10}$/.test(itm.batch.trim()))
     );
@@ -2099,11 +2245,14 @@ export function SlitFilmManagement({
     const verifiedCountNow = nextItems.filter((i) => i.status === "verified").length;
 
     setPickLists((prev) =>
-      prev.map((o) => (o.orderNo === activePickListOrder.orderNo ? updatedActiveOrder : o))
+      prev.map((o) => {
+        if (o.orderNo === activePickListOrder.orderNo) {
+          savePickListToCloud(updatedActiveOrder).catch(console.error);
+          return updatedActiveOrder;
+        }
+        return o;
+      })
     );
-
-    // Sync updated Pick List order with verified batch immediately to Cloud Firestore
-    savePickListToCloud(updatedActiveOrder).catch(console.error);
 
     if (soundEnabled) playScanSound(true);
 
@@ -3160,12 +3309,15 @@ export function SlitFilmManagement({
 
   // Helper to determine if an item has been scanned and received by staff at "จ่ายหน้าเครื่อง"
   const isItemMachineIssued = useCallback(
-    (item: PickListItem): boolean => {
-      // Must be prepared at outbound first (status === 'verified') AND explicitly scanned by staff at "จ่ายหน้าเครื่อง"
-      if (item.status !== "verified") return false;
-      return Boolean(item.machineIssued);
+    (item: PickListItem, orderNo?: string): boolean => {
+      if (Boolean(item.machineIssued)) return true;
+      if (!item.batch) return false;
+      const bKey = item.batch.trim().toUpperCase();
+      if (outboundIssuedBatchSet.has(bKey)) return true;
+      if (orderNo && outboundIssuedBatchSet.has(`${bKey}::${orderNo}`)) return true;
+      return false;
     },
-    []
+    [outboundIssuedBatchSet]
   );
 
   // Aggregate returnable batches currently at machines (Only display when staff at จ่ายหน้าเครื่อง has scanned)
@@ -4162,12 +4314,14 @@ export function SlitFilmManagement({
         };
         if (existsIdx !== -1) {
           const mergedRec = mergeSlitBarcodeRecords(prev[existsIdx], updateData, sapMasterMap);
+          saveInboundRecordToCloud(mergedRec).catch(console.error);
           const others = prev.filter((r, i) => i !== existsIdx && r.batch.trim().toUpperCase() !== trimmed);
           return [mergedRec, ...others];
         } else {
           const record = generateRecordFromBatch(trimmed, "inbound", machineLoc, targetMachine, sapMasterMap);
           record.orderNo = foundOrder!.orderNo;
           record.conditionText = `รับงานหน้าเครื่อง ${targetMachine} เรียบร้อยแล้ว`;
+          saveInboundRecordToCloud(record).catch(console.error);
           return [record, ...prev];
         }
       });
@@ -4229,9 +4383,12 @@ export function SlitFilmManagement({
         };
         if (existsIdx !== -1) {
           const updated = [...prev];
-          updated[existsIdx] = mergeSlitBarcodeRecords(updated[existsIdx], newOutboundRecord, sapMasterMap);
+          const mergedOutbound = mergeSlitBarcodeRecords(updated[existsIdx], newOutboundRecord, sapMasterMap);
+          updated[existsIdx] = mergedOutbound;
+          saveOutboundRecordToCloud(mergedOutbound).catch(console.error);
           return updated;
         } else {
+          saveOutboundRecordToCloud(newOutboundRecord).catch(console.error);
           return [newOutboundRecord, ...prev];
         }
       });
@@ -4468,7 +4625,7 @@ export function SlitFilmManagement({
 
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
-  }, [isScannerModalOpen, isOutboundScannerOpen]);
+  }, [isScannerModalOpen, isOutboundScannerOpen, activePickListOrder, pickLists]);
 
   // Change machine for a specific row in the table
   const handleMachineChange = (id: string, newMachine: string) => {
@@ -4859,13 +5016,13 @@ export function SlitFilmManagement({
               >
                 {isThai ? "- เตรียมเบิก" : "- Outbound"}
               </span>
-              {pickLists.length > 0 && (
+              {outboundPickLists.length > 0 && (
                 <span
                   className={`flex-shrink-0 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold ${
                     activeMode === "outbound" ? "bg-white/20 text-white" : "bg-amber-500/20 text-amber-600 dark:text-amber-400"
                   }`}
                 >
-                  {pickLists.length}
+                  {outboundPickLists.length}
                 </span>
               )}
             </button>
@@ -5299,8 +5456,8 @@ export function SlitFilmManagement({
             <div className="grid grid-cols-4 sm:grid-cols-7 lg:grid-cols-11 gap-1.5 pt-0.5">
               {outboundMachines.filter((m) => m.type === activeCategory).map((m) => {
                 const isMSelected = selectedOutboundMachine === m.id;
-                const mOrders = pickLists.filter((o) => o.machineId === m.id);
-                const activeOrdersCount = mOrders.filter((o) => o.status !== "completed").length;
+                const mOrders = outboundPickLists.filter((o) => o.machineId === m.id);
+                const activeOrdersCount = mOrders.length;
                 const isCustomOutboundMachine = !OUTBOUND_MACHINES.some((def) => def.id === m.id);
 
                 return (
@@ -5479,7 +5636,7 @@ export function SlitFilmManagement({
                       [ เครื่อง {selectedOutboundMachine} ]
                     </span>
                     <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                      {machineOrders.length} {isThai ? "ใบสั่ง" : "orders"}
+                      {outboundMachineOrders.length} {isThai ? "ใบสั่ง" : "orders"}
                     </span>
                   </div>
                   <h3 className="text-[11px] sm:text-xs font-extrabold text-slate-900 dark:text-slate-100 leading-tight truncate">
@@ -5506,12 +5663,12 @@ export function SlitFilmManagement({
             </div>
 
             {/* Render Each Order as a Collapsible Card (Accordion Item) */}
-            {machineOrders.length > 0 ? (
+            {outboundMachineOrders.length > 0 ? (
               <div className="space-y-1.5 sm:space-y-2">
-                {machineOrders.map((order) => {
+                {outboundMachineOrders.map((order) => {
                   const isExpanded = expandedOrderNos.includes(order.orderNo);
                   const validItems = order.items.filter((i) => Boolean(i.batch && /^[A-Za-z0-9]{10}$/.test(i.batch.trim())));
-                  const verifiedItems = validItems.filter((i) => i.status === "verified" || isItemMachineIssued(i));
+                  const verifiedItems = validItems.filter((i) => i.status === "verified" || isItemMachineIssued(i, order.orderNo));
                   const verifiedWeight = verifiedItems.reduce((sum, i) => sum + (i.reqQty || 0), 0);
                   const totalWeight = validItems.reduce((sum, i) => sum + (i.reqQty || 0), 0);
 
@@ -5680,7 +5837,7 @@ export function SlitFilmManagement({
                                     {paginatedValidItems.map((item, idx) => {
                                       const bKey = item.batch.trim().toUpperCase();
                                       const matchedLoc = findInboundLocation(item.batch);
-                                      const isVerified = item.status === "verified";
+                                      const isVerified = item.status === "verified" || isItemMachineIssued(item);
                                       const rowNumber = startIndex + idx + 1;
 
                                       const sapRec = sapMasterMap.get(bKey);

@@ -205,16 +205,71 @@ export async function deleteRecordFromCloud(collectionName: "slit_inbound" | "sl
   }
 }
 
+function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unknown> {
+  const docId = sanitizeDocId(order.id || `ORD-${order.orderNo}`);
+  const rawItems = Array.isArray(order.items) ? order.items : [];
+  const cleanItems = rawItems.map((item, idx) => {
+    const cleanItem: Record<string, unknown> = {
+      id: String(item.id || `PLI-${docId}-${idx}`),
+      bomItem: String(item.bomItem || ""),
+      material: String(item.material || ""),
+      description: String(item.description || ""),
+      reqQty: typeof item.reqQty === "number" && !isNaN(item.reqQty) ? item.reqQty : 0,
+      unit: String(item.unit || "KG"),
+      itemCategory: String(item.itemCategory || ""),
+      operation: String(item.operation || ""),
+      sequence: String(item.sequence || ""),
+      plant: String(item.plant || ""),
+      storageLocation: String(item.storageLocation || ""),
+      batch: String(item.batch || "").trim().toUpperCase(),
+      status: item.status === "verified" ? "verified" : "pending",
+      machineIssued: Boolean(item.machineIssued),
+    };
+    if (item.scannedAt) {
+      cleanItem.scannedAt = String(item.scannedAt);
+    }
+    if (item.machineIssuedAt) {
+      cleanItem.machineIssuedAt = String(item.machineIssuedAt);
+    }
+    return cleanItem;
+  });
+
+  const validCheckPool = cleanItems.filter((i) =>
+    Boolean(i.batch && /^[A-Za-z0-9]{10}$/.test(String(i.batch).trim()))
+  );
+  const pool = validCheckPool.length > 0 ? validCheckPool : cleanItems;
+  const allVerified = pool.length > 0 && pool.every((i) => i.status === "verified");
+  const someVerified = pool.some((i) => i.status === "verified");
+
+  const resolvedStatus =
+    order.status === "completed" || allVerified
+      ? "completed"
+      : order.status === "in_progress" || someVerified
+      ? "in_progress"
+      : "pending";
+
+  const payload: Record<string, unknown> = {
+    id: docId,
+    orderNo: String(order.orderNo || "").trim(),
+    machineId: String(order.machineId || "TM01").trim(),
+    machineType: order.machineType || "pipe",
+    createdAt: String(order.createdAt || ""),
+    createdDate: String(order.createdDate || ""),
+    status: resolvedStatus,
+    items: cleanItems,
+    operatorDismissed: Boolean(order.operatorDismissed),
+    updatedAt: new Date().toISOString(),
+  };
+
+  return payload;
+}
+
 /**
  * Save pick list order to Firestore
  */
 export async function savePickListToCloud(order: PickListOrder): Promise<void> {
   const docId = sanitizeDocId(order.id || `ORD-${order.orderNo}`);
-  const payload = {
-    ...order,
-    id: docId,
-    updatedAt: new Date().toISOString(),
-  };
+  const payload = sanitizePickListOrderPayload(order);
   try {
     await setDoc(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true });
   } catch (error) {
@@ -230,11 +285,7 @@ export async function batchSavePickListsToCloud(orders: PickListOrder[]): Promis
   const batch = writeBatch(db);
   for (const order of orders) {
     const docId = sanitizeDocId(order.id || `ORD-${order.orderNo}`);
-    const payload = {
-      ...order,
-      id: docId,
-      updatedAt: new Date().toISOString(),
-    };
+    const payload = sanitizePickListOrderPayload(order);
     batch.set(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true });
   }
   try {
@@ -257,7 +308,8 @@ export async function deletePickListFromCloud(orderIdOrNo: string): Promise<void
 }
 
 /**
- * Initial sync / migration helper: If Firestore is empty and local data exists, seed to Firestore
+ * Initial sync / migration helper: If Firestore is empty and local data exists, seed to Firestore.
+ * Also reconciles any local Pick List orders that have more verified scan progress than their existing cloud document.
  */
 export async function syncLocalDataToFirestoreIfEmpty(
   localInbound: SlitBarcodeRecord[],
@@ -279,9 +331,42 @@ export async function syncLocalDataToFirestoreIfEmpty(
       const pickListSnap = await getDocs(collection(db, PICKLIST_COLLECTION));
       if (pickListSnap.empty) {
         await batchSavePickListsToCloud(localPickLists);
+      } else {
+        const cloudMap = new Map<string, PickListOrder>();
+        pickListSnap.forEach((d) => {
+          const data = d.data() as PickListOrder;
+          if (data?.orderNo) {
+            cloudMap.set(data.orderNo.trim().toUpperCase(), data);
+          }
+        });
+
+        const ordersToUpdate: PickListOrder[] = [];
+        for (const localOrd of localPickLists) {
+          if (!localOrd?.orderNo) continue;
+          const cloudOrd = cloudMap.get(localOrd.orderNo.trim().toUpperCase());
+          if (!cloudOrd) continue; // Do not re-upload orders deleted from cloud
+
+          const localVerifiedCount = (localOrd.items || []).filter((i) => i.status === "verified").length;
+          const cloudVerifiedCount = (cloudOrd.items || []).filter((i) => i.status === "verified").length;
+          const localIssuedCount = (localOrd.items || []).filter((i) => Boolean(i.machineIssued)).length;
+          const cloudIssuedCount = (cloudOrd.items || []).filter((i) => Boolean(i.machineIssued)).length;
+
+          if (
+            localVerifiedCount > cloudVerifiedCount ||
+            localIssuedCount > cloudIssuedCount ||
+            (localOrd.status === "completed" && cloudOrd.status !== "completed")
+          ) {
+            ordersToUpdate.push(localOrd);
+          }
+        }
+
+        if (ordersToUpdate.length > 0) {
+          await batchSavePickListsToCloud(ordersToUpdate);
+        }
       }
     }
   } catch {
     // If offline or permission check, ignore initial seed
   }
 }
+
