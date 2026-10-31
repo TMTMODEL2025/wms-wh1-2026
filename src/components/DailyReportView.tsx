@@ -346,13 +346,37 @@ export function DailyReportView({
   // SECTION 1 DATA: Inbound from machines SM01 - SM04
   // =========================================================================
   const smInboundRecords = useMemo(() => {
-    // Gather candidates from inboundList and movementHistoryList
-    const combined = [...inboundList, ...movementHistoryList];
     const map = new Map<string, SlitBarcodeRecord>();
 
-    for (const item of combined) {
+    // 1. Primary source: inboundList (all records received into warehouse via + รับเข้า)
+    // Do NOT exclude records even if their location or machine was later updated during outbound/issue on the same day
+    for (const item of inboundList) {
       if (!item.batch) continue;
       const bKey = item.batch.trim().toUpperCase();
+
+      if (!isRecordInSelectedShift(item.scanTimestamp)) continue;
+
+      const rawMachine = (item.machine || "SM01").trim().toUpperCase();
+      const machine = rawMachine.startsWith("SM") ? rawMachine : "SM01";
+
+      if (!map.has(bKey)) {
+        const sapMatch = sapMasterMap.get(bKey);
+        map.set(bKey, {
+          ...item,
+          machine,
+          weightKg: item.weightKg || sapMatch?.weightKg || 0,
+          grade: item.grade || sapMatch?.grade || "-",
+          certThickness: formatDimension2Decimals(item.certThickness || sapMatch?.certThickness, "2.50 mm"),
+          width: formatDimension2Decimals(item.width || sapMatch?.width, "100.00 mm"),
+        });
+      }
+    }
+
+    // 2. Fallback source: movementHistoryList for any inbound record not already in map
+    for (const item of movementHistoryList) {
+      if (!item.batch) continue;
+      const bKey = item.batch.trim().toUpperCase();
+      if (map.has(bKey)) continue;
 
       const loc = (item.location || item.storageLocation || "").trim();
       if (item.mode === "outbound" || loc.startsWith("เบิก") || loc.includes("เบิก")) {
@@ -368,20 +392,17 @@ export function DailyReportView({
 
       if (!isSmMachine) continue;
 
-      // Filter by shift
       if (!isRecordInSelectedShift(item.scanTimestamp)) continue;
 
-      if (!map.has(bKey)) {
-        const sapMatch = sapMasterMap.get(bKey);
-        map.set(bKey, {
-          ...item,
-          machine: machine.startsWith("SM") ? machine : "SM01",
-          weightKg: item.weightKg || sapMatch?.weightKg || 0,
-          grade: item.grade || sapMatch?.grade || "-",
-          certThickness: formatDimension2Decimals(item.certThickness || sapMatch?.certThickness, "2.50 mm"),
-          width: formatDimension2Decimals(item.width || sapMatch?.width, "100.00 mm"),
-        });
-      }
+      const sapMatch = sapMasterMap.get(bKey);
+      map.set(bKey, {
+        ...item,
+        machine: machine.startsWith("SM") ? machine : "SM01",
+        weightKg: item.weightKg || sapMatch?.weightKg || 0,
+        grade: item.grade || sapMatch?.grade || "-",
+        certThickness: formatDimension2Decimals(item.certThickness || sapMatch?.certThickness, "2.50 mm"),
+        width: formatDimension2Decimals(item.width || sapMatch?.width, "100.00 mm"),
+      });
     }
 
     return Array.from(map.values());
@@ -608,9 +629,23 @@ export function DailyReportView({
 
     // 1. Collect Inbound records across both shifts (SM machines)
     const inboundMap = new Map<string, { shift: "day" | "night"; weightKg: number }>();
-    [...inboundList, ...movementHistoryList].forEach((item) => {
+    inboundList.forEach((item) => {
       if (!item.batch) return;
       const bKey = item.batch.trim().toUpperCase();
+      const shift = getRecordShiftOnSelectedDate(item.scanTimestamp);
+      if (!shift) return;
+
+      if (!inboundMap.has(bKey)) {
+        inboundMap.set(bKey, {
+          shift,
+          weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
+        });
+      }
+    });
+    movementHistoryList.forEach((item) => {
+      if (!item.batch) return;
+      const bKey = item.batch.trim().toUpperCase();
+      if (inboundMap.has(bKey)) return;
       const loc = (item.location || item.storageLocation || "").trim();
       if (item.mode === "outbound" || loc.startsWith("เบิก") || loc.includes("เบิก")) return;
       const machine = (item.machine || "SM01").trim().toUpperCase();
@@ -622,12 +657,10 @@ export function DailyReportView({
       const shift = getRecordShiftOnSelectedDate(item.scanTimestamp);
       if (!shift) return;
 
-      if (!inboundMap.has(bKey)) {
-        inboundMap.set(bKey, {
-          shift,
-          weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
-        });
-      }
+      inboundMap.set(bKey, {
+        shift,
+        weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
+      });
     });
 
     // 2. Collect Outbound / Dispensed records across both shifts
@@ -926,13 +959,11 @@ export function DailyReportView({
       }
     >();
 
-    [...inboundList, ...movementHistoryList].forEach((item) => {
+    inboundList.forEach((item) => {
       if (!item.batch) return;
       const bKey = item.batch.trim().toUpperCase();
-      const machine = (item.machine || "").trim().toUpperCase();
-      const isSmMachine =
-        machine.startsWith("SM") || ["SM01", "SM02", "SM03", "SM04"].includes(machine);
-      if (!isSmMachine) return;
+      const rawMachine = (item.machine || "SM01").trim().toUpperCase();
+      const machine = rawMachine.startsWith("SM") ? rawMachine : "SM01";
 
       const { opDateStr, shift } = getOperationalDateAndShift(item.scanTimestamp);
       if (!opDateStr.startsWith(selectedMonth)) return;
@@ -943,11 +974,36 @@ export function DailyReportView({
           batch: item.batch,
           opDateStr,
           shift,
-          machine: machine || "SM01",
+          machine,
           weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
           grade: item.grade || "-",
         });
       }
+    });
+
+    movementHistoryList.forEach((item) => {
+      if (!item.batch) return;
+      const bKey = item.batch.trim().toUpperCase();
+      if (monthlyInboundMap.has(bKey)) return;
+      const loc = (item.location || item.storageLocation || "").trim();
+      if (item.mode === "outbound" || loc.startsWith("เบิก") || loc.includes("เบิก")) return;
+      const machine = (item.machine || "").trim().toUpperCase();
+      const isSmMachine =
+        machine.startsWith("SM") || ["SM01", "SM02", "SM03", "SM04"].includes(machine);
+      if (!isSmMachine) return;
+
+      const { opDateStr, shift } = getOperationalDateAndShift(item.scanTimestamp);
+      if (!opDateStr.startsWith(selectedMonth)) return;
+      if (monthlyShiftFilter !== "all" && shift !== monthlyShiftFilter) return;
+
+      monthlyInboundMap.set(bKey, {
+        batch: item.batch,
+        opDateStr,
+        shift,
+        machine: machine || "SM01",
+        weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
+        grade: item.grade || "-",
+      });
     });
 
     // 2. Collect Monthly Outbound / Dispensing Records
@@ -1505,12 +1561,9 @@ export function DailyReportView({
 
       const loc = rawLoc.toUpperCase().replace(/^อาคาร\s*/i, "").trim();
 
-      const recTs = String(rec.scanTimestamp || "");
       const issuedTs = issuedAtMachineMap.get(bKey);
       const isIssuedAfterInbound =
-        issuedTs !== undefined &&
-        !isReturnedToWarehouse &&
-        Boolean(issuedTs && (!recTs || issuedTs > recTs));
+        issuedTs !== undefined && !isReturnedToWarehouse;
 
       if (
         !loc ||

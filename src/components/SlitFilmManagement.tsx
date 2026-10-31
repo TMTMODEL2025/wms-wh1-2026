@@ -2256,7 +2256,7 @@ export function SlitFilmManagement({
             orderNo: targetOrder.orderNo,
             location: existingLoc,
             storageLocation: existingLoc,
-            scanTimestamp: nowStr,
+            scanTimestamp: updated[idx].scanTimestamp || nowStr,
             conditionText: `เตรียมเบิกสำหรับเครื่อง ${targetOrder.machineId} (ใบสั่ง #${targetOrder.orderNo})`,
             ...(matchedSap ? {
               hasSapData: true,
@@ -2332,39 +2332,25 @@ export function SlitFilmManagement({
     });
     const deletedBatches = Array.from(deletedBatchSet);
 
-    // 1. Remove order from pickLists & localStorage & Cloud Firestore
-    setPickLists((prev) => {
-      const next = prev.filter(
-        (o) => (o.orderNo || "").trim().toUpperCase() !== cleanOrdNoUpper
-      );
-      try {
-        localStorage.setItem(STORAGE_KEY_PICK_LISTS, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+    // 1. Remove order from pickLists & Cloud Firestore
+    setPickLists((prev) =>
+      prev.filter((o) => (o.orderNo || "").trim().toUpperCase() !== cleanOrdNoUpper)
+    );
     if (selectedOrderNo === ordNo) {
       setSelectedOrderNo(null);
     }
     deletePickListFromCloud(ordNo).catch(console.error);
 
     // 2. Remove any outbound records linked to this orderNo or its batches from outboundList & Cloud Firestore
-    setOutboundList((prev) => {
-      const next = prev.filter((r) => {
+    setOutboundList((prev) =>
+      prev.filter((r) => {
         const rOrd = (r.orderNo || "").trim().toUpperCase();
         const rBatch = (r.batch || "").trim().toUpperCase();
         if (rOrd === cleanOrdNoUpper) return false;
         if (rBatch && deletedBatchSet.has(rBatch)) return false;
         return true;
-      });
-      try {
-        localStorage.setItem(STORAGE_KEY_OUTBOUND, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
-    });
+      })
+    );
     deleteOutboundByOrderOrBatchesFromCloud(ordNo, deletedBatches).catch(console.error);
 
     // 3. Reset any inbound records linked to this orderNo or its batches back to normal available warehouse status
@@ -2403,11 +2389,6 @@ export function SlitFilmManagement({
         resetInboundRecords.push(cleanedRecord);
         return cleanedRecord;
       });
-      try {
-        localStorage.setItem(STORAGE_KEY_INBOUND, JSON.stringify(next));
-      } catch {
-        // ignore
-      }
       return next;
     });
     if (resetInboundRecords.length > 0) {
@@ -2705,8 +2686,13 @@ export function SlitFilmManagement({
     const preparedBatchMap = new Map<string, { orderNo: string; machineId: string }>();
     pickLists.forEach((pl) => {
       (pl.items || []).forEach((item) => {
-        if (item.batch && item.status === "verified") {
-          const bKey = item.batch.trim().toUpperCase();
+        if (!item.batch) return;
+        const bKey = item.batch.trim().toUpperCase();
+        if (item.machineIssued) {
+          dispatchedBatchSet.add(bKey);
+          outboundBatchOrderSet.add(`${bKey}::${pl.orderNo}`);
+        }
+        if (item.status === "verified") {
           // Check if already dispatched to machine in outboundList or movement history
           const isDispatched =
             dispatchedBatchSet.has(bKey) ||
@@ -2725,12 +2711,17 @@ export function SlitFilmManagement({
     const activeInboundMap = new Map<string, SlitBarcodeRecord>();
     inboundList.forEach((item) => {
       if (!item.location) return;
+      const bKey = item.batch.trim().toUpperCase();
+      const isReturnedToWarehouse = Boolean(
+        item.conditionText && String(item.conditionText).includes("คืนคลัง")
+      );
+      if (dispatchedBatchSet.has(bKey) && !isReturnedToWarehouse) return;
       const loc = item.location.trim();
       const upperLoc = loc.toUpperCase();
       if (loc.startsWith("เบิก") || loc.includes("เบิก")) return;
       if (["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) return;
 
-      activeInboundMap.set(item.batch.trim().toUpperCase(), item);
+      activeInboundMap.set(bKey, item);
     });
 
     const resultList: (SlitBarcodeRecord & {
@@ -4350,81 +4341,14 @@ export function SlitFilmManagement({
       const nowTimestampStr = `${new Date().toISOString().slice(0, 10)} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
 
       const matchedSap = sapMasterMap.get(trimmed);
+      const sourceBasketLoc =
+        inboundMatch?.location && !inboundMatch.location.startsWith("เบิก")
+          ? inboundMatch.location
+          : inboundMatch?.storageLocation && !inboundMatch.storageLocation.startsWith("เบิก")
+          ? inboundMatch.storageLocation
+          : matchedSap?.storageLocation || "-";
 
-      // Update inboundList record location to "เบิกTM01" with Upsert / Merge (and deduplicate any older entries for this batch)
-      setInboundList((prev) => {
-        const existsIdx = prev.findIndex((r) => r.batch.trim().toUpperCase() === trimmed);
-        const updateData: Partial<SlitBarcodeRecord> = {
-          orderNo: foundOrder!.orderNo,
-          location: machineLoc,
-          storageLocation: machineLoc,
-          machine: targetMachine,
-          scanTimestamp: nowTimestampStr,
-          conditionText: `รับงานหน้าเครื่อง ${targetMachine} เรียบร้อยแล้ว`,
-          ...(matchedSap ? {
-            hasSapData: true,
-            certThickness: matchedSap.certThickness,
-            width: matchedSap.width,
-            weightKg: matchedSap.weightKg,
-            unrestricted: matchedSap.unrestricted,
-            grade: matchedSap.grade,
-            manufacturer: matchedSap.manufacturer,
-            description: matchedSap.description,
-            salesDoc: matchedSap.salesDoc,
-            materialNo: matchedSap.materialNo,
-            targetThickness: matchedSap.targetThickness,
-            qualityClass: matchedSap.qualityClass,
-            coilNo: matchedSap.coilNo,
-          } : {})
-        };
-        if (existsIdx !== -1) {
-          const mergedRec = mergeSlitBarcodeRecords(prev[existsIdx], updateData, sapMasterMap);
-          saveInboundRecordToCloud(mergedRec).catch(console.error);
-          const others = prev.filter((r, i) => i !== existsIdx && r.batch.trim().toUpperCase() !== trimmed);
-          return [mergedRec, ...others];
-        } else {
-          const record = generateRecordFromBatch(trimmed, "inbound", machineLoc, targetMachine, sapMasterMap);
-          record.orderNo = foundOrder!.orderNo;
-          record.conditionText = `รับงานหน้าเครื่อง ${targetMachine} เรียบร้อยแล้ว`;
-          saveInboundRecordToCloud(record).catch(console.error);
-          return [record, ...prev];
-        }
-      });
-
-      // Remove issued coil from any warehouse basket in Space Management storage
-      try {
-        const spaceRaw = localStorage.getItem("tmt_wms_space_management_data_v1");
-        if (spaceRaw) {
-          const parsedSpace = JSON.parse(spaceRaw);
-          if (Array.isArray(parsedSpace)) {
-            const updatedSpace = parsedSpace.map((b: any) => ({
-              ...b,
-              rows: (b.rows || []).map((r: any) => ({
-                ...r,
-                baskets: (r.baskets || []).map((bk: any) => {
-                  const remainingCoils = (bk.coils || []).filter(
-                    (c: any) => String(c.batch || "").trim().toUpperCase() !== trimmed
-                  );
-                  return {
-                    ...bk,
-                    coils: remainingCoils,
-                    status:
-                      bk.status === "maintenance"
-                        ? "maintenance"
-                        : remainingCoils.length === 0
-                        ? "available"
-                        : bk.status,
-                  };
-                }),
-              })),
-            }));
-            localStorage.setItem("tmt_wms_space_management_data_v1", JSON.stringify(updatedSpace));
-          }
-        }
-        window.dispatchEvent(new Event("storage"));
-      } catch {}
-
-      // Also update/add in outboundList so Movement History consistently shows "เบิกTM01"
+      // Record outbound issuance in outboundList (preserving inboundList's original SM01-SM04 receipt record for Daily Reports)
       setOutboundList((prev) => {
         const existsIdx = prev.findIndex((r) => r.batch.trim().toUpperCase() === trimmed);
         const newOutboundRecord: SlitBarcodeRecord = {
@@ -4442,6 +4366,7 @@ export function SlitFilmManagement({
           machine: targetMachine,
           location: machineLoc,
           storageLocation: machineLoc,
+          previousLocation: sourceBasketLoc,
           description: matchedSap?.description || foundItem?.description || "",
           conditionText: `รับงานหน้าเครื่อง ${targetMachine} เรียบร้อยแล้ว`,
           hasSapData: Boolean(matchedSap),

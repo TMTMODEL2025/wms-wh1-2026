@@ -336,13 +336,10 @@ function loadSpaceDataFromInventory(
 
       const loc = rawLoc.toUpperCase();
 
-      // Check if this batch was issued at machine AFTER this inbound record's timestamp
-      const recTs = String(rec.scanTimestamp || "");
+      // Check if this batch was issued at machine (unless returned to warehouse)
       const issuedTs = issuedAtMachineMap.get(bKey);
       const isIssuedAfterInbound =
-        issuedTs !== undefined &&
-        !isReturnedToWarehouse &&
-        Boolean(issuedTs && (!recTs || issuedTs > recTs));
+        issuedTs !== undefined && !isReturnedToWarehouse;
 
       // Exclude records that have no basket location or have completed จ่ายหน้าเครื่อง
       if (
