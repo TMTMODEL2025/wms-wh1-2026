@@ -117,6 +117,11 @@ export function subscribeToSlitPickLists(
       snapshot.forEach((d) => {
         orders.push(d.data() as PickListOrder);
       });
+      orders.sort((a, b) => {
+        const timeA = `${a.createdDate || ""} ${a.createdAt || ""}`;
+        const timeB = `${b.createdDate || ""} ${b.createdAt || ""}`;
+        return timeB.localeCompare(timeA);
+      });
       onData(orders);
     },
     (error) => {
