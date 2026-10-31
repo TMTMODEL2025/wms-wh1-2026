@@ -5002,8 +5002,30 @@ function WmsApp() {
   const [materialHandlingExpanded, setMaterialHandlingExpanded] = useState<boolean>(false);
   const [warehouseInventoryExpanded, setWarehouseInventoryExpanded] = useState<boolean>(false);
   const [administrationExpanded, setAdministrationExpanded] = useState<boolean>(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      if (typeof window.matchMedia === "function") {
+        return window.matchMedia("(max-width: 768px)").matches;
+      }
+      return window.innerWidth <= 768;
+    }
+    return false;
+  });
   const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report">("inbound");
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia("(max-width: 768px)");
+    const handleMediaChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        setSidebarCollapsed(true);
+      }
+    };
+    if (mql.addEventListener) {
+      mql.addEventListener("change", handleMediaChange);
+      return () => mql.removeEventListener("change", handleMediaChange);
+    }
+  }, []);
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadStoredVehicles());
   const [employeeRoster, setEmployeeRoster] = useState<Employee[]>(() => loadStoredEmployees());
   const [officerAssignments, setOfficerAssignments] = useState<VehicleAssignment[]>(() =>
