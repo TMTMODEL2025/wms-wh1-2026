@@ -2113,17 +2113,17 @@ export function DailyReportView({
           {/* =========================================================================
               HEADER & FILTER BAR (Compact Inline Single Row Layout)
               ========================================================================= */}
-      <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-2 sm:gap-3">
+      <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-2 sm:gap-3 overflow-hidden">
         {/* Left: Title & Subtitle */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs shrink-0">
             <FileText size={18} className="sm:w-[22px] sm:h-[22px]" />
           </div>
-          <div>
-            <h2 className="text-sm sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <span>{isThai ? "รายงานประจำวัน (Daily Report)" : "Daily Production & Material Report"}</span>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
+              <span className="truncate">{isThai ? "รายงานประจำวัน (Daily Report)" : "Daily Production & Material Report"}</span>
             </h2>
-            <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">
+            <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate">
               {isThai
                 ? "สรุปการรับเข้าวัตถุดิบเครื่องจักร SM01 - SM04 และรายงานการเบิกจ่ายหน้าเครื่องประจำวัน"
                 : "Daily Machine Inbound & Dispensing Summary Report"}
@@ -2132,9 +2132,9 @@ export function DailyReportView({
         </div>
 
         {/* Right: Inline Compact Controls (Date, Shift, Excel, Print) */}
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap xl:flex-nowrap w-full sm:w-auto">
+        <div className="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 flex-wrap w-full lg:w-auto max-w-full shrink-0">
           {/* 1. Compact Date Selector */}
-          <div className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs flex-1 sm:flex-initial justify-between sm:justify-start">
+          <div className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs flex-1 sm:flex-initial justify-between sm:justify-start shrink-0">
             <div className="flex items-center gap-1 shrink-0">
               <Calendar size={13} className="text-cyan-500 shrink-0 sm:w-3.5 sm:h-3.5" />
               <span className="font-bold text-slate-700 dark:text-slate-300 text-[10.5px] sm:text-[11px] shrink-0">
@@ -2190,7 +2190,7 @@ export function DailyReportView({
             </div>
 
             {/* Embedded Shift Period Badge */}
-            <span className="hidden sm:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 whitespace-nowrap">
+            <span className="hidden 2xl:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 whitespace-nowrap">
               {selectedShift === "day"
                 ? "08:00-20:00 น."
                 : "20:00-08:00 น."}
@@ -2201,9 +2201,9 @@ export function DailyReportView({
           <button
             type="button"
             onClick={exportToExcel}
-            className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+            className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
           >
-            <FileSpreadsheet size={14} />
+            <FileSpreadsheet size={14} className="shrink-0" />
             <span>{isThai ? "ส่งออก Excel" : "Export"}</span>
           </button>
 
@@ -2211,9 +2211,9 @@ export function DailyReportView({
           <button
             type="button"
             onClick={() => window.print()}
-            className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+            className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
           >
-            <Printer size={14} />
+            <Printer size={14} className="shrink-0" />
             <span>{isThai ? "พิมพ์" : "Print"}</span>
           </button>
         </div>
@@ -3039,21 +3039,21 @@ export function DailyReportView({
            ========================================================================= */
         <>
           {/* MONTHLY HEADER & FILTER BAR */}
-          <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-1.5 sm:gap-3">
+          <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-1.5 sm:gap-3 overflow-hidden">
             {/* Left: Title & Subtitle */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs shrink-0">
                 <Calendar size={16} className="sm:w-[22px] sm:h-[22px]" />
               </div>
-              <div>
-                <h2 className="text-xs sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xs sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                  <span className="truncate">
                     {isThai
                       ? "รายงานประจำเดือน (Monthly Cumulative Report)"
                       : "Monthly Cumulative Production & Material Report"}
                   </span>
                 </h2>
-                <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate">
                   {isThai
                     ? "สรุปยอดสะสมการรับเข้าวัตถุดิบและเบิกจ่ายหน้าเครื่องรายวัน รายเครื่องจักร และสัดส่วนรวมตลอดทั้งเดือน"
                     : "Monthly Cumulative Inbound, Machine Dispensing & Daily Trend Summary"}
@@ -3062,7 +3062,7 @@ export function DailyReportView({
             </div>
 
             {/* Right: Monthly Filter Controls (Month/Year, Shift Filter, Export Excel, Print) */}
-            <div className="flex items-center justify-between sm:justify-start gap-1 sm:gap-2 flex-nowrap sm:flex-wrap xl:flex-nowrap w-full sm:w-auto">
+            <div className="flex items-center justify-between sm:justify-start lg:justify-end gap-1 sm:gap-2 flex-nowrap sm:flex-wrap w-full lg:w-auto max-w-full shrink-0">
               {/* 1. Month/Year Selector */}
               <div className="px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs shrink-0">
                 <div className="flex items-center gap-1 shrink-0">
@@ -3083,13 +3083,13 @@ export function DailyReportView({
               </div>
 
               {/* 2. Shift Filter Selector (All / Day / Night) */}
-              <div className="px-1 sm:px-2.5 py-0.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs flex-1 sm:flex-initial min-w-0 justify-center">
+              <div className="px-1 sm:px-2.5 py-0.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs flex-1 sm:flex-initial min-w-0 justify-center shrink-0">
                 <Clock size={13} className="text-amber-500 shrink-0 hidden sm:block sm:w-3.5 sm:h-3.5" />
                 <div className="flex sm:inline-flex w-full sm:w-auto rounded sm:rounded-lg p-0.5 bg-slate-200/80 dark:bg-[#122342] border border-slate-300 dark:border-[#1e3a5f] gap-0.5">
                   <button
                     type="button"
                     onClick={() => setMonthlyShiftFilter("all")}
-                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
+                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
                       monthlyShiftFilter === "all"
                         ? "bg-cyan-600 text-white shadow-xs font-extrabold"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -3102,7 +3102,7 @@ export function DailyReportView({
                   <button
                     type="button"
                     onClick={() => setMonthlyShiftFilter("day")}
-                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
+                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
                       monthlyShiftFilter === "day"
                         ? "bg-amber-500 text-white shadow-xs font-extrabold"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -3115,7 +3115,7 @@ export function DailyReportView({
                   <button
                     type="button"
                     onClick={() => setMonthlyShiftFilter("night")}
-                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
+                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
                       monthlyShiftFilter === "night"
                         ? "bg-indigo-600 text-white shadow-xs font-extrabold"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -3131,19 +3131,19 @@ export function DailyReportView({
               <button
                 type="button"
                 onClick={exportMonthlyToExcel}
-                className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
               >
-                <FileSpreadsheet size={14} />
-                <span>{isThai ? "ส่งออก Excel รายเดือน" : "Export Monthly"}</span>
+                <FileSpreadsheet size={14} className="shrink-0" />
+                <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
               </button>
 
               {/* 4. Print Report */}
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Printer size={14} />
+                <Printer size={14} className="shrink-0" />
                 <span>{isThai ? "พิมพ์" : "Print"}</span>
               </button>
             </div>
@@ -4007,23 +4007,23 @@ export function DailyReportView({
            ========================================================================= */
         <>
           {/* HEADER & FILTER BAR FOR STORAGE SPACE REPORT */}
-          <div className="px-1.5 py-2 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col xl:flex-row xl:items-center justify-between gap-1.5 sm:gap-3 overflow-hidden">
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0 px-0.5 sm:px-0">
-              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs">
+          <div className="px-1.5 py-2 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-1.5 sm:gap-3 overflow-hidden">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 px-0.5 sm:px-0">
+              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs shrink-0">
                 <Boxes size={16} className="sm:w-[22px] sm:h-[22px]" />
               </div>
-              <div>
-                <h2 className="text-xs sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                  <span className="sm:hidden">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xs sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                  <span className="sm:hidden truncate">
                     {isThai ? "รายงานพื้นที่จัดเก็บเหล็กสลิต" : "Slit Steel Storage Space Report"}
                   </span>
-                  <span className="hidden sm:inline">
+                  <span className="hidden sm:inline truncate">
                     {isThai
                       ? "รายงานพื้นที่จัดเก็บเหล็กสลิต (Slit Steel Storage Space Report)"
                       : "Slit Steel Storage Space Report"}
                   </span>
                 </h2>
-                <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate">
                   {isThai
                     ? "สรุปสถานะคลังจัดเก็บตะกร้าเหล็กสลิต (อาคาร H, F, E9, E10, I) และพื้นที่วางวัตถุดิบรอผลิตหน้าเครื่องจักร (TM 1-14 / CF 1, 2, 4, 5)"
                     : "Comprehensive report for Warehouse Basket Storage by Building and Machine Staging Areas"}
@@ -4031,13 +4031,13 @@ export function DailyReportView({
               </div>
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2 flex-nowrap sm:flex-wrap xl:flex-nowrap w-full sm:w-auto min-w-0">
+            <div className="flex items-center justify-start lg:justify-end gap-1 sm:gap-2 flex-nowrap sm:flex-wrap w-full lg:w-auto max-w-full min-w-0 shrink-0">
               {/* Sub-view Switcher: All vs Warehouse vs Machine */}
-              <div className="flex items-center justify-between sm:inline-flex w-full sm:w-auto min-w-0 rounded-md sm:rounded-xl p-0.5 sm:p-1 bg-slate-100 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] gap-0.5 sm:gap-0">
+              <div className="flex items-center justify-between sm:inline-flex w-full sm:w-auto min-w-0 rounded-md sm:rounded-xl p-0.5 sm:p-1 bg-slate-100 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] gap-0.5 sm:gap-0 shrink-0">
                 <button
                   type="button"
                   onClick={() => setSpaceReportSubTab("all")}
-                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center cursor-pointer whitespace-nowrap text-center ${
+                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-2.5 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center cursor-pointer whitespace-nowrap text-center ${
                     spaceReportSubTab === "all"
                       ? "bg-cyan-600 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -4048,7 +4048,7 @@ export function DailyReportView({
                 <button
                   type="button"
                   onClick={() => setSpaceReportSubTab("warehouse")}
-                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
+                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-2.5 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
                     spaceReportSubTab === "warehouse"
                       ? "bg-cyan-600 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -4060,7 +4060,7 @@ export function DailyReportView({
                 <button
                   type="button"
                   onClick={() => setSpaceReportSubTab("machine")}
-                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
+                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-2.5 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
                     spaceReportSubTab === "machine"
                       ? "bg-cyan-600 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -4075,9 +4075,9 @@ export function DailyReportView({
               <button
                 type="button"
                 onClick={exportSpaceReportToExcel}
-                className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap"
+                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
               >
-                <FileSpreadsheet size={14} />
+                <FileSpreadsheet size={14} className="shrink-0" />
                 <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
               </button>
 
@@ -4085,9 +4085,9 @@ export function DailyReportView({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
               >
-                <Printer size={14} />
+                <Printer size={14} className="shrink-0" />
                 <span>{isThai ? "พิมพ์" : "Print"}</span>
               </button>
             </div>

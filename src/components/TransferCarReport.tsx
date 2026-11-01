@@ -613,57 +613,50 @@ export function TransferCarReport({
   return (
     <div className="space-y-2.5 sm:space-y-4">
       {/* 1. Header Banner & Filter Controls */}
-      <div className="rounded-xl sm:rounded-2xl border p-2.5 sm:p-5 bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-4">
+      <div className="rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-md overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 sm:gap-3">
           {/* Title and Icon */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5">
-            <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-orange-500/20 flex-shrink-0">
-              <Truck size={18} className="sm:w-6 sm:h-6" />
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <div className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-orange-500/20 shrink-0">
+              <Truck size={18} className="sm:w-[22px] sm:h-[22px]" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <h2 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
-                  {isThai
-                    ? "รายงานปริมาณการใช้งาน Transfer Car ประจำเดือน"
-                    : "Transfer Car Monthly Usage Report"}
-                </h2>
-                <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                  TM06 & TM07
-                </span>
-              </div>
-              <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap sm:flex-nowrap">
+              <h2 className="text-sm sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-tight truncate">
                 {isThai
-                  ? "คำนวณตามช่วงเวลา จำนวนแถบ น้ำหนัก และการแบ่งรอบขนย้ายจริงจากการสแกนจ่ายหน้าเครื่อง"
-                  : "Tracks operational trips, time windows, strip counts, and actual stock weights to pipe mills"}
-              </p>
+                  ? "รายงานปริมาณการใช้งาน Transfer Car ประจำเดือน"
+                  : "Transfer Car Monthly Usage Report"}
+              </h2>
+              <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 whitespace-nowrap">
+                TM06 & TM07
+              </span>
             </div>
           </div>
 
           {/* Action Tools: Month Picker, Machine Filter, Export */}
-          <div className="flex flex-row sm:flex-wrap items-center gap-1.5 sm:gap-2.5 w-full lg:w-auto">
+          <div className="flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full lg:w-auto shrink-0">
             {/* Month Selector */}
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
-              <Calendar size={13} className="text-slate-400 flex-shrink-0 sm:w-3.5 sm:h-3.5" />
-              <label className="hidden sm:inline text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                {isThai ? "เลือกเดือน:" : "Month:"}
+            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
+              <Calendar size={13} className="text-amber-500 shrink-0 sm:w-3.5 sm:h-3.5" />
+              <label className="hidden sm:inline text-[11px] font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                {isThai ? "เดือน/ปี:" : "Month:"}
               </label>
               <input
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-[11px] sm:text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer w-[108px] sm:w-auto"
+                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-[11px] sm:text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer w-[108px] sm:w-auto shadow-xs"
               />
             </div>
 
             {/* Machine Filter Toggle Buttons */}
-            <div className="inline-flex flex-1 sm:flex-initial rounded-lg sm:rounded-xl p-0.5 sm:p-1 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f]">
+            <div className="inline-flex flex-1 sm:flex-initial rounded-lg sm:rounded-xl p-0.5 sm:p-1 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
               <button
                 type="button"
                 onClick={() => setSelectedMachineFilter("ALL")}
-                className={`flex-1 sm:flex-initial px-2 sm:px-3 py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   selectedMachineFilter === "ALL"
                     ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 <span className="sm:hidden">{isThai ? "ทั้งหมด" : "All"}</span>
@@ -672,10 +665,10 @@ export function TransferCarReport({
               <button
                 type="button"
                 onClick={() => setSelectedMachineFilter("TM06")}
-                className={`flex-1 sm:flex-initial px-2 sm:px-3 py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer ${
                   selectedMachineFilter === "TM06"
                     ? "bg-amber-500 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 TM06
@@ -683,10 +676,10 @@ export function TransferCarReport({
               <button
                 type="button"
                 onClick={() => setSelectedMachineFilter("TM07")}
-                className={`flex-1 sm:flex-initial px-2 sm:px-3 py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-2 sm:px-2.5 py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer ${
                   selectedMachineFilter === "TM07"
                     ? "bg-blue-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
                 TM07
@@ -698,14 +691,14 @@ export function TransferCarReport({
               type="button"
               onClick={handleExportExcel}
               disabled={filteredTrips.length === 0}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+              className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap ${
                 filteredTrips.length === 0
                   ? "opacity-50 bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
                   : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-95"
               }`}
               title={isThai ? "ส่งออกรายงานเป็นไฟล์ Excel (.xlsx)" : "Export report as Excel"}
             >
-              <Download size={14} />
+              <FileSpreadsheet size={14} className="shrink-0" />
               <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
             </button>
           </div>

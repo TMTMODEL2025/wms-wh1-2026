@@ -27,7 +27,6 @@ import {
   Wrench,
   ShieldAlert,
   ArrowRightLeft,
-  SlidersHorizontal,
   ChevronRight,
   HardDrive,
   Cpu
@@ -1583,131 +1582,99 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         </div>
       </div>
 
-      {/* Filter Bar & Controls */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 shadow-md border border-slate-200 dark:border-slate-800 space-y-1.5 sm:space-y-3">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-1.5 sm:gap-2.5">
-          {/* Left: Row Selector & Status Filter Pills */}
-          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
-            {/* Compact Row Selector Dropdown */}
-            <div className="flex items-center gap-1 sm:gap-1.5 w-full sm:w-auto shrink-0">
-              <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1 shrink-0">
-                <SlidersHorizontal size={11} className="sm:w-3 sm:h-3" />
-                <span>แถว:</span>
-              </span>
+      {/* Filter Bar & Controls (Single Compact Inline Row) */}
+      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl px-2 py-1.5 sm:px-3.5 sm:py-2.5 shadow-md border border-slate-200 dark:border-slate-800">
+        <div className="flex flex-nowrap items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none">
+          {/* Status Filter Pills */}
+          <div className="flex flex-nowrap items-center gap-1 text-[9.5px] sm:text-xs shrink-0">
+            <span className="font-bold text-slate-400 uppercase text-[9.5px] sm:text-[11px] mr-0.5 shrink-0">สถานะ:</span>
 
-              <select
-                value={selectedRowId}
-                onChange={(e) => setSelectedRowId(e.target.value)}
-                className="flex-1 sm:flex-initial px-2 py-0.5 sm:px-3 sm:py-1.5 h-7 sm:h-auto rounded-lg sm:rounded-xl text-[10.5px] sm:text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:focus:ring-cyan-400 transition-all cursor-pointer shadow-2xs hover:bg-slate-200 dark:hover:bg-slate-700/80"
-              >
-                <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium">
-                  ทุกแถว ({currentBuilding.rows.length} แถว)
-                </option>
-                {currentBuilding.rows.map((row) => (
-                  <option
-                    key={row.rowId}
-                    value={row.rowId}
-                    className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-medium"
-                  >
-                    {row.rowNameTh} ({row.baskets.length} ตะกร้า)
-                  </option>
-                ))}
-              </select>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("all")}
+              className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all shrink-0 whitespace-nowrap cursor-pointer ${
+                selectedStatus === "all"
+                  ? "bg-slate-800 text-white"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+              }`}
+            >
+              ทั้งหมด
+            </button>
 
-            <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block mx-1" />
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("available")}
+              className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+                selectedStatus === "available"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span>ว่าง</span>
+            </button>
 
-            {/* Status Filter Pills (Single clean scrollable row on mobile) */}
-            <div className="flex flex-nowrap sm:flex-wrap items-center gap-1 text-[9.5px] sm:text-xs overflow-x-auto scrollbar-none pb-0.5 sm:pb-0">
-              <span className="font-bold text-slate-400 uppercase text-[9.5px] sm:text-[11px] mr-0.5 shrink-0">สถานะ:</span>
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("occupied")}
+              className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+                selectedStatus === "occupied"
+                  ? "bg-amber-600 text-white"
+                  : "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span>ใช้งาน</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => setSelectedStatus("all")}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all shrink-0 whitespace-nowrap ${
-                  selectedStatus === "all"
-                    ? "bg-slate-800 text-white"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                }`}
-              >
-                ทั้งหมด
-              </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("full")}
+              className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+                selectedStatus === "full"
+                  ? "bg-rose-600 text-white"
+                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span>เต็ม</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={() => setSelectedStatus("available")}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap ${
-                  selectedStatus === "available"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>ว่าง</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedStatus("occupied")}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap ${
-                  selectedStatus === "occupied"
-                    ? "bg-amber-600 text-white"
-                    : "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                <span>ใช้งาน</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedStatus("full")}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap ${
-                  selectedStatus === "full"
-                    ? "bg-rose-600 text-white"
-                    : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                <span>เต็ม</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedStatus("maintenance")}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap ${
-                  selectedStatus === "maintenance"
-                    ? "bg-rose-600 text-white"
-                    : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
-                }`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                <span>ซ่อมบำรุง</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("maintenance")}
+              className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md font-semibold transition-all flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+                selectedStatus === "maintenance"
+                  ? "bg-rose-600 text-white"
+                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span>ซ่อมบำรุง</span>
+            </button>
           </div>
 
-          {/* Right: View Density Toggle & Search Box & Add Row */}
-          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto sm:ml-auto">
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[10px] sm:text-xs font-bold shrink-0">
+          {/* Same Row Right Controls: View Density Toggle & Search Box & Add Row */}
+          <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
+            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 text-[9.5px] sm:text-xs font-bold shrink-0">
               <button
                 type="button"
                 onClick={() => setIsCompactView(true)}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md transition-all flex items-center gap-1 ${
+                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
                   isCompactView
                     ? "bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs"
                     : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                 }`}
-                title="มุมมองกะทัดรัด (รองรับ 50+ ตะกร้าต่อแถว)"
+                title="มุมมองแบบบรรทัด (รองรับ 50+ ตะกร้าต่อแถว)"
               >
-                <Grid size={11} className="sm:w-3 sm:h-3" />
-                <span className="sm:hidden">กะทัดรัด</span>
-                <span className="hidden sm:inline">มุมมองกะทัดรัด (50+)</span>
+                <Grid size={11} className="sm:w-3 sm:h-3 shrink-0" />
+                <span className="sm:hidden">แบบบรรทัด</span>
+                <span className="hidden sm:inline">มุมมองแบบบรรทัด</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsCompactView(false)}
-                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md transition-all flex items-center gap-1 ${
+                className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
                   !isCompactView
                     ? "bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs"
                     : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
@@ -1719,35 +1686,35 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </button>
             </div>
 
-            <div className="relative flex-1 sm:w-40 min-w-0">
+            <div className="relative w-28 sm:w-44 shrink-0">
               <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="ค้นหา..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-6 pr-6 py-0.5 sm:py-1 h-7 sm:h-auto rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10.5px] sm:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="w-full pl-6 pr-6 py-0.5 sm:py-1 h-6 sm:h-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[10px] sm:text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
                   <X size={11} />
                 </button>
               )}
             </div>
 
-            {/* Action Button: Add Row (Desktop only, hidden on Mobile) */}
             <button
               type="button"
               onClick={handleAddNewRow}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow-xs shrink-0"
+              className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 h-6 sm:h-7 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-[10px] sm:text-xs font-bold transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
               title={`เพิ่มแถวใหม่ใน ${currentBuilding.buildingNameTh}`}
             >
-              <Plus size={13} />
-              <span>เพิ่มแถวใหม่</span>
+              <Plus size={12} className="sm:w-3.5 sm:h-3.5 shrink-0" />
+              <span className="sm:hidden">เพิ่มแถว</span>
+              <span className="hidden sm:inline">เพิ่มแถวใหม่</span>
             </button>
           </div>
         </div>
