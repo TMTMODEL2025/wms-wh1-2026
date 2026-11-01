@@ -76,6 +76,20 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "orderNo"]
+    },
+    "SlitSapChunk": {
+      "title": "Slit SAP Master Data Chunk",
+      "description": "Bundled chunk of up to 800 SAP Master Data records to minimize Firestore read/write operations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "chunkIndex": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "totalItems": { "type": "number" },
+        "itemCount": { "type": "number" },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "chunkIndex"]
     }
   },
   "firestore": {
@@ -90,6 +104,10 @@
     "/slit_picklists/{orderId}": {
       "schema": "SlitPickListOrder",
       "description": "Collection of dispatch pick lists"
+    },
+    "/slit_sap_chunks/{chunkId}": {
+      "schema": "SlitSapChunk",
+      "description": "Collection of bundled SAP Master Data chunks"
     }
   }
 }

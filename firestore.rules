@@ -27,6 +27,12 @@ service cloud.firestore {
         && data.orderNo is string && data.orderNo.size() <= 64;
     }
 
+    function isValidSapChunk(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.chunkIndex is number
+        && data.items is list && data.items.size() <= 1000;
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -43,6 +49,16 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(orderId) && isValidPickList(request.resource.data);
       allow delete: if isValidId(orderId);
+    }
+
+    match /slit_sap_chunks/{chunkId} {
+      allow read: if true;
+      allow create, update: if isValidId(chunkId) && isValidSapChunk(request.resource.data);
+      allow delete: if isValidId(chunkId);
+    }
+
+    match /test/{docId} {
+      allow read: if true;
     }
   }
 }

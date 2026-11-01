@@ -8,11 +8,13 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
-import { SlitBarcodeRecord, PickListOrder } from "../components/SlitFilmManagement";
+import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "../components/SlitFilmManagement";
 
 const INBOUND_COLLECTION = "slit_inbound";
 const OUTBOUND_COLLECTION = "slit_outbound";
 const PICKLIST_COLLECTION = "slit_picklists";
+export const SAP_CHUNKS_COLLECTION = "slit_sap_chunks";
+export const SAP_CHUNK_SIZE = 800;
 
 function sanitizeDocId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
@@ -435,21 +437,170 @@ export async function deleteInboundByBatchesFromCloud(batches: string[]): Promis
 }
 
 /**
- * Clear all documents in slit_picklists, slit_outbound, and slit_inbound on full reset
+ * Sanitize a single SAP Master Item so it is compact and safe for Firestore storage
+ */
+function sanitizeSapMasterItem(item: SapMasterItem): SapMasterItem {
+  const safeWeight =
+    typeof item.weightKg === "number" && !isNaN(item.weightKg) && item.weightKg >= 0 && item.weightKg <= 100000
+      ? item.weightKg
+      : 0;
+  return {
+    batch: String(item.batch || "").trim().toUpperCase().slice(0, 32),
+    salesDoc: String(item.salesDoc || "").trim().slice(0, 64),
+    materialNo: String(item.materialNo || "").trim().slice(0, 64),
+    certThickness: String(item.certThickness || "").trim().slice(0, 32),
+    storageLocation: String(item.storageLocation || "").trim().slice(0, 64),
+    targetThickness: String(item.targetThickness || "").trim().slice(0, 32),
+    width: String(item.width || "").trim().slice(0, 32),
+    weightKg: safeWeight,
+    unrestricted: String(item.unrestricted || `${safeWeight.toLocaleString()} kg`).trim().slice(0, 64),
+    qualityClass: String(item.qualityClass || "").trim().slice(0, 32),
+    grade: String(item.grade || "").trim().slice(0, 64),
+    manufacturer: String(item.manufacturer || "").trim().slice(0, 64),
+    description: String(item.description || "").trim().slice(0, 256),
+    coilNo: String(item.coilNo || "").trim().slice(0, 64),
+    conditionText: String(item.conditionText || "").trim().slice(0, 128),
+  };
+}
+
+export interface SlitSapChunkDoc {
+  id: string;
+  chunkIndex: number;
+  totalChunks: number;
+  totalItems: number;
+  itemCount: number;
+  items: SapMasterItem[];
+  updatedAt: string;
+}
+
+/**
+ * Real-time listener for bundled SAP Master Data chunks (800 items per document)
+ * 3,000+ SAP rows require only 4 document reads per sync!
+ */
+export function subscribeToSlitSapMaster(
+  onData: (items: SapMasterItem[], chunkCount: number) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const colRef = collection(db, SAP_CHUNKS_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const chunks: SlitSapChunkDoc[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data() as SlitSapChunkDoc;
+        if (data && Array.isArray(data.items)) {
+          chunks.push(data);
+        }
+      });
+      chunks.sort((a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0));
+      const allItems: SapMasterItem[] = [];
+      for (const ch of chunks) {
+        for (const itm of ch.items) {
+          if (itm && itm.batch) {
+            allItems.push(itm);
+          }
+        }
+      }
+      onData(allItems, chunks.length);
+    },
+    (error) => {
+      onError?.(error);
+      handleFirestoreError(error, OperationType.GET, SAP_CHUNKS_COLLECTION);
+    }
+  );
+}
+
+/**
+ * Bundle SAP Master Data into chunks of 800 items per document and commit to Firestore.
+ * For 3,000+ items, this uses only 4 document writes instead of 3,000!
+ */
+export async function saveSapMasterChunksToCloud(
+  items: SapMasterItem[]
+): Promise<{ chunkCount: number; itemCount: number }> {
+  // Deduplicate by uppercase batch and sanitize
+  const dedupMap = new Map<string, SapMasterItem>();
+  for (const raw of items) {
+    if (!raw || !raw.batch) continue;
+    const cleaned = sanitizeSapMasterItem(raw);
+    if (cleaned.batch) {
+      dedupMap.set(cleaned.batch, cleaned);
+    }
+  }
+  const cleanItems = Array.from(dedupMap.values());
+  const totalItems = cleanItems.length;
+  const totalChunks = totalItems === 0 ? 0 : Math.ceil(totalItems / SAP_CHUNK_SIZE);
+  const nowIso = new Date().toISOString();
+
+  try {
+    const existingSnap = await getDocs(collection(db, SAP_CHUNKS_COLLECTION));
+    const newChunkIds = new Set<string>();
+    const batch = writeBatch(db);
+
+    for (let idx = 0; idx < totalChunks; idx++) {
+      const slice = cleanItems.slice(idx * SAP_CHUNK_SIZE, (idx + 1) * SAP_CHUNK_SIZE);
+      const docId = `SAP_CHUNK_${String(idx + 1).padStart(4, "0")}`;
+      newChunkIds.add(docId);
+
+      const chunkPayload: SlitSapChunkDoc = {
+        id: docId,
+        chunkIndex: idx,
+        totalChunks,
+        totalItems,
+        itemCount: slice.length,
+        items: slice,
+        updatedAt: nowIso,
+      };
+      batch.set(doc(db, SAP_CHUNKS_COLLECTION, docId), stripUndefinedDeep(chunkPayload));
+    }
+
+    // Remove any obsolete chunk documents if the new dataset has fewer chunks
+    existingSnap.forEach((d) => {
+      if (!newChunkIds.has(d.id)) {
+        batch.delete(d.ref);
+      }
+    });
+
+    await batch.commit();
+    return { chunkCount: totalChunks, itemCount: totalItems };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, SAP_CHUNKS_COLLECTION);
+    return { chunkCount: 0, itemCount: 0 };
+  }
+}
+
+/**
+ * Clear all SAP Master Data chunks from Cloud Firestore
+ */
+export async function clearSapMasterChunksFromCloud(): Promise<void> {
+  try {
+    const snap = await getDocs(collection(db, SAP_CHUNKS_COLLECTION));
+    if (snap.empty) return;
+    const batch = writeBatch(db);
+    snap.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, SAP_CHUNKS_COLLECTION);
+  }
+}
+
+/**
+ * Clear all documents in slit_picklists, slit_outbound, slit_inbound, and slit_sap_chunks on full reset
  */
 export async function clearAllSlitDataFromCloud(): Promise<void> {
   clearLegacySlitLocalStorage();
   try {
-    const [pickSnap, outSnap, inSnap] = await Promise.all([
+    const [pickSnap, outSnap, inSnap, sapSnap] = await Promise.all([
       getDocs(collection(db, PICKLIST_COLLECTION)),
       getDocs(collection(db, OUTBOUND_COLLECTION)),
       getDocs(collection(db, INBOUND_COLLECTION)),
+      getDocs(collection(db, SAP_CHUNKS_COLLECTION)),
     ]);
 
     const allRefs = [
       ...pickSnap.docs.map((d) => d.ref),
       ...outSnap.docs.map((d) => d.ref),
       ...inSnap.docs.map((d) => d.ref),
+      ...sapSnap.docs.map((d) => d.ref),
     ];
 
     // Commit in chunks of 400 to respect Firestore 500-op batch limit
@@ -474,6 +625,3 @@ export async function syncLocalDataToFirestoreIfEmpty(
 ): Promise<void> {
   clearLegacySlitLocalStorage();
 }
-
-
-

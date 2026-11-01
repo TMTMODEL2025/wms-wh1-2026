@@ -72,6 +72,7 @@ import {
   subscribeToSlitInbound,
   subscribeToSlitOutbound,
   subscribeToSlitPickLists,
+  subscribeToSlitSapMaster,
   saveInboundRecordToCloud,
   saveOutboundRecordToCloud,
   batchSaveInboundToCloud,
@@ -82,8 +83,11 @@ import {
   deletePickListFromCloud,
   deleteOutboundByOrderOrBatchesFromCloud,
   deleteInboundByBatchesFromCloud,
+  saveSapMasterChunksToCloud,
+  clearSapMasterChunksFromCloud,
   clearAllSlitDataFromCloud,
   clearLegacySlitLocalStorage,
+  SAP_CHUNK_SIZE,
 } from "../services/slitDataService";
 
 export interface SapMasterItem {
@@ -1091,33 +1095,33 @@ export function SlitFilmManagement({
     message: "",
   });
 
-  // SAP Master Data Upload & Mapping State (Pre-loadable & Persistent)
+  // SAP Master Data Upload & Mapping State (100% Cloud Firestore Chunked Storage)
   const [isSapModalOpen, setIsSapModalOpen] = useState<boolean>(false);
   const [sapRawText, setSapRawText] = useState<string>("");
-  const [sapMasterMap, setSapMasterMap] = useState<Map<string, SapMasterItem>>(() => {
+  const [sapMasterMap, setSapMasterMap] = useState<Map<string, SapMasterItem>>(() => new Map());
+  const [sapChunkCount, setSapChunkCount] = useState<number>(0);
+  const legacyLocalSapRef = useRef<SapMasterItem[]>([]);
+
+  // Capture any existing localStorage SAP data once so it can be migrated into Firestore Chunks if Cloud is empty
+  useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SAP_MASTER);
       if (saved) {
         const parsed: SapMasterItem[] = JSON.parse(saved);
-        const map = new Map<string, SapMasterItem>();
-        let hasSanitized = false;
-        parsed.forEach((item) => {
-          const safeWeight = sanitizeWeightKg(item.weightKg, item.unrestricted);
-          if (safeWeight !== item.weightKg || (item.unrestricted && item.unrestricted.includes("2,000,000,000"))) {
-            item.weightKg = safeWeight;
-            item.unrestricted = `${safeWeight.toLocaleString()} kg`;
-            hasSanitized = true;
-          }
-          map.set(item.batch.trim().toUpperCase(), item);
-        });
-        if (hasSanitized) {
-          localStorage.setItem(STORAGE_KEY_SAP_MASTER, JSON.stringify(Array.from(map.values())));
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          legacyLocalSapRef.current = parsed.map((item) => {
+            const safeWeight = sanitizeWeightKg(item.weightKg, item.unrestricted);
+            return {
+              ...item,
+              weightKg: safeWeight,
+              unrestricted: `${safeWeight.toLocaleString()} kg`,
+            };
+          });
         }
-        return map;
+        localStorage.removeItem(STORAGE_KEY_SAP_MASTER);
       }
     } catch {}
-    return new Map();
-  });
+  }, []);
 
   // SAP Upload & Processing Animation State
   const [isSapProcessing, setIsSapProcessing] = useState<boolean>(false);
@@ -1315,12 +1319,18 @@ export function SlitFilmManagement({
 
       const map = new Map<string, SapMasterItem>(sapMasterMap);
       masterData.forEach((item) => {
-        map.set(item.batch.trim().toUpperCase(), item);
+        const safeWeight = sanitizeWeightKg(item.weightKg, item.unrestricted);
+        map.set(item.batch.trim().toUpperCase(), {
+          ...item,
+          weightKg: safeWeight,
+          unrestricted: `${safeWeight.toLocaleString()} kg`,
+        });
       });
       setSapMasterMap(map);
-      try {
-        localStorage.setItem(STORAGE_KEY_SAP_MASTER, JSON.stringify(Array.from(map.values())));
-      } catch {}
+      const bundledItems = Array.from(map.values());
+      const calculatedChunks = bundledItems.length === 0 ? 0 : Math.ceil(bundledItems.length / SAP_CHUNK_SIZE);
+      setSapChunkCount(calculatedChunks);
+      saveSapMasterChunksToCloud(bundledItems).catch(console.error);
 
       const updatedInboundForCloud: SlitBarcodeRecord[] = [];
       setInboundList((prev) =>
@@ -1434,12 +1444,16 @@ export function SlitFilmManagement({
                   <span style="font-weight: bold; color: #15803d;">${masterData.length.toLocaleString()} ${isThai ? "รายการ" : "items"}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="color: #166534;">${isThai ? "มัดรวมข้อมูลขึ้น Cloud (Chunking):" : "Bundled Cloud Chunks:"}</span>
+                  <span style="font-weight: bold; color: #0891b2;">${calculatedChunks} ${isThai ? `ก้อน (รวม ${map.size.toLocaleString()} รายการ)` : `chunks (${map.size.toLocaleString()} total)`}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                   <span style="color: #166534;">${isThai ? "จับคู่กับ Batch ในระบบปัจจุบัน:" : "Matched Existing Batches:"}</span>
                   <span style="font-weight: bold; color: #0284c7;">${totalMappedShopfloorBatches} ${isThai ? "รายการ" : "items"}</span>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
-                  <span style="color: #166534;">${isThai ? "สถานะการสแกนหน้างาน:" : "Inbound Ready:"}</span>
-                  <span style="font-weight: bold; color: #059669;">${isThai ? "รองรับการรับเข้าภายหลังได้ทันที" : "Ready for Inbound Scan"}</span>
+                  <span style="color: #166534;">${isThai ? "สถานะการซิงค์ PC & มือถือ:" : "Cloud Sync Status:"}</span>
+                  <span style="font-weight: bold; color: #059669;">${isThai ? "ซิงค์ขึ้น Cloud เรียบร้อย (ประหยัดโควต้า)" : "Synced to Cloud"}</span>
                 </div>
               </div>
             </div>
@@ -1449,7 +1463,7 @@ export function SlitFilmManagement({
         });
 
         onLogTransaction?.(
-          `Saved ${masterData.length} SAP master records (${totalMappedShopfloorBatches} existing batches updated)`,
+          `Saved ${masterData.length} SAP master records in ${calculatedChunks} Cloud chunks (${totalMappedShopfloorBatches} existing batches updated)`,
           `SAP-MAP-${Date.now()}`,
           "Completed"
         );
@@ -1549,11 +1563,40 @@ export function SlitFilmManagement({
       }
     );
 
+    // Subscribe to Chunked SAP Master Data in real-time (800 items per chunk document)
+    const unsubscribeSapMaster = subscribeToSlitSapMaster(
+      (cloudSapItems, chunkCount) => {
+        if (!isMounted || !Array.isArray(cloudSapItems)) return;
+
+        // One-time migration if Cloud is empty and user had local SAP data before this update
+        if (cloudSapItems.length === 0 && legacyLocalSapRef.current.length > 0) {
+          const toMigrate = [...legacyLocalSapRef.current];
+          legacyLocalSapRef.current = [];
+          saveSapMasterChunksToCloud(toMigrate).catch(console.error);
+          return;
+        }
+
+        const nextMap = new Map<string, SapMasterItem>();
+        cloudSapItems.forEach((item) => {
+          if (!item || !item.batch) return;
+          const safeWeight = sanitizeWeightKg(item.weightKg, item.unrestricted);
+          nextMap.set(item.batch.trim().toUpperCase(), {
+            ...item,
+            weightKg: safeWeight,
+            unrestricted: `${safeWeight.toLocaleString()} kg`,
+          });
+        });
+        setSapMasterMap(nextMap);
+        setSapChunkCount(chunkCount);
+      }
+    );
+
     return () => {
       isMounted = false;
       unsubscribeInbound();
       unsubscribeOutbound();
       unsubscribePickLists();
+      unsubscribeSapMaster();
     };
   }, []);
 
@@ -7689,11 +7732,19 @@ export function SlitFilmManagement({
                 <Package size={20} />
               </div>
               <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-2">
                   <span>{isThai ? "Stock คงคลัง" : "Stock Balance"}</span>
                   <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                     {filteredStockList.length} {isThai ? "รายการ" : "items"}
                   </span>
+                  {sapMasterMap.size > 0 && (
+                    <span
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-mono"
+                      title={isThai ? `มัดรวมข้อมูล SAP บน Cloud Firestore (${SAP_CHUNK_SIZE} รายการ/ก้อน)` : "Bundled SAP Master Data on Cloud Firestore"}
+                    >
+                      ☁️ SAP Cloud: {sapChunkCount || Math.ceil(sapMasterMap.size / SAP_CHUNK_SIZE)} {isThai ? "ก้อน" : "chunks"} ({sapMasterMap.size.toLocaleString()})
+                    </span>
+                  )}
                 </h2>
                 <p className="hidden text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {isThai
@@ -9556,27 +9607,71 @@ export function SlitFilmManagement({
                 </div>
 
                 {/* Modal Footer */}
-                <div className="pt-3 border-t border-slate-100 dark:border-[#1e3a5f] flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsSapModalOpen(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400"
-                  >
-                    {isThai ? "ยกเลิก" : "Cancel"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePerformSapMapping(false)}
-                    disabled={!sapRawText.trim()}
-                    className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
-                      !sapRawText.trim()
-                        ? "opacity-50 bg-slate-300 text-slate-500 cursor-not-allowed"
-                        : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
-                    }`}
-                  >
-                    <Save size={16} />
-                    <span>{isThai ? "บันทึกและจับคู่ข้อมูล SAP" : "Save & Map SAP Data"}</span>
-                  </button>
+                <div className="pt-3 border-t border-slate-100 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    {sapMasterMap.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          Swal.fire({
+                            title: isThai ? "ล้างข้อมูล SAP บน Cloud?" : "Clear Cloud SAP Data?",
+                            text: isThai
+                              ? `ต้องการลบข้อมูล SAP ที่มัดรวมไว้บน Cloud ทั้งหมด (${sapMasterMap.size.toLocaleString()} รายการ / ${sapChunkCount || Math.ceil(sapMasterMap.size / SAP_CHUNK_SIZE)} ก้อน) ใช่หรือไม่?`
+                              : `Do you want to clear all ${sapMasterMap.size.toLocaleString()} SAP master records from Cloud?`,
+                            icon: "warning",
+                            showCancelButton: true,
+                            confirmButtonColor: "#dc2626",
+                            cancelButtonColor: "#64748b",
+                            confirmButtonText: isThai ? "ยืนยันล้างข้อมูล SAP" : "Clear SAP Data",
+                            cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
+                          }).then((res) => {
+                            if (res.isConfirmed) {
+                              setSapMasterMap(new Map());
+                              setSapChunkCount(0);
+                              localStorage.removeItem(STORAGE_KEY_SAP_MASTER);
+                              clearSapMasterChunksFromCloud().catch(console.error);
+                              Swal.fire({
+                                icon: "success",
+                                title: isThai ? "ล้างข้อมูล SAP สำเร็จ" : "SAP Data Cleared",
+                                timer: 1400,
+                                showConfirmButton: false,
+                              });
+                            }
+                          });
+                        }}
+                        className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 flex items-center gap-1.5 cursor-pointer transition-all"
+                      >
+                        <Trash2 size={14} />
+                        <span>
+                          {isThai
+                            ? `ล้างข้อมูล SAP เดิม (${sapMasterMap.size.toLocaleString()} รายการ)`
+                            : `Clear SAP (${sapMasterMap.size.toLocaleString()})`}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsSapModalOpen(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                    >
+                      {isThai ? "ยกเลิก" : "Cancel"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handlePerformSapMapping(false)}
+                      disabled={!sapRawText.trim()}
+                      className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
+                        !sapRawText.trim()
+                          ? "opacity-50 bg-slate-300 text-slate-500 cursor-not-allowed"
+                          : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
+                      }`}
+                    >
+                      <Save size={16} />
+                      <span>{isThai ? "บันทึกและจับคู่ข้อมูล SAP" : "Save & Map SAP Data"}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

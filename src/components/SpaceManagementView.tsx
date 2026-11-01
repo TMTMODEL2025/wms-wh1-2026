@@ -52,6 +52,7 @@ import {
   subscribeToSlitInbound,
   subscribeToSlitOutbound,
   subscribeToSlitPickLists,
+  subscribeToSlitSapMaster,
   saveInboundRecordToCloud,
   deleteInboundByBatchesFromCloud,
   clearLegacySlitLocalStorage,
@@ -228,26 +229,12 @@ function loadSpaceDataFromInventory(
   statusOverrides: Record<string, { status: string; notes?: string; lastUpdated?: string }> = {}
 ): BuildingSpaceData[] {
   try {
-    // Load SAP master records as fallback for location, thickness, width, grade, and weight
+    // Load SAP master records from Cloud Firestore (passed in via externalSapMasterMap)
     const sapMasterMap = new Map<string, any>();
     if (externalSapMasterMap && externalSapMasterMap.size > 0) {
       externalSapMasterMap.forEach((val, key) => {
         sapMasterMap.set(String(key).trim().toUpperCase(), val);
       });
-    } else {
-      try {
-        const sapStr = localStorage.getItem("tmt_wms_slit_sap_master_records");
-        if (sapStr) {
-          const sapArr = JSON.parse(sapStr);
-          if (Array.isArray(sapArr)) {
-            sapArr.forEach((item: any) => {
-              if (item?.batch) {
-                sapMasterMap.set(String(item.batch).trim().toUpperCase(), item);
-              }
-            });
-          }
-        }
-      } catch {}
     }
 
     // Track batches issued at machine (จ่ายหน้าเครื่อง) along with their latest issue timestamp
@@ -483,6 +470,9 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   const [cloudInbound, setCloudInbound] = useState<SlitBarcodeRecord[]>(propInboundList || []);
   const [cloudOutbound, setCloudOutbound] = useState<SlitBarcodeRecord[]>(propOutboundList || []);
   const [cloudPickLists, setCloudPickLists] = useState<PickListOrder[]>(propPickLists || []);
+  const [cloudSapMasterMap, setCloudSapMasterMap] = useState<Map<string, SapMasterItem>>(
+    propSapMasterMap || new Map()
+  );
   const [statusOverrides, setStatusOverrides] = useState<
     Record<string, { status: string; notes?: string; lastUpdated?: string }>
   >({});
@@ -492,23 +482,32 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     const unsubIn = subscribeToSlitInbound((records) => setCloudInbound(records));
     const unsubOut = subscribeToSlitOutbound((records) => setCloudOutbound(records));
     const unsubPick = subscribeToSlitPickLists((orders) => setCloudPickLists(orders));
+    const unsubSap = subscribeToSlitSapMaster((items) => {
+      const m = new Map<string, SapMasterItem>();
+      items.forEach((itm) => {
+        if (itm?.batch) m.set(itm.batch.trim().toUpperCase(), itm);
+      });
+      setCloudSapMasterMap(m);
+    });
     return () => {
       unsubIn();
       unsubOut();
       unsubPick();
+      unsubSap();
     };
   }, []);
 
   const effectiveInbound = propInboundList ?? cloudInbound;
   const effectiveOutbound = propOutboundList ?? cloudOutbound;
   const effectivePickLists = propPickLists ?? cloudPickLists;
+  const effectiveSapMasterMap = propSapMasterMap ?? cloudSapMasterMap;
 
   const [spaceData, setSpaceData] = useState<BuildingSpaceData[]>(() =>
     loadSpaceDataFromInventory(
       effectiveInbound,
       effectivePickLists,
       effectiveOutbound,
-      propSapMasterMap,
+      effectiveSapMasterMap,
       statusOverrides
     )
   );
@@ -546,7 +545,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         effectiveInbound,
         effectivePickLists,
         effectiveOutbound,
-        propSapMasterMap,
+        effectiveSapMasterMap,
         statusOverrides
       );
       setSpaceData((prev) => {
@@ -565,7 +564,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, syncData);
       window.removeEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, syncData);
     };
-  }, [effectiveInbound, effectivePickLists, effectiveOutbound, propSapMasterMap, statusOverrides]);
+  }, [effectiveInbound, effectivePickLists, effectiveOutbound, effectiveSapMasterMap, statusOverrides]);
 
   // Keep selectedBasket modal in sync when coils are cut/removed upon จ่ายหน้าเครื่อง
   useEffect(() => {
