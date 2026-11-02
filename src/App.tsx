@@ -5001,6 +5001,7 @@ function WmsApp() {
   };
   const [materialHandlingExpanded, setMaterialHandlingExpanded] = useState<boolean>(false);
   const [warehouseInventoryExpanded, setWarehouseInventoryExpanded] = useState<boolean>(false);
+  const [slitMenuExpanded, setSlitMenuExpanded] = useState<boolean>(false);
   const [administrationExpanded, setAdministrationExpanded] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -5359,6 +5360,9 @@ function WmsApp() {
                           onClick={() => {
                             setActive(item.id);
                             setSelectedRecord(null);
+                            if (item.id === "slit") {
+                              setSlitMenuExpanded(true);
+                            }
                           }}
                           title={item.label}
                         >
@@ -5517,16 +5521,24 @@ function WmsApp() {
                             const isSlit = item.id === "slit";
 
                             return (
-                              <div key={item.id} style={{ marginBottom: isSlit && isActive ? 4 : 0 }}>
+                              <div key={item.id} style={{ marginBottom: isSlit && slitMenuExpanded ? 4 : 0 }}>
                                 <button
                                   type="button"
                                   className={`nav-card-btn ${isActive ? "active" : ""}`}
                                   style={{ backgroundImage: `url(${bgImage})` }}
                                   onClick={() => {
-                                    setActive(item.id);
-                                    setSelectedRecord(null);
-                                    if (!isSlit && typeof window !== "undefined" && window.innerWidth <= 768) {
-                                      setSidebarCollapsed(true);
+                                    if (isSlit) {
+                                      setSlitMenuExpanded((prev) => !prev);
+                                      if (!isActive) {
+                                        setActive(item.id);
+                                        setSelectedRecord(null);
+                                      }
+                                    } else {
+                                      setActive(item.id);
+                                      setSelectedRecord(null);
+                                      if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                        setSidebarCollapsed(true);
+                                      }
                                     }
                                   }}
                                   title={item.label}
@@ -5543,7 +5555,7 @@ function WmsApp() {
                                       style={{
                                         fontSize: 11,
                                         marginLeft: "auto",
-                                        transform: isActive ? "rotate(0deg)" : "rotate(-90deg)",
+                                        transform: slitMenuExpanded ? "rotate(0deg)" : "rotate(-90deg)",
                                       }}
                                     >
                                       <ChevronDown size={14} />
@@ -5552,7 +5564,7 @@ function WmsApp() {
                                 </button>
 
                                  {/* Submenu for Slit / Film */}
-                                 {isSlit && isActive && (
+                                 {isSlit && slitMenuExpanded && (
                                    <div className="nav-submenu">
                                      <button
                                        type="button"

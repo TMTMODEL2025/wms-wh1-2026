@@ -9278,15 +9278,10 @@ export function SlitFilmManagement({
                         return (
                           <tr
                             key={item.id}
-                            onClick={() => {
-                              if (!isVerified) {
-                                processOutboundBarcodeScan(item.batch);
-                              }
-                            }}
-                            className={`transition-colors ${
+                            className={`transition-colors select-none ${
                               isVerified
                                 ? "bg-emerald-50/80 dark:bg-emerald-950/40 text-slate-900 dark:text-slate-100"
-                                : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 hover:bg-amber-50/50 dark:hover:bg-amber-950/30 cursor-pointer"
+                                : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300"
                             }`}
                           >
                             <td className="p-2 font-mono font-black text-amber-600 dark:text-amber-400 text-xs">
@@ -9299,9 +9294,9 @@ export function SlitFilmManagement({
                                   <span>สแกนแล้ว</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                                   <Barcode size={10} />
-                                  <span>รอสแกน (กดเพื่อสแกน)</span>
+                                  <span>รอสแกน</span>
                                 </span>
                               )}
                             </td>
