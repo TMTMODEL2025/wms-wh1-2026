@@ -517,13 +517,21 @@ async function startServer() {
 
     const existing = (serverState.warehouseSpaceConfig || {}) as Record<string, unknown>;
     const existingUpdatedAt = typeof existing.updatedAt === "string" ? existing.updatedAt : "";
-    const incomingUpdatedAt =
-      typeof incoming.updatedAt === "string" && incoming.updatedAt
-        ? incoming.updatedAt
-        : new Date().toISOString();
+    const existingMs = existingUpdatedAt ? Date.parse(existingUpdatedAt) || 0 : 0;
+    const nowMs = Date.now();
+    const monotonicServerIso = new Date(Math.max(nowMs, existingMs + 1)).toISOString();
 
-    // If incoming is explicitly a seed-only request and server already has newer state, keep server state
-    if (incoming.seedOnly === true && existingUpdatedAt && existingUpdatedAt >= incomingUpdatedAt) {
+    const incomingUpdatedAt =
+      incoming.seedOnly === true && typeof incoming.updatedAt === "string" && incoming.updatedAt
+        ? incoming.updatedAt
+        : monotonicServerIso;
+
+    // If incoming is explicitly a seed-only request and server already has state, keep server state
+    if (
+      incoming.seedOnly === true &&
+      existingUpdatedAt &&
+      (existingUpdatedAt >= incomingUpdatedAt || Boolean(existing.buildingMaxCapacityTons))
+    ) {
       res.json({ warehouseSpaceConfig: serverState.warehouseSpaceConfig });
       return;
     }
@@ -539,7 +547,11 @@ async function startServer() {
         : existing.buildingMaxCapacityTons;
 
     const effectiveUpdatedAt =
-      incomingUpdatedAt >= existingUpdatedAt ? incomingUpdatedAt : new Date().toISOString();
+      incoming.seedOnly === true
+        ? incomingUpdatedAt >= existingUpdatedAt
+          ? incomingUpdatedAt
+          : monotonicServerIso
+        : monotonicServerIso;
 
     const merged: Record<string, unknown> = {
       ...existing,

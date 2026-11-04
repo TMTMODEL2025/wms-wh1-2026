@@ -137,11 +137,6 @@ export function saveStoredBuildingMaxCapacityTons(
   const normalized = normalizeBuildingMaxCapacityTons(capacities);
   try {
     if (typeof window !== "undefined" && window.localStorage) {
-      const localUpdatedAt = window.localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_UPDATED_AT) || "";
-      if (options?.skipCloudWrite && options?.updatedAt && localUpdatedAt && options.updatedAt < localUpdatedAt) {
-        return getStoredBuildingMaxCapacityTons();
-      }
-
       const effectiveTs = options?.updatedAt || new Date().toISOString();
       const serialized = JSON.stringify(normalized);
       localStorage.setItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS, serialized);

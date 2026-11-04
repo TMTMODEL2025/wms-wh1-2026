@@ -1280,10 +1280,27 @@ export function subscribeToSlitSpaceConfig(
       return;
     }
 
-    const { mergedDoc, localWasNewer } = mergeWithNewerLocalCapacity(rawDoc);
+    // If server API has already responded with live state, ignore older Firestore snapshots
+    // (since Firestore daily write quota may be exhausted while Server API has the newest cross-device state)
+    if (source === "firestore" && apiResponded && latestDoc) {
+      const fsTs = rawDoc.updatedAt || "";
+      if (!fsTs || (latestUpdatedAt && fsTs <= latestUpdatedAt)) {
+        return;
+      }
+    }
+
+    let mergedDoc = rawDoc;
+    let localWasNewer = false;
+
+    if (source === "firestore" && !apiResponded) {
+      const res = mergeWithNewerLocalCapacity(rawDoc);
+      mergedDoc = res.mergedDoc;
+      localWasNewer = res.localWasNewer;
+    }
+
     const incomingTs = mergedDoc.updatedAt || "";
 
-    if (source === "firestore" || localWasNewer) {
+    if (source === "firestore") {
       fetch("/api/space-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1294,7 +1311,7 @@ export function subscribeToSlitSpaceConfig(
       }).catch(() => {});
     }
 
-    if (latestDoc && latestUpdatedAt && incomingTs && incomingTs < latestUpdatedAt) {
+    if (source === "firestore" && latestDoc && latestUpdatedAt && incomingTs && incomingTs < latestUpdatedAt) {
       return;
     }
 
@@ -1306,8 +1323,8 @@ export function subscribeToSlitSpaceConfig(
         ...(mergedDoc.buildingMaxCapacityTons || {}),
       },
     };
-    if (incomingTs > latestUpdatedAt) {
-      latestUpdatedAt = incomingTs;
+    if (incomingTs > latestUpdatedAt || source === "api") {
+      latestUpdatedAt = incomingTs || new Date().toISOString();
     }
 
     onData(latestDoc);
