@@ -36,11 +36,7 @@ import {
   MachineStagingConfig,
   calculateAccumulatedWidthMm,
 } from "../data/machineStagingStorage";
-import {
-  getStoredMasterBasketLayout,
-  MASTER_BASKET_LAYOUT_UPDATED_EVENT,
-  parseWarehouseBasketLocation,
-} from "../data/masterBasketStorage";
+import { getStoredMasterBasketLayout } from "../data/masterBasketStorage";
 
 interface DailyReportViewProps {
   inboundList: SlitBarcodeRecord[];
@@ -242,11 +238,9 @@ export function DailyReportView({
     };
 
     window.addEventListener(MACHINE_STAGING_UPDATED_EVENT, refreshStaging);
-    window.addEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, refreshStaging);
     window.addEventListener("storage", handleStorageSync);
     return () => {
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, refreshStaging);
-      window.removeEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, refreshStaging);
       window.removeEventListener("storage", handleStorageSync);
     };
   }, []);
@@ -1589,7 +1583,38 @@ export function DailyReportView({
         return;
       }
 
-      const { bId, rId, basketId } = parseWarehouseBasketLocation(loc);
+      let bId: "H" | "F" | "E9" | "E10" | "I" = "H";
+      let rest = loc;
+
+      if (/^E-?10(?![0-9])/i.test(loc) && (loc.length <= 4 || /^E-?10[-/_ A-Z]/i.test(loc))) {
+        bId = "E10";
+        rest = loc.replace(/^E-?10\s*[-/_]?\s*/i, "");
+      } else if (/^E-?9(?![0-9])/i.test(loc) && (loc.length <= 3 || /^E-?9[-/_ A-Z]/i.test(loc))) {
+        bId = "E9";
+        rest = loc.replace(/^E-?9\s*[-/_]?\s*/i, "");
+      } else if (loc.startsWith("F")) {
+        bId = "F";
+        rest = /^F\d+\s*[-/_]\s*[A-Z]/i.test(loc)
+          ? loc.replace(/^F\d+\s*[-/_]\s*/i, "")
+          : loc.replace(/^F\s*[-/_]?\s*/i, "");
+      } else if (loc.startsWith("I")) {
+        bId = "I";
+        rest = /^I\d+\s*[-/_]\s*[A-Z]/i.test(loc)
+          ? loc.replace(/^I\d+\s*[-/_]\s*/i, "")
+          : loc.replace(/^I\s*[-/_]?\s*/i, "");
+      } else if (loc.startsWith("H")) {
+        bId = "H";
+        rest = /^H\d+\s*[-/_]\s*[A-Z]/i.test(loc)
+          ? loc.replace(/^H\d+\s*[-/_]\s*/i, "")
+          : loc.replace(/^H\s*[-/_]?\s*/i, "");
+      }
+
+      rest = rest.replace(/^O(?=[A-Z]\d)/i, "").trim();
+      const rowMatch = rest.match(/[A-Z]/);
+      const rId = rowMatch ? rowMatch[0] : "A";
+      const numMatch = rest.match(/\d+/);
+      const bNo = numMatch ? numMatch[0].padStart(2, "0") : "01";
+      const basketId = `${bId}-${rId}${bNo}`;
 
       if (!buildingGroupMap[bId]) buildingGroupMap[bId] = {};
       if (!buildingGroupMap[bId][rId]) buildingGroupMap[bId][rId] = {};

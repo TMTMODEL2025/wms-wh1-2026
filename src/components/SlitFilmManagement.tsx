@@ -54,12 +54,6 @@ import {
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
 import { SpaceManagementView } from "./SpaceManagementView";
-import {
-  ensureBasketInMasterLayout,
-  ensureMasterBasketCloudSync,
-  isValidWarehouseBasketLocation,
-  parseWarehouseBasketLocation,
-} from "../data/masterBasketStorage";
 import * as XLSX from "xlsx";
 import { useLanguage } from "../contexts/LanguageContext";
 import {
@@ -3327,11 +3321,6 @@ export function SlitFilmManagement({
           return updated;
         });
 
-        if (isValidWarehouseBasketLocation(destLayout)) {
-          const { bId, rId, basketId } = parseWarehouseBasketLocation(destLayout);
-          ensureBasketInMasterLayout(bId, rId, basketId);
-        }
-
         relocateBatchList.forEach((relocItem) => {
           removeCoilByBatch(relocItem.batch);
         });
@@ -3825,13 +3814,6 @@ export function SlitFilmManagement({
           description: item.description || matchedSap?.description || "",
           conditionText: `คืนคลังจาก ${item.machineCode || item.machineId}${item.rackNameTh && item.rackNameTh !== "-" ? ` (${item.rackNameTh})` : ""}`,
         };
-      });
-
-      newInboundRecords.forEach((rec) => {
-        if (rec.location && isValidWarehouseBasketLocation(rec.location)) {
-          const { bId, rId, basketId } = parseWarehouseBasketLocation(rec.location);
-          ensureBasketInMasterLayout(bId, rId, basketId);
-        }
       });
 
       setInboundList((prev) => {
@@ -4903,10 +4885,6 @@ export function SlitFilmManagement({
     });
 
     if (activeMode === "inbound") {
-      if (isValidWarehouseBasketLocation(finalLocation)) {
-        const { bId, rId, basketId } = parseWarehouseBasketLocation(finalLocation);
-        ensureBasketInMasterLayout(bId, rId, basketId);
-      }
       committedBatches.forEach((item) => {
         removeCoilByBatch(item.batch);
       });
@@ -7150,11 +7128,7 @@ export function SlitFilmManagement({
                       spellCheck={false}
                       value={locationBarcode}
                       onChange={(e) => {
-                        const rawVal = e.target.value
-                          .replace(/[\r\n\t\0\x02\x03\x04]+/g, "")
-                          .replace(/^\*+|\*+$/g, "")
-                          .toUpperCase();
-                        setLocationBarcode(rawVal);
+                        setLocationBarcode(cleanBarcode(e.target.value));
                         if (locationScanError) setLocationScanError(null);
                       }}
                       placeholder={isThai ? "ยิงบาร์โค้ด Location จัดเก็บ..." : "Scan Location barcode..."}
