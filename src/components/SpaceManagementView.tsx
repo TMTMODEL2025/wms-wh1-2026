@@ -39,6 +39,7 @@ import {
 } from "../data/machineStagingStorage";
 import {
   getStoredMasterBasketLayout,
+  saveStoredMasterBasketLayout,
   addBasketToRow,
   addNewRowToBuilding,
   removeBasketFromRow,
@@ -53,6 +54,8 @@ import {
   subscribeToSlitOutbound,
   subscribeToSlitPickLists,
   subscribeToSlitSapMaster,
+  subscribeToSlitSpaceConfig,
+  saveSlitSpaceConfigToCloud,
   saveInboundRecordToCloud,
   deleteInboundByBatchesFromCloud,
   clearLegacySlitLocalStorage,
@@ -380,6 +383,7 @@ function loadSpaceDataFromInventory(
 
     if (masterLayoutModified) {
       masterLayout = getStoredMasterBasketLayout();
+      saveSlitSpaceConfigToCloud({ masterLayout }).catch(console.error);
     }
 
     // Preserve manual statuses (like maintenance) passed in statusOverrides
@@ -476,6 +480,8 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   const [statusOverrides, setStatusOverrides] = useState<
     Record<string, { status: string; notes?: string; lastUpdated?: string }>
   >({});
+  const isSpaceConfigLoadedRef = useRef<boolean>(false);
+  const lastSyncedSummaryRef = useRef<string>("");
 
   useEffect(() => {
     clearLegacySlitLocalStorage();
@@ -489,11 +495,62 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       });
       setCloudSapMasterMap(m);
     });
+    const unsubSpaceConfig = subscribeToSlitSpaceConfig((cloudConfig) => {
+      isSpaceConfigLoadedRef.current = true;
+      if (!cloudConfig) {
+        // Seed initial space configuration to Cloud Firestore if not yet created
+        let initialCap: Record<"H" | "F" | "E9" | "E10" | "I", number> = {
+          H: 8000,
+          F: 8000,
+          E9: 8000,
+          E10: 8000,
+          I: 8000,
+        };
+        try {
+          const saved = localStorage.getItem("tmt_wms_building_max_capacity_tons_v1");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === "object") {
+              initialCap = { ...initialCap, ...parsed };
+            }
+          }
+        } catch {}
+        saveSlitSpaceConfigToCloud({
+          buildingMaxCapacityTons: initialCap,
+          masterLayout: getStoredMasterBasketLayout(),
+          statusOverrides: {},
+        }).catch(console.error);
+        return;
+      }
+
+      if (cloudConfig.buildingMaxCapacityTons && typeof cloudConfig.buildingMaxCapacityTons === "object") {
+        setBuildingMaxCapacityTons((prev) => {
+          const next = { ...prev, ...cloudConfig.buildingMaxCapacityTons };
+          if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+          try {
+            localStorage.setItem("tmt_wms_building_max_capacity_tons_v1", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+      }
+
+      if (Array.isArray(cloudConfig.masterLayout) && cloudConfig.masterLayout.length > 0) {
+        saveStoredMasterBasketLayout(cloudConfig.masterLayout);
+      }
+
+      if (cloudConfig.statusOverrides && typeof cloudConfig.statusOverrides === "object") {
+        setStatusOverrides((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudConfig.statusOverrides)) return prev;
+          return cloudConfig.statusOverrides!;
+        });
+      }
+    });
     return () => {
       unsubIn();
       unsubOut();
       unsubPick();
       unsubSap();
+      unsubSpaceConfig();
     };
   }, []);
 
@@ -641,6 +698,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     try {
       localStorage.setItem("tmt_wms_building_max_capacity_tons_v1", JSON.stringify(updated));
     } catch {}
+    saveSlitSpaceConfigToCloud({ buildingMaxCapacityTons: updated }).catch(console.error);
     setEditingCapacityBuildingId(null);
     Swal.fire({
       icon: "success",
@@ -762,6 +820,19 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     };
   }, [buildingTabSummaries]);
 
+  // Keep real-time summary metrics (พื้นที่จัดเก็บทั้งหมด, พื้นที่ใช้ไป, พื้นที่คงเหลือ, จำนวนตะกร้า, จำนวนแถบ) synced in Cloud Firestore
+  useEffect(() => {
+    if (!isSpaceConfigLoadedRef.current) return;
+    const summarySnapshot = {
+      ...allStorageAreasSummary,
+      buildings: buildingTabSummaries,
+    };
+    const serialized = JSON.stringify(summarySnapshot);
+    if (lastSyncedSummaryRef.current === serialized) return;
+    lastSyncedSummaryRef.current = serialized;
+    saveSlitSpaceConfigToCloud({ summarySnapshot }).catch(console.error);
+  }, [allStorageAreasSummary, buildingTabSummaries]);
+
   const hasInventoryStock = useMemo(() => {
     return spaceData.some((b) => b.rows.some((r) => r.baskets.length > 0));
   }, [spaceData]);
@@ -803,14 +874,18 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   // Handler: Change Basket Status
   const handleUpdateBasketStatus = (basketId: string, newStatus: "available" | "occupied" | "full" | "maintenance") => {
     const nowStr = new Date().toISOString().replace("T", " ").slice(0, 16);
-    setStatusOverrides((prev) => ({
-      ...prev,
-      [basketId]: {
-        status: newStatus,
-        notes: prev[basketId]?.notes,
-        lastUpdated: nowStr,
-      },
-    }));
+    setStatusOverrides((prev) => {
+      const next = {
+        ...prev,
+        [basketId]: {
+          status: newStatus,
+          notes: prev[basketId]?.notes,
+          lastUpdated: nowStr,
+        },
+      };
+      saveSlitSpaceConfigToCloud({ statusOverrides: next }).catch(console.error);
+      return next;
+    });
     setSpaceData((prev) =>
       prev.map((b) => {
         if (b.buildingId !== activeBuildingId) return b;
@@ -1048,12 +1123,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         });
         return;
       }
+      saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
       setSpaceData(
         loadSpaceDataFromInventory(
           effectiveInbound,
           effectivePickLists,
           effectiveOutbound,
-          propSapMasterMap,
+          effectiveSapMasterMap,
           statusOverrides
         )
       );
@@ -1073,12 +1149,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   const handleAddBasketToRow = (rowId: string) => {
     const newBasket = addBasketToRow(activeBuildingId, rowId);
     if (newBasket) {
+      saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
       setSpaceData(
         loadSpaceDataFromInventory(
           effectiveInbound,
           effectivePickLists,
           effectiveOutbound,
-          propSapMasterMap,
+          effectiveSapMasterMap,
           statusOverrides
         )
       );
@@ -1117,6 +1194,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     }).then((result) => {
       if (result.isConfirmed) {
         removeBasketFromRow(activeBuildingId, rowId, basketId);
+        saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
         setIsDetailModalOpen(false);
         setSelectedBasket(null);
         setSpaceData(
@@ -1124,7 +1202,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
             effectiveInbound,
             effectivePickLists,
             effectiveOutbound,
-            propSapMasterMap,
+            effectiveSapMasterMap,
             statusOverrides
           )
         );
@@ -1160,12 +1238,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     }
 
     ensureBasketInMasterLayout(activeBuildingId, newBasketRowId, newBasketId);
+    saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
     setSpaceData(
       loadSpaceDataFromInventory(
         effectiveInbound,
         effectivePickLists,
         effectiveOutbound,
-        propSapMasterMap,
+        effectiveSapMasterMap,
         statusOverrides
       )
     );

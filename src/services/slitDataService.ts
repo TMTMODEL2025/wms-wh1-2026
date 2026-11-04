@@ -9,12 +9,15 @@ import {
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "../components/SlitFilmManagement";
+import type { MasterBuildingLayout } from "../data/masterBasketStorage";
 
 const INBOUND_COLLECTION = "slit_inbound";
 const OUTBOUND_COLLECTION = "slit_outbound";
 const PICKLIST_COLLECTION = "slit_picklists";
 export const SAP_CHUNKS_COLLECTION = "slit_sap_chunks";
 export const SAP_CHUNK_SIZE = 800;
+export const SPACE_CONFIG_COLLECTION = "slit_space_config";
+export const SPACE_CONFIG_DOC_ID = "warehouse_space_state";
 
 function sanitizeDocId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
@@ -583,17 +586,95 @@ export async function clearSapMasterChunksFromCloud(): Promise<void> {
   }
 }
 
+export interface SlitWarehouseSpaceSummaryBuilding {
+  buildingId: "H" | "F" | "E9" | "E10" | "I";
+  buildingNameTh: string;
+  maxCapacityTons: number;
+  usedSpaceTons: number;
+  remainingSpaceTons: number;
+  totalBaskets: number;
+  usedBaskets: number;
+  totalCoils: number;
+  percent: number;
+  spaceUsagePercent: number;
+}
+
+export interface SlitWarehouseSpaceSummarySnapshot {
+  totalMaxCapacityTons: number;
+  totalUsedSpaceTons: number;
+  totalRemainingSpaceTons: number;
+  totalBaskets: number;
+  totalUsedBaskets: number;
+  totalCoils: number;
+  basketPercent: number;
+  spacePercent: number;
+  buildings: SlitWarehouseSpaceSummaryBuilding[];
+}
+
+export interface SlitWarehouseSpaceCloudDoc {
+  id: string;
+  buildingMaxCapacityTons?: Record<"H" | "F" | "E9" | "E10" | "I", number>;
+  masterLayout?: MasterBuildingLayout[];
+  statusOverrides?: Record<string, { status: string; notes?: string; lastUpdated?: string }>;
+  summarySnapshot?: SlitWarehouseSpaceSummarySnapshot;
+  updatedAt: string;
+}
+
 /**
- * Clear all documents in slit_picklists, slit_outbound, slit_inbound, and slit_sap_chunks on full reset
+ * Real-time listener for Slit Warehouse Space Configuration & Summary Metrics
+ * (buildingMaxCapacityTons, masterLayout, statusOverrides, summarySnapshot)
+ */
+export function subscribeToSlitSpaceConfig(
+  onData: (config: SlitWarehouseSpaceCloudDoc | null) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const docRef = doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID);
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onData(null);
+        return;
+      }
+      onData(snapshot.data() as SlitWarehouseSpaceCloudDoc);
+    },
+    (error) => {
+      onError?.(error);
+      handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
+    }
+  );
+}
+
+/**
+ * Save or merge Slit Warehouse Space Configuration & Summary Metrics to Cloud Firestore
+ */
+export async function saveSlitSpaceConfigToCloud(
+  partial: Partial<Omit<SlitWarehouseSpaceCloudDoc, "id" | "updatedAt">>
+): Promise<void> {
+  const payload = stripUndefinedDeep({
+    id: SPACE_CONFIG_DOC_ID,
+    ...partial,
+    updatedAt: new Date().toISOString(),
+  });
+  try {
+    await setDoc(doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID), payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
+  }
+}
+
+/**
+ * Clear all documents in slit_picklists, slit_outbound, slit_inbound, slit_sap_chunks, and slit_space_config on full reset
  */
 export async function clearAllSlitDataFromCloud(): Promise<void> {
   clearLegacySlitLocalStorage();
   try {
-    const [pickSnap, outSnap, inSnap, sapSnap] = await Promise.all([
+    const [pickSnap, outSnap, inSnap, sapSnap, spaceSnap] = await Promise.all([
       getDocs(collection(db, PICKLIST_COLLECTION)),
       getDocs(collection(db, OUTBOUND_COLLECTION)),
       getDocs(collection(db, INBOUND_COLLECTION)),
       getDocs(collection(db, SAP_CHUNKS_COLLECTION)),
+      getDocs(collection(db, SPACE_CONFIG_COLLECTION)),
     ]);
 
     const allRefs = [
@@ -601,6 +682,7 @@ export async function clearAllSlitDataFromCloud(): Promise<void> {
       ...outSnap.docs.map((d) => d.ref),
       ...inSnap.docs.map((d) => d.ref),
       ...sapSnap.docs.map((d) => d.ref),
+      ...spaceSnap.docs.map((d) => d.ref),
     ];
 
     // Commit in chunks of 400 to respect Firestore 500-op batch limit

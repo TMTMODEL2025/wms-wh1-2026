@@ -33,6 +33,10 @@ service cloud.firestore {
         && data.items is list && data.items.size() <= 1000;
     }
 
+    function isValidSpaceConfig(data) {
+      return data.id is string && data.id.size() <= 128;
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -55,6 +59,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(chunkId) && isValidSapChunk(request.resource.data);
       allow delete: if isValidId(chunkId);
+    }
+
+    match /slit_space_config/{configId} {
+      allow read: if true;
+      allow create, update: if isValidId(configId) && isValidSpaceConfig(request.resource.data);
+      allow delete: if isValidId(configId);
     }
 
     match /test/{docId} {

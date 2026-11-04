@@ -90,6 +90,16 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "chunkIndex"]
+    },
+    "SlitWarehouseSpaceConfig": {
+      "title": "Slit Warehouse Space Configuration & Real-time Summary",
+      "description": "Real-time storage capacities, master basket layout, status overrides, and space summary metrics across buildings H, F, E9, E10, I",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id"]
     }
   },
   "firestore": {
@@ -108,6 +118,10 @@
     "/slit_sap_chunks/{chunkId}": {
       "schema": "SlitSapChunk",
       "description": "Collection of bundled SAP Master Data chunks"
+    },
+    "/slit_space_config/{configId}": {
+      "schema": "SlitWarehouseSpaceConfig",
+      "description": "Collection of warehouse space configurations, basket layouts, and real-time space summary metrics"
     }
   }
 }
