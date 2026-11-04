@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Swal from "sweetalert2";
 import {
   Cpu,
@@ -22,9 +22,14 @@ import {
   saveStoredMachineStaging,
   resetAllMachineStagingToEmpty,
   ensureMachineStagingCloudSync,
+  computeMachineStagingSummarySnapshot,
   STORAGE_KEY_MACHINE_STAGING,
   MACHINE_STAGING_UPDATED_EVENT
 } from "../data/machineStagingStorage";
+import {
+  subscribeToSlitMachineStaging,
+  saveSlitMachineStagingToCloud,
+} from "../services/slitDataService";
 
 export type { MachineRackCoil, MachineRack, MachineStagingConfig };
 export {
@@ -51,10 +56,23 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
   // Active selected machine
   const [selectedMachineId, setSelectedMachineId] = useState<string>("TM01");
+  const [isMachineStagingCloudLoaded, setIsMachineStagingCloudLoaded] = useState<boolean>(false);
+  const lastSyncedStagingRef = useRef<string>("");
 
   // Real-time synchronization: listen to Cloud Firestore & storage updates
   useEffect(() => {
     ensureMachineStagingCloudSync();
+    const unsubCloud = subscribeToSlitMachineStaging((cloudDoc) => {
+      setIsMachineStagingCloudLoaded(true);
+      if (cloudDoc && Array.isArray(cloudDoc.machines) && cloudDoc.machines.length > 0) {
+        saveStoredMachineStaging(cloudDoc.machines, { skipCloudWrite: true });
+        setMachines((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudDoc.machines)) return prev;
+          return cloudDoc.machines;
+        });
+      }
+    });
+
     const handleUpdate = () => {
       const fresh = getStoredMachineStaging();
       setMachines((prev) => {
@@ -65,6 +83,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
     window.addEventListener(MACHINE_STAGING_UPDATED_EVENT, handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
+      unsubCloud();
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
@@ -309,6 +328,19 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
       }
     };
   }, [machines]);
+
+  // Keep real-time Machine Staging summary metrics & rack states synced in Cloud Firestore
+  useEffect(() => {
+    if (!isMachineStagingCloudLoaded) return;
+    const summarySnapshot = computeMachineStagingSummarySnapshot(machines);
+    const payloadStr = JSON.stringify({ machines, summarySnapshot });
+    if (lastSyncedStagingRef.current === payloadStr) return;
+    lastSyncedStagingRef.current = payloadStr;
+    saveSlitMachineStagingToCloud({
+      machines,
+      summarySnapshot,
+    }).catch(console.error);
+  }, [isMachineStagingCloudLoaded, machines]);
 
   // Handler: Update Rack Used Meters (Manual control in 1-meter intervals)
   const handleUpdateUsedMeters = (rackId: string, meters: number) => {

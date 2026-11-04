@@ -32,11 +32,21 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
 import {
   getStoredMachineStaging,
+  ensureMachineStagingCloudSync,
   MACHINE_STAGING_UPDATED_EVENT,
   MachineStagingConfig,
   calculateAccumulatedWidthMm,
 } from "../data/machineStagingStorage";
-import { getStoredMasterBasketLayout } from "../data/masterBasketStorage";
+import {
+  getStoredMasterBasketLayout,
+  ensureWarehouseSpaceCloudSync,
+  MASTER_BASKET_LAYOUT_UPDATED_EVENT,
+  BUILDING_CAPACITY_UPDATED_EVENT,
+} from "../data/masterBasketStorage";
+import {
+  subscribeToSlitMachineStaging,
+  saveSlitMachineStagingToCloud,
+} from "../services/slitDataService";
 
 interface DailyReportViewProps {
   inboundList: SlitBarcodeRecord[];
@@ -205,6 +215,7 @@ export function DailyReportView({
           JSON.stringify(updated)
         );
       } catch {}
+      saveSlitMachineStagingToCloud({ productionStatus: updated }).catch(console.error);
       return updated;
     });
   };
@@ -223,6 +234,24 @@ export function DailyReportView({
   }, [machineProductionStatus]);
 
   useEffect(() => {
+    ensureMachineStagingCloudSync();
+    ensureWarehouseSpaceCloudSync();
+
+    const unsubMachineCloud = subscribeToSlitMachineStaging((cloudDoc) => {
+      if (cloudDoc?.productionStatus && typeof cloudDoc.productionStatus === "object") {
+        setMachineProductionStatus((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(cloudDoc.productionStatus)) return prev;
+          try {
+            localStorage.setItem(
+              "tmt_wms_machine_production_status_v1",
+              JSON.stringify(cloudDoc.productionStatus)
+            );
+          } catch {}
+          return cloudDoc.productionStatus!;
+        });
+      }
+    });
+
     const refreshStaging = () => {
       setMachineStagingConfigs(getStoredMachineStaging());
       setSpaceStorageTick((t) => t + 1);
@@ -238,9 +267,14 @@ export function DailyReportView({
     };
 
     window.addEventListener(MACHINE_STAGING_UPDATED_EVENT, refreshStaging);
+    window.addEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, refreshStaging);
+    window.addEventListener(BUILDING_CAPACITY_UPDATED_EVENT, refreshStaging);
     window.addEventListener("storage", handleStorageSync);
     return () => {
+      unsubMachineCloud();
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, refreshStaging);
+      window.removeEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, refreshStaging);
+      window.removeEventListener(BUILDING_CAPACITY_UPDATED_EVENT, refreshStaging);
       window.removeEventListener("storage", handleStorageSync);
     };
   }, []);

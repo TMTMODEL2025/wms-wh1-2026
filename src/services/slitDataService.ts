@@ -694,6 +694,15 @@ export interface SlitMachineStagingCloudDoc {
   id: string;
   machines: MachineStagingConfig[];
   summarySnapshot?: SlitMachineStagingSummarySnapshot;
+  productionStatus?: Record<
+    string,
+    {
+      waitingMoveInActive: boolean;
+      waitingMoveInCoils: number;
+      waitingSlitActive: boolean;
+      waitingSlitCoils: number;
+    }
+  >;
   updatedAt: string;
 }
 

@@ -2,6 +2,10 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  subscribeToSlitSpaceConfig,
+  saveSlitSpaceConfigToCloud,
+} from "../services/slitDataService";
 
 export type BuildingId = "H" | "F" | "E9" | "E10" | "I";
 
@@ -34,6 +38,8 @@ export interface MasterBuildingLayout {
 
 export const STORAGE_KEY_MASTER_BASKET_LAYOUT = "tmt_wms_master_basket_layout_v1";
 export const MASTER_BASKET_LAYOUT_UPDATED_EVENT = "master-basket-layout-updated";
+export const STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS = "tmt_wms_building_max_capacity_tons_v1";
+export const BUILDING_CAPACITY_UPDATED_EVENT = "building-capacity-updated";
 
 export const BUILDING_DEFINITIONS: Array<{
   id: BuildingId;
@@ -81,6 +87,68 @@ export const BUILDING_DEFINITIONS: Array<{
 
 const DEFAULT_ROWS = ["A", "B", "C", "D"];
 const DEFAULT_BASKETS_PER_ROW = 10;
+
+let isWarehouseSpaceCloudSubscribed = false;
+let isWarehouseSpaceCloudLoaded = false;
+let lastCloudSerializedLayout = "";
+
+export function ensureWarehouseSpaceCloudSync(): void {
+  if (isWarehouseSpaceCloudSubscribed || typeof window === "undefined") return;
+  isWarehouseSpaceCloudSubscribed = true;
+
+  subscribeToSlitSpaceConfig((cloudConfig) => {
+    isWarehouseSpaceCloudLoaded = true;
+    if (!cloudConfig) {
+      let initialCap: Record<"H" | "F" | "E9" | "E10" | "I", number> = {
+        H: 8000,
+        F: 8000,
+        E9: 8000,
+        E10: 8000,
+        I: 8000,
+      };
+      try {
+        const savedCap = localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS);
+        if (savedCap) {
+          const parsed = JSON.parse(savedCap);
+          if (parsed && typeof parsed === "object") {
+            initialCap = { ...initialCap, ...parsed };
+          }
+        }
+      } catch {}
+      const currentLayout = getStoredMasterBasketLayout();
+      lastCloudSerializedLayout = JSON.stringify(currentLayout);
+      saveSlitSpaceConfigToCloud({
+        buildingMaxCapacityTons: initialCap,
+        masterLayout: currentLayout,
+        statusOverrides: {},
+      }).catch(console.error);
+      return;
+    }
+
+    if (cloudConfig.buildingMaxCapacityTons && typeof cloudConfig.buildingMaxCapacityTons === "object") {
+      try {
+        const capStr = JSON.stringify(cloudConfig.buildingMaxCapacityTons);
+        if (localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS) !== capStr) {
+          localStorage.setItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS, capStr);
+          window.dispatchEvent(
+            new CustomEvent(BUILDING_CAPACITY_UPDATED_EVENT, {
+              detail: cloudConfig.buildingMaxCapacityTons,
+            })
+          );
+        }
+      } catch {}
+    }
+
+    if (Array.isArray(cloudConfig.masterLayout) && cloudConfig.masterLayout.length > 0) {
+      lastCloudSerializedLayout = JSON.stringify(cloudConfig.masterLayout);
+      saveStoredMasterBasketLayout(cloudConfig.masterLayout, { skipCloudWrite: true });
+    }
+  });
+}
+
+if (typeof window !== "undefined") {
+  ensureWarehouseSpaceCloudSync();
+}
 
 /**
  * Generate default baskets for a building and row (e.g. H-A01 to H-A10)
@@ -136,8 +204,6 @@ export function getStoredMasterBasketLayout(): MasterBuildingLayout[] {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Verify that all 5 buildings exist
-          const existingBuildingIds = new Set(parsed.map((b: any) => b.buildingId));
           const defaults = buildDefaultMasterBasketLayout();
           let changed = false;
 
@@ -147,7 +213,6 @@ export function getStoredMasterBasketLayout(): MasterBuildingLayout[] {
               changed = true;
               return def;
             }
-            // Ensure rows are non-empty and well-formed
             const rows = (found.rows && found.rows.length > 0 ? found.rows : def.rows).map(
               (r: any) => ({
                 rowId: String(r.rowId || "A").toUpperCase(),
@@ -165,7 +230,7 @@ export function getStoredMasterBasketLayout(): MasterBuildingLayout[] {
           });
 
           if (changed) {
-            saveStoredMasterBasketLayout(merged);
+            saveStoredMasterBasketLayout(merged, { skipCloudWrite: true });
           }
           return merged;
         }
@@ -176,27 +241,34 @@ export function getStoredMasterBasketLayout(): MasterBuildingLayout[] {
   }
 
   const initial = buildDefaultMasterBasketLayout();
-  saveStoredMasterBasketLayout(initial);
+  saveStoredMasterBasketLayout(initial, { skipCloudWrite: true });
   return initial;
 }
 
 /**
- * Save master basket layout to LocalStorage and dispatch sync event
+ * Save master basket layout to LocalStorage & Cloud Firestore and dispatch sync event
  */
-export function saveStoredMasterBasketLayout(data: MasterBuildingLayout[]): void {
+export function saveStoredMasterBasketLayout(
+  data: MasterBuildingLayout[],
+  options?: { skipCloudWrite?: boolean }
+): void {
   try {
+    const serialized = JSON.stringify(data);
     if (typeof window !== "undefined" && window.localStorage) {
-      const serialized = JSON.stringify(data);
-      if (localStorage.getItem(STORAGE_KEY_MASTER_BASKET_LAYOUT) === serialized) {
-        return;
+      if (localStorage.getItem(STORAGE_KEY_MASTER_BASKET_LAYOUT) !== serialized) {
+        localStorage.setItem(STORAGE_KEY_MASTER_BASKET_LAYOUT, serialized);
+        window.dispatchEvent(
+          new CustomEvent(MASTER_BASKET_LAYOUT_UPDATED_EVENT, { detail: data })
+        );
       }
-      localStorage.setItem(STORAGE_KEY_MASTER_BASKET_LAYOUT, serialized);
-      window.dispatchEvent(
-        new CustomEvent(MASTER_BASKET_LAYOUT_UPDATED_EVENT, { detail: data })
-      );
+    }
+
+    if (!options?.skipCloudWrite && isWarehouseSpaceCloudLoaded && serialized !== lastCloudSerializedLayout) {
+      lastCloudSerializedLayout = serialized;
+      saveSlitSpaceConfigToCloud({ masterLayout: data }).catch(console.error);
     }
   } catch (e) {
-    console.error("Failed to save master basket layout to localStorage:", e);
+    console.error("Failed to save master basket layout:", e);
   }
 }
 

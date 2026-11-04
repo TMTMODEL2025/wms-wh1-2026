@@ -480,7 +480,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   const [statusOverrides, setStatusOverrides] = useState<
     Record<string, { status: string; notes?: string; lastUpdated?: string }>
   >({});
-  const isSpaceConfigLoadedRef = useRef<boolean>(false);
+  const [isSpaceConfigLoaded, setIsSpaceConfigLoaded] = useState<boolean>(false);
   const lastSyncedSummaryRef = useRef<string>("");
 
   useEffect(() => {
@@ -496,7 +496,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       setCloudSapMasterMap(m);
     });
     const unsubSpaceConfig = subscribeToSlitSpaceConfig((cloudConfig) => {
-      isSpaceConfigLoadedRef.current = true;
+      setIsSpaceConfigLoaded(true);
       if (!cloudConfig) {
         // Seed initial space configuration to Cloud Firestore if not yet created
         let initialCap: Record<"H" | "F" | "E9" | "E10" | "I", number> = {
@@ -535,7 +535,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       }
 
       if (Array.isArray(cloudConfig.masterLayout) && cloudConfig.masterLayout.length > 0) {
-        saveStoredMasterBasketLayout(cloudConfig.masterLayout);
+        saveStoredMasterBasketLayout(cloudConfig.masterLayout, { skipCloudWrite: true });
       }
 
       if (cloudConfig.statusOverrides && typeof cloudConfig.statusOverrides === "object") {
@@ -822,7 +822,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
   // Keep real-time summary metrics (พื้นที่จัดเก็บทั้งหมด, พื้นที่ใช้ไป, พื้นที่คงเหลือ, จำนวนตะกร้า, จำนวนแถบ) synced in Cloud Firestore
   useEffect(() => {
-    if (!isSpaceConfigLoadedRef.current) return;
+    if (!isSpaceConfigLoaded) return;
     const summarySnapshot = {
       ...allStorageAreasSummary,
       buildings: buildingTabSummaries,
@@ -831,7 +831,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     if (lastSyncedSummaryRef.current === serialized) return;
     lastSyncedSummaryRef.current = serialized;
     saveSlitSpaceConfigToCloud({ summarySnapshot }).catch(console.error);
-  }, [allStorageAreasSummary, buildingTabSummaries]);
+  }, [isSpaceConfigLoaded, allStorageAreasSummary, buildingTabSummaries]);
 
   const hasInventoryStock = useMemo(() => {
     return spaceData.some((b) => b.rows.some((r) => r.baskets.length > 0));
