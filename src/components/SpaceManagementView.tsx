@@ -44,6 +44,8 @@ import {
   addNewRowToBuilding,
   removeBasketFromRow,
   ensureBasketInMasterLayout,
+  ensureMasterBasketCloudSync,
+  parseWarehouseBasketLocation,
   STORAGE_KEY_MASTER_BASKET_LAYOUT,
   MASTER_BASKET_LAYOUT_UPDATED_EVENT,
   BuildingId,
@@ -166,63 +168,8 @@ function formatShortBasketName(id: string): string {
   return id;
 }
 
-function parseWarehouseBasketLocation(rawLoc: string): {
-  bId: "H" | "F" | "E9" | "E10" | "I";
-  rId: string;
-  bNo: string;
-  basketId: string;
-} {
-  let loc = String(rawLoc || "").trim().toUpperCase();
-  loc = loc.replace(/^อาคาร\s*/i, "").trim();
+// Uses shared parseWarehouseBasketLocation from ../data/masterBasketStorage
 
-  let bId: "H" | "F" | "E9" | "E10" | "I" = "H";
-  let rest = loc;
-
-  if (/^E-?10(?![0-9])/i.test(loc) && (loc.length <= 4 || /^E-?10[-/_ A-Z]/i.test(loc))) {
-    bId = "E10";
-    rest = loc.replace(/^E-?10\s*[-/_]?\s*/i, "");
-  } else if (/^E-?9(?![0-9])/i.test(loc) && (loc.length <= 3 || /^E-?9[-/_ A-Z]/i.test(loc))) {
-    bId = "E9";
-    rest = loc.replace(/^E-?9\s*[-/_]?\s*/i, "");
-  } else if (loc.startsWith("F")) {
-    bId = "F";
-    if (/^F\d+\s*[-/_]\s*[A-Z]/i.test(loc)) {
-      rest = loc.replace(/^F\d+\s*[-/_]\s*/i, "");
-    } else {
-      rest = loc.replace(/^F\s*[-/_]?\s*/i, "");
-    }
-  } else if (loc.startsWith("I")) {
-    bId = "I";
-    if (/^I\d+\s*[-/_]\s*[A-Z]/i.test(loc)) {
-      rest = loc.replace(/^I\d+\s*[-/_]\s*/i, "");
-    } else {
-      rest = loc.replace(/^I\s*[-/_]?\s*/i, "");
-    }
-  } else if (loc.startsWith("H")) {
-    bId = "H";
-    if (/^H\d+\s*[-/_]\s*[A-Z]/i.test(loc)) {
-      rest = loc.replace(/^H\d+\s*[-/_]\s*/i, "");
-    } else {
-      rest = loc.replace(/^H\s*[-/_]?\s*/i, "");
-    }
-  }
-
-  // Strip optional SAP 'O' prefix before row letter + digits (e.g. H/OE10 -> E10, F/OC13 -> C13)
-  rest = rest.replace(/^O(?=[A-Z]\d)/i, "").trim();
-
-  const rowMatch = rest.match(/[A-Z]/);
-  const rId = rowMatch ? rowMatch[0] : "A";
-
-  const numMatch = rest.match(/\d+/);
-  const bNo = numMatch ? numMatch[0].padStart(2, "0") : "01";
-
-  return {
-    bId,
-    rId,
-    bNo,
-    basketId: `${bId}-${rId}${bNo}`,
-  };
-}
 
 function loadSpaceDataFromInventory(
   records: SlitBarcodeRecord[] = [],
@@ -383,7 +330,6 @@ function loadSpaceDataFromInventory(
 
     if (masterLayoutModified) {
       masterLayout = getStoredMasterBasketLayout();
-      saveSlitSpaceConfigToCloud({ masterLayout }).catch(console.error);
     }
 
     // Preserve manual statuses (like maintenance) passed in statusOverrides
@@ -485,6 +431,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
   useEffect(() => {
     clearLegacySlitLocalStorage();
+    ensureMasterBasketCloudSync();
     const unsubIn = subscribeToSlitInbound((records) => setCloudInbound(records));
     const unsubOut = subscribeToSlitOutbound((records) => setCloudOutbound(records));
     const unsubPick = subscribeToSlitPickLists((orders) => setCloudPickLists(orders));
@@ -532,10 +479,6 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
           } catch {}
           return next;
         });
-      }
-
-      if (Array.isArray(cloudConfig.masterLayout) && cloudConfig.masterLayout.length > 0) {
-        saveStoredMasterBasketLayout(cloudConfig.masterLayout);
       }
 
       if (cloudConfig.statusOverrides && typeof cloudConfig.statusOverrides === "object") {
@@ -613,13 +556,21 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       });
     };
 
+    const handleStorageChange = (e: StorageEvent) => {
+      if (!e.key || e.key === STORAGE_KEY_MASTER_BASKET_LAYOUT) {
+        syncData();
+      }
+    };
+
     syncData();
     window.addEventListener(MACHINE_STAGING_UPDATED_EVENT, syncData);
     window.addEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, syncData);
+    window.addEventListener("storage", handleStorageChange);
 
     return () => {
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, syncData);
       window.removeEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, syncData);
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, [effectiveInbound, effectivePickLists, effectiveOutbound, effectiveSapMasterMap, statusOverrides]);
 
@@ -830,7 +781,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     const serialized = JSON.stringify(summarySnapshot);
     if (lastSyncedSummaryRef.current === serialized) return;
     lastSyncedSummaryRef.current = serialized;
-    saveSlitSpaceConfigToCloud({ summarySnapshot }).catch(console.error);
+    saveSlitSpaceConfigToCloud({
+      summarySnapshot,
+      masterLayout: getStoredMasterBasketLayout(),
+    }).catch(console.error);
   }, [allStorageAreasSummary, buildingTabSummaries]);
 
   const hasInventoryStock = useMemo(() => {
@@ -1123,7 +1077,6 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         });
         return;
       }
-      saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
       setSpaceData(
         loadSpaceDataFromInventory(
           effectiveInbound,
@@ -1149,7 +1102,6 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   const handleAddBasketToRow = (rowId: string) => {
     const newBasket = addBasketToRow(activeBuildingId, rowId);
     if (newBasket) {
-      saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
       setSpaceData(
         loadSpaceDataFromInventory(
           effectiveInbound,
@@ -1194,7 +1146,6 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     }).then((result) => {
       if (result.isConfirmed) {
         removeBasketFromRow(activeBuildingId, rowId, basketId);
-        saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
         setIsDetailModalOpen(false);
         setSelectedBasket(null);
         setSpaceData(
@@ -1238,7 +1189,6 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     }
 
     ensureBasketInMasterLayout(activeBuildingId, newBasketRowId, newBasketId);
-    saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
     setSpaceData(
       loadSpaceDataFromInventory(
         effectiveInbound,
@@ -1854,11 +1804,11 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                       <span><strong className="text-amber-600 dark:text-amber-400">{rowCoilCount} แถบ</strong> <span className="hidden xs:inline">({rowTotalKg.toLocaleString()} kg)</span></span>
                     </div>
 
-                    {/* Add Basket to Row Button (Desktop only, hidden on Mobile) */}
+                    {/* Add Basket to Row Button */}
                     <button
                       type="button"
                       onClick={() => handleAddBasketToRow(row.rowId)}
-                      className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all shadow-xs whitespace-nowrap"
+                      className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 text-[11px] sm:text-xs font-bold transition-all shadow-xs whitespace-nowrap"
                       title={`เพิ่มตะกร้าใหม่ใน ${row.rowNameTh}`}
                     >
                       <Plus size={12} />
