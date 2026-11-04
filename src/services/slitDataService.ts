@@ -22,7 +22,7 @@ export const SPACE_CONFIG_DOC_ID = "warehouse_space_state";
 export const MACHINE_STAGING_DOC_ID = "machine_staging_state";
 
 function sanitizeDocId(id: string): string {
-  return id.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
+  return String(id || "").replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
 }
 
 function stripUndefinedDeep<T>(obj: T): T {
@@ -41,6 +41,237 @@ function stripUndefinedDeep<T>(obj: T): T {
     return cleaned as T;
   }
   return obj;
+}
+
+// ============================================================================
+// Firestore Write Circuit Breaker & Bundler (Hybrid Real-Time Architecture)
+// ============================================================================
+let firestoreQuotaExhaustedUntil = 0;
+const QUOTA_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes cooldown when quota is full
+
+function isFirestoreWritePaused(): boolean {
+  return Date.now() < firestoreQuotaExhaustedUntil;
+}
+
+function markFirestoreWriteExhausted(): void {
+  firestoreQuotaExhaustedUntil = Date.now() + QUOTA_COOLDOWN_MS;
+}
+
+async function runFirestoreWriteWithQuotaGuard(
+  writeFn: () => Promise<void>,
+  opType: OperationType,
+  path: string
+): Promise<boolean> {
+  if (isFirestoreWritePaused()) {
+    return false;
+  }
+  try {
+    const timeoutPromise = new Promise<"timeout">((resolve) =>
+      setTimeout(() => resolve("timeout"), 2500)
+    );
+    const result = await Promise.race([
+      writeFn().then(() => "ok" as const),
+      timeoutPromise,
+    ]);
+    if (result === "timeout") {
+      markFirestoreWriteExhausted();
+      return false;
+    }
+    return true;
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (
+      errMsg.includes("resource-exhausted") ||
+      errMsg.includes("RESOURCE_EXHAUSTED") ||
+      errMsg.includes("Quota limit exceeded")
+    ) {
+      markFirestoreWriteExhausted();
+    }
+    handleFirestoreError(error, opType, path);
+    return false;
+  }
+}
+
+// ============================================================================
+// Shared Single-Connection SSE & Real-Time State Multiplexer
+// ============================================================================
+type SseEventName =
+  | "warehouse_space_state"
+  | "machine_staging_state"
+  | "slit_inbound"
+  | "slit_outbound"
+  | "slit_picklists"
+  | "slit_sap_updated"
+  | "warehouse_space_reset";
+
+const sseListeners: Record<SseEventName, Set<(payload: any) => void>> = {
+  warehouse_space_state: new Set(),
+  machine_staging_state: new Set(),
+  slit_inbound: new Set(),
+  slit_outbound: new Set(),
+  slit_picklists: new Set(),
+  slit_sap_updated: new Set(),
+  warehouse_space_reset: new Set(),
+};
+
+const latestSsePayloads: Partial<Record<SseEventName, any>> = {};
+let sharedEventSource: EventSource | null = null;
+let sharedPollInterval: ReturnType<typeof setInterval> | null = null;
+let initialStateFetchPromise: Promise<any> | null = null;
+
+function emitSharedEvent(eventName: SseEventName, payload: any): void {
+  if (eventName !== "warehouse_space_reset") {
+    latestSsePayloads[eventName] = payload;
+  }
+  const listeners = sseListeners[eventName];
+  if (listeners) {
+    listeners.forEach((cb) => {
+      try {
+        cb(payload);
+      } catch {
+        // ignore listener error
+      }
+    });
+  }
+}
+
+function fetchInitialSlitStateOnce(): Promise<any> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  if (!initialStateFetchPromise) {
+    initialStateFetchPromise = fetch("/api/slit-state", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data === "object") {
+          const updatedAtMap = data.updatedAtMap || {};
+          if (data.warehouseSpaceConfig) {
+            emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
+          }
+          if (data.machineStagingConfig) {
+            emitSharedEvent("machine_staging_state", data.machineStagingConfig);
+          }
+          if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
+            emitSharedEvent("slit_inbound", {
+              records: data.inboundRecords,
+              updatedAt: updatedAtMap.inbound || new Date().toISOString(),
+            });
+          }
+          if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
+            emitSharedEvent("slit_outbound", {
+              records: data.outboundRecords,
+              updatedAt: updatedAtMap.outbound || new Date().toISOString(),
+            });
+          }
+          if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
+            emitSharedEvent("slit_picklists", {
+              orders: data.pickLists,
+              updatedAt: updatedAtMap.pickLists || new Date().toISOString(),
+            });
+          }
+          if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
+            emitSharedEvent("slit_sap_updated", {
+              itemCount: data.sapItemCount,
+              updatedAt: updatedAtMap.sap || new Date().toISOString(),
+            });
+          }
+        }
+        return data;
+      })
+      .catch(() => null);
+  }
+  return initialStateFetchPromise;
+}
+
+function ensureSharedRealtimeStream(): void {
+  if (typeof window === "undefined") return;
+
+  fetchInitialSlitStateOnce();
+
+  if (!sharedEventSource && typeof EventSource !== "undefined") {
+    try {
+      sharedEventSource = new EventSource("/api/space-config/stream");
+      const events: SseEventName[] = [
+        "warehouse_space_state",
+        "machine_staging_state",
+        "slit_inbound",
+        "slit_outbound",
+        "slit_picklists",
+        "slit_sap_updated",
+        "warehouse_space_reset",
+      ];
+      for (const evtName of events) {
+        sharedEventSource.addEventListener(evtName, (evt: MessageEvent) => {
+          try {
+            const parsed = evt.data ? JSON.parse(evt.data) : {};
+            emitSharedEvent(evtName, parsed);
+          } catch {
+            // ignore malformed JSON
+          }
+        });
+      }
+    } catch {
+      // ignore EventSource init error
+    }
+  }
+
+  if (!sharedPollInterval) {
+    sharedPollInterval = setInterval(() => {
+      fetch("/api/slit-state", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!data || typeof data !== "object") return;
+          const updatedAtMap = data.updatedAtMap || {};
+          if (data.warehouseSpaceConfig) {
+            emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
+          }
+          if (data.machineStagingConfig) {
+            emitSharedEvent("machine_staging_state", data.machineStagingConfig);
+          }
+          if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
+            emitSharedEvent("slit_inbound", {
+              records: data.inboundRecords,
+              updatedAt: updatedAtMap.inbound || "",
+            });
+          }
+          if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
+            emitSharedEvent("slit_outbound", {
+              records: data.outboundRecords,
+              updatedAt: updatedAtMap.outbound || "",
+            });
+          }
+          if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
+            emitSharedEvent("slit_picklists", {
+              orders: data.pickLists,
+              updatedAt: updatedAtMap.pickLists || "",
+            });
+          }
+          if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
+            emitSharedEvent("slit_sap_updated", {
+              itemCount: data.sapItemCount,
+              updatedAt: updatedAtMap.sap || "",
+            });
+          }
+        })
+        .catch(() => {});
+    }, 5000);
+  }
+}
+
+function subscribeSharedSse(
+  eventName: SseEventName,
+  cb: (payload: any) => void
+): () => void {
+  ensureSharedRealtimeStream();
+  sseListeners[eventName].add(cb);
+  if (latestSsePayloads[eventName] !== undefined) {
+    try {
+      cb(latestSsePayloads[eventName]);
+    } catch {
+      // ignore
+    }
+  }
+  return () => {
+    sseListeners[eventName].delete(cb);
+  };
 }
 
 // Convert Firestore document or raw record to clean SlitBarcodeRecord
@@ -89,7 +320,7 @@ const LEGACY_SLIT_LOCAL_STORAGE_KEYS = [
 ];
 
 /**
- * Clear all legacy localStorage keys for Slit Film Management so only Firebase Firestore is used.
+ * Clear all legacy localStorage keys for Slit Film Management so only Hybrid Cloud/Server is used.
  */
 export function clearLegacySlitLocalStorage(): void {
   try {
@@ -104,157 +335,356 @@ export function clearLegacySlitLocalStorage(): void {
 }
 
 /**
- * Real-time listener for Slit Inbound records (100% Cloud Firestore Single Source of Truth)
+ * Real-time listener for Slit Inbound records (Hybrid Real-Time SSE + Cloud Firestore)
  */
 export function subscribeToSlitInbound(
   onData: (records: SlitBarcodeRecord[]) => void,
   onError?: (err: unknown) => void
 ): () => void {
+  let hasServerState = false;
+  let lastSerialized = "";
+
+  const emitSorted = (rawRecords: SlitBarcodeRecord[]) => {
+    const sorted = [...rawRecords].sort((a, b) =>
+      (b.scanTimestamp || "").localeCompare(a.scanTimestamp || "")
+    );
+    const serialized = JSON.stringify(sorted);
+    if (serialized !== lastSerialized) {
+      lastSerialized = serialized;
+      onData(sorted);
+    }
+  };
+
+  const unsubSse = subscribeSharedSse("slit_inbound", (payload) => {
+    if (payload && Array.isArray(payload.records)) {
+      hasServerState = true;
+      emitSorted(payload.records as SlitBarcodeRecord[]);
+    }
+  });
+
   const colRef = collection(db, INBOUND_COLLECTION);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     colRef,
     (snapshot) => {
       const records: SlitBarcodeRecord[] = [];
       snapshot.forEach((d) => {
         records.push(d.data() as SlitBarcodeRecord);
       });
-      // Sort newest scan first
-      records.sort((a, b) => (b.scanTimestamp || "").localeCompare(a.scanTimestamp || ""));
-      onData(records);
+      if (records.length > 0 && typeof window !== "undefined") {
+        fetch("/api/slit-inbound", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ records, seedOnly: true }),
+        }).catch(() => {});
+      }
+      if (!hasServerState) {
+        emitSorted(records);
+      }
     },
     (error) => {
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, INBOUND_COLLECTION);
     }
   );
+
+  return () => {
+    unsubSse();
+    unsubFirestore();
+  };
 }
 
 /**
- * Real-time listener for Slit Outbound records (100% Cloud Firestore Single Source of Truth)
+ * Real-time listener for Slit Outbound records (Hybrid Real-Time SSE + Cloud Firestore)
  */
 export function subscribeToSlitOutbound(
   onData: (records: SlitBarcodeRecord[]) => void,
   onError?: (err: unknown) => void
 ): () => void {
+  let hasServerState = false;
+  let lastSerialized = "";
+
+  const emitSorted = (rawRecords: SlitBarcodeRecord[]) => {
+    const sorted = [...rawRecords].sort((a, b) =>
+      (b.scanTimestamp || "").localeCompare(a.scanTimestamp || "")
+    );
+    const serialized = JSON.stringify(sorted);
+    if (serialized !== lastSerialized) {
+      lastSerialized = serialized;
+      onData(sorted);
+    }
+  };
+
+  const unsubSse = subscribeSharedSse("slit_outbound", (payload) => {
+    if (payload && Array.isArray(payload.records)) {
+      hasServerState = true;
+      emitSorted(payload.records as SlitBarcodeRecord[]);
+    }
+  });
+
   const colRef = collection(db, OUTBOUND_COLLECTION);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     colRef,
     (snapshot) => {
       const records: SlitBarcodeRecord[] = [];
       snapshot.forEach((d) => {
         records.push(d.data() as SlitBarcodeRecord);
       });
-      records.sort((a, b) => (b.scanTimestamp || "").localeCompare(a.scanTimestamp || ""));
-      onData(records);
+      if (records.length > 0 && typeof window !== "undefined") {
+        fetch("/api/slit-outbound", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ records, seedOnly: true }),
+        }).catch(() => {});
+      }
+      if (!hasServerState) {
+        emitSorted(records);
+      }
     },
     (error) => {
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, OUTBOUND_COLLECTION);
     }
   );
+
+  return () => {
+    unsubSse();
+    unsubFirestore();
+  };
 }
 
 /**
- * Real-time listener for Slit Pick Lists (100% Cloud Firestore Single Source of Truth)
+ * Real-time listener for Slit Pick Lists (Hybrid Real-Time SSE + Cloud Firestore)
  */
 export function subscribeToSlitPickLists(
   onData: (orders: PickListOrder[]) => void,
   onError?: (err: unknown) => void
 ): () => void {
+  let hasServerState = false;
+  let lastSerialized = "";
+
+  const emitSorted = (rawOrders: PickListOrder[]) => {
+    const sorted = [...rawOrders].sort((a, b) => {
+      const timeA = `${a.createdDate || ""} ${a.createdAt || ""}`;
+      const timeB = `${b.createdDate || ""} ${b.createdAt || ""}`;
+      return timeB.localeCompare(timeA);
+    });
+    const serialized = JSON.stringify(sorted);
+    if (serialized !== lastSerialized) {
+      lastSerialized = serialized;
+      onData(sorted);
+    }
+  };
+
+  const unsubSse = subscribeSharedSse("slit_picklists", (payload) => {
+    if (payload && Array.isArray(payload.orders)) {
+      hasServerState = true;
+      emitSorted(payload.orders as PickListOrder[]);
+    }
+  });
+
   const colRef = collection(db, PICKLIST_COLLECTION);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     colRef,
     (snapshot) => {
       const orders: PickListOrder[] = [];
       snapshot.forEach((d) => {
         orders.push(d.data() as PickListOrder);
       });
-      orders.sort((a, b) => {
-        const timeA = `${a.createdDate || ""} ${a.createdAt || ""}`;
-        const timeB = `${b.createdDate || ""} ${b.createdAt || ""}`;
-        return timeB.localeCompare(timeA);
-      });
-      onData(orders);
+      if (orders.length > 0 && typeof window !== "undefined") {
+        fetch("/api/slit-picklists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orders, seedOnly: true }),
+        }).catch(() => {});
+      }
+      if (!hasServerState) {
+        emitSorted(orders);
+      }
     },
     (error) => {
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, PICKLIST_COLLECTION);
     }
   );
+
+  return () => {
+    unsubSse();
+    unsubFirestore();
+  };
 }
 
 /**
- * Save single inbound record to Firestore
+ * Save single inbound record to Server API + Firestore
  */
 export async function saveInboundRecordToCloud(record: SlitBarcodeRecord): Promise<void> {
   const docId = sanitizeDocId(record.id || `IN-${record.batch}-${Date.now()}`);
   const payload = sanitizeRecordPayload({ ...record, id: docId });
-  try {
-    await setDoc(doc(db, INBOUND_COLLECTION, docId), payload, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${INBOUND_COLLECTION}/${docId}`);
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-inbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: [payload] }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent("slit_inbound", data);
+      }
+    } catch {
+      // ignore server API error
+    }
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    () => setDoc(doc(db, INBOUND_COLLECTION, docId), payload, { merge: true }),
+    OperationType.WRITE,
+    `${INBOUND_COLLECTION}/${docId}`
+  );
 }
 
 /**
- * Save single outbound record to Firestore
+ * Save single outbound record to Server API + Firestore
  */
 export async function saveOutboundRecordToCloud(record: SlitBarcodeRecord): Promise<void> {
   const docId = sanitizeDocId(record.id || `OUT-${record.batch}-${Date.now()}`);
   const payload = sanitizeRecordPayload({ ...record, id: docId, mode: "outbound" });
-  try {
-    await setDoc(doc(db, OUTBOUND_COLLECTION, docId), payload, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${OUTBOUND_COLLECTION}/${docId}`);
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-outbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: [payload] }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent("slit_outbound", data);
+      }
+    } catch {
+      // ignore server API error
+    }
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    () => setDoc(doc(db, OUTBOUND_COLLECTION, docId), payload, { merge: true }),
+    OperationType.WRITE,
+    `${OUTBOUND_COLLECTION}/${docId}`
+  );
 }
 
 /**
- * Batch save multiple inbound records to Firestore
+ * Batch save multiple inbound records to Server API + Firestore
  */
 export async function batchSaveInboundToCloud(records: SlitBarcodeRecord[]): Promise<void> {
   if (records.length === 0) return;
-  const batch = writeBatch(db);
-  for (const r of records) {
+  const payloads = records.map((r) => {
     const docId = sanitizeDocId(r.id || `IN-${r.batch}-${Date.now()}`);
-    const payload = sanitizeRecordPayload({ ...r, id: docId });
-    batch.set(doc(db, INBOUND_COLLECTION, docId), payload, { merge: true });
+    return sanitizeRecordPayload({ ...r, id: docId });
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-inbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: payloads }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent("slit_inbound", data);
+      }
+    } catch {
+      // ignore server API error
+    }
   }
-  try {
-    await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, INBOUND_COLLECTION);
-  }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const batch = writeBatch(db);
+      for (const payload of payloads) {
+        const docId = String(payload.id);
+        batch.set(doc(db, INBOUND_COLLECTION, docId), payload, { merge: true });
+      }
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    INBOUND_COLLECTION
+  );
 }
 
 /**
- * Batch save multiple outbound records to Firestore
+ * Batch save multiple outbound records to Server API + Firestore
  */
 export async function batchSaveOutboundToCloud(records: SlitBarcodeRecord[]): Promise<void> {
   if (records.length === 0) return;
-  const batch = writeBatch(db);
-  for (const r of records) {
+  const payloads = records.map((r) => {
     const docId = sanitizeDocId(r.id || `OUT-${r.batch}-${Date.now()}`);
-    const payload = sanitizeRecordPayload({ ...r, id: docId, mode: "outbound" });
-    batch.set(doc(db, OUTBOUND_COLLECTION, docId), payload, { merge: true });
+    return sanitizeRecordPayload({ ...r, id: docId, mode: "outbound" });
+  });
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-outbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: payloads }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent("slit_outbound", data);
+      }
+    } catch {
+      // ignore server API error
+    }
   }
-  try {
-    await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, OUTBOUND_COLLECTION);
-  }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const batch = writeBatch(db);
+      for (const payload of payloads) {
+        const docId = String(payload.id);
+        batch.set(doc(db, OUTBOUND_COLLECTION, docId), payload, { merge: true });
+      }
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    OUTBOUND_COLLECTION
+  );
 }
 
 /**
- * Delete a record from Firestore
+ * Delete a record from Server API + Firestore
  */
-export async function deleteRecordFromCloud(collectionName: "slit_inbound" | "slit_outbound", id: string): Promise<void> {
+export async function deleteRecordFromCloud(
+  collectionName: "slit_inbound" | "slit_outbound",
+  id: string
+): Promise<void> {
   const docId = sanitizeDocId(id);
-  try {
-    await deleteDoc(doc(db, collectionName, docId));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${collectionName}/${docId}`);
+  const endpoint = collectionName === "slit_inbound" ? "/api/slit-inbound" : "/api/slit-outbound";
+  const eventName = collectionName === "slit_inbound" ? "slit_inbound" : "slit_outbound";
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch(endpoint, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: docId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent(eventName, data);
+      }
+    } catch {
+      // ignore
+    }
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    () => deleteDoc(doc(db, collectionName, docId)),
+    OperationType.DELETE,
+    `${collectionName}/${docId}`
+  );
 }
 
 function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unknown> {
@@ -317,66 +747,120 @@ function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unkn
 }
 
 /**
- * Save pick list order to Firestore
+ * Save pick list order to Server API + Firestore
  */
 export async function savePickListToCloud(order: PickListOrder): Promise<void> {
   const docId = sanitizeDocId(order.id || `ORD-${order.orderNo}`);
   const payload = sanitizePickListOrderPayload(order);
-  try {
-    await setDoc(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `${PICKLIST_COLLECTION}/${docId}`);
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-picklists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders: [payload] }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.orders) emitSharedEvent("slit_picklists", data);
+      }
+    } catch {
+      // ignore
+    }
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    () => setDoc(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true }),
+    OperationType.WRITE,
+    `${PICKLIST_COLLECTION}/${docId}`
+  );
 }
 
 /**
- * Batch save multiple pick list orders to Firestore
+ * Batch save multiple pick list orders to Server API + Firestore
  */
 export async function batchSavePickListsToCloud(orders: PickListOrder[]): Promise<void> {
   if (orders.length === 0) return;
-  const batch = writeBatch(db);
-  for (const order of orders) {
-    const docId = sanitizeDocId(order.id || `ORD-${order.orderNo}`);
-    const payload = sanitizePickListOrderPayload(order);
-    batch.set(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true });
+  const payloads = orders.map((o) => sanitizePickListOrderPayload(o));
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-picklists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orders: payloads }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.orders) emitSharedEvent("slit_picklists", data);
+      }
+    } catch {
+      // ignore
+    }
   }
-  try {
-    await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, PICKLIST_COLLECTION);
-  }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const batch = writeBatch(db);
+      for (const payload of payloads) {
+        const docId = String(payload.id);
+        batch.set(doc(db, PICKLIST_COLLECTION, docId), payload, { merge: true });
+      }
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    PICKLIST_COLLECTION
+  );
 }
 
 /**
- * Delete pick list order from Firestore (removes by docId and any matching orderNo document)
+ * Delete pick list order from Server API + Firestore (removes by docId and any matching orderNo document)
  */
 export async function deletePickListFromCloud(orderIdOrNo: string): Promise<void> {
   const trimmed = orderIdOrNo.trim();
   const rawOrderNo = trimmed.startsWith("ORD-") ? trimmed.slice(4) : trimmed;
   const primaryDocId = sanitizeDocId(trimmed.startsWith("ORD-") ? trimmed : `ORD-${trimmed}`);
-  try {
-    await deleteDoc(doc(db, PICKLIST_COLLECTION, primaryDocId));
-    // Also clean up any document in slit_picklists with matching orderNo or id
-    const snap = await getDocs(collection(db, PICKLIST_COLLECTION));
-    const batch = writeBatch(db);
-    let hasExtra = false;
-    snap.forEach((d) => {
-      const data = d.data() as PickListOrder;
-      const docOrderNo = (data?.orderNo || "").trim().toUpperCase();
-      if (
-        d.id === sanitizeDocId(trimmed) ||
-        docOrderNo === rawOrderNo.toUpperCase()
-      ) {
-        batch.delete(d.ref);
-        hasExtra = true;
+
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-picklists", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIdOrNo: trimmed }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.orders) emitSharedEvent("slit_picklists", data);
       }
-    });
-    if (hasExtra) {
-      await batch.commit();
+    } catch {
+      // ignore
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `${PICKLIST_COLLECTION}/${primaryDocId}`);
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      await deleteDoc(doc(db, PICKLIST_COLLECTION, primaryDocId));
+      const snap = await getDocs(collection(db, PICKLIST_COLLECTION));
+      const batch = writeBatch(db);
+      let hasExtra = false;
+      snap.forEach((d) => {
+        const data = d.data() as PickListOrder;
+        const docOrderNo = (data?.orderNo || "").trim().toUpperCase();
+        if (
+          d.id === sanitizeDocId(trimmed) ||
+          docOrderNo === rawOrderNo.toUpperCase()
+        ) {
+          batch.delete(d.ref);
+          hasExtra = true;
+        }
+      });
+      if (hasExtra) {
+        await batch.commit();
+      }
+    },
+    OperationType.DELETE,
+    `${PICKLIST_COLLECTION}/${primaryDocId}`
+  );
 }
 
 /**
@@ -387,58 +871,96 @@ export async function deleteOutboundByOrderOrBatchesFromCloud(
   batches: string[]
 ): Promise<void> {
   const cleanOrderNo = orderNo.trim().toUpperCase();
-  const batchSet = new Set(batches.map((b) => b.trim().toUpperCase()).filter(Boolean));
+  const cleanBatches = batches.map((b) => b.trim().toUpperCase()).filter(Boolean);
+  const batchSet = new Set(cleanBatches);
   if (!cleanOrderNo && batchSet.size === 0) return;
 
-  try {
-    const snap = await getDocs(collection(db, OUTBOUND_COLLECTION));
-    const batch = writeBatch(db);
-    let hasDeletes = false;
-    snap.forEach((d) => {
-      const data = d.data() as SlitBarcodeRecord;
-      const recOrderNo = (data?.orderNo || "").trim().toUpperCase();
-      const recBatch = (data?.batch || "").trim().toUpperCase();
-      if (
-        (cleanOrderNo && recOrderNo === cleanOrderNo) ||
-        (recBatch && batchSet.has(recBatch))
-      ) {
-        batch.delete(d.ref);
-        hasDeletes = true;
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-outbound", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderNo: cleanOrderNo, batches: cleanBatches }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent("slit_outbound", data);
       }
-    });
-    if (hasDeletes) {
-      await batch.commit();
+    } catch {
+      // ignore
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, OUTBOUND_COLLECTION);
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const snap = await getDocs(collection(db, OUTBOUND_COLLECTION));
+      const batch = writeBatch(db);
+      let hasDeletes = false;
+      snap.forEach((d) => {
+        const data = d.data() as SlitBarcodeRecord;
+        const recOrderNo = (data?.orderNo || "").trim().toUpperCase();
+        const recBatch = (data?.batch || "").trim().toUpperCase();
+        if (
+          (cleanOrderNo && recOrderNo === cleanOrderNo) ||
+          (recBatch && batchSet.has(recBatch))
+        ) {
+          batch.delete(d.ref);
+          hasDeletes = true;
+        }
+      });
+      if (hasDeletes) {
+        await batch.commit();
+      }
+    },
+    OperationType.DELETE,
+    OUTBOUND_COLLECTION
+  );
 }
 
 /**
- * Delete inbound records by batch list from Firestore
+ * Delete inbound records by batch list from Server API + Firestore
  */
 export async function deleteInboundByBatchesFromCloud(batches: string[]): Promise<void> {
-  const batchSet = new Set(batches.map((b) => b.trim().toUpperCase()).filter(Boolean));
+  const cleanBatches = batches.map((b) => b.trim().toUpperCase()).filter(Boolean);
+  const batchSet = new Set(cleanBatches);
   if (batchSet.size === 0) return;
 
-  try {
-    const snap = await getDocs(collection(db, INBOUND_COLLECTION));
-    const batch = writeBatch(db);
-    let hasDeletes = false;
-    snap.forEach((d) => {
-      const data = d.data() as SlitBarcodeRecord;
-      const recBatch = (data?.batch || "").trim().toUpperCase();
-      if (recBatch && batchSet.has(recBatch)) {
-        batch.delete(d.ref);
-        hasDeletes = true;
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/slit-inbound", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batches: cleanBatches }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.records) emitSharedEvent("slit_inbound", data);
       }
-    });
-    if (hasDeletes) {
-      await batch.commit();
+    } catch {
+      // ignore
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, INBOUND_COLLECTION);
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const snap = await getDocs(collection(db, INBOUND_COLLECTION));
+      const batch = writeBatch(db);
+      let hasDeletes = false;
+      snap.forEach((d) => {
+        const data = d.data() as SlitBarcodeRecord;
+        const recBatch = (data?.batch || "").trim().toUpperCase();
+        if (recBatch && batchSet.has(recBatch)) {
+          batch.delete(d.ref);
+          hasDeletes = true;
+        }
+      });
+      if (hasDeletes) {
+        await batch.commit();
+      }
+    },
+    OperationType.DELETE,
+    INBOUND_COLLECTION
+  );
 }
 
 /**
@@ -480,14 +1002,48 @@ export interface SlitSapChunkDoc {
 
 /**
  * Real-time listener for bundled SAP Master Data chunks (800 items per document)
- * 3,000+ SAP rows require only 4 document reads per sync!
+ * Uses Hybrid Real-Time SSE (/api/slit-sap) + Cloud Firestore
  */
 export function subscribeToSlitSapMaster(
   onData: (items: SapMasterItem[], chunkCount: number) => void,
   onError?: (err: unknown) => void
 ): () => void {
+  let isDisposed = false;
+  let hasServerSap = false;
+  let lastSapUpdatedAt = "";
+
+  const fetchServerSap = () => {
+    if (typeof window === "undefined" || isDisposed) return;
+    fetch("/api/slit-sap", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isDisposed || !data || !Array.isArray(data.items)) return;
+        if (data.updatedAt || data.items.length > 0) {
+          hasServerSap = true;
+          lastSapUpdatedAt = data.updatedAt || lastSapUpdatedAt;
+          const count =
+            typeof data.chunkCount === "number"
+              ? data.chunkCount
+              : data.items.length === 0
+              ? 0
+              : Math.ceil(data.items.length / SAP_CHUNK_SIZE);
+          onData(data.items as SapMasterItem[], count);
+        }
+      })
+      .catch(() => {});
+  };
+
+  fetchServerSap();
+
+  const unsubSse = subscribeSharedSse("slit_sap_updated", (payload) => {
+    if (!payload) return;
+    if (payload.updatedAt && payload.updatedAt !== lastSapUpdatedAt) {
+      fetchServerSap();
+    }
+  });
+
   const colRef = collection(db, SAP_CHUNKS_COLLECTION);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     colRef,
     (snapshot) => {
       const chunks: SlitSapChunkDoc[] = [];
@@ -506,23 +1062,36 @@ export function subscribeToSlitSapMaster(
           }
         }
       }
-      onData(allItems, chunks.length);
+      if (allItems.length > 0 && typeof window !== "undefined") {
+        fetch("/api/slit-sap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: allItems, seedOnly: true }),
+        }).catch(() => {});
+      }
+      if (!hasServerSap) {
+        onData(allItems, chunks.length);
+      }
     },
     (error) => {
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, SAP_CHUNKS_COLLECTION);
     }
   );
+
+  return () => {
+    isDisposed = true;
+    unsubSse();
+    unsubFirestore();
+  };
 }
 
 /**
- * Bundle SAP Master Data into chunks of 800 items per document and commit to Firestore.
- * For 3,000+ items, this uses only 4 document writes instead of 3,000!
+ * Bundle SAP Master Data into chunks of 800 items per document and commit to Server API + Firestore.
  */
 export async function saveSapMasterChunksToCloud(
   items: SapMasterItem[]
 ): Promise<{ chunkCount: number; itemCount: number }> {
-  // Deduplicate by uppercase batch and sanitize
   const dedupMap = new Map<string, SapMasterItem>();
   for (const raw of items) {
     if (!raw || !raw.batch) continue;
@@ -536,56 +1105,79 @@ export async function saveSapMasterChunksToCloud(
   const totalChunks = totalItems === 0 ? 0 : Math.ceil(totalItems / SAP_CHUNK_SIZE);
   const nowIso = new Date().toISOString();
 
-  try {
-    const existingSnap = await getDocs(collection(db, SAP_CHUNKS_COLLECTION));
-    const newChunkIds = new Set<string>();
-    const batch = writeBatch(db);
-
-    for (let idx = 0; idx < totalChunks; idx++) {
-      const slice = cleanItems.slice(idx * SAP_CHUNK_SIZE, (idx + 1) * SAP_CHUNK_SIZE);
-      const docId = `SAP_CHUNK_${String(idx + 1).padStart(4, "0")}`;
-      newChunkIds.add(docId);
-
-      const chunkPayload: SlitSapChunkDoc = {
-        id: docId,
-        chunkIndex: idx,
-        totalChunks,
-        totalItems,
-        itemCount: slice.length,
-        items: slice,
-        updatedAt: nowIso,
-      };
-      batch.set(doc(db, SAP_CHUNKS_COLLECTION, docId), stripUndefinedDeep(chunkPayload));
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/slit-sap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: cleanItems }),
+      });
+    } catch {
+      // ignore
     }
-
-    // Remove any obsolete chunk documents if the new dataset has fewer chunks
-    existingSnap.forEach((d) => {
-      if (!newChunkIds.has(d.id)) {
-        batch.delete(d.ref);
-      }
-    });
-
-    await batch.commit();
-    return { chunkCount: totalChunks, itemCount: totalItems };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, SAP_CHUNKS_COLLECTION);
-    return { chunkCount: 0, itemCount: 0 };
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const existingSnap = await getDocs(collection(db, SAP_CHUNKS_COLLECTION));
+      const newChunkIds = new Set<string>();
+      const batch = writeBatch(db);
+
+      for (let idx = 0; idx < totalChunks; idx++) {
+        const slice = cleanItems.slice(idx * SAP_CHUNK_SIZE, (idx + 1) * SAP_CHUNK_SIZE);
+        const docId = `SAP_CHUNK_${String(idx + 1).padStart(4, "0")}`;
+        newChunkIds.add(docId);
+
+        const chunkPayload: SlitSapChunkDoc = {
+          id: docId,
+          chunkIndex: idx,
+          totalChunks,
+          totalItems,
+          itemCount: slice.length,
+          items: slice,
+          updatedAt: nowIso,
+        };
+        batch.set(doc(db, SAP_CHUNKS_COLLECTION, docId), stripUndefinedDeep(chunkPayload));
+      }
+
+      existingSnap.forEach((d) => {
+        if (!newChunkIds.has(d.id)) {
+          batch.delete(d.ref);
+        }
+      });
+
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    SAP_CHUNKS_COLLECTION
+  );
+
+  return { chunkCount: totalChunks, itemCount: totalItems };
 }
 
 /**
- * Clear all SAP Master Data chunks from Cloud Firestore
+ * Clear all SAP Master Data chunks from Server API + Cloud Firestore
  */
 export async function clearSapMasterChunksFromCloud(): Promise<void> {
-  try {
-    const snap = await getDocs(collection(db, SAP_CHUNKS_COLLECTION));
-    if (snap.empty) return;
-    const batch = writeBatch(db);
-    snap.forEach((d) => batch.delete(d.ref));
-    await batch.commit();
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, SAP_CHUNKS_COLLECTION);
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/slit-sap", { method: "DELETE" });
+    } catch {
+      // ignore
+    }
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const snap = await getDocs(collection(db, SAP_CHUNKS_COLLECTION));
+      if (snap.empty) return;
+      const batch = writeBatch(db);
+      snap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    },
+    OperationType.DELETE,
+    SAP_CHUNKS_COLLECTION
+  );
 }
 
 export interface SlitWarehouseSpaceSummaryBuilding {
@@ -624,8 +1216,6 @@ export interface SlitWarehouseSpaceCloudDoc {
 
 const LOCAL_CAP_STORAGE_KEY = "tmt_wms_building_max_capacity_tons_v1";
 const LOCAL_CAP_UPDATED_AT_KEY = "tmt_wms_building_max_capacity_updated_at_v1";
-
-let isFirestoreSpaceWriteExhausted = false;
 
 /**
  * Real-time listener for Slit Warehouse Space Configuration & Summary Metrics
@@ -693,7 +1283,6 @@ export function subscribeToSlitSpaceConfig(
     const { mergedDoc, localWasNewer } = mergeWithNewerLocalCapacity(rawDoc);
     const incomingTs = mergedDoc.updatedAt || "";
 
-    // Seed server state if Firestore had data that server hasn't received yet or if local was newer
     if (source === "firestore" || localWasNewer) {
       fetch("/api/space-config", {
         method: "POST",
@@ -706,7 +1295,6 @@ export function subscribeToSlitSpaceConfig(
     }
 
     if (latestDoc && latestUpdatedAt && incomingTs && incomingTs < latestUpdatedAt) {
-      // Ignore stale snapshot (e.g. older Firestore state when server/local already has newer state)
       return;
     }
 
@@ -725,7 +1313,10 @@ export function subscribeToSlitSpaceConfig(
     onData(latestDoc);
   };
 
-  // 1. Initial fetch from /api/space-config
+  const unsubSse = subscribeSharedSse("warehouse_space_state", (payload) => {
+    handleIncomingDoc(payload as SlitWarehouseSpaceCloudDoc, "api");
+  });
+
   if (typeof window !== "undefined") {
     fetch("/api/space-config", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -741,39 +1332,6 @@ export function subscribeToSlitSpaceConfig(
       });
   }
 
-  // 2. Real-time Server-Sent Events (SSE) subscription + lightweight polling fallback
-  let eventSource: EventSource | null = null;
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
-
-  if (typeof window !== "undefined" && typeof EventSource !== "undefined") {
-    try {
-      eventSource = new EventSource("/api/space-config/stream");
-      eventSource.addEventListener("warehouse_space_state", (evt: MessageEvent) => {
-        try {
-          const parsed = JSON.parse(evt.data) as SlitWarehouseSpaceCloudDoc;
-          handleIncomingDoc(parsed, "api");
-        } catch {
-          // ignore malformed SSE event
-        }
-      });
-    } catch {
-      // ignore SSE error
-    }
-
-    pollInterval = setInterval(() => {
-      if (isDisposed) return;
-      fetch("/api/space-config", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((json) => {
-          if (json?.warehouseSpaceConfig) {
-            handleIncomingDoc(json.warehouseSpaceConfig as SlitWarehouseSpaceCloudDoc, "api");
-          }
-        })
-        .catch(() => {});
-    }, 4000);
-  }
-
-  // 3. Firestore real-time listener
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID);
   const unsubFirestore = onSnapshot(
     docRef,
@@ -796,18 +1354,16 @@ export function subscribeToSlitSpaceConfig(
 
   return () => {
     isDisposed = true;
+    unsubSse();
     unsubFirestore();
-    if (eventSource) {
-      eventSource.close();
-    }
-    if (pollInterval) {
-      clearInterval(pollInterval);
-    }
   };
 }
 
+let pendingSpaceFirestorePayload: Record<string, unknown> | null = null;
+let spaceFirestoreDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 /**
- * Save or merge Slit Warehouse Space Configuration & Summary Metrics to Server API + Cloud Firestore
+ * Save or merge Slit Warehouse Space Configuration & Summary Metrics to Server API + Cloud Firestore (Bundled)
  */
 export async function saveSlitSpaceConfigToCloud(
   partial: Partial<Omit<SlitWarehouseSpaceCloudDoc, "id" | "updatedAt">>
@@ -827,45 +1383,63 @@ export async function saveSlitSpaceConfigToCloud(
     }
   }
 
-  // 1. Always persist immediately to backend /api/space-config (fast & immune to Firestore daily write quota)
+  // 1. Always persist immediately to backend /api/space-config (instant SSE broadcast)
   if (typeof window !== "undefined") {
     try {
-      await fetch("/api/space-config", {
+      const res = await fetch("/api/space-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.warehouseSpaceConfig) {
+          emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
+        }
+      }
     } catch (err) {
       console.warn("Failed to post space-config to server API:", err);
     }
   }
 
-  // 2. Also sync to Cloud Firestore if daily write quota is not exhausted
-  if (isFirestoreSpaceWriteExhausted) {
+  // 2. Bundle / debounce Firestore writes to save daily write quota
+  if (isFirestoreWritePaused()) {
     return;
   }
 
-  try {
-    const writePromise = setDoc(
-      doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID),
-      payload,
-      { merge: true }
-    );
-    const timeoutPromise = new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), 2500)
-    );
-    const result = await Promise.race([writePromise, timeoutPromise]);
-    if (result === "timeout") {
-      // Firestore SDK is backing off due to quota exhaustion or offline state
-      isFirestoreSpaceWriteExhausted = true;
-    }
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    if (errMsg.includes("resource-exhausted") || errMsg.includes("RESOURCE_EXHAUSTED")) {
-      isFirestoreSpaceWriteExhausted = true;
-    }
-    handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
+  pendingSpaceFirestorePayload = {
+    ...(pendingSpaceFirestorePayload || {}),
+    ...payload,
+    ...(partial.buildingMaxCapacityTons
+      ? {
+          buildingMaxCapacityTons: {
+            ...((pendingSpaceFirestorePayload?.buildingMaxCapacityTons as Record<string, unknown>) || {}),
+            ...partial.buildingMaxCapacityTons,
+          },
+        }
+      : {}),
+    updatedAt: nowIso,
+  };
+
+  if (spaceFirestoreDebounceTimer) {
+    clearTimeout(spaceFirestoreDebounceTimer);
   }
+
+  spaceFirestoreDebounceTimer = setTimeout(() => {
+    spaceFirestoreDebounceTimer = null;
+    const toWrite = pendingSpaceFirestorePayload;
+    pendingSpaceFirestorePayload = null;
+    if (!toWrite) return;
+
+    runFirestoreWriteWithQuotaGuard(
+      () =>
+        setDoc(doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID), toWrite, {
+          merge: true,
+        }),
+      OperationType.WRITE,
+      `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`
+    ).catch(() => {});
+  }, 1200);
 }
 
 export interface SlitMachineStagingGroupSummary {
@@ -957,6 +1531,10 @@ export function subscribeToSlitMachineStaging(
     onData(latestDoc);
   };
 
+  const unsubSse = subscribeSharedSse("machine_staging_state", (payload) => {
+    handleIncomingDoc(payload as SlitMachineStagingCloudDoc, "api");
+  });
+
   if (typeof window !== "undefined") {
     fetch("/api/space-config", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -970,23 +1548,6 @@ export function subscribeToSlitMachineStaging(
       .catch(() => {
         apiResponded = true;
       });
-  }
-
-  let eventSource: EventSource | null = null;
-  if (typeof window !== "undefined" && typeof EventSource !== "undefined") {
-    try {
-      eventSource = new EventSource("/api/space-config/stream");
-      eventSource.addEventListener("machine_staging_state", (evt: MessageEvent) => {
-        try {
-          const parsed = JSON.parse(evt.data) as SlitMachineStagingCloudDoc;
-          handleIncomingDoc(parsed, "api");
-        } catch {
-          // ignore
-        }
-      });
-    } catch {
-      // ignore
-    }
   }
 
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID);
@@ -1011,99 +1572,122 @@ export function subscribeToSlitMachineStaging(
 
   return () => {
     isDisposed = true;
+    unsubSse();
     unsubFirestore();
-    if (eventSource) {
-      eventSource.close();
-    }
   };
 }
 
+let pendingMachineFirestorePayload: Record<string, unknown> | null = null;
+let machineFirestoreDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
 /**
- * Save or merge Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) state and summary snapshot to Server API + Cloud Firestore
+ * Save or merge Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) state and summary snapshot to Server API + Cloud Firestore (Bundled)
  */
 export async function saveSlitMachineStagingToCloud(
   partial: Partial<Omit<SlitMachineStagingCloudDoc, "id" | "updatedAt">>
 ): Promise<void> {
+  const nowIso = new Date().toISOString();
   const payload = stripUndefinedDeep({
     id: MACHINE_STAGING_DOC_ID,
     ...partial,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowIso,
   });
 
   if (typeof window !== "undefined") {
     try {
-      await fetch("/api/machine-staging", {
+      const res = await fetch("/api/machine-staging", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.machineStagingConfig) {
+          emitSharedEvent("machine_staging_state", data.machineStagingConfig);
+        }
+      }
     } catch (err) {
       console.warn("Failed to post machine-staging to server API:", err);
     }
   }
 
-  if (isFirestoreSpaceWriteExhausted) {
+  if (isFirestoreWritePaused()) {
     return;
   }
 
-  try {
-    const writePromise = setDoc(
-      doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID),
-      payload,
-      { merge: true }
-    );
-    const timeoutPromise = new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), 2500)
-    );
-    const result = await Promise.race([writePromise, timeoutPromise]);
-    if (result === "timeout") {
-      isFirestoreSpaceWriteExhausted = true;
-    }
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    if (errMsg.includes("resource-exhausted") || errMsg.includes("RESOURCE_EXHAUSTED")) {
-      isFirestoreSpaceWriteExhausted = true;
-    }
-    handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
+  pendingMachineFirestorePayload = {
+    ...(pendingMachineFirestorePayload || {}),
+    ...payload,
+    updatedAt: nowIso,
+  };
+
+  if (machineFirestoreDebounceTimer) {
+    clearTimeout(machineFirestoreDebounceTimer);
   }
+
+  machineFirestoreDebounceTimer = setTimeout(() => {
+    machineFirestoreDebounceTimer = null;
+    const toWrite = pendingMachineFirestorePayload;
+    pendingMachineFirestorePayload = null;
+    if (!toWrite) return;
+
+    runFirestoreWriteWithQuotaGuard(
+      () =>
+        setDoc(doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID), toWrite, {
+          merge: true,
+        }),
+      OperationType.WRITE,
+      `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`
+    ).catch(() => {});
+  }, 1200);
 }
 
 /**
- * Clear all documents in slit_picklists, slit_outbound, slit_inbound, slit_sap_chunks, and slit_space_config on full reset
+ * Clear all documents in Server API and slit_picklists, slit_outbound, slit_inbound, slit_sap_chunks, and slit_space_config on full reset
  */
 export async function clearAllSlitDataFromCloud(): Promise<void> {
   clearLegacySlitLocalStorage();
-  try {
-    const [pickSnap, outSnap, inSnap, sapSnap, spaceSnap] = await Promise.all([
-      getDocs(collection(db, PICKLIST_COLLECTION)),
-      getDocs(collection(db, OUTBOUND_COLLECTION)),
-      getDocs(collection(db, INBOUND_COLLECTION)),
-      getDocs(collection(db, SAP_CHUNKS_COLLECTION)),
-      getDocs(collection(db, SPACE_CONFIG_COLLECTION)),
-    ]);
 
-    const allRefs = [
-      ...pickSnap.docs.map((d) => d.ref),
-      ...outSnap.docs.map((d) => d.ref),
-      ...inSnap.docs.map((d) => d.ref),
-      ...sapSnap.docs.map((d) => d.ref),
-      ...spaceSnap.docs.map((d) => d.ref),
-    ];
-
-    // Commit in chunks of 400 to respect Firestore 500-op batch limit
-    for (let i = 0; i < allRefs.length; i += 400) {
-      const chunk = allRefs.slice(i, i + 400);
-      const batch = writeBatch(db);
-      chunk.forEach((ref) => batch.delete(ref));
-      await batch.commit();
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/space-config", { method: "DELETE" });
+    } catch {
+      // ignore
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, PICKLIST_COLLECTION);
   }
+
+  await runFirestoreWriteWithQuotaGuard(
+    async () => {
+      const [pickSnap, outSnap, inSnap, sapSnap, spaceSnap] = await Promise.all([
+        getDocs(collection(db, PICKLIST_COLLECTION)),
+        getDocs(collection(db, OUTBOUND_COLLECTION)),
+        getDocs(collection(db, INBOUND_COLLECTION)),
+        getDocs(collection(db, SAP_CHUNKS_COLLECTION)),
+        getDocs(collection(db, SPACE_CONFIG_COLLECTION)),
+      ]);
+
+      const allRefs = [
+        ...pickSnap.docs.map((d) => d.ref),
+        ...outSnap.docs.map((d) => d.ref),
+        ...inSnap.docs.map((d) => d.ref),
+        ...sapSnap.docs.map((d) => d.ref),
+        ...spaceSnap.docs.map((d) => d.ref),
+      ];
+
+      for (let i = 0; i < allRefs.length; i += 400) {
+        const chunk = allRefs.slice(i, i + 400);
+        const batch = writeBatch(db);
+        chunk.forEach((ref) => batch.delete(ref));
+        await batch.commit();
+      }
+    },
+    OperationType.DELETE,
+    PICKLIST_COLLECTION
+  );
 }
 
 /**
- * Legacy auto-migration is disabled: clears legacy localStorage keys and relies 100% on Firestore.
+ * Legacy auto-migration is disabled: clears legacy localStorage keys and relies 100% on Hybrid Cloud/Server.
  */
 export async function syncLocalDataToFirestoreIfEmpty(
   _localInbound?: SlitBarcodeRecord[],
