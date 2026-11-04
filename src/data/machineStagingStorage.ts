@@ -1,4 +1,10 @@
 // Machine Staging Area Data Store & Real-time Integration
+import {
+  subscribeToSlitMachineStaging,
+  saveSlitMachineStagingToCloud,
+  type SlitMachineStagingSummarySnapshot,
+  type SlitMachineStagingGroupSummary,
+} from "../services/slitDataService";
 
 export interface MachineRackCoil {
   id: string;
@@ -134,6 +140,151 @@ export function buildInitialState(): MachineStagingConfig[] {
   });
 }
 
+function metersToTonsHelper(meters: number): number {
+  return Number(((meters / 1.2) * 16).toFixed(2));
+}
+
+export function computeMachineStagingSummarySnapshot(
+  machines: MachineStagingConfig[]
+): SlitMachineStagingSummarySnapshot {
+  const computeGroup = (cat: "pipe" | "c_channel"): SlitMachineStagingGroupSummary => {
+    const groupMachines = machines.filter((m) => m.category === cat);
+    const totalMachines = groupMachines.length;
+    let totalRacks = 0;
+    let totalCapacityMeters = 0;
+    let usedRacks = 0;
+    let occupiedRacks = 0;
+    let fullRacks = 0;
+    let usedMeters = 0;
+    let availableRacks = 0;
+    let availableMeters = 0;
+    let maintenanceRacks = 0;
+    let maintenanceMeters = 0;
+
+    groupMachines.forEach((m) => {
+      (m.racks || []).forEach((r) => {
+        const maxM = Math.max(1, Math.round(r.maxCapacityMm / 1000));
+        const usedM = Math.min(maxM, Math.max(0, r.usedMeters ?? 0));
+        totalRacks++;
+        totalCapacityMeters += maxM;
+
+        if (r.status === "maintenance") {
+          maintenanceRacks++;
+          maintenanceMeters += maxM;
+          usedMeters += usedM;
+        } else {
+          usedMeters += usedM;
+          availableMeters += Math.max(0, maxM - usedM);
+          if (usedM > 0) {
+            usedRacks++;
+            if (usedM >= maxM) {
+              fullRacks++;
+            } else {
+              occupiedRacks++;
+            }
+          } else {
+            availableRacks++;
+          }
+        }
+      });
+    });
+
+    const usagePercent =
+      totalCapacityMeters > 0 ? Math.round((usedMeters / totalCapacityMeters) * 100) : 0;
+
+    return {
+      totalMachines,
+      totalRacks,
+      totalCapacityMeters,
+      totalCapacityTons: metersToTonsHelper(totalCapacityMeters),
+      usedRacks,
+      occupiedRacks,
+      fullRacks,
+      usedMeters,
+      usedTons: metersToTonsHelper(usedMeters),
+      availableRacks,
+      availableMeters,
+      availableTons: metersToTonsHelper(availableMeters),
+      maintenanceRacks,
+      maintenanceMeters,
+      maintenanceTons: metersToTonsHelper(maintenanceMeters),
+      usagePercent,
+    };
+  };
+
+  const tm = computeGroup("pipe");
+  const cf = computeGroup("c_channel");
+  const totalMachines = tm.totalMachines + cf.totalMachines;
+  const totalRacks = tm.totalRacks + cf.totalRacks;
+  const totalCapacityMeters = tm.totalCapacityMeters + cf.totalCapacityMeters;
+  const usedRacks = tm.usedRacks + cf.usedRacks;
+  const occupiedRacks = tm.occupiedRacks + cf.occupiedRacks;
+  const fullRacks = tm.fullRacks + cf.fullRacks;
+  const usedMeters = tm.usedMeters + cf.usedMeters;
+  const availableRacks = tm.availableRacks + cf.availableRacks;
+  const availableMeters = tm.availableMeters + cf.availableMeters;
+  const maintenanceRacks = tm.maintenanceRacks + cf.maintenanceRacks;
+  const maintenanceMeters = tm.maintenanceMeters + cf.maintenanceMeters;
+  const usagePercent =
+    totalCapacityMeters > 0 ? Math.round((usedMeters / totalCapacityMeters) * 100) : 0;
+
+  return {
+    tm,
+    cf,
+    all: {
+      totalMachines,
+      totalRacks,
+      totalCapacityMeters,
+      totalCapacityTons: metersToTonsHelper(totalCapacityMeters),
+      usedRacks,
+      occupiedRacks,
+      fullRacks,
+      usedMeters,
+      usedTons: metersToTonsHelper(usedMeters),
+      availableRacks,
+      availableMeters,
+      availableTons: metersToTonsHelper(availableMeters),
+      maintenanceRacks,
+      maintenanceMeters,
+      maintenanceTons: metersToTonsHelper(maintenanceMeters),
+      usagePercent,
+    },
+  };
+}
+
+let isMachineStagingCloudSubscribed = false;
+let isMachineStagingCloudLoaded = false;
+let lastCloudSerializedMachines = "";
+
+export function ensureMachineStagingCloudSync(): void {
+  if (isMachineStagingCloudSubscribed || typeof window === "undefined") return;
+  isMachineStagingCloudSubscribed = true;
+
+  subscribeToSlitMachineStaging((cloudDoc) => {
+    isMachineStagingCloudLoaded = true;
+    if (!cloudDoc || !Array.isArray(cloudDoc.machines) || cloudDoc.machines.length === 0) {
+      // Seed initial Machine Staging state (TM 1-14 / CF 1, 2, 4, 5) to Cloud Firestore
+      const current = getStoredMachineStaging();
+      const serialized = JSON.stringify(current);
+      lastCloudSerializedMachines = serialized;
+      saveSlitMachineStagingToCloud({
+        machines: current,
+        summarySnapshot: computeMachineStagingSummarySnapshot(current),
+      }).catch(console.error);
+      return;
+    }
+
+    const cloudSerialized = JSON.stringify(cloudDoc.machines);
+    lastCloudSerializedMachines = cloudSerialized;
+    saveStoredMachineStaging(cloudDoc.machines, { skipCloudWrite: true });
+  });
+}
+
+// Automatically initialize real-time Cloud Firestore sync in browser runtime
+if (typeof window !== "undefined") {
+  ensureMachineStagingCloudSync();
+}
+
 export function resetAllMachineStagingToEmpty(): MachineStagingConfig[] {
   const current = getStoredMachineStaging();
   const clearedState: MachineStagingConfig[] = (current && current.length > 0 ? current : buildInitialState()).map((m) => ({
@@ -208,22 +359,33 @@ export function getStoredMachineStaging(): MachineStagingConfig[] {
     console.error("Failed to load machine staging from localStorage:", e);
   }
   const initialState = buildInitialState();
-  saveStoredMachineStaging(initialState);
+  saveStoredMachineStaging(initialState, { skipCloudWrite: true });
   return initialState;
 }
 
-export function saveStoredMachineStaging(data: MachineStagingConfig[]): void {
+export function saveStoredMachineStaging(
+  data: MachineStagingConfig[],
+  options?: { skipCloudWrite?: boolean }
+): void {
   try {
     const serialized = JSON.stringify(data);
     if (typeof window !== "undefined" && window.localStorage) {
-      if (localStorage.getItem(STORAGE_KEY_MACHINE_STAGING) === serialized) {
-        return;
+      const prevLocal = localStorage.getItem(STORAGE_KEY_MACHINE_STAGING);
+      if (prevLocal !== serialized) {
+        localStorage.setItem(STORAGE_KEY_MACHINE_STAGING, serialized);
+        window.dispatchEvent(new CustomEvent(MACHINE_STAGING_UPDATED_EVENT, { detail: data }));
       }
-      localStorage.setItem(STORAGE_KEY_MACHINE_STAGING, serialized);
-      window.dispatchEvent(new CustomEvent(MACHINE_STAGING_UPDATED_EVENT, { detail: data }));
+    }
+
+    if (!options?.skipCloudWrite && isMachineStagingCloudLoaded && serialized !== lastCloudSerializedMachines) {
+      lastCloudSerializedMachines = serialized;
+      saveSlitMachineStagingToCloud({
+        machines: data,
+        summarySnapshot: computeMachineStagingSummarySnapshot(data),
+      }).catch(console.error);
     }
   } catch (e) {
-    console.error("Failed to save machine staging to localStorage:", e);
+    console.error("Failed to save machine staging:", e);
   }
 }
 

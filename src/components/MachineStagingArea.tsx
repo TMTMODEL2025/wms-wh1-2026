@@ -21,6 +21,7 @@ import {
   getStoredMachineStaging,
   saveStoredMachineStaging,
   resetAllMachineStagingToEmpty,
+  ensureMachineStagingCloudSync,
   STORAGE_KEY_MACHINE_STAGING,
   MACHINE_STAGING_UPDATED_EVENT
 } from "../data/machineStagingStorage";
@@ -40,7 +41,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
   const { language } = useLanguage();
   const isThai = externalIsThai ?? (language === "th");
 
-  // Load state from LocalStorage or initialize default empty 18 machines
+  // Load state from LocalStorage / Cloud Firestore or initialize default empty 18 machines
   const [machines, setMachines] = useState<MachineStagingConfig[]>(() => {
     return getStoredMachineStaging();
   });
@@ -51,8 +52,9 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
   // Active selected machine
   const [selectedMachineId, setSelectedMachineId] = useState<string>("TM01");
 
-  // Real-time synchronization: listen to storage updates
+  // Real-time synchronization: listen to Cloud Firestore & storage updates
   useEffect(() => {
+    ensureMachineStagingCloudSync();
     const handleUpdate = () => {
       const fresh = getStoredMachineStaging();
       setMachines((prev) => {

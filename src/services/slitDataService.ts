@@ -10,6 +10,7 @@ import {
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "../components/SlitFilmManagement";
 import type { MasterBuildingLayout } from "../data/masterBasketStorage";
+import type { MachineStagingConfig } from "../data/machineStagingStorage";
 
 const INBOUND_COLLECTION = "slit_inbound";
 const OUTBOUND_COLLECTION = "slit_outbound";
@@ -18,6 +19,7 @@ export const SAP_CHUNKS_COLLECTION = "slit_sap_chunks";
 export const SAP_CHUNK_SIZE = 800;
 export const SPACE_CONFIG_COLLECTION = "slit_space_config";
 export const SPACE_CONFIG_DOC_ID = "warehouse_space_state";
+export const MACHINE_STAGING_DOC_ID = "machine_staging_state";
 
 function sanitizeDocId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 128);
@@ -660,6 +662,80 @@ export async function saveSlitSpaceConfigToCloud(
     await setDoc(doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID), payload, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
+  }
+}
+
+export interface SlitMachineStagingGroupSummary {
+  totalMachines: number;
+  totalRacks: number;
+  totalCapacityMeters: number;
+  totalCapacityTons: number;
+  usedRacks: number;
+  occupiedRacks: number;
+  fullRacks: number;
+  usedMeters: number;
+  usedTons: number;
+  availableRacks: number;
+  availableMeters: number;
+  availableTons: number;
+  maintenanceRacks: number;
+  maintenanceMeters: number;
+  maintenanceTons: number;
+  usagePercent: number;
+}
+
+export interface SlitMachineStagingSummarySnapshot {
+  all: SlitMachineStagingGroupSummary;
+  tm: SlitMachineStagingGroupSummary;
+  cf: SlitMachineStagingGroupSummary;
+}
+
+export interface SlitMachineStagingCloudDoc {
+  id: string;
+  machines: MachineStagingConfig[];
+  summarySnapshot?: SlitMachineStagingSummarySnapshot;
+  updatedAt: string;
+}
+
+/**
+ * Real-time listener for Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) in Cloud Firestore
+ */
+export function subscribeToSlitMachineStaging(
+  onData: (docData: SlitMachineStagingCloudDoc | null) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  const docRef = doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID);
+  return onSnapshot(
+    docRef,
+    (snapshot) => {
+      if (!snapshot.exists()) {
+        onData(null);
+        return;
+      }
+      onData(snapshot.data() as SlitMachineStagingCloudDoc);
+    },
+    (error) => {
+      onError?.(error);
+      handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
+    }
+  );
+}
+
+/**
+ * Save or merge Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) state and summary snapshot to Cloud Firestore
+ */
+export async function saveSlitMachineStagingToCloud(
+  partial: Partial<Omit<SlitMachineStagingCloudDoc, "id" | "updatedAt">>
+): Promise<void> {
+  const payload = stripUndefinedDeep({
+    id: MACHINE_STAGING_DOC_ID,
+    ...partial,
+    updatedAt: new Date().toISOString(),
+  });
+  try {
+    await setDoc(doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID), payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
   }
 }
 
