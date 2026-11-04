@@ -6819,7 +6819,7 @@ export function SlitFilmManagement({
                                 <tr>
                                   <th className="p-2 text-left font-mono font-bold">Batch</th>
                                   <th className="p-2 text-left font-mono font-bold">{isThai ? "ใบสั่ง" : "Order"}</th>
-                                  <th className="p-2 text-center font-bold">{isThai ? "สถานะ / กดสแกน" : "Status"}</th>
+                                  <th className="p-2 text-center font-bold">{isThai ? "สถานะ" : "Status"}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-800/80">
@@ -6829,16 +6829,11 @@ export function SlitFilmManagement({
                                   return (
                                     <tr
                                       key={`${itm.orderNo}-${itm.id}`}
-                                      onClick={() => {
-                                        if (isPrepared && !isIssued) {
-                                          processBarcodeSubmission(itm.batch);
-                                        }
-                                      }}
-                                      className={`transition-colors ${
+                                      className={`transition-colors select-none ${
                                         isIssued
                                           ? "bg-emerald-950/30"
                                           : isPrepared
-                                          ? "bg-[#111e38]/70 hover:bg-[#16294a] cursor-pointer"
+                                          ? "bg-[#111e38]/70"
                                           : "bg-[#0a1526]/40 opacity-70"
                                       }`}
                                     >
@@ -6855,9 +6850,9 @@ export function SlitFilmManagement({
                                             <span>{isThai ? "จ่ายแล้ว" : "Issued"}</span>
                                           </span>
                                         ) : isPrepared ? (
-                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs">
+                                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white shadow-2xs">
                                             <Barcode size={10} />
-                                            <span>{isThai ? "เตรียมแล้ว (กดสแกน)" : "Ready (Tap to Scan)"}</span>
+                                            <span>{isThai ? "เตรียมแล้ว (รอสแกน)" : "Ready (Wait Scan)"}</span>
                                           </span>
                                         ) : (
                                           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-950/60 text-amber-300 border border-amber-800/60">
@@ -7724,68 +7719,72 @@ export function SlitFilmManagement({
 
       {/* 6. Stock Balance View (Stock คงคลัง) */}
       {activeMode === "stock_balance" && (
-        <section className="p-3 sm:p-4 rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-sm space-y-3 font-sans animate-fade-in">
-          {/* Header & Subtitle */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 border-slate-100 dark:border-[#1e3a5f]">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                <Package size={20} />
-              </div>
-              <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-2">
-                  <span>{isThai ? "Stock คงคลัง" : "Stock Balance"}</span>
-                  <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                    {filteredStockList.length} {isThai ? "รายการ" : "items"}
-                  </span>
-                  {sapMasterMap.size > 0 && (
-                    <span
-                      className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-mono"
-                      title={isThai ? `มัดรวมข้อมูล SAP บน Cloud Firestore (${SAP_CHUNK_SIZE} รายการ/ก้อน)` : "Bundled SAP Master Data on Cloud Firestore"}
-                    >
-                      ☁️ SAP Cloud: {sapChunkCount || Math.ceil(sapMasterMap.size / SAP_CHUNK_SIZE)} {isThai ? "ก้อน" : "chunks"} ({sapMasterMap.size.toLocaleString()})
+        <>
+          {/* Top-Right Action Buttons aligned on the same row as main heading 'เหล็กสลิต / ฟิล์ม' */}
+          <div className="flex items-center gap-1.5 absolute -top-[38px] right-0 z-20">
+            {/* Export Excel Button (Compact Height) */}
+            <button
+              type="button"
+              onClick={handleExportStockBalanceExcel}
+              disabled={filteredStockList.length === 0}
+              className="hidden sm:inline-flex h-7 px-2.5 py-1 rounded-lg text-[11px] leading-none font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-xs items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-emerald-700"
+            >
+              <FileSpreadsheet size={13} className="text-emerald-100 shrink-0" />
+              <span>{isThai ? "Export Excel" : "Export Excel"}</span>
+            </button>
+
+            {/* SAP Data Upload Button (Compact Height) */}
+            <button
+              type="button"
+              onClick={() => setIsSapModalOpen(true)}
+              className="hidden sm:inline-flex h-7 px-2.5 py-1 rounded-lg text-[11px] leading-none font-bold bg-[#1c2d42] hover:bg-[#111f30] dark:bg-[#1e3a5f] dark:hover:bg-[#284c7a] text-white shadow-xs items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-[#2d4b6e] dark:border-[#385f8d]"
+            >
+              <FileSpreadsheet size={13} className="text-cyan-400 shrink-0" />
+              <span>{isThai ? "อัปโหลดข้อมูลจาก SAP" : "Upload SAP Data"}</span>
+            </button>
+          </div>
+
+          <section className="p-2.5 sm:p-3.5 rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-sm space-y-2.5 font-sans animate-fade-in">
+            {/* Header & Subtitle */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5 border-slate-100 dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <Package size={18} />
+                </div>
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-2">
+                    <span>{isThai ? "Stock คงคลัง" : "Stock Balance"}</span>
+                    <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      {filteredStockList.length} {isThai ? "รายการ" : "items"}
                     </span>
-                  )}
-                </h2>
-                <p className="hidden text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {isThai
-                    ? "ตารางแสดงปริมาณวัตถุดิบสลิต/ฟิล์มคงคลังล่าสุด"
-                    : "Real-time Slit Steel & Film inventory balance"}
-                </p>
+                    {sapMasterMap.size > 0 && (
+                      <span
+                        className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-mono"
+                        title={isThai ? `มัดรวมข้อมูล SAP บน Cloud Firestore (${SAP_CHUNK_SIZE} รายการ/ก้อน)` : "Bundled SAP Master Data on Cloud Firestore"}
+                      >
+                        ☁️ SAP Cloud: {sapChunkCount || Math.ceil(sapMasterMap.size / SAP_CHUNK_SIZE)} {isThai ? "ก้อน" : "chunks"} ({sapMasterMap.size.toLocaleString()})
+                      </span>
+                    )}
+                  </h2>
+                  <p className="hidden text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {isThai
+                      ? "ตารางแสดงปริมาณวัตถุดิบสลิต/ฟิล์มคงคลังล่าสุด"
+                      : "Real-time Slit Steel & Film inventory balance"}
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              {/* Export Excel Button */}
-              <button
-                type="button"
-                onClick={handleExportStockBalanceExcel}
-                disabled={filteredStockList.length === 0}
-                className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-xs items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-emerald-700"
-              >
-                <FileSpreadsheet size={14} className="text-emerald-100" />
-                <span>{isThai ? "Export Excel" : "Export Excel"}</span>
-              </button>
-
-              {/* SAP Data Upload Button */}
-              <button
-                type="button"
-                onClick={() => setIsSapModalOpen(true)}
-                className="hidden sm:flex px-3 py-1.5 rounded-xl text-xs font-bold bg-[#1c2d42] hover:bg-[#111f30] dark:bg-[#1e3a5f] dark:hover:bg-[#284c7a] text-white shadow-xs items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-[#2d4b6e] dark:border-[#385f8d]"
-              >
-                <FileSpreadsheet size={14} className="text-cyan-400" />
-                <span>{isThai ? "อัปโหลดข้อมูลจาก SAP" : "Upload SAP Data"}</span>
-              </button>
-
-              <div className="flex items-center gap-1.5 sm:pl-2 sm:border-l border-slate-200 dark:border-[#1e3a5f]">
-                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">
-                  {isThai ? "รวมน้ำหนักคลัง:" : "Total Stock:"}
-                </span>
-                <div className="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs">
-                  {stockTotalWeightKg.toLocaleString()} kg ({stockTotalWeightTon} TON)
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">
+                    {isThai ? "รวมน้ำหนักคลัง:" : "Total Stock:"}
+                  </span>
+                  <div className="px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs">
+                    {stockTotalWeightKg.toLocaleString()} kg ({stockTotalWeightTon} TON)
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
           {/* SAP Fiori Style Top Toolbar: Quick Search & Status Filter */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
@@ -8059,7 +8058,8 @@ export function SlitFilmManagement({
               </button>
             </div>
           </div>
-        </section>
+          </section>
+        </>
       )}
 
       {/* 5. Return to Warehouse (คืนคลัง) View */}

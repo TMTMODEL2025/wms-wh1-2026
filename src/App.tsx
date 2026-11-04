@@ -915,8 +915,8 @@ const CSS = `
     padding: 8px 10px;
     margin-top: 10px;
     margin-bottom: 5px;
-    background: rgba(15, 23, 42, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: transparent;
+    border: 1px solid transparent;
     border-radius: 6px;
     color: #94a3b8;
     font-size: 11px;
@@ -927,16 +927,16 @@ const CSS = `
     transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .nav-caption-btn:hover {
-    background: rgba(30, 41, 59, 0.7);
+    background: transparent;
     color: #f1f5f9;
-    border-color: rgba(56, 189, 248, 0.4);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    border-color: transparent;
+    box-shadow: none;
   }
   .nav-caption-btn.active-group {
     color: #38bdf8;
-    border-color: rgba(56, 189, 248, 0.55);
-    background: rgba(14, 165, 233, 0.14);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.18);
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
   }
   .nav-arrow-icon {
     display: inline-flex;
@@ -993,6 +993,20 @@ const CSS = `
     z-index: 2;
   }
 
+  /* Clean background-free variant for non-Overview main menus */
+  .nav-card-btn:not(.nav-overview-hero) {
+    background: transparent !important;
+    background-image: none !important;
+    border-color: transparent;
+    box-shadow: none;
+  }
+  .nav-card-btn:not(.nav-overview-hero)::before {
+    display: none;
+  }
+  .nav-card-btn:not(.nav-overview-hero):not(.active):not(.active-parent)::after {
+    display: none;
+  }
+
   .nav-card-btn > * {
     position: relative;
     z-index: 3;
@@ -1007,6 +1021,11 @@ const CSS = `
   .nav-card-btn:hover::before {
     background: linear-gradient(105deg, rgba(11, 25, 45, 0.74) 0%, rgba(14, 38, 65, 0.64) 55%, rgba(11, 25, 45, 0.7) 100%);
   }
+  .nav-card-btn:not(.nav-overview-hero):hover {
+    background: transparent !important;
+    border-color: transparent;
+    box-shadow: none;
+  }
 
   .nav-card-btn.active,
   .nav-card-btn.active-parent {
@@ -1018,6 +1037,13 @@ const CSS = `
   .nav-card-btn.active::before,
   .nav-card-btn.active-parent::before {
     background: linear-gradient(105deg, rgba(8, 30, 55, 0.82) 0%, rgba(12, 45, 80, 0.72) 55%, rgba(8, 30, 55, 0.78) 100%);
+  }
+  .nav-card-btn:not(.nav-overview-hero).active,
+  .nav-card-btn:not(.nav-overview-hero).active-parent {
+    background: transparent !important;
+    border-color: transparent;
+    box-shadow: none;
+    color: #38bdf8;
   }
 
   /* Glowing cyan active indicator strip on left */
@@ -1046,6 +1072,10 @@ const CSS = `
     color: #93c5fd;
     flex-shrink: 0;
     transition: all 0.2s ease;
+  }
+  .nav-card-btn:not(.nav-overview-hero) .nav-icon {
+    background: transparent;
+    border-color: rgba(148, 163, 184, 0.2);
   }
   .nav-card-btn:hover .nav-icon {
     color: #38bdf8;
@@ -5310,7 +5340,8 @@ function WmsApp() {
                     {/* 1. Executive Overview Icon */}
                     <button
                       type="button"
-                      className={`nav-card-btn ${active === "dashboard" ? "active" : ""}`}
+                      className={`nav-card-btn nav-overview-hero ${active === "dashboard" ? "active" : ""}`}
+                      style={{ backgroundImage: `url(${SIDEBAR_IMAGES.dashboard})` }}
                       onClick={() => {
                         setActive("dashboard");
                         setSelectedRecord(null);
@@ -5405,7 +5436,7 @@ function WmsApp() {
                     {/* 1. Executive Overview */}
                     <button
                       type="button"
-                      className={`nav-card-btn ${active === "dashboard" ? "active" : ""}`}
+                      className={`nav-card-btn nav-overview-hero ${active === "dashboard" ? "active" : ""}`}
                       style={{ backgroundImage: `url(${SIDEBAR_IMAGES.dashboard})` }}
                       onClick={() => {
                         setActive("dashboard");
@@ -5429,7 +5460,6 @@ function WmsApp() {
                         className={`nav-card-btn ${
                           isMaterialHandlingActive ? "active-parent" : ""
                         }`}
-                        style={{ backgroundImage: `url(${SIDEBAR_IMAGES.materialHandling})` }}
                         onClick={() => {
                           setMaterialHandlingExpanded(!materialHandlingExpanded);
                           if (!isMaterialHandlingActive && !materialHandlingExpanded) {
@@ -5517,7 +5547,6 @@ function WmsApp() {
                           {warehouseInventoryItems.map((item) => {
                             const Icon = item.icon;
                             const isActive = active === item.id;
-                            const bgImage = SIDEBAR_IMAGES[item.id] || SIDEBAR_IMAGES.slit;
                             const isSlit = item.id === "slit";
 
                             return (
@@ -5525,7 +5554,6 @@ function WmsApp() {
                                 <button
                                   type="button"
                                   className={`nav-card-btn ${isActive ? "active" : ""}`}
-                                  style={{ backgroundImage: `url(${bgImage})` }}
                                   onClick={() => {
                                     if (isSlit) {
                                       setSlitMenuExpanded((prev) => !prev);
@@ -5779,13 +5807,11 @@ function WmsApp() {
                           {administrationItems.map((item) => {
                             const Icon = item.icon;
                             const isActive = active === item.id;
-                            const bgImage = SIDEBAR_IMAGES[item.id] || SIDEBAR_IMAGES.admin;
                             return (
                               <button
                                 key={item.id}
                                 type="button"
                                 className={`nav-card-btn ${isActive ? "active" : ""}`}
-                                style={{ backgroundImage: `url(${bgImage})` }}
                                 onClick={() => {
                                   setActive(item.id);
                                   setSelectedRecord(null);
@@ -5814,7 +5840,7 @@ function WmsApp() {
           </aside>
 
           <main className="main">
-            <div className={`page-heading ${active === "slit" ? "relative min-h-[36px]" : ""}`}>
+            <div className={`page-heading ${active === "slit" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : ""}`}>
               <div>
                 <h1>{pageTitle}</h1>
                 {active !== "slit" &&
