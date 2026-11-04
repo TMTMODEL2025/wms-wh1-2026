@@ -1,0 +1,4781 @@
+{
+  "warehouseSpaceConfig": {
+    "id": "warehouse_space_state",
+    "buildingMaxCapacityTons": {
+      "F": 3123,
+      "E10": 780,
+      "E9": 780,
+      "I": 1140,
+      "H": 2755
+    },
+    "updatedAt": "2026-11-04T11:22:28.152Z",
+    "statusOverrides": {},
+    "masterLayout": [
+      {
+        "buildingNameTh": "อาคาร H",
+        "subtitleEn": "Primary Slit Film Processing & Storage Hub",
+        "buildingNameEn": "Building H",
+        "rows": [
+          {
+            "rowId": "A",
+            "descriptionTh": "โซนจัดเก็บแถว A อาคาร H",
+            "baskets": [
+              {
+                "buildingId": "H",
+                "rowId": "A",
+                "basketNo": "01",
+                "maxCoils": 3,
+                "id": "H-A01",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "A",
+                "maxCoils": 3,
+                "buildingId": "H",
+                "basketNo": "02",
+                "id": "H-A02",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "A",
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "basketNo": "03",
+                "maxCoils": 3,
+                "id": "H-A03"
+              },
+              {
+                "rowId": "A",
+                "basketNo": "04",
+                "maxCoils": 3,
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "id": "H-A04"
+              },
+              {
+                "buildingId": "H",
+                "maxCoils": 3,
+                "id": "H-A05",
+                "basketNo": "05",
+                "maxCapacityKg": 2500,
+                "rowId": "A"
+              },
+              {
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "06",
+                "id": "H-A06",
+                "buildingId": "H",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "H",
+                "rowId": "A",
+                "basketNo": "07",
+                "id": "H-A07",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "08",
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "id": "H-A08"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "09",
+                "rowId": "A",
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "id": "H-A09"
+              },
+              {
+                "id": "H-A10",
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "basketNo": "10",
+                "buildingId": "H",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "11",
+                "rowId": "A",
+                "maxCoils": 3,
+                "buildingId": "H",
+                "id": "H-A11"
+              }
+            ],
+            "rowNameEn": "Row A",
+            "rowNameTh": "แถว A"
+          },
+          {
+            "rowNameEn": "Row B",
+            "rowId": "B",
+            "baskets": [
+              {
+                "maxCoils": 3,
+                "basketNo": "01",
+                "buildingId": "H",
+                "rowId": "B",
+                "id": "H-B01",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "maxCoils": 3,
+                "id": "H-B02",
+                "basketNo": "02"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "03",
+                "maxCoils": 3,
+                "id": "H-B03",
+                "buildingId": "H",
+                "rowId": "B"
+              },
+              {
+                "id": "H-B04",
+                "buildingId": "H",
+                "rowId": "B",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "04"
+              },
+              {
+                "id": "H-B05",
+                "basketNo": "05",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "H"
+              },
+              {
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "06",
+                "id": "H-B06",
+                "rowId": "B"
+              },
+              {
+                "id": "H-B07",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "basketNo": "07",
+                "buildingId": "H",
+                "maxCoils": 3
+              },
+              {
+                "id": "H-B08",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "buildingId": "H",
+                "basketNo": "08",
+                "maxCoils": 3
+              },
+              {
+                "id": "H-B09",
+                "maxCapacityKg": 2500,
+                "basketNo": "09",
+                "buildingId": "H",
+                "maxCoils": 3,
+                "rowId": "B"
+              },
+              {
+                "basketNo": "10",
+                "maxCoils": 3,
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "id": "H-B10"
+              }
+            ],
+            "rowNameTh": "แถว B",
+            "descriptionTh": "โซนจัดเก็บแถว B อาคาร H"
+          },
+          {
+            "baskets": [
+              {
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "H-C01",
+                "buildingId": "H",
+                "maxCoils": 3,
+                "basketNo": "01"
+              },
+              {
+                "rowId": "C",
+                "basketNo": "02",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "H-C02",
+                "buildingId": "H"
+              },
+              {
+                "basketNo": "03",
+                "buildingId": "H",
+                "maxCoils": 3,
+                "id": "H-C03",
+                "rowId": "C",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "H",
+                "basketNo": "04",
+                "maxCoils": 3,
+                "rowId": "C",
+                "id": "H-C04"
+              },
+              {
+                "buildingId": "H",
+                "id": "H-C05",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "basketNo": "05",
+                "maxCoils": 3
+              },
+              {
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "basketNo": "06",
+                "id": "H-C06",
+                "buildingId": "H",
+                "maxCoils": 3
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "07",
+                "maxCapacityKg": 2500,
+                "buildingId": "H",
+                "id": "H-C07",
+                "rowId": "C"
+              },
+              {
+                "buildingId": "H",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "08",
+                "id": "H-C08",
+                "rowId": "C"
+              },
+              {
+                "maxCoils": 3,
+                "id": "H-C09",
+                "basketNo": "09",
+                "maxCapacityKg": 2500,
+                "buildingId": "H",
+                "rowId": "C"
+              },
+              {
+                "buildingId": "H",
+                "id": "H-C10",
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "10",
+                "maxCapacityKg": 2500
+              }
+            ],
+            "descriptionTh": "โซนจัดเก็บแถว C อาคาร H",
+            "rowNameTh": "แถว C",
+            "rowId": "C",
+            "rowNameEn": "Row C"
+          },
+          {
+            "descriptionTh": "โซนจัดเก็บแถว D อาคาร H",
+            "baskets": [
+              {
+                "maxCoils": 3,
+                "basketNo": "01",
+                "maxCapacityKg": 2500,
+                "buildingId": "H",
+                "rowId": "D",
+                "id": "H-D01"
+              },
+              {
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "basketNo": "02",
+                "maxCoils": 3,
+                "id": "H-D02",
+                "buildingId": "H"
+              },
+              {
+                "rowId": "D",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "H-D03",
+                "basketNo": "03",
+                "buildingId": "H"
+              },
+              {
+                "buildingId": "H",
+                "id": "H-D04",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "04",
+                "rowId": "D"
+              },
+              {
+                "buildingId": "H",
+                "id": "H-D05",
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "05"
+              },
+              {
+                "id": "H-D06",
+                "rowId": "D",
+                "buildingId": "H",
+                "maxCapacityKg": 2500,
+                "basketNo": "06",
+                "maxCoils": 3
+              },
+              {
+                "rowId": "D",
+                "id": "H-D07",
+                "buildingId": "H",
+                "maxCoils": 3,
+                "basketNo": "07",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "D",
+                "buildingId": "H",
+                "id": "H-D08",
+                "basketNo": "08",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "H",
+                "rowId": "D",
+                "maxCoils": 3,
+                "basketNo": "09",
+                "maxCapacityKg": 2500,
+                "id": "H-D09"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "10",
+                "buildingId": "H",
+                "id": "H-D10",
+                "rowId": "D"
+              }
+            ],
+            "rowId": "D",
+            "rowNameTh": "แถว D",
+            "rowNameEn": "Row D"
+          }
+        ],
+        "subtitleTh": "ศูนย์จัดเก็บฟิล์มสลิตหลัก และคลังย่อยแปรรูป (Main Slit Film Hub)",
+        "buildingId": "H"
+      },
+      {
+        "buildingNameTh": "อาคาร F",
+        "subtitleEn": "Premium Grade & Fast Dispatch Slit Warehouse",
+        "rows": [
+          {
+            "rowNameTh": "แถว A",
+            "rowNameEn": "Row A",
+            "descriptionTh": "โซนจัดเก็บแถว A อาคาร F",
+            "rowId": "A",
+            "baskets": [
+              {
+                "buildingId": "F",
+                "rowId": "A",
+                "id": "F-A01",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "01"
+              },
+              {
+                "rowId": "A",
+                "basketNo": "02",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-A02"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-A03",
+                "rowId": "A",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "03"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "04",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-A04",
+                "rowId": "A"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "basketNo": "05",
+                "id": "F-A05",
+                "maxCoils": 3
+              },
+              {
+                "rowId": "A",
+                "basketNo": "06",
+                "id": "F-A06",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-A07",
+                "rowId": "A",
+                "basketNo": "07",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "basketNo": "08",
+                "id": "F-A08",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "09",
+                "id": "F-A09"
+              },
+              {
+                "rowId": "A",
+                "buildingId": "F",
+                "id": "F-A10",
+                "basketNo": "10",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "basketNo": "11",
+                "id": "F-A11"
+              },
+              {
+                "rowId": "A",
+                "id": "F-A12",
+                "maxCoils": 3,
+                "basketNo": "12",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-A13",
+                "maxCoils": 3,
+                "basketNo": "13",
+                "rowId": "A",
+                "buildingId": "F"
+              },
+              {
+                "rowId": "A",
+                "buildingId": "F",
+                "basketNo": "14",
+                "maxCapacityKg": 2500,
+                "id": "F-A14",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "id": "F-A15",
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "15"
+              },
+              {
+                "buildingId": "F",
+                "basketNo": "16",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "id": "F-A16"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "17",
+                "id": "F-A17",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "A"
+              },
+              {
+                "buildingId": "F",
+                "id": "F-A18",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "18"
+              },
+              {
+                "basketNo": "19",
+                "id": "F-A19",
+                "maxCoils": 3,
+                "rowId": "A",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "id": "F-A20",
+                "basketNo": "20",
+                "maxCoils": 3,
+                "rowId": "A",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-A21",
+                "rowId": "A",
+                "basketNo": "21",
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "22",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "rowId": "A",
+                "id": "F-A22",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "id": "F-A23",
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "23"
+              },
+              {
+                "rowId": "A",
+                "basketNo": "24",
+                "maxCoils": 3,
+                "id": "F-A24",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "25",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "F-A25",
+                "buildingId": "F",
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "id": "F-A26",
+                "basketNo": "26"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-A27",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "27"
+              },
+              {
+                "id": "F-A28",
+                "maxCoils": 3,
+                "basketNo": "28",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "29",
+                "rowId": "A",
+                "id": "F-A29",
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "30",
+                "maxCapacityKg": 2500,
+                "id": "F-A30"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-A31",
+                "rowId": "A",
+                "maxCoils": 3,
+                "basketNo": "31"
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "32",
+                "id": "F-A32",
+                "rowId": "A"
+              },
+              {
+                "id": "F-A33",
+                "basketNo": "33",
+                "rowId": "A",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "id": "F-A34",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "34"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "35",
+                "id": "F-A35",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "A"
+              },
+              {
+                "rowId": "A",
+                "id": "F-A36",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "36",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-A37",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "37",
+                "rowId": "A",
+                "buildingId": "F"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "38",
+                "rowId": "A",
+                "id": "F-A38",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "39",
+                "rowId": "A",
+                "maxCoils": 3,
+                "id": "F-A39",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "id": "F-A40",
+                "basketNo": "40",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "rowId": "A",
+                "basketNo": "41",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "id": "F-A41",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-A42",
+                "basketNo": "42",
+                "buildingId": "F",
+                "rowId": "A",
+                "maxCoils": 3
+              },
+              {
+                "rowId": "A",
+                "id": "F-A43",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "basketNo": "43",
+                "maxCoils": 3
+              },
+              {
+                "id": "F-A44",
+                "rowId": "A",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "44",
+                "maxCoils": 3
+              },
+              {
+                "id": "F-A45",
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "buildingId": "F",
+                "basketNo": "45",
+                "maxCoils": 3
+              },
+              {
+                "id": "F-A46",
+                "rowId": "A",
+                "maxCoils": 3,
+                "basketNo": "46",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "47",
+                "rowId": "A",
+                "id": "F-A47",
+                "maxCapacityKg": 2500
+              }
+            ]
+          },
+          {
+            "rowId": "B",
+            "rowNameTh": "แถว B",
+            "rowNameEn": "Row B",
+            "descriptionTh": "โซนจัดเก็บแถว B อาคาร F",
+            "baskets": [
+              {
+                "basketNo": "01",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-B01",
+                "rowId": "B"
+              },
+              {
+                "id": "F-B02",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "02",
+                "buildingId": "F",
+                "rowId": "B"
+              },
+              {
+                "id": "F-B03",
+                "maxCoils": 3,
+                "basketNo": "03",
+                "buildingId": "F",
+                "rowId": "B",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "B",
+                "maxCoils": 3,
+                "basketNo": "04",
+                "id": "F-B04"
+              },
+              {
+                "id": "F-B05",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B",
+                "basketNo": "05"
+              },
+              {
+                "id": "F-B06",
+                "rowId": "B",
+                "buildingId": "F",
+                "basketNo": "06",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-B07",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "B",
+                "basketNo": "07"
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "F-B08",
+                "basketNo": "08",
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "id": "F-B09",
+                "maxCoils": 3,
+                "basketNo": "09",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "basketNo": "10",
+                "id": "F-B10",
+                "maxCoils": 3,
+                "rowId": "B"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "11",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "B",
+                "id": "F-B11"
+              },
+              {
+                "buildingId": "F",
+                "id": "F-B12",
+                "basketNo": "12",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B",
+                "id": "F-B13",
+                "basketNo": "13",
+                "buildingId": "F"
+              },
+              {
+                "id": "F-B14",
+                "rowId": "B",
+                "basketNo": "14",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "15",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "buildingId": "F",
+                "id": "F-B15"
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "16",
+                "id": "F-B16",
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "basketNo": "17",
+                "id": "F-B17",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "B"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "id": "F-B18",
+                "maxCoils": 3,
+                "basketNo": "18",
+                "buildingId": "F"
+              },
+              {
+                "id": "F-B19",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "basketNo": "19",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "maxCoils": 3,
+                "id": "F-B20",
+                "basketNo": "20",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "B"
+              },
+              {
+                "id": "F-B21",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B",
+                "basketNo": "21"
+              },
+              {
+                "id": "F-B22",
+                "buildingId": "F",
+                "basketNo": "22",
+                "maxCoils": 3,
+                "rowId": "B",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "B",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "23",
+                "maxCoils": 3,
+                "id": "F-B23"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "24",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "id": "F-B24",
+                "rowId": "B"
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "25",
+                "id": "F-B25"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "B",
+                "maxCoils": 3,
+                "basketNo": "26",
+                "id": "F-B26"
+              },
+              {
+                "buildingId": "F",
+                "id": "F-B27",
+                "basketNo": "27",
+                "rowId": "B",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "id": "F-B28",
+                "maxCoils": 3,
+                "basketNo": "28",
+                "maxCapacityKg": 2500,
+                "rowId": "B"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-B29",
+                "buildingId": "F",
+                "rowId": "B",
+                "basketNo": "29",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "30",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "F-B30",
+                "rowId": "B",
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "31",
+                "id": "F-B31",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "32",
+                "maxCoils": 3,
+                "rowId": "B",
+                "buildingId": "F",
+                "id": "F-B32",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "B",
+                "basketNo": "33",
+                "maxCapacityKg": 2500,
+                "id": "F-B33"
+              },
+              {
+                "rowId": "B",
+                "basketNo": "34",
+                "id": "F-B34",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "35",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "F-B35"
+              },
+              {
+                "rowId": "B",
+                "maxCoils": 3,
+                "basketNo": "36",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-B36"
+              },
+              {
+                "id": "F-B37",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "B",
+                "basketNo": "37",
+                "maxCoils": 3
+              },
+              {
+                "id": "F-B38",
+                "rowId": "B",
+                "basketNo": "38",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-B39",
+                "basketNo": "39",
+                "maxCoils": 3,
+                "rowId": "B",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "basketNo": "40",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "F-B40",
+                "rowId": "B",
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "41",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "F-B41"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-B42",
+                "rowId": "B",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "42"
+              },
+              {
+                "id": "F-B43",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "basketNo": "43",
+                "maxCoils": 3,
+                "rowId": "B"
+              },
+              {
+                "rowId": "B",
+                "buildingId": "F",
+                "basketNo": "44",
+                "id": "F-B44",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "45",
+                "maxCoils": 3,
+                "rowId": "B",
+                "id": "F-B45",
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "46",
+                "maxCoils": 3,
+                "rowId": "B",
+                "id": "F-B46",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-B47",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "basketNo": "47",
+                "rowId": "B",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "48",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "id": "F-B48"
+              },
+              {
+                "buildingId": "F",
+                "basketNo": "49",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "F-B49",
+                "rowId": "B"
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "50",
+                "id": "F-B50",
+                "rowId": "B"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "51",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "F-B51",
+                "buildingId": "F"
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "F-B52",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "52"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "B",
+                "basketNo": "53",
+                "id": "F-B53",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "54",
+                "maxCoils": 3,
+                "id": "F-B54",
+                "rowId": "B",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-B55",
+                "maxCapacityKg": 2500,
+                "basketNo": "55",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "B"
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-B56",
+                "basketNo": "56",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "57",
+                "id": "F-B57",
+                "buildingId": "F",
+                "rowId": "B"
+              },
+              {
+                "basketNo": "58",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B",
+                "buildingId": "F",
+                "id": "F-B58"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "59",
+                "id": "F-B59",
+                "maxCoils": 3,
+                "rowId": "B"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "60",
+                "rowId": "B",
+                "id": "F-B60",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "61",
+                "buildingId": "F",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "F-B61"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-B62",
+                "basketNo": "62",
+                "rowId": "B",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-B63",
+                "rowId": "B",
+                "basketNo": "63",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "64",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "id": "F-B64",
+                "rowId": "B",
+                "maxCapacityKg": 2500
+              }
+            ]
+          },
+          {
+            "rowId": "C",
+            "rowNameTh": "แถว C",
+            "rowNameEn": "Row C",
+            "baskets": [
+              {
+                "rowId": "C",
+                "buildingId": "F",
+                "id": "F-C01",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "01"
+              },
+              {
+                "buildingId": "F",
+                "basketNo": "02",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "F-C02"
+              },
+              {
+                "basketNo": "03",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "id": "F-C03",
+                "rowId": "C",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "C",
+                "id": "F-C04",
+                "basketNo": "04"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-C05",
+                "maxCoils": 3,
+                "basketNo": "05",
+                "rowId": "C"
+              },
+              {
+                "basketNo": "06",
+                "maxCoils": 3,
+                "id": "F-C06",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "F-C07",
+                "maxCoils": 3,
+                "basketNo": "07",
+                "buildingId": "F"
+              },
+              {
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "F-C08",
+                "buildingId": "F",
+                "basketNo": "08",
+                "maxCapacityKg": 2500
+              },
+              {
+                "basketNo": "09",
+                "rowId": "C",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "F-C09",
+                "buildingId": "F"
+              },
+              {
+                "maxCoils": 3,
+                "id": "F-C10",
+                "rowId": "C",
+                "basketNo": "10",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-C11",
+                "rowId": "C",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "11"
+              },
+              {
+                "basketNo": "12",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "C",
+                "id": "F-C12",
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-C13",
+                "buildingId": "F",
+                "basketNo": "13",
+                "maxCoils": 3,
+                "rowId": "C"
+              },
+              {
+                "id": "F-C14",
+                "buildingId": "F",
+                "basketNo": "14",
+                "rowId": "C",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "basketNo": "15",
+                "id": "F-C15"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "id": "F-C16",
+                "basketNo": "16",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "id": "F-C17",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "C",
+                "buildingId": "F",
+                "basketNo": "17"
+              },
+              {
+                "rowId": "C",
+                "basketNo": "18",
+                "id": "F-C18",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "id": "F-C19",
+                "rowId": "C",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "19"
+              },
+              {
+                "basketNo": "20",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-C20",
+                "rowId": "C"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-C21",
+                "rowId": "C",
+                "basketNo": "21",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "id": "F-C22",
+                "basketNo": "22",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "F-C23",
+                "rowId": "C",
+                "basketNo": "23"
+              },
+              {
+                "id": "F-C24",
+                "rowId": "C",
+                "basketNo": "24",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "25",
+                "id": "F-C25",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "26",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "F-C26",
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "id": "F-C27",
+                "maxCoils": 3,
+                "basketNo": "27",
+                "rowId": "C",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-C28",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "basketNo": "28",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "29",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-C29",
+                "rowId": "C"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3,
+                "id": "F-C30",
+                "rowId": "C",
+                "basketNo": "30"
+              },
+              {
+                "basketNo": "31",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "rowId": "C",
+                "id": "F-C31",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-C32",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "32",
+                "buildingId": "F",
+                "rowId": "C"
+              },
+              {
+                "basketNo": "33",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-C33",
+                "rowId": "C"
+              },
+              {
+                "basketNo": "34",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "F-C34",
+                "rowId": "C"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "35",
+                "id": "F-C35",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "rowId": "C",
+                "id": "F-C36",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "36",
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "id": "F-C37",
+                "maxCapacityKg": 2500,
+                "basketNo": "37",
+                "rowId": "C",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "C",
+                "basketNo": "38",
+                "id": "F-C38",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "F-C39",
+                "basketNo": "39"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-C40",
+                "maxCoils": 3,
+                "basketNo": "40",
+                "buildingId": "F",
+                "rowId": "C"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "41",
+                "id": "F-C41",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "42",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-C42",
+                "rowId": "C"
+              },
+              {
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "F-C43",
+                "buildingId": "F",
+                "basketNo": "43",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "44",
+                "maxCoils": 3,
+                "rowId": "C",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-C44"
+              },
+              {
+                "basketNo": "45",
+                "rowId": "C",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "id": "F-C45",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "rowId": "C",
+                "basketNo": "46",
+                "id": "F-C46",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-C47",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "basketNo": "47",
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "48",
+                "rowId": "C",
+                "buildingId": "F",
+                "id": "F-C48",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "49",
+                "id": "F-C49",
+                "rowId": "C",
+                "maxCapacityKg": 2500
+              },
+              {
+                "basketNo": "50",
+                "maxCoils": 3,
+                "rowId": "C",
+                "buildingId": "F",
+                "id": "F-C50",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-C51",
+                "basketNo": "51",
+                "rowId": "C",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "52",
+                "rowId": "C",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "id": "F-C52",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-C53",
+                "rowId": "C",
+                "buildingId": "F",
+                "basketNo": "53",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-C54",
+                "basketNo": "54",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "rowId": "C",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "55",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-C55",
+                "rowId": "C"
+              },
+              {
+                "buildingId": "F",
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "56",
+                "id": "F-C56",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "rowId": "C",
+                "id": "F-C57",
+                "maxCapacityKg": 2500,
+                "basketNo": "57",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "58",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "id": "F-C58",
+                "rowId": "C"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "59",
+                "rowId": "C",
+                "id": "F-C59"
+              },
+              {
+                "buildingId": "F",
+                "basketNo": "60",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "C",
+                "id": "F-C60"
+              },
+              {
+                "basketNo": "61",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "C",
+                "id": "F-C61",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "basketNo": "62",
+                "id": "F-C62",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "C",
+                "basketNo": "63",
+                "id": "F-C63",
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "64",
+                "id": "F-C64",
+                "rowId": "C"
+              }
+            ],
+            "descriptionTh": "โซนจัดเก็บแถว C อาคาร F"
+          },
+          {
+            "rowId": "D",
+            "baskets": [
+              {
+                "rowId": "D",
+                "id": "F-D01",
+                "basketNo": "01",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "rowId": "D",
+                "basketNo": "02",
+                "id": "F-D02",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-D03",
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "basketNo": "03",
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "04",
+                "maxCoils": 3,
+                "id": "F-D04",
+                "rowId": "D"
+              },
+              {
+                "basketNo": "05",
+                "rowId": "D",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-D05"
+              },
+              {
+                "rowId": "D",
+                "buildingId": "F",
+                "id": "F-D06",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "06"
+              },
+              {
+                "buildingId": "F",
+                "basketNo": "07",
+                "rowId": "D",
+                "id": "F-D07",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-D08",
+                "maxCoils": 3,
+                "rowId": "D",
+                "basketNo": "08",
+                "maxCapacityKg": 2500,
+                "buildingId": "F"
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "09",
+                "maxCoils": 3,
+                "rowId": "D",
+                "id": "F-D09"
+              },
+              {
+                "basketNo": "10",
+                "maxCoils": 3,
+                "id": "F-D10",
+                "buildingId": "F",
+                "rowId": "D",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-D11",
+                "rowId": "D",
+                "basketNo": "11",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "basketNo": "12",
+                "rowId": "D",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "id": "F-D12"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "13",
+                "maxCapacityKg": 2500,
+                "id": "F-D13",
+                "rowId": "D",
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "14",
+                "rowId": "D",
+                "id": "F-D14"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "15",
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-D15",
+                "rowId": "D"
+              },
+              {
+                "id": "F-D16",
+                "basketNo": "16",
+                "rowId": "D",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-D17",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "17",
+                "buildingId": "F",
+                "rowId": "D"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-D18",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "18",
+                "rowId": "D"
+              },
+              {
+                "rowId": "D",
+                "maxCoils": 3,
+                "basketNo": "19",
+                "buildingId": "F",
+                "id": "F-D19",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "maxCoils": 3,
+                "basketNo": "20",
+                "id": "F-D20",
+                "maxCapacityKg": 2500,
+                "rowId": "D"
+              },
+              {
+                "buildingId": "F",
+                "rowId": "D",
+                "id": "F-D21",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "21"
+              },
+              {
+                "id": "F-D22",
+                "maxCapacityKg": 2500,
+                "basketNo": "22",
+                "maxCoils": 3,
+                "buildingId": "F",
+                "rowId": "D"
+              },
+              {
+                "buildingId": "F",
+                "id": "F-D23",
+                "maxCoils": 3,
+                "rowId": "D",
+                "basketNo": "23",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "F-D24",
+                "maxCoils": 3,
+                "basketNo": "24",
+                "rowId": "D",
+                "buildingId": "F",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-D25",
+                "rowId": "D",
+                "basketNo": "25",
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "rowId": "D",
+                "id": "F-D26",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "26"
+              },
+              {
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "basketNo": "27",
+                "id": "F-D27",
+                "buildingId": "F",
+                "maxCoils": 3
+              },
+              {
+                "id": "F-D28",
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "28",
+                "maxCoils": 3,
+                "rowId": "D"
+              },
+              {
+                "maxCoils": 3,
+                "rowId": "D",
+                "basketNo": "29",
+                "buildingId": "F",
+                "id": "F-D29",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "30",
+                "id": "F-D30"
+              },
+              {
+                "buildingId": "F",
+                "rowId": "D",
+                "id": "F-D31",
+                "basketNo": "31",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "F-D32",
+                "basketNo": "32",
+                "rowId": "D",
+                "maxCoils": 3,
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "33",
+                "maxCoils": 3,
+                "rowId": "D",
+                "id": "F-D33",
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "F",
+                "basketNo": "34",
+                "id": "F-D34",
+                "rowId": "D"
+              },
+              {
+                "basketNo": "35",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "id": "F-D35",
+                "rowId": "D",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "id": "F-D36",
+                "rowId": "D",
+                "basketNo": "36",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "F",
+                "maxCapacityKg": 2500,
+                "basketNo": "37",
+                "maxCoils": 3,
+                "rowId": "D",
+                "id": "F-D37"
+              },
+              {
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "id": "F-D38",
+                "maxCoils": 3,
+                "basketNo": "38",
+                "buildingId": "F"
+              },
+              {
+                "id": "F-D39",
+                "buildingId": "F",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "39",
+                "rowId": "D"
+              },
+              {
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "40",
+                "buildingId": "F",
+                "rowId": "D",
+                "id": "F-D40"
+              },
+              {
+                "id": "F-D41",
+                "rowId": "D",
+                "buildingId": "F",
+                "basketNo": "41",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "F",
+                "id": "F-D42",
+                "rowId": "D",
+                "basketNo": "42",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3
+              },
+              {
+                "rowId": "D",
+                "buildingId": "F",
+                "id": "F-D43",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "43"
+              },
+              {
+                "id": "F-D44",
+                "buildingId": "F",
+                "rowId": "D",
+                "basketNo": "44",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "45",
+                "buildingId": "F",
+                "id": "F-D45",
+                "rowId": "D"
+              },
+              {
+                "id": "F-D46",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "D",
+                "basketNo": "46",
+                "buildingId": "F"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "47",
+                "maxCoils": 3,
+                "rowId": "D",
+                "buildingId": "F",
+                "id": "F-D47"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "F",
+                "rowId": "D",
+                "basketNo": "48",
+                "id": "F-D48",
+                "maxCoils": 3
+              }
+            ],
+            "rowNameTh": "แถว D",
+            "rowNameEn": "Row D",
+            "descriptionTh": "โซนจัดเก็บแถว D อาคาร F"
+          }
+        ],
+        "subtitleTh": "คลังฟิล์มสลิตเกรดพรีเมียม และงานส่งมอบด่วน (High Grade Warehouse)",
+        "buildingNameEn": "Building F",
+        "buildingId": "F"
+      },
+      {
+        "buildingNameEn": "Building E9",
+        "rows": [
+          {
+            "rowNameEn": "Row A",
+            "baskets": [
+              {
+                "id": "E9-A01",
+                "basketNo": "01",
+                "rowId": "A",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "02",
+                "id": "E9-A02",
+                "rowId": "A",
+                "buildingId": "E9"
+              },
+              {
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "basketNo": "03",
+                "rowId": "A",
+                "id": "E9-A03"
+              },
+              {
+                "id": "E9-A04",
+                "rowId": "A",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "basketNo": "04",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "05",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "id": "E9-A05",
+                "rowId": "A"
+              },
+              {
+                "id": "E9-A06",
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "basketNo": "06"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "id": "E9-A07",
+                "buildingId": "E9",
+                "basketNo": "07",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "E9",
+                "id": "E9-A08",
+                "maxCoils": 3,
+                "basketNo": "08",
+                "maxCapacityKg": 2500,
+                "rowId": "A"
+              },
+              {
+                "id": "E9-A09",
+                "maxCapacityKg": 2500,
+                "basketNo": "09",
+                "rowId": "A",
+                "maxCoils": 3,
+                "buildingId": "E9"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "10",
+                "id": "E9-A10",
+                "buildingId": "E9",
+                "rowId": "A",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "E9-A11",
+                "buildingId": "E9",
+                "rowId": "A",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "11"
+              },
+              {
+                "buildingId": "E9",
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "basketNo": "12",
+                "maxCoils": 3,
+                "id": "E9-A12"
+              },
+              {
+                "rowId": "A",
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "id": "E9-A13",
+                "maxCapacityKg": 2500,
+                "basketNo": "13"
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "basketNo": "14",
+                "maxCapacityKg": 2500,
+                "id": "E9-A14",
+                "rowId": "A"
+              },
+              {
+                "buildingId": "E9",
+                "rowId": "A",
+                "basketNo": "15",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "E9-A15"
+              },
+              {
+                "buildingId": "E9",
+                "basketNo": "16",
+                "maxCoils": 3,
+                "rowId": "A",
+                "id": "E9-A16",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "A",
+                "basketNo": "17",
+                "maxCoils": 3,
+                "id": "E9-A17",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "E9-A18",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "rowId": "A",
+                "basketNo": "18"
+              },
+              {
+                "buildingId": "E9",
+                "id": "E9-A19",
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "19",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "id": "E9-A20",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "basketNo": "20"
+              },
+              {
+                "rowId": "A",
+                "id": "E9-A21",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "21"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "22",
+                "buildingId": "E9",
+                "id": "E9-A22",
+                "rowId": "A"
+              }
+            ],
+            "rowNameTh": "แถว A",
+            "rowId": "A",
+            "descriptionTh": "โซนจัดเก็บแถว A อาคาร E9"
+          },
+          {
+            "rowNameTh": "แถว B",
+            "descriptionTh": "โซนจัดเก็บแถว B อาคาร E9",
+            "rowNameEn": "Row B",
+            "baskets": [
+              {
+                "id": "E9-B01",
+                "buildingId": "E9",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "01"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "02",
+                "maxCapacityKg": 2500,
+                "id": "E9-B02",
+                "buildingId": "E9",
+                "rowId": "B"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "03",
+                "rowId": "B",
+                "buildingId": "E9",
+                "id": "E9-B03",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "B",
+                "buildingId": "E9",
+                "basketNo": "04",
+                "id": "E9-B04",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "id": "E9-B05",
+                "basketNo": "05",
+                "rowId": "B",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "E9-B06",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "basketNo": "06",
+                "buildingId": "E9",
+                "maxCoils": 3
+              },
+              {
+                "id": "E9-B07",
+                "rowId": "B",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "basketNo": "07",
+                "maxCoils": 3
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "basketNo": "08",
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "id": "E9-B08"
+              },
+              {
+                "rowId": "B",
+                "basketNo": "09",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "id": "E9-B09",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "basketNo": "10",
+                "id": "E9-B10"
+              },
+              {
+                "rowId": "B",
+                "id": "E9-B11",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "11"
+              },
+              {
+                "basketNo": "12",
+                "rowId": "B",
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "E9-B12"
+              },
+              {
+                "maxCoils": 3,
+                "rowId": "B",
+                "basketNo": "13",
+                "buildingId": "E9",
+                "id": "E9-B13",
+                "maxCapacityKg": 2500
+              }
+            ],
+            "rowId": "B"
+          },
+          {
+            "baskets": [
+              {
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "basketNo": "01",
+                "id": "E9-C01",
+                "maxCapacityKg": 2500,
+                "rowId": "C"
+              },
+              {
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "02",
+                "buildingId": "E9",
+                "id": "E9-C02",
+                "rowId": "C"
+              },
+              {
+                "buildingId": "E9",
+                "basketNo": "03",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "E9-C03",
+                "rowId": "C"
+              },
+              {
+                "id": "E9-C04",
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "rowId": "C",
+                "basketNo": "04",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "05",
+                "maxCapacityKg": 2500,
+                "id": "E9-C05",
+                "buildingId": "E9"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "basketNo": "06",
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "E9-C06"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "basketNo": "07",
+                "maxCoils": 3,
+                "id": "E9-C07",
+                "buildingId": "E9"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "id": "E9-C08",
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "08"
+              },
+              {
+                "basketNo": "09",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "E9-C09"
+              },
+              {
+                "maxCoils": 3,
+                "rowId": "C",
+                "basketNo": "10",
+                "id": "E9-C10",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "11",
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "rowId": "C",
+                "id": "E9-C11"
+              },
+              {
+                "basketNo": "12",
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "E9-C12",
+                "maxCapacityKg": 2500,
+                "buildingId": "E9"
+              },
+              {
+                "basketNo": "13",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "id": "E9-C13",
+                "rowId": "C"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "14",
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "rowId": "C",
+                "id": "E9-C14"
+              },
+              {
+                "rowId": "C",
+                "basketNo": "15",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "id": "E9-C15"
+              },
+              {
+                "rowId": "C",
+                "id": "E9-C16",
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "basketNo": "16",
+                "maxCoils": 3
+              }
+            ],
+            "descriptionTh": "โซนจัดเก็บแถว C อาคาร E9",
+            "rowNameEn": "Row C",
+            "rowNameTh": "แถว C",
+            "rowId": "C"
+          },
+          {
+            "descriptionTh": "โซนจัดเก็บแถว D อาคาร E9",
+            "rowId": "D",
+            "rowNameEn": "Row D",
+            "rowNameTh": "แถว D",
+            "baskets": [
+              {
+                "id": "E9-D01",
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "01",
+                "buildingId": "E9"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "E9-D02",
+                "rowId": "D",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "basketNo": "02"
+              },
+              {
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "basketNo": "03",
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "id": "E9-D03"
+              },
+              {
+                "buildingId": "E9",
+                "rowId": "D",
+                "id": "E9-D04",
+                "maxCoils": 3,
+                "basketNo": "04",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "05",
+                "id": "E9-D05",
+                "buildingId": "E9",
+                "rowId": "D"
+              },
+              {
+                "rowId": "D",
+                "buildingId": "E9",
+                "maxCoils": 3,
+                "basketNo": "06",
+                "id": "E9-D06",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "E9",
+                "basketNo": "07",
+                "rowId": "D",
+                "maxCoils": 3,
+                "id": "E9-D07"
+              },
+              {
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "id": "E9-D08",
+                "buildingId": "E9",
+                "basketNo": "08",
+                "maxCoils": 3
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "rowId": "D",
+                "basketNo": "09",
+                "id": "E9-D09"
+              },
+              {
+                "rowId": "D",
+                "buildingId": "E9",
+                "maxCapacityKg": 2500,
+                "id": "E9-D10",
+                "basketNo": "10",
+                "maxCoils": 3
+              }
+            ]
+          }
+        ],
+        "buildingNameTh": "อาคาร E9",
+        "subtitleTh": "คลังจัดเก็บฟิล์มสลิตเกรดอุตสาหกรรมหนัก (Heavy Industrial Slit Storage)",
+        "buildingId": "E9",
+        "subtitleEn": "Heavy Industrial Slit Storage Zone"
+      },
+      {
+        "rows": [
+          {
+            "rowNameTh": "แถว A",
+            "rowNameEn": "Row A",
+            "rowId": "A",
+            "baskets": [
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "E10",
+                "id": "E10-A01",
+                "rowId": "A",
+                "maxCoils": 3,
+                "basketNo": "01"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "02",
+                "id": "E10-A02",
+                "buildingId": "E10",
+                "maxCapacityKg": 2500,
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "E10-A03",
+                "rowId": "A",
+                "buildingId": "E10",
+                "maxCoils": 3,
+                "basketNo": "03"
+              },
+              {
+                "buildingId": "E10",
+                "basketNo": "04",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "E10-A04",
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "05",
+                "id": "E10-A05",
+                "buildingId": "E10",
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "06",
+                "rowId": "A",
+                "id": "E10-A06",
+                "buildingId": "E10"
+              },
+              {
+                "basketNo": "07",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "E10",
+                "rowId": "A",
+                "id": "E10-A07"
+              },
+              {
+                "buildingId": "E10",
+                "basketNo": "08",
+                "rowId": "A",
+                "maxCoils": 3,
+                "id": "E10-A08",
+                "maxCapacityKg": 2500
+              },
+              {
+                "basketNo": "09",
+                "maxCoils": 3,
+                "rowId": "A",
+                "buildingId": "E10",
+                "id": "E10-A09",
+                "maxCapacityKg": 2500
+              },
+              {
+                "basketNo": "10",
+                "maxCoils": 3,
+                "id": "E10-A10",
+                "maxCapacityKg": 2500,
+                "buildingId": "E10",
+                "rowId": "A"
+              },
+              {
+                "basketNo": "11",
+                "rowId": "A",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "E10-A11",
+                "buildingId": "E10"
+              },
+              {
+                "id": "E10-A12",
+                "rowId": "A",
+                "maxCoils": 3,
+                "buildingId": "E10",
+                "basketNo": "12",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "buildingId": "E10",
+                "id": "E10-A13",
+                "basketNo": "13",
+                "maxCoils": 3
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "14",
+                "id": "E10-A14",
+                "buildingId": "E10",
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "E10-A15",
+                "rowId": "A",
+                "maxCoils": 3,
+                "basketNo": "15",
+                "buildingId": "E10"
+              },
+              {
+                "id": "E10-A16",
+                "buildingId": "E10",
+                "basketNo": "16",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "A"
+              },
+              {
+                "maxCoils": 3,
+                "id": "E10-A17",
+                "basketNo": "17",
+                "maxCapacityKg": 2500,
+                "buildingId": "E10",
+                "rowId": "A"
+              },
+              {
+                "buildingId": "E10",
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "basketNo": "18",
+                "id": "E10-A18",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "19",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "E10-A19",
+                "rowId": "A",
+                "buildingId": "E10"
+              },
+              {
+                "rowId": "A",
+                "id": "E10-A20",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "20",
+                "buildingId": "E10"
+              },
+              {
+                "rowId": "A",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "basketNo": "21",
+                "id": "E10-A21",
+                "buildingId": "E10"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "22",
+                "buildingId": "E10",
+                "rowId": "A",
+                "maxCoils": 3,
+                "id": "E10-A22"
+              },
+              {
+                "id": "E10-A23",
+                "basketNo": "23",
+                "maxCoils": 3,
+                "buildingId": "E10",
+                "rowId": "A",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "id": "E10-A24",
+                "basketNo": "24",
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "buildingId": "E10"
+              },
+              {
+                "buildingId": "E10",
+                "maxCoils": 3,
+                "basketNo": "25",
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "id": "E10-A25"
+              },
+              {
+                "basketNo": "26",
+                "maxCoils": 3,
+                "id": "E10-A26",
+                "buildingId": "E10",
+                "rowId": "A",
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "A",
+                "buildingId": "E10",
+                "id": "E10-A27",
+                "basketNo": "27",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "rowId": "A",
+                "maxCoils": 3,
+                "basketNo": "28",
+                "buildingId": "E10",
+                "maxCapacityKg": 2500,
+                "id": "E10-A28"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "E10-A29",
+                "maxCoils": 3,
+                "rowId": "A",
+                "basketNo": "29",
+                "buildingId": "E10"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "maxCoils": 3,
+                "id": "E10-A30",
+                "basketNo": "30",
+                "buildingId": "E10"
+              }
+            ],
+            "descriptionTh": "โซนจัดเก็บแถว A อาคาร E10"
+          },
+          {
+            "rowId": "B",
+            "rowNameEn": "Row B",
+            "descriptionTh": "โซนจัดเก็บแถว B อาคาร E10",
+            "baskets": [
+              {
+                "basketNo": "01",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "E10-B01",
+                "buildingId": "E10",
+                "rowId": "B"
+              },
+              {
+                "id": "E10-B02",
+                "basketNo": "02",
+                "rowId": "B",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "buildingId": "E10"
+              },
+              {
+                "id": "E10-B03",
+                "maxCoils": 3,
+                "basketNo": "03",
+                "buildingId": "E10",
+                "maxCapacityKg": 2500,
+                "rowId": "B"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "04",
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "E10-B04",
+                "buildingId": "E10"
+              },
+              {
+                "buildingId": "E10",
+                "rowId": "B",
+                "basketNo": "05",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "E10-B05"
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "E10",
+                "basketNo": "06",
+                "id": "E10-B06",
+                "maxCapacityKg": 2500,
+                "rowId": "B"
+              },
+              {
+                "id": "E10-B07",
+                "maxCapacityKg": 2500,
+                "basketNo": "07",
+                "maxCoils": 3,
+                "rowId": "B",
+                "buildingId": "E10"
+              },
+              {
+                "rowId": "B",
+                "id": "E10-B08",
+                "maxCapacityKg": 2500,
+                "buildingId": "E10",
+                "maxCoils": 3,
+                "basketNo": "08"
+              },
+              {
+                "id": "E10-B09",
+                "buildingId": "E10",
+                "rowId": "B",
+                "basketNo": "09",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3
+              },
+              {
+                "rowId": "B",
+                "maxCapacityKg": 2500,
+                "id": "E10-B10",
+                "buildingId": "E10",
+                "basketNo": "10",
+                "maxCoils": 3
+              }
+            ],
+            "rowNameTh": "แถว B"
+          },
+          {
+            "rowId": "C",
+            "rowNameTh": "แถว C",
+            "baskets": [
+              {
+                "id": "E10-C01",
+                "maxCapacityKg": 2500,
+                "basketNo": "01",
+                "maxCoils": 3,
+                "rowId": "C",
+                "buildingId": "E10"
+              },
+              {
+                "buildingId": "E10",
+                "basketNo": "02",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "E10-C02"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "03",
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "E10-C03",
+                "buildingId": "E10"
+              },
+              {
+                "id": "E10-C04",
+                "buildingId": "E10",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "04"
+              },
+              {
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "E10-C05",
+                "basketNo": "05",
+                "maxCapacityKg": 2500,
+                "buildingId": "E10"
+              },
+              {
+                "buildingId": "E10",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "06",
+                "id": "E10-C06"
+              },
+              {
+                "buildingId": "E10",
+                "maxCoils": 3,
+                "basketNo": "07",
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "E10-C07"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "E10",
+                "maxCoils": 3,
+                "basketNo": "08",
+                "id": "E10-C08",
+                "rowId": "C"
+              },
+              {
+                "basketNo": "09",
+                "maxCoils": 3,
+                "rowId": "C",
+                "id": "E10-C09",
+                "maxCapacityKg": 2500,
+                "buildingId": "E10"
+              },
+              {
+                "id": "E10-C10",
+                "buildingId": "E10",
+                "rowId": "C",
+                "maxCoils": 3,
+                "basketNo": "10",
+                "maxCapacityKg": 2500
+              }
+            ],
+            "descriptionTh": "โซนจัดเก็บแถว C อาคาร E10",
+            "rowNameEn": "Row C"
+          },
+          {
+            "rowId": "D",
+            "baskets": [
+              {
+                "basketNo": "01",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "D",
+                "buildingId": "E10",
+                "id": "E10-D01"
+              },
+              {
+                "id": "E10-D02",
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "basketNo": "02",
+                "maxCoils": 3,
+                "buildingId": "E10"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "03",
+                "maxCoils": 3,
+                "id": "E10-D03",
+                "rowId": "D",
+                "buildingId": "E10"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "E10",
+                "basketNo": "04",
+                "rowId": "D",
+                "id": "E10-D04",
+                "maxCoils": 3
+              },
+              {
+                "id": "E10-D05",
+                "maxCoils": 3,
+                "basketNo": "05",
+                "rowId": "D",
+                "buildingId": "E10",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "E10-D06",
+                "maxCapacityKg": 2500,
+                "basketNo": "06",
+                "maxCoils": 3,
+                "rowId": "D",
+                "buildingId": "E10"
+              },
+              {
+                "id": "E10-D07",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "D",
+                "basketNo": "07",
+                "buildingId": "E10"
+              },
+              {
+                "rowId": "D",
+                "id": "E10-D08",
+                "maxCapacityKg": 2500,
+                "basketNo": "08",
+                "buildingId": "E10",
+                "maxCoils": 3
+              },
+              {
+                "basketNo": "09",
+                "maxCoils": 3,
+                "buildingId": "E10",
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "id": "E10-D09"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "10",
+                "maxCoils": 3,
+                "rowId": "D",
+                "buildingId": "E10",
+                "id": "E10-D10"
+              }
+            ],
+            "descriptionTh": "โซนจัดเก็บแถว D อาคาร E10",
+            "rowNameTh": "แถว D",
+            "rowNameEn": "Row D"
+          }
+        ],
+        "buildingNameEn": "Building E10",
+        "buildingId": "E10",
+        "buildingNameTh": "อาคาร E10",
+        "subtitleTh": "โซนจัดเก็บและเตรียมการส่งออกฟิล์มสลิต (Export & Fast Staging Area)",
+        "subtitleEn": "Export & Fast Staging Slit Warehouse Zone"
+      },
+      {
+        "subtitleEn": "Raw Material Slit Buffer & Processing Storage",
+        "buildingNameEn": "Building I",
+        "rows": [
+          {
+            "rowId": "A",
+            "rowNameEn": "Row A",
+            "descriptionTh": "โซนจัดเก็บแถว A อาคาร I",
+            "rowNameTh": "แถว A",
+            "baskets": [
+              {
+                "maxCapacityKg": 2500,
+                "id": "I-A01",
+                "buildingId": "I",
+                "maxCoils": 3,
+                "basketNo": "01",
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "id": "I-A02",
+                "basketNo": "02",
+                "buildingId": "I",
+                "maxCoils": 3
+              },
+              {
+                "rowId": "A",
+                "maxCapacityKg": 2500,
+                "buildingId": "I",
+                "id": "I-A03",
+                "maxCoils": 3,
+                "basketNo": "03"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "rowId": "A",
+                "buildingId": "I",
+                "basketNo": "04",
+                "id": "I-A04",
+                "maxCoils": 3
+              },
+              {
+                "id": "I-A05",
+                "buildingId": "I",
+                "maxCapacityKg": 2500,
+                "basketNo": "05",
+                "rowId": "A",
+                "maxCoils": 3
+              },
+              {
+                "buildingId": "I",
+                "rowId": "A",
+                "id": "I-A06",
+                "basketNo": "06",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "buildingId": "I",
+                "id": "I-A07",
+                "rowId": "A",
+                "maxCoils": 3,
+                "basketNo": "07"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "08",
+                "buildingId": "I",
+                "rowId": "A",
+                "id": "I-A08",
+                "maxCapacityKg": 2500
+              },
+              {
+                "id": "I-A09",
+                "maxCapacityKg": 2500,
+                "basketNo": "09",
+                "buildingId": "I",
+                "maxCoils": 3,
+                "rowId": "A"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "basketNo": "10",
+                "maxCoils": 3,
+                "id": "I-A10",
+                "rowId": "A",
+                "buildingId": "I"
+              }
+            ]
+          },
+          {
+            "rowId": "B",
+            "rowNameTh": "แถว B",
+            "descriptionTh": "โซนจัดเก็บแถว B อาคาร I",
+            "baskets": [
+              {
+                "buildingId": "I",
+                "basketNo": "01",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B",
+                "id": "I-B01"
+              },
+              {
+                "buildingId": "I",
+                "id": "I-B02",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "B",
+                "basketNo": "02"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "I-B03",
+                "maxCoils": 3,
+                "basketNo": "03",
+                "buildingId": "I",
+                "rowId": "B"
+              },
+              {
+                "rowId": "B",
+                "buildingId": "I",
+                "basketNo": "04",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "I-B04"
+              },
+              {
+                "basketNo": "05",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "rowId": "B",
+                "id": "I-B05",
+                "buildingId": "I"
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "06",
+                "id": "I-B06",
+                "rowId": "B",
+                "buildingId": "I",
+                "maxCapacityKg": 2500
+              },
+              {
+                "buildingId": "I",
+                "id": "I-B07",
+                "basketNo": "07",
+                "maxCoils": 3,
+                "rowId": "B",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "I-B08",
+                "rowId": "B",
+                "maxCoils": 3,
+                "basketNo": "08",
+                "buildingId": "I"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "I-B09",
+                "basketNo": "09",
+                "buildingId": "I",
+                "rowId": "B"
+              },
+              {
+                "rowId": "B",
+                "basketNo": "10",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "id": "I-B10",
+                "buildingId": "I"
+              }
+            ],
+            "rowNameEn": "Row B"
+          },
+          {
+            "rowId": "C",
+            "baskets": [
+              {
+                "buildingId": "I",
+                "basketNo": "01",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "I-C01",
+                "rowId": "C"
+              },
+              {
+                "buildingId": "I",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "02",
+                "id": "I-C02",
+                "rowId": "C"
+              },
+              {
+                "maxCoils": 3,
+                "buildingId": "I",
+                "basketNo": "03",
+                "id": "I-C03",
+                "rowId": "C",
+                "maxCapacityKg": 2500
+              },
+              {
+                "maxCoils": 3,
+                "basketNo": "04",
+                "buildingId": "I",
+                "id": "I-C04",
+                "maxCapacityKg": 2500,
+                "rowId": "C"
+              },
+              {
+                "id": "I-C05",
+                "maxCapacityKg": 2500,
+                "rowId": "C",
+                "buildingId": "I",
+                "maxCoils": 3,
+                "basketNo": "05"
+              },
+              {
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "id": "I-C06",
+                "maxCoils": 3,
+                "basketNo": "06",
+                "buildingId": "I"
+              },
+              {
+                "rowId": "C",
+                "maxCoils": 3,
+                "id": "I-C07",
+                "basketNo": "07",
+                "maxCapacityKg": 2500,
+                "buildingId": "I"
+              },
+              {
+                "rowId": "C",
+                "basketNo": "08",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "I-C08",
+                "buildingId": "I"
+              },
+              {
+                "rowId": "C",
+                "maxCapacityKg": 2500,
+                "buildingId": "I",
+                "id": "I-C09",
+                "maxCoils": 3,
+                "basketNo": "09"
+              },
+              {
+                "id": "I-C10",
+                "basketNo": "10",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "C",
+                "buildingId": "I"
+              }
+            ],
+            "rowNameEn": "Row C",
+            "rowNameTh": "แถว C",
+            "descriptionTh": "โซนจัดเก็บแถว C อาคาร I"
+          },
+          {
+            "rowNameTh": "แถว D",
+            "descriptionTh": "โซนจัดเก็บแถว D อาคาร I",
+            "rowNameEn": "Row D",
+            "rowId": "D",
+            "baskets": [
+              {
+                "id": "I-D01",
+                "maxCapacityKg": 2500,
+                "buildingId": "I",
+                "maxCoils": 3,
+                "basketNo": "01",
+                "rowId": "D"
+              },
+              {
+                "buildingId": "I",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "I-D02",
+                "rowId": "D",
+                "basketNo": "02"
+              },
+              {
+                "maxCapacityKg": 2500,
+                "id": "I-D03",
+                "buildingId": "I",
+                "basketNo": "03",
+                "maxCoils": 3,
+                "rowId": "D"
+              },
+              {
+                "id": "I-D04",
+                "maxCoils": 3,
+                "rowId": "D",
+                "buildingId": "I",
+                "maxCapacityKg": 2500,
+                "basketNo": "04"
+              },
+              {
+                "rowId": "D",
+                "basketNo": "05",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "buildingId": "I",
+                "id": "I-D05"
+              },
+              {
+                "basketNo": "06",
+                "buildingId": "I",
+                "rowId": "D",
+                "maxCoils": 3,
+                "maxCapacityKg": 2500,
+                "id": "I-D06"
+              },
+              {
+                "basketNo": "07",
+                "buildingId": "I",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "rowId": "D",
+                "id": "I-D07"
+              },
+              {
+                "id": "I-D08",
+                "maxCapacityKg": 2500,
+                "rowId": "D",
+                "buildingId": "I",
+                "maxCoils": 3,
+                "basketNo": "08"
+              },
+              {
+                "id": "I-D09",
+                "maxCapacityKg": 2500,
+                "maxCoils": 3,
+                "basketNo": "09",
+                "buildingId": "I",
+                "rowId": "D"
+              },
+              {
+                "id": "I-D10",
+                "maxCoils": 3,
+                "basketNo": "10",
+                "rowId": "D",
+                "maxCapacityKg": 2500,
+                "buildingId": "I"
+              }
+            ]
+          }
+        ],
+        "subtitleTh": "โซนจัดเก็บฟิล์มสลิตวัตถุดิบรองรับงานแปรรูป (Raw Material Slit Buffer)",
+        "buildingId": "I",
+        "buildingNameTh": "อาคาร I"
+      }
+    ],
+    "summarySnapshot": {
+      "totalBaskets": 425,
+      "buildings": [
+        {
+          "buildingId": "H",
+          "maxCapacityTons": 2750,
+          "totalBaskets": 41,
+          "percent": 10,
+          "totalCoils": 4,
+          "spaceUsagePercent": 1,
+          "remainingSpaceTons": 2723.888,
+          "usedBaskets": 4,
+          "buildingNameTh": "อาคาร H",
+          "usedSpaceTons": 26.112
+        },
+        {
+          "remainingSpaceTons": 3111.167,
+          "usedSpaceTons": 11.833,
+          "usedBaskets": 1,
+          "maxCapacityTons": 3123,
+          "spaceUsagePercent": 0,
+          "buildingNameTh": "อาคาร F",
+          "buildingId": "F",
+          "totalBaskets": 223,
+          "percent": 0,
+          "totalCoils": 1
+        },
+        {
+          "usedSpaceTons": 14.276,
+          "buildingNameTh": "อาคาร E9",
+          "usedBaskets": 1,
+          "remainingSpaceTons": 765.724,
+          "spaceUsagePercent": 2,
+          "totalBaskets": 61,
+          "percent": 2,
+          "maxCapacityTons": 780,
+          "totalCoils": 2,
+          "buildingId": "E9"
+        },
+        {
+          "usedSpaceTons": 14.256,
+          "usedBaskets": 1,
+          "buildingId": "E10",
+          "remainingSpaceTons": 765.744,
+          "spaceUsagePercent": 2,
+          "totalCoils": 2,
+          "buildingNameTh": "อาคาร E10",
+          "totalBaskets": 60,
+          "maxCapacityTons": 780,
+          "percent": 2
+        },
+        {
+          "totalCoils": 0,
+          "usedSpaceTons": 0,
+          "buildingId": "I",
+          "remainingSpaceTons": 1140,
+          "usedBaskets": 0,
+          "buildingNameTh": "อาคาร I",
+          "percent": 0,
+          "maxCapacityTons": 1140,
+          "totalBaskets": 40,
+          "spaceUsagePercent": 0
+        }
+      ],
+      "totalMaxCapacityTons": 8573,
+      "totalCoils": 9,
+      "spacePercent": 1,
+      "totalRemainingSpaceTons": 8506.523,
+      "totalUsedSpaceTons": 66.477,
+      "basketPercent": 2,
+      "totalUsedBaskets": 7
+    }
+  },
+  "machineStagingConfig": {
+    "updatedAt": "2026-11-04T09:23:29.121Z",
+    "summarySnapshot": {
+      "all": {
+        "usedTons": 586.67,
+        "usagePercent": 8,
+        "availableMeters": 479,
+        "usedMeters": 44,
+        "totalCapacityMeters": 523,
+        "occupiedRacks": 11,
+        "maintenanceTons": 0,
+        "totalCapacityTons": 6973.33,
+        "maintenanceRacks": 0,
+        "fullRacks": 2,
+        "availableTons": 6386.67,
+        "totalRacks": 96,
+        "usedRacks": 13,
+        "maintenanceMeters": 0,
+        "totalMachines": 18,
+        "availableRacks": 83
+      },
+      "tm": {
+        "availableRacks": 72,
+        "totalCapacityTons": 5053.33,
+        "maintenanceRacks": 0,
+        "usedMeters": 0,
+        "occupiedRacks": 0,
+        "maintenanceTons": 0,
+        "maintenanceMeters": 0,
+        "totalCapacityMeters": 379,
+        "usagePercent": 0,
+        "totalRacks": 72,
+        "availableTons": 5053.33,
+        "fullRacks": 0,
+        "availableMeters": 379,
+        "usedTons": 0,
+        "usedRacks": 0,
+        "totalMachines": 14
+      },
+      "cf": {
+        "usedMeters": 44,
+        "usagePercent": 31,
+        "maintenanceMeters": 0,
+        "totalCapacityMeters": 144,
+        "totalMachines": 4,
+        "availableRacks": 11,
+        "availableTons": 1333.33,
+        "maintenanceRacks": 0,
+        "totalRacks": 24,
+        "fullRacks": 2,
+        "occupiedRacks": 11,
+        "totalCapacityTons": 1920,
+        "availableMeters": 100,
+        "usedTons": 586.67,
+        "usedRacks": 13,
+        "maintenanceTons": 0
+      }
+    },
+    "machines": [
+      {
+        "machineId": "TM01",
+        "machineCode": "TM 01",
+        "category": "pipe",
+        "descriptionTh": "ท่อกลมและท่อสี่เหลี่ยมขนาดมาตรฐาน 1/2\" - 1\"",
+        "machineNameTh": "เครื่องผลิตท่อ TM 01",
+        "racks": [
+          {
+            "rackNo": 1,
+            "usedMeters": 0,
+            "status": "available",
+            "rackId": "TM01-R01",
+            "rackNameTh": "01 TM 01",
+            "maxCapacityMm": 6000,
+            "coils": []
+          },
+          {
+            "rackNameTh": "02 TM 01",
+            "maxCapacityMm": 6000,
+            "usedMeters": 0,
+            "rackNo": 2,
+            "coils": [],
+            "status": "available",
+            "rackId": "TM01-R02"
+          },
+          {
+            "rackNameTh": "03 TM 01",
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 3,
+            "rackId": "TM01-R03",
+            "maxCapacityMm": 6000,
+            "coils": []
+          },
+          {
+            "coils": [],
+            "rackId": "TM01-R04",
+            "rackNameTh": "04 TM 01",
+            "rackNo": 4,
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "status": "available",
+            "rackNo": 5,
+            "maxCapacityMm": 6000,
+            "rackNameTh": "05 TM 01",
+            "rackId": "TM01-R05",
+            "usedMeters": 0,
+            "coils": []
+          },
+          {
+            "rackNo": 6,
+            "rackNameTh": "06 TM 01",
+            "status": "available",
+            "rackId": "TM01-R06",
+            "usedMeters": 0,
+            "coils": [],
+            "maxCapacityMm": 6000
+          }
+        ]
+      },
+      {
+        "machineCode": "TM 02",
+        "machineId": "TM02",
+        "category": "pipe",
+        "machineNameTh": "เครื่องผลิตท่อ TM 02",
+        "descriptionTh": "ท่อกลมและท่อเหลี่ยมขนาด 1\" - 1.5\"",
+        "racks": [
+          {
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "rackNameTh": "01 TM 02",
+            "rackId": "TM02-R01",
+            "rackNo": 1,
+            "status": "available",
+            "usedMeters": 0
+          },
+          {
+            "coils": [],
+            "rackId": "TM02-R02",
+            "rackNameTh": "02 TM 02",
+            "rackNo": 2,
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "usedMeters": 0
+          },
+          {
+            "status": "available",
+            "rackNo": 3,
+            "rackId": "TM02-R03",
+            "rackNameTh": "03 TM 02",
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "usedMeters": 0
+          },
+          {
+            "status": "available",
+            "usedMeters": 0,
+            "rackNo": 4,
+            "rackId": "TM02-R04",
+            "rackNameTh": "04 TM 02",
+            "coils": [],
+            "maxCapacityMm": 6000
+          },
+          {
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "rackNameTh": "05 TM 02",
+            "rackNo": 5,
+            "rackId": "TM02-R05",
+            "coils": []
+          },
+          {
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackId": "TM02-R06",
+            "rackNameTh": "06 TM 02",
+            "rackNo": 6,
+            "status": "available",
+            "usedMeters": 0
+          }
+        ]
+      },
+      {
+        "category": "pipe",
+        "machineId": "TM03",
+        "machineCode": "TM 03",
+        "racks": [
+          {
+            "rackNameTh": "01 TM 03",
+            "rackNo": 1,
+            "coils": [],
+            "status": "available",
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "rackId": "TM03-R01"
+          },
+          {
+            "rackNameTh": "02 TM 03",
+            "coils": [],
+            "rackId": "TM03-R02",
+            "status": "available",
+            "rackNo": 2,
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "status": "available",
+            "rackNo": 3,
+            "rackId": "TM03-R03",
+            "rackNameTh": "03 TM 03",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "usedMeters": 0,
+            "rackId": "TM03-R04",
+            "rackNameTh": "04 TM 03",
+            "status": "available",
+            "rackNo": 4
+          },
+          {
+            "rackNameTh": "05 TM 03",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "usedMeters": 0,
+            "rackId": "TM03-R05",
+            "rackNo": 5,
+            "status": "available"
+          },
+          {
+            "rackNo": 6,
+            "rackNameTh": "06 TM 03",
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "rackId": "TM03-R06",
+            "usedMeters": 0,
+            "coils": []
+          }
+        ],
+        "machineNameTh": "เครื่องผลิตท่อ TM 03",
+        "descriptionTh": "ท่อโครงสร้างและท่อเฟอร์นิเจอร์ 1\" - 2\""
+      },
+      {
+        "machineCode": "TM 04",
+        "descriptionTh": "ท่อเหล็กดำและท่อกัลวาไนซ์ 1.5\" - 2.5\"",
+        "machineNameTh": "เครื่องผลิตท่อ TM 04",
+        "racks": [
+          {
+            "usedMeters": 0,
+            "rackId": "TM04-R01",
+            "coils": [],
+            "status": "available",
+            "rackNo": 1,
+            "rackNameTh": "01 TM 04",
+            "maxCapacityMm": 6000
+          },
+          {
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "rackNo": 2,
+            "rackId": "TM04-R02",
+            "coils": [],
+            "rackNameTh": "02 TM 04"
+          },
+          {
+            "usedMeters": 0,
+            "rackNo": 3,
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "rackId": "TM04-R03",
+            "rackNameTh": "03 TM 04"
+          }
+        ],
+        "category": "pipe",
+        "machineId": "TM04"
+      },
+      {
+        "machineCode": "TM 05",
+        "descriptionTh": "ท่อเหล็กสี่เหลี่ยมจัตุรัส 50x50 - 75x75 มม.",
+        "machineNameTh": "เครื่องผลิตท่อ TM 05",
+        "category": "pipe",
+        "racks": [
+          {
+            "usedMeters": 0,
+            "rackNo": 1,
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "rackId": "TM05-R01",
+            "coils": [],
+            "rackNameTh": "01 TM 05"
+          },
+          {
+            "usedMeters": 0,
+            "rackNameTh": "02 TM 05",
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "rackNo": 2,
+            "rackId": "TM05-R02",
+            "coils": []
+          },
+          {
+            "coils": [],
+            "rackId": "TM05-R03",
+            "rackNameTh": "03 TM 05",
+            "rackNo": 3,
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "rackNameTh": "04 TM 05",
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "rackNo": 4,
+            "rackId": "TM05-R04",
+            "coils": [],
+            "usedMeters": 0
+          },
+          {
+            "maxCapacityMm": 6000,
+            "rackNameTh": "05 TM 05",
+            "coils": [],
+            "rackNo": 5,
+            "status": "available",
+            "usedMeters": 0,
+            "rackId": "TM05-R05"
+          },
+          {
+            "maxCapacityMm": 6000,
+            "rackNameTh": "06 TM 05",
+            "rackNo": 6,
+            "coils": [],
+            "status": "available",
+            "usedMeters": 0,
+            "rackId": "TM05-R06"
+          },
+          {
+            "rackId": "TM05-R07",
+            "status": "available",
+            "rackNameTh": "07 TM 05",
+            "coils": [],
+            "rackNo": 7,
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "coils": [],
+            "usedMeters": 0,
+            "rackId": "TM05-R08",
+            "maxCapacityMm": 6000,
+            "rackNo": 8,
+            "status": "available",
+            "rackNameTh": "08 TM 05"
+          },
+          {
+            "coils": [],
+            "rackNameTh": "09 TM 05",
+            "maxCapacityMm": 6000,
+            "rackId": "TM05-R09",
+            "usedMeters": 0,
+            "rackNo": 9,
+            "status": "available"
+          },
+          {
+            "rackNo": 10,
+            "status": "available",
+            "rackNameTh": "10 TM 05",
+            "rackId": "TM05-R10",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "rackNameTh": "11 TM 05",
+            "rackId": "TM05-R11",
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 11
+          },
+          {
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "rackNameTh": "12 TM 05",
+            "status": "available",
+            "rackNo": 12,
+            "rackId": "TM05-R12",
+            "coils": []
+          }
+        ],
+        "machineId": "TM05"
+      },
+      {
+        "racks": [
+          {
+            "maxCapacityMm": 2000,
+            "rackNameTh": "01 TM 06",
+            "rackNo": 1,
+            "coils": [],
+            "status": "available",
+            "usedMeters": 0,
+            "rackId": "TM06-R01"
+          },
+          {
+            "rackId": "TM06-R02",
+            "rackNameTh": "02 TM 06",
+            "maxCapacityMm": 2000,
+            "status": "available",
+            "coils": [],
+            "rackNo": 2,
+            "usedMeters": 0
+          }
+        ],
+        "machineId": "TM06",
+        "machineCode": "TM 06",
+        "machineNameTh": "เครื่องผลิตท่อ TM 06",
+        "descriptionTh": "ท่อเหล็กสี่เหลี่ยมผืนผ้า 50x25 - 100x50 มม.",
+        "category": "pipe"
+      },
+      {
+        "racks": [
+          {
+            "rackNameTh": "01 TM 07",
+            "status": "available",
+            "rackNo": 1,
+            "rackId": "TM07-R01",
+            "maxCapacityMm": 2000,
+            "usedMeters": 0,
+            "coils": []
+          },
+          {
+            "status": "available",
+            "rackNo": 2,
+            "rackId": "TM07-R02",
+            "rackNameTh": "02 TM 07",
+            "maxCapacityMm": 2000,
+            "coils": [],
+            "usedMeters": 0
+          }
+        ],
+        "category": "pipe",
+        "machineNameTh": "เครื่องผลิตท่อ TM 07",
+        "descriptionTh": "ท่อกลมและท่อเหลี่ยมโครงสร้างอาคาร 2\" - 3\"",
+        "machineId": "TM07",
+        "machineCode": "TM 07"
+      },
+      {
+        "descriptionTh": "ท่อโครงสร้างขนาดใหญ่ 3\" - 4\"",
+        "machineNameTh": "เครื่องผลิตท่อ TM 08",
+        "category": "pipe",
+        "machineCode": "TM 08",
+        "machineId": "TM08",
+        "racks": [
+          {
+            "coils": [],
+            "usedMeters": 0,
+            "rackId": "TM08-R01",
+            "maxCapacityMm": 6000,
+            "rackNo": 1,
+            "status": "available",
+            "rackNameTh": "01 TM 08"
+          },
+          {
+            "status": "available",
+            "rackNo": 2,
+            "rackId": "TM08-R02",
+            "maxCapacityMm": 6000,
+            "rackNameTh": "02 TM 08",
+            "usedMeters": 0,
+            "coils": []
+          },
+          {
+            "rackId": "TM08-R03",
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "coils": [],
+            "rackNameTh": "03 TM 08",
+            "rackNo": 3,
+            "usedMeters": 0
+          }
+        ]
+      },
+      {
+        "racks": [
+          {
+            "rackId": "TM09-R01",
+            "coils": [],
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "rackNo": 1,
+            "rackNameTh": "01 TM 09",
+            "usedMeters": 0
+          },
+          {
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "rackId": "TM09-R02",
+            "usedMeters": 0,
+            "rackNo": 2,
+            "status": "available",
+            "rackNameTh": "02 TM 09"
+          },
+          {
+            "rackNo": 3,
+            "status": "available",
+            "rackId": "TM09-R03",
+            "usedMeters": 0,
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackNameTh": "03 TM 09"
+          },
+          {
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "rackNo": 4,
+            "status": "available",
+            "rackId": "TM09-R04",
+            "rackNameTh": "04 TM 09"
+          },
+          {
+            "usedMeters": 0,
+            "status": "available",
+            "maxCapacityMm": 6000,
+            "rackNameTh": "05 TM 09",
+            "rackNo": 5,
+            "rackId": "TM09-R05",
+            "coils": []
+          },
+          {
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackNameTh": "06 TM 09",
+            "rackId": "TM09-R06",
+            "rackNo": 6,
+            "status": "available",
+            "usedMeters": 0
+          },
+          {
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "rackId": "TM09-R07",
+            "rackNameTh": "07 TM 09",
+            "status": "available",
+            "rackNo": 7
+          }
+        ],
+        "machineId": "TM09",
+        "machineCode": "TM 09",
+        "category": "pipe",
+        "machineNameTh": "เครื่องผลิตท่อ TM 09",
+        "descriptionTh": "ท่อเหล็กหนาพิเศษ งานอุตสาหกรรม 2.5\" - 4\""
+      },
+      {
+        "machineNameTh": "เครื่องผลิตท่อ TM 10",
+        "descriptionTh": "ท่อเหล็กโครงสร้าง 100x100 - 125x125 มม.",
+        "machineCode": "TM 10",
+        "racks": [
+          {
+            "rackNameTh": "01 TM 10",
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "usedMeters": 0,
+            "rackNo": 1,
+            "rackId": "TM10-R01",
+            "coils": []
+          },
+          {
+            "rackNo": 2,
+            "rackNameTh": "02 TM 10",
+            "status": "available",
+            "rackId": "TM10-R02",
+            "maxCapacityMm": 6000,
+            "usedMeters": 0,
+            "coils": []
+          },
+          {
+            "rackNameTh": "03 TM 10",
+            "status": "available",
+            "usedMeters": 0,
+            "rackNo": 3,
+            "rackId": "TM10-R03",
+            "coils": [],
+            "maxCapacityMm": 6000
+          },
+          {
+            "rackId": "TM10-R04",
+            "rackNameTh": "04 TM 10",
+            "status": "available",
+            "coils": [],
+            "rackNo": 4,
+            "maxCapacityMm": 6000,
+            "usedMeters": 0
+          },
+          {
+            "rackNameTh": "05 TM 10",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackId": "TM10-R05",
+            "usedMeters": 0,
+            "rackNo": 5,
+            "status": "available"
+          },
+          {
+            "usedMeters": 0,
+            "rackNo": 6,
+            "coils": [],
+            "status": "available",
+            "rackNameTh": "06 TM 10",
+            "maxCapacityMm": 6000,
+            "rackId": "TM10-R06"
+          }
+        ],
+        "category": "pipe",
+        "machineId": "TM10"
+      },
+      {
+        "descriptionTh": "ท่อกลมขนาดใหญ่ 4\" - 5\" งานชลประทาน",
+        "machineNameTh": "เครื่องผลิตท่อ TM 11",
+        "machineCode": "TM 11",
+        "category": "pipe",
+        "machineId": "TM11",
+        "racks": [
+          {
+            "rackNameTh": "01 TM 11",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackId": "TM11-R01",
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 1
+          },
+          {
+            "rackNo": 2,
+            "status": "available",
+            "usedMeters": 0,
+            "rackId": "TM11-R02",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackNameTh": "02 TM 11"
+          }
+        ]
+      },
+      {
+        "machineCode": "TM 12",
+        "machineId": "TM12",
+        "descriptionTh": "ท่อโครงสร้าง 150x150 มม. งานสะพานและอาคาร",
+        "racks": [
+          {
+            "status": "available",
+            "rackNo": 1,
+            "usedMeters": 0,
+            "rackId": "TM12-R01",
+            "rackNameTh": "01 TM 12",
+            "maxCapacityMm": 5000,
+            "coils": []
+          },
+          {
+            "maxCapacityMm": 5000,
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 2,
+            "rackId": "TM12-R02",
+            "rackNameTh": "02 TM 12",
+            "coils": []
+          },
+          {
+            "rackNameTh": "03 TM 12",
+            "status": "available",
+            "rackNo": 3,
+            "rackId": "TM12-R03",
+            "usedMeters": 0,
+            "coils": [],
+            "maxCapacityMm": 5000
+          }
+        ],
+        "machineNameTh": "เครื่องผลิตท่อ TM 12",
+        "category": "pipe"
+      },
+      {
+        "machineCode": "TM 13",
+        "machineNameTh": "เครื่องผลิตท่อ TM 13",
+        "descriptionTh": "ท่อเหล็กเหนียวความแม่นยำสูง (Precision Tube)",
+        "machineId": "TM13",
+        "category": "pipe",
+        "racks": [
+          {
+            "rackNo": 1,
+            "status": "available",
+            "usedMeters": 0,
+            "rackId": "TM13-R01",
+            "coils": [],
+            "maxCapacityMm": 5000,
+            "rackNameTh": "01 TM 13"
+          },
+          {
+            "rackNameTh": "02 TM 13",
+            "maxCapacityMm": 5000,
+            "coils": [],
+            "rackId": "TM13-R02",
+            "status": "available",
+            "rackNo": 2,
+            "usedMeters": 0
+          },
+          {
+            "usedMeters": 0,
+            "maxCapacityMm": 5000,
+            "rackNo": 3,
+            "coils": [],
+            "rackNameTh": "03 TM 13",
+            "status": "available",
+            "rackId": "TM13-R03"
+          },
+          {
+            "usedMeters": 0,
+            "coils": [],
+            "rackId": "TM13-R04",
+            "rackNameTh": "04 TM 13",
+            "status": "available",
+            "maxCapacityMm": 5000,
+            "rackNo": 4
+          }
+        ]
+      },
+      {
+        "category": "pipe",
+        "machineId": "TM14",
+        "machineCode": "TM 14",
+        "racks": [
+          {
+            "rackNo": 1,
+            "status": "available",
+            "rackNameTh": "01 TM 14",
+            "maxCapacityMm": 3000,
+            "rackId": "TM14-R01",
+            "coils": [],
+            "usedMeters": 0
+          },
+          {
+            "status": "available",
+            "rackNo": 8,
+            "rackId": "TM14-R08",
+            "usedMeters": 0,
+            "maxCapacityMm": 3000,
+            "rackNameTh": "08 TM 14",
+            "coils": []
+          },
+          {
+            "rackNo": 9,
+            "status": "available",
+            "rackNameTh": "09 TM 14",
+            "rackId": "TM14-R09",
+            "coils": [],
+            "maxCapacityMm": 3000,
+            "usedMeters": 0
+          },
+          {
+            "coils": [],
+            "rackNameTh": "10 TM 14",
+            "maxCapacityMm": 3000,
+            "rackId": "TM14-R10",
+            "status": "available",
+            "usedMeters": 0,
+            "rackNo": 10
+          },
+          {
+            "coils": [],
+            "rackId": "TM14-R11",
+            "maxCapacityMm": 3000,
+            "rackNo": 11,
+            "status": "available",
+            "rackNameTh": "11 TM 14",
+            "usedMeters": 0
+          },
+          {
+            "status": "available",
+            "rackNo": 12,
+            "rackId": "TM14-R12",
+            "usedMeters": 0,
+            "rackNameTh": "12 TM 14",
+            "coils": [],
+            "maxCapacityMm": 3000
+          },
+          {
+            "rackNameTh": "13 TM 14",
+            "usedMeters": 0,
+            "rackNo": 13,
+            "coils": [],
+            "status": "available",
+            "maxCapacityMm": 3000,
+            "rackId": "TM14-R13"
+          },
+          {
+            "rackId": "TM14-R14",
+            "status": "available",
+            "coils": [],
+            "usedMeters": 0,
+            "rackNo": 14,
+            "maxCapacityMm": 3000,
+            "rackNameTh": "14 TM 14"
+          },
+          {
+            "usedMeters": 0,
+            "rackNo": 15,
+            "status": "available",
+            "rackId": "TM14-R15",
+            "coils": [],
+            "rackNameTh": "15 TM 14",
+            "maxCapacityMm": 3000
+          },
+          {
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 16,
+            "maxCapacityMm": 3000,
+            "rackId": "TM14-R16",
+            "coils": [],
+            "rackNameTh": "16 TM 14"
+          }
+        ],
+        "descriptionTh": "ท่อเหล็กสเปกส่งออกและงานโครงสร้างขนาดใหญ่ 6\"",
+        "machineNameTh": "เครื่องผลิตท่อ TM 14"
+      },
+      {
+        "racks": [
+          {
+            "rackId": "CF01-R01",
+            "status": "occupied",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "usedMeters": 1,
+            "rackNo": 1,
+            "rackNameTh": "01 CF 1"
+          },
+          {
+            "rackNo": 2,
+            "status": "occupied",
+            "maxCapacityMm": 6000,
+            "rackId": "CF01-R02",
+            "rackNameTh": "02 CF 1",
+            "coils": [],
+            "usedMeters": 3
+          },
+          {
+            "coils": [],
+            "rackNameTh": "03 CF 1",
+            "rackId": "CF01-R03",
+            "rackNo": 3,
+            "status": "occupied",
+            "maxCapacityMm": 6000,
+            "usedMeters": 3
+          },
+          {
+            "rackNameTh": "04 CF 1",
+            "rackNo": 4,
+            "coils": [],
+            "status": "occupied",
+            "maxCapacityMm": 6000,
+            "usedMeters": 3,
+            "rackId": "CF01-R04"
+          },
+          {
+            "coils": [],
+            "rackId": "CF01-R05",
+            "rackNameTh": "05 CF 1",
+            "rackNo": 5,
+            "status": "occupied",
+            "maxCapacityMm": 6000,
+            "usedMeters": 4
+          },
+          {
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "rackNameTh": "06 CF 1",
+            "rackId": "CF01-R06",
+            "rackNo": 6,
+            "status": "occupied",
+            "usedMeters": 4
+          }
+        ],
+        "machineCode": "CF 1",
+        "machineNameTh": "เครื่องผลิตตัวซี CF 1",
+        "descriptionTh": "เหล็กโครงสร้างรูปพรรณตัวซี ขนาด 75x45 - 100x50 มม.",
+        "category": "c_channel",
+        "machineId": "CF01"
+      },
+      {
+        "machineCode": "CF 2",
+        "category": "c_channel",
+        "descriptionTh": "เหล็กโครงสร้างรูปพรรณตัวซี ขนาด 125x50 - 150x50 มม.",
+        "machineNameTh": "เครื่องผลิตตัวซี CF 2",
+        "racks": [
+          {
+            "status": "occupied",
+            "rackNo": 1,
+            "rackId": "CF02-R01",
+            "rackNameTh": "01 CF 2",
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "usedMeters": 2
+          },
+          {
+            "usedMeters": 3,
+            "coils": [],
+            "rackId": "CF02-R02",
+            "rackNo": 2,
+            "status": "occupied",
+            "maxCapacityMm": 6000,
+            "rackNameTh": "02 CF 2"
+          },
+          {
+            "coils": [],
+            "rackId": "CF02-R03",
+            "rackNo": 3,
+            "status": "full",
+            "rackNameTh": "03 CF 2",
+            "usedMeters": 6,
+            "maxCapacityMm": 6000
+          },
+          {
+            "coils": [],
+            "rackId": "CF02-R04",
+            "rackNo": 4,
+            "status": "occupied",
+            "usedMeters": 4,
+            "rackNameTh": "04 CF 2",
+            "maxCapacityMm": 6000
+          },
+          {
+            "usedMeters": 6,
+            "maxCapacityMm": 6000,
+            "rackNo": 5,
+            "coils": [],
+            "status": "full",
+            "rackNameTh": "05 CF 2",
+            "rackId": "CF02-R05"
+          },
+          {
+            "rackId": "CF02-R06",
+            "status": "occupied",
+            "maxCapacityMm": 6000,
+            "rackNameTh": "06 CF 2",
+            "rackNo": 6,
+            "coils": [],
+            "usedMeters": 3
+          }
+        ],
+        "machineId": "CF02"
+      },
+      {
+        "category": "c_channel",
+        "racks": [
+          {
+            "rackNameTh": "01 CF 4",
+            "status": "available",
+            "rackNo": 1,
+            "usedMeters": 0,
+            "rackId": "CF04-R01",
+            "coils": [],
+            "maxCapacityMm": 6000
+          },
+          {
+            "coils": [],
+            "rackNameTh": "02 CF 4",
+            "rackId": "CF04-R02",
+            "status": "available",
+            "usedMeters": 0,
+            "maxCapacityMm": 6000,
+            "rackNo": 2
+          },
+          {
+            "rackId": "CF04-R03",
+            "maxCapacityMm": 6000,
+            "rackNameTh": "03 CF 4",
+            "status": "available",
+            "coils": [],
+            "rackNo": 3,
+            "usedMeters": 0
+          },
+          {
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 4,
+            "maxCapacityMm": 6000,
+            "rackId": "CF04-R04",
+            "rackNameTh": "04 CF 4",
+            "coils": []
+          },
+          {
+            "rackNameTh": "05 CF 4",
+            "maxCapacityMm": 6000,
+            "coils": [],
+            "rackId": "CF04-R05",
+            "usedMeters": 0,
+            "status": "available",
+            "rackNo": 5
+          },
+          {
+            "rackNameTh": "06 CF 4",
+            "maxCapacityMm": 6000,
+            "rackNo": 6,
+            "status": "available",
+            "coils": [],
+            "usedMeters": 0,
+            "rackId": "CF04-R06"
+          }
+        ],
+        "descriptionTh": "เหล็กตัวซีหนาพิเศษ 150x65 - 200x75 มม.",
+        "machineNameTh": "เครื่องผลิตตัวซี CF 4",
+        "machineId": "CF04",
+        "machineCode": "CF 4"
+      },
+      {
+        "racks": [
+          {
+            "coils": [],
+            "usedMeters": 2,
+            "maxCapacityMm": 6000,
+            "rackId": "CF05-R01",
+            "status": "occupied",
+            "rackNameTh": "01 CF 5",
+            "rackNo": 1
+          },
+          {
+            "rackNameTh": "02 CF 5",
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "usedMeters": 0,
+            "rackId": "CF05-R02",
+            "rackNo": 2,
+            "status": "available"
+          },
+          {
+            "coils": [],
+            "rackId": "CF05-R03",
+            "rackNo": 3,
+            "rackNameTh": "03 CF 5",
+            "status": "available",
+            "usedMeters": 0,
+            "maxCapacityMm": 6000
+          },
+          {
+            "status": "available",
+            "rackNo": 4,
+            "rackId": "CF05-R04",
+            "maxCapacityMm": 6000,
+            "rackNameTh": "04 CF 5",
+            "usedMeters": 0,
+            "coils": []
+          },
+          {
+            "rackNameTh": "05 CF 5",
+            "usedMeters": 0,
+            "rackNo": 5,
+            "coils": [],
+            "maxCapacityMm": 6000,
+            "status": "available",
+            "rackId": "CF05-R05"
+          },
+          {
+            "maxCapacityMm": 6000,
+            "rackNameTh": "06 CF 5",
+            "coils": [],
+            "rackId": "CF05-R06",
+            "status": "available",
+            "rackNo": 6,
+            "usedMeters": 0
+          }
+        ],
+        "machineId": "CF05",
+        "descriptionTh": "เหล็กโครงสร้างตัวซี งานแปหลังคามาตรฐานสูง",
+        "machineNameTh": "เครื่องผลิตตัวซี CF 5",
+        "machineCode": "CF 5",
+        "category": "c_channel"
+      }
+    ],
+    "id": "machine_staging_state"
+  }
+}

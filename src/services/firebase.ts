@@ -62,14 +62,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   const errMsg = error instanceof Error ? error.message : String(error);
   const errCode = (error as { code?: string })?.code || "";
 
-  // Ignore transient network/offline states as Firestore automatically retries and syncs when back online
+  // Ignore transient network/offline/quota states so app continues operating smoothly with server sync
   if (
     errCode === "unavailable" ||
+    errCode === "resource-exhausted" ||
     errMsg.includes("code=unavailable") ||
+    errMsg.includes("resource-exhausted") ||
+    errMsg.includes("RESOURCE_EXHAUSTED") ||
+    errMsg.includes("Quota limit exceeded") ||
     errMsg.includes("the client is offline") ||
     errMsg.includes("Could not reach Cloud Firestore backend")
   ) {
-    console.warn("Firestore transient offline/unavailable state:", errMsg);
+    console.warn("Firestore transient offline/quota state:", errMsg);
     return;
   }
 

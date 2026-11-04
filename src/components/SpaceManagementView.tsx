@@ -512,17 +512,23 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         return;
       }
 
+      if (cloudConfig.summarySnapshot && !lastSyncedSummaryRef.current) {
+        lastSyncedSummaryRef.current = JSON.stringify(cloudConfig.summarySnapshot);
+      }
+
       if (cloudConfig.buildingMaxCapacityTons && typeof cloudConfig.buildingMaxCapacityTons === "object") {
-        const normalizedCloudCap = normalizeBuildingMaxCapacityTons(cloudConfig.buildingMaxCapacityTons);
-        saveStoredBuildingMaxCapacityTons(normalizedCloudCap, { skipCloudWrite: true });
+        const effectiveCap = saveStoredBuildingMaxCapacityTons(cloudConfig.buildingMaxCapacityTons, {
+          skipCloudWrite: true,
+          updatedAt: cloudConfig.updatedAt,
+        });
         setBuildingMaxCapacityTons((prev) => {
           const isSame =
-            prev.H === normalizedCloudCap.H &&
-            prev.F === normalizedCloudCap.F &&
-            prev.E9 === normalizedCloudCap.E9 &&
-            prev.E10 === normalizedCloudCap.E10 &&
-            prev.I === normalizedCloudCap.I;
-          return isSame ? prev : normalizedCloudCap;
+            prev.H === effectiveCap.H &&
+            prev.F === effectiveCap.F &&
+            prev.E9 === effectiveCap.E9 &&
+            prev.E10 === effectiveCap.E10 &&
+            prev.I === effectiveCap.I;
+          return isSame ? prev : effectiveCap;
         });
       }
 
@@ -703,12 +709,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       });
       return;
     }
+    const nowIso = new Date().toISOString();
     const updated = normalizeBuildingMaxCapacityTons({
       ...buildingMaxCapacityTons,
       [buildingId]: parsed,
     });
     setBuildingMaxCapacityTons(updated);
-    saveStoredBuildingMaxCapacityTons(updated, { skipCloudWrite: true });
+    saveStoredBuildingMaxCapacityTons(updated, { skipCloudWrite: true, updatedAt: nowIso });
 
     // Compute updated building summaries and combined summary snapshot immediately for atomic Cloud Firestore sync
     const updatedBuildingSummaries = spaceData.map((b) => {

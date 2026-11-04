@@ -39,6 +39,7 @@ export interface MasterBuildingLayout {
 export const STORAGE_KEY_MASTER_BASKET_LAYOUT = "tmt_wms_master_basket_layout_v1";
 export const MASTER_BASKET_LAYOUT_UPDATED_EVENT = "master-basket-layout-updated";
 export const STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS = "tmt_wms_building_max_capacity_tons_v1";
+export const STORAGE_KEY_BUILDING_MAX_CAPACITY_UPDATED_AT = "tmt_wms_building_max_capacity_updated_at_v1";
 export const BUILDING_CAPACITY_UPDATED_EVENT = "building-capacity-updated";
 
 export const BUILDING_DEFINITIONS: Array<{
@@ -131,13 +132,20 @@ export function getStoredBuildingMaxCapacityTons(): Record<BuildingId, number> {
 
 export function saveStoredBuildingMaxCapacityTons(
   capacities: Partial<Record<BuildingId, number | string>>,
-  options?: { skipCloudWrite?: boolean }
+  options?: { skipCloudWrite?: boolean; updatedAt?: string }
 ): Record<BuildingId, number> {
   const normalized = normalizeBuildingMaxCapacityTons(capacities);
   try {
     if (typeof window !== "undefined" && window.localStorage) {
+      const localUpdatedAt = window.localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_UPDATED_AT) || "";
+      if (options?.skipCloudWrite && options?.updatedAt && localUpdatedAt && options.updatedAt < localUpdatedAt) {
+        return getStoredBuildingMaxCapacityTons();
+      }
+
+      const effectiveTs = options?.updatedAt || new Date().toISOString();
       const serialized = JSON.stringify(normalized);
       localStorage.setItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS, serialized);
+      localStorage.setItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_UPDATED_AT, effectiveTs);
       window.dispatchEvent(
         new CustomEvent(BUILDING_CAPACITY_UPDATED_EVENT, {
           detail: normalized,
@@ -259,7 +267,10 @@ export function ensureWarehouseSpaceCloudSync(): void {
     }
 
     if (cloudConfig.buildingMaxCapacityTons && typeof cloudConfig.buildingMaxCapacityTons === "object") {
-      saveStoredBuildingMaxCapacityTons(cloudConfig.buildingMaxCapacityTons, { skipCloudWrite: true });
+      saveStoredBuildingMaxCapacityTons(cloudConfig.buildingMaxCapacityTons, {
+        skipCloudWrite: true,
+        updatedAt: cloudConfig.updatedAt,
+      });
     }
 
     if (Array.isArray(cloudConfig.masterLayout) && cloudConfig.masterLayout.length > 0) {

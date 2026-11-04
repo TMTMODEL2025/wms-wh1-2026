@@ -8,7 +8,7 @@ import {
   getDocs,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
-import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "../components/SlitFilmManagement";
+import type { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "../components/SlitFilmManagement";
 import type { MasterBuildingLayout } from "../data/masterBasketStorage";
 import type { MachineStagingConfig } from "../data/machineStagingStorage";
 
@@ -622,48 +622,248 @@ export interface SlitWarehouseSpaceCloudDoc {
   updatedAt: string;
 }
 
+const LOCAL_CAP_STORAGE_KEY = "tmt_wms_building_max_capacity_tons_v1";
+const LOCAL_CAP_UPDATED_AT_KEY = "tmt_wms_building_max_capacity_updated_at_v1";
+
+let isFirestoreSpaceWriteExhausted = false;
+
 /**
  * Real-time listener for Slit Warehouse Space Configuration & Summary Metrics
  * (buildingMaxCapacityTons, masterLayout, statusOverrides, summarySnapshot)
+ * Combines Express real-time API/SSE (/api/space-config) + Cloud Firestore with timestamp conflict resolution
  */
 export function subscribeToSlitSpaceConfig(
   onData: (config: SlitWarehouseSpaceCloudDoc | null) => void,
   onError?: (err: unknown) => void
 ): () => void {
+  let isDisposed = false;
+  let latestUpdatedAt = "";
+  let latestDoc: SlitWarehouseSpaceCloudDoc | null = null;
+  let apiResponded = false;
+  let firestoreResponded = false;
+
+  const mergeWithNewerLocalCapacity = (
+    docData: SlitWarehouseSpaceCloudDoc
+  ): { mergedDoc: SlitWarehouseSpaceCloudDoc; localWasNewer: boolean } => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const localCapUpdatedAt = window.localStorage.getItem(LOCAL_CAP_UPDATED_AT_KEY) || "";
+        const localCapRaw = window.localStorage.getItem(LOCAL_CAP_STORAGE_KEY);
+        const docUpdatedAt = docData.updatedAt || "";
+
+        if (localCapRaw && localCapUpdatedAt && localCapUpdatedAt > docUpdatedAt) {
+          const parsedLocalCap = JSON.parse(localCapRaw);
+          if (parsedLocalCap && typeof parsedLocalCap === "object") {
+            return {
+              mergedDoc: {
+                ...docData,
+                buildingMaxCapacityTons: {
+                  ...(docData.buildingMaxCapacityTons || {}),
+                  ...parsedLocalCap,
+                },
+                updatedAt: localCapUpdatedAt,
+              },
+              localWasNewer: true,
+            };
+          }
+        }
+      }
+    } catch {
+      // ignore localStorage read error
+    }
+    return { mergedDoc: docData, localWasNewer: false };
+  };
+
+  const handleIncomingDoc = (
+    rawDoc: SlitWarehouseSpaceCloudDoc | null,
+    source: "api" | "firestore"
+  ) => {
+    if (isDisposed) return;
+
+    if (source === "api") apiResponded = true;
+    if (source === "firestore") firestoreResponded = true;
+
+    if (!rawDoc) {
+      if (latestDoc === null && apiResponded && firestoreResponded) {
+        onData(null);
+      }
+      return;
+    }
+
+    const { mergedDoc, localWasNewer } = mergeWithNewerLocalCapacity(rawDoc);
+    const incomingTs = mergedDoc.updatedAt || "";
+
+    // Seed server state if Firestore had data that server hasn't received yet or if local was newer
+    if (source === "firestore" || localWasNewer) {
+      fetch("/api/space-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...mergedDoc,
+          seedOnly: !localWasNewer,
+        }),
+      }).catch(() => {});
+    }
+
+    if (latestDoc && latestUpdatedAt && incomingTs && incomingTs < latestUpdatedAt) {
+      // Ignore stale snapshot (e.g. older Firestore state when server/local already has newer state)
+      return;
+    }
+
+    latestDoc = {
+      ...(latestDoc || {}),
+      ...mergedDoc,
+      buildingMaxCapacityTons: {
+        ...(latestDoc?.buildingMaxCapacityTons || {}),
+        ...(mergedDoc.buildingMaxCapacityTons || {}),
+      },
+    };
+    if (incomingTs > latestUpdatedAt) {
+      latestUpdatedAt = incomingTs;
+    }
+
+    onData(latestDoc);
+  };
+
+  // 1. Initial fetch from /api/space-config
+  if (typeof window !== "undefined") {
+    fetch("/api/space-config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.warehouseSpaceConfig) {
+          handleIncomingDoc(json.warehouseSpaceConfig as SlitWarehouseSpaceCloudDoc, "api");
+        } else {
+          handleIncomingDoc(null, "api");
+        }
+      })
+      .catch(() => {
+        apiResponded = true;
+      });
+  }
+
+  // 2. Real-time Server-Sent Events (SSE) subscription + lightweight polling fallback
+  let eventSource: EventSource | null = null;
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+  if (typeof window !== "undefined" && typeof EventSource !== "undefined") {
+    try {
+      eventSource = new EventSource("/api/space-config/stream");
+      eventSource.addEventListener("warehouse_space_state", (evt: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(evt.data) as SlitWarehouseSpaceCloudDoc;
+          handleIncomingDoc(parsed, "api");
+        } catch {
+          // ignore malformed SSE event
+        }
+      });
+    } catch {
+      // ignore SSE error
+    }
+
+    pollInterval = setInterval(() => {
+      if (isDisposed) return;
+      fetch("/api/space-config", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (json?.warehouseSpaceConfig) {
+            handleIncomingDoc(json.warehouseSpaceConfig as SlitWarehouseSpaceCloudDoc, "api");
+          }
+        })
+        .catch(() => {});
+    }, 4000);
+  }
+
+  // 3. Firestore real-time listener
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     docRef,
     (snapshot) => {
       if (!snapshot.exists()) {
         if (snapshot.metadata.fromCache) {
           return;
         }
-        onData(null);
+        handleIncomingDoc(null, "firestore");
         return;
       }
-      onData(snapshot.data() as SlitWarehouseSpaceCloudDoc);
+      handleIncomingDoc(snapshot.data() as SlitWarehouseSpaceCloudDoc, "firestore");
     },
     (error) => {
+      firestoreResponded = true;
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
     }
   );
+
+  return () => {
+    isDisposed = true;
+    unsubFirestore();
+    if (eventSource) {
+      eventSource.close();
+    }
+    if (pollInterval) {
+      clearInterval(pollInterval);
+    }
+  };
 }
 
 /**
- * Save or merge Slit Warehouse Space Configuration & Summary Metrics to Cloud Firestore
+ * Save or merge Slit Warehouse Space Configuration & Summary Metrics to Server API + Cloud Firestore
  */
 export async function saveSlitSpaceConfigToCloud(
   partial: Partial<Omit<SlitWarehouseSpaceCloudDoc, "id" | "updatedAt">>
 ): Promise<void> {
+  const nowIso = new Date().toISOString();
   const payload = stripUndefinedDeep({
     id: SPACE_CONFIG_DOC_ID,
     ...partial,
-    updatedAt: new Date().toISOString(),
+    updatedAt: nowIso,
   });
+
+  if (partial.buildingMaxCapacityTons && typeof window !== "undefined" && window.localStorage) {
+    try {
+      window.localStorage.setItem(LOCAL_CAP_UPDATED_AT_KEY, nowIso);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 1. Always persist immediately to backend /api/space-config (fast & immune to Firestore daily write quota)
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/space-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn("Failed to post space-config to server API:", err);
+    }
+  }
+
+  // 2. Also sync to Cloud Firestore if daily write quota is not exhausted
+  if (isFirestoreSpaceWriteExhausted) {
+    return;
+  }
+
   try {
-    await setDoc(doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID), payload, { merge: true });
+    const writePromise = setDoc(
+      doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID),
+      payload,
+      { merge: true }
+    );
+    const timeoutPromise = new Promise<"timeout">((resolve) =>
+      setTimeout(() => resolve("timeout"), 2500)
+    );
+    const result = await Promise.race([writePromise, timeoutPromise]);
+    if (result === "timeout") {
+      // Firestore SDK is backing off due to quota exhaustion or offline state
+      isFirestoreSpaceWriteExhausted = true;
+    }
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.includes("resource-exhausted") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      isFirestoreSpaceWriteExhausted = true;
+    }
     handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
   }
 }
@@ -710,34 +910,116 @@ export interface SlitMachineStagingCloudDoc {
 }
 
 /**
- * Real-time listener for Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) in Cloud Firestore
+ * Real-time listener for Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) in Server API + Cloud Firestore
  */
 export function subscribeToSlitMachineStaging(
   onData: (docData: SlitMachineStagingCloudDoc | null) => void,
   onError?: (err: unknown) => void
 ): () => void {
+  let isDisposed = false;
+  let latestUpdatedAt = "";
+  let latestDoc: SlitMachineStagingCloudDoc | null = null;
+  let apiResponded = false;
+  let firestoreResponded = false;
+
+  const handleIncomingDoc = (
+    rawDoc: SlitMachineStagingCloudDoc | null,
+    source: "api" | "firestore"
+  ) => {
+    if (isDisposed) return;
+    if (source === "api") apiResponded = true;
+    if (source === "firestore") firestoreResponded = true;
+
+    if (!rawDoc) {
+      if (latestDoc === null && apiResponded && firestoreResponded) {
+        onData(null);
+      }
+      return;
+    }
+
+    const incomingTs = rawDoc.updatedAt || "";
+    if (source === "firestore") {
+      fetch("/api/machine-staging", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...rawDoc, seedOnly: true }),
+      }).catch(() => {});
+    }
+
+    if (latestDoc && latestUpdatedAt && incomingTs && incomingTs < latestUpdatedAt) {
+      return;
+    }
+
+    latestDoc = { ...(latestDoc || {}), ...rawDoc };
+    if (incomingTs > latestUpdatedAt) {
+      latestUpdatedAt = incomingTs;
+    }
+    onData(latestDoc);
+  };
+
+  if (typeof window !== "undefined") {
+    fetch("/api/space-config", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.machineStagingConfig) {
+          handleIncomingDoc(json.machineStagingConfig as SlitMachineStagingCloudDoc, "api");
+        } else {
+          handleIncomingDoc(null, "api");
+        }
+      })
+      .catch(() => {
+        apiResponded = true;
+      });
+  }
+
+  let eventSource: EventSource | null = null;
+  if (typeof window !== "undefined" && typeof EventSource !== "undefined") {
+    try {
+      eventSource = new EventSource("/api/space-config/stream");
+      eventSource.addEventListener("machine_staging_state", (evt: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(evt.data) as SlitMachineStagingCloudDoc;
+          handleIncomingDoc(parsed, "api");
+        } catch {
+          // ignore
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID);
-  return onSnapshot(
+  const unsubFirestore = onSnapshot(
     docRef,
     (snapshot) => {
       if (!snapshot.exists()) {
         if (snapshot.metadata.fromCache) {
           return;
         }
-        onData(null);
+        handleIncomingDoc(null, "firestore");
         return;
       }
-      onData(snapshot.data() as SlitMachineStagingCloudDoc);
+      handleIncomingDoc(snapshot.data() as SlitMachineStagingCloudDoc, "firestore");
     },
     (error) => {
+      firestoreResponded = true;
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
     }
   );
+
+  return () => {
+    isDisposed = true;
+    unsubFirestore();
+    if (eventSource) {
+      eventSource.close();
+    }
+  };
 }
 
 /**
- * Save or merge Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) state and summary snapshot to Cloud Firestore
+ * Save or merge Machine Staging Area (TM 1-14 / CF 1, 2, 4, 5) state and summary snapshot to Server API + Cloud Firestore
  */
 export async function saveSlitMachineStagingToCloud(
   partial: Partial<Omit<SlitMachineStagingCloudDoc, "id" | "updatedAt">>
@@ -747,9 +1029,41 @@ export async function saveSlitMachineStagingToCloud(
     ...partial,
     updatedAt: new Date().toISOString(),
   });
+
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/machine-staging", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn("Failed to post machine-staging to server API:", err);
+    }
+  }
+
+  if (isFirestoreSpaceWriteExhausted) {
+    return;
+  }
+
   try {
-    await setDoc(doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID), payload, { merge: true });
+    const writePromise = setDoc(
+      doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID),
+      payload,
+      { merge: true }
+    );
+    const timeoutPromise = new Promise<"timeout">((resolve) =>
+      setTimeout(() => resolve("timeout"), 2500)
+    );
+    const result = await Promise.race([writePromise, timeoutPromise]);
+    if (result === "timeout") {
+      isFirestoreSpaceWriteExhausted = true;
+    }
   } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error);
+    if (errMsg.includes("resource-exhausted") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      isFirestoreSpaceWriteExhausted = true;
+    }
     handleFirestoreError(error, OperationType.WRITE, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
   }
 }
