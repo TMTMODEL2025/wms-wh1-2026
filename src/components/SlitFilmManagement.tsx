@@ -2471,8 +2471,9 @@ export function SlitFilmManagement({
     batch?: string;
   } | null>(null);
 
-  // Search keyword in current table
+  // Search keyword & date filter in current table
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [historyDateFilter, setHistoryDateFilter] = useState<string>("");
 
   // Inspect detail modal
   const [selectedRecord, setSelectedRecord] = useState<SlitBarcodeRecord | null>(null);
@@ -4982,10 +4983,33 @@ export function SlitFilmManagement({
 
   // Filtered rows for current view
   const filteredList = useMemo(() => {
-    if (!searchKeyword.trim()) return currentList;
-    const query = searchKeyword.toLowerCase();
-    return currentList.filter(
-      (r) =>
+    const extractDateYMD = (rawTs?: string): string => {
+      if (!rawTs) return "";
+      const s = rawTs.trim();
+      if (!s || s === "-") return "";
+      const mIso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (mIso) {
+        let y = parseInt(mIso[1], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${String(parseInt(mIso[2], 10)).padStart(2, "0")}-${String(parseInt(mIso[3], 10)).padStart(2, "0")}`;
+      }
+      const mDmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (mDmy) {
+        let y = parseInt(mDmy[3], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${String(parseInt(mDmy[2], 10)).padStart(2, "0")}-${String(parseInt(mDmy[1], 10)).padStart(2, "0")}`;
+      }
+      return "";
+    };
+
+    const query = searchKeyword.trim().toLowerCase();
+    return currentList.filter((r) => {
+      if (historyDateFilter) {
+        const recDateYMD = extractDateYMD(r.scanTimestamp);
+        if (recDateYMD !== historyDateFilter) return false;
+      }
+      if (!query) return true;
+      return (
         r.batch.toLowerCase().includes(query) ||
         getOrderNoForRecord(r).toLowerCase().includes(query) ||
         (r.grade || "").toLowerCase().includes(query) ||
@@ -4993,13 +5017,14 @@ export function SlitFilmManagement({
         (r.location || "").toLowerCase().includes(query) ||
         (getPreviousLocationForRecord(r) || "").toLowerCase().includes(query) ||
         (r.machine || "").toLowerCase().includes(query)
-    );
-  }, [currentList, searchKeyword, pickLists, movementHistoryList]);
+      );
+    });
+  }, [currentList, searchKeyword, historyDateFilter, pickLists, movementHistoryList]);
 
   // Calculate metrics
   const totalWeightKg = useMemo(() => {
-    return currentList.reduce((sum, item) => sum + (item.weightKg || 0), 0);
-  }, [currentList]);
+    return filteredList.reduce((sum, item) => sum + (item.weightKg || 0), 0);
+  }, [filteredList]);
 
   const totalWeightTon = (totalWeightKg / 1000).toFixed(3);
 
@@ -7241,23 +7266,56 @@ export function SlitFilmManagement({
                 </div>
               </div>
 
-              {/* Rows Per Page Selector */}
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {isThai ? "แสดง:" : "Show:"}
-                </span>
-                <select
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="px-2 py-0 h-7 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
-                >
-                  <option value={5}>5 {isThai ? "แถว/หน้า" : "/ page"}</option>
-                  <option value={10}>10 {isThai ? "แถว/หน้า" : "/ page"}</option>
-                  <option value={20}>20 {isThai ? "แถว/หน้า" : "/ page"}</option>
-                </select>
+              {/* Date Filter & Rows Per Page Selector */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <div className="flex items-center gap-1.5">
+                  <Calendar size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {isThai ? "วันที่:" : "Date:"}
+                  </span>
+                  <div className="relative flex items-center">
+                    <input
+                      type="date"
+                      value={historyDateFilter}
+                      onChange={(e) => {
+                        setHistoryDateFilter(e.target.value);
+                        setCurrentPage(1);
+                      }}
+                      className="px-2 py-0 h-7 text-xs font-mono font-bold rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                    />
+                    {historyDateFilter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHistoryDateFilter("");
+                          setCurrentPage(1);
+                        }}
+                        title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
+                        className="ml-1 p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {isThai ? "แสดง:" : "Show:"}
+                  </span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-0 h-7 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value={5}>5 {isThai ? "แถว/หน้า" : "/ page"}</option>
+                    <option value={10}>10 {isThai ? "แถว/หน้า" : "/ page"}</option>
+                    <option value={20}>20 {isThai ? "แถว/หน้า" : "/ page"}</option>
+                  </select>
+                </div>
               </div>
             </div>
 
