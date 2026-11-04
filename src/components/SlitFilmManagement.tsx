@@ -49,6 +49,7 @@ import {
   RefreshCw,
   Loader2,
   Camera,
+  Calendar,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
@@ -2684,6 +2685,7 @@ export function SlitFilmManagement({
   // Stock Balance States & Derived Lists
   const [stockSearchKeyword, setStockSearchKeyword] = useState<string>("");
   const [stockStatusFilter, setStockStatusFilter] = useState<"all" | "ready" | "preparing" | "pending_location">("all");
+  const [stockDateFilter, setStockDateFilter] = useState<string>("");
   const [stockPageSize, setStockPageSize] = useState<number>(10);
   const [stockCurrentPage, setStockCurrentPage] = useState<number>(1);
 
@@ -2726,7 +2728,7 @@ export function SlitFilmManagement({
     });
 
     // 1. Gather all batches that have been scanned as prepared in pick lists (item status is verified and not yet dispatched)
-    const preparedBatchMap = new Map<string, { orderNo: string; machineId: string }>();
+    const preparedBatchMap = new Map<string, { orderNo: string; machineId: string; createdDate?: string }>();
     pickLists.forEach((pl) => {
       (pl.items || []).forEach((item) => {
         if (!item.batch) return;
@@ -2744,6 +2746,7 @@ export function SlitFilmManagement({
             preparedBatchMap.set(bKey, {
               orderNo: pl.orderNo,
               machineId: pl.machineId,
+              createdDate: pl.createdDate,
             });
           }
         }
@@ -2798,7 +2801,7 @@ export function SlitFilmManagement({
       resultList.push({
         id: matchedInbound?.id || `SAP-STOCK-${cleanKey}`,
         mode: "inbound",
-        scanTimestamp: matchedInbound?.scanTimestamp || "-",
+        scanTimestamp: matchedInbound?.scanTimestamp || prepInfo?.createdDate || "-",
         batch: sapItem.batch,
         machine: matchedInbound?.machine || "-",
         location: matchedInbound?.location || "-",
@@ -2880,7 +2883,7 @@ export function SlitFilmManagement({
         resultList.push({
           id: `PREP-PL-${cleanKey}`,
           mode: "inbound",
-          scanTimestamp: foundItem?.scannedAt || "-",
+          scanTimestamp: prepInfo.createdDate || foundItem?.scannedAt || "-",
           batch: cleanKey,
           machine: prepInfo.machineId || "-",
           location: foundItem?.storageLocation || "รอระบุ",
@@ -2908,6 +2911,25 @@ export function SlitFilmManagement({
   }, [inboundList, sapMasterMap, pickLists, outboundList, movementHistoryList]);
 
   const filteredStockList = useMemo(() => {
+    const extractDateYMD = (rawTs?: string): string => {
+      if (!rawTs) return "";
+      const s = rawTs.trim();
+      if (!s || s === "-") return "";
+      const mIso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (mIso) {
+        let y = parseInt(mIso[1], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${String(parseInt(mIso[2], 10)).padStart(2, "0")}-${String(parseInt(mIso[3], 10)).padStart(2, "0")}`;
+      }
+      const mDmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (mDmy) {
+        let y = parseInt(mDmy[3], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${String(parseInt(mDmy[2], 10)).padStart(2, "0")}-${String(parseInt(mDmy[1], 10)).padStart(2, "0")}`;
+      }
+      return "";
+    };
+
     return stockList.filter((item) => {
       const locStr = (item.location || "").trim();
       const isPendingLocationItem =
@@ -2920,6 +2942,11 @@ export function SlitFilmManagement({
       if (stockStatusFilter === "ready" && (item.stockStatus !== "ready" || isPendingLocationItem)) return false;
       if (stockStatusFilter === "preparing" && item.stockStatus !== "preparing") return false;
       if (stockStatusFilter === "pending_location" && !isPendingLocationItem) return false;
+
+      if (stockDateFilter) {
+        const itemDateYMD = extractDateYMD(item.scanTimestamp);
+        if (itemDateYMD !== stockDateFilter) return false;
+      }
 
       if (stockSearchKeyword.trim()) {
         const q = stockSearchKeyword.toLowerCase();
@@ -2936,7 +2963,7 @@ export function SlitFilmManagement({
 
       return true;
     });
-  }, [stockList, stockStatusFilter, stockSearchKeyword]);
+  }, [stockList, stockStatusFilter, stockDateFilter, stockSearchKeyword]);
 
   const stockTotalWeightKg = useMemo(() => {
     return filteredStockList.reduce((sum, item) => sum + (sanitizeWeightKg(item.weightKg, item.unrestricted) || 0), 0);
@@ -7816,8 +7843,37 @@ export function SlitFilmManagement({
               )}
             </div>
 
-            {/* Filter Dropdown & Page Size */}
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            {/* Date Filter, Status Filter Dropdown & Page Size */}
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <Calendar size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{isThai ? "วันที่:" : "Date:"}</span>
+                <div className="relative flex items-center">
+                  <input
+                    type="date"
+                    value={stockDateFilter}
+                    onChange={(e) => {
+                      setStockDateFilter(e.target.value);
+                      setStockCurrentPage(1);
+                    }}
+                    className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  />
+                  {stockDateFilter && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStockDateFilter("");
+                        setStockCurrentPage(1);
+                      }}
+                      title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
+                      className="ml-1 p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
                 <span>{isThai ? "สถานะ:" : "Status:"}</span>
                 <select
