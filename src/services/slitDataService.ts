@@ -635,6 +635,9 @@ export function subscribeToSlitSpaceConfig(
     docRef,
     (snapshot) => {
       if (!snapshot.exists()) {
+        if (snapshot.metadata.fromCache) {
+          return;
+        }
         onData(null);
         return;
       }
@@ -718,6 +721,9 @@ export function subscribeToSlitMachineStaging(
     docRef,
     (snapshot) => {
       if (!snapshot.exists()) {
+        if (snapshot.metadata.fromCache) {
+          return;
+        }
         onData(null);
         return;
       }

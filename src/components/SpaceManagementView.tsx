@@ -46,6 +46,11 @@ import {
   ensureBasketInMasterLayout,
   STORAGE_KEY_MASTER_BASKET_LAYOUT,
   MASTER_BASKET_LAYOUT_UPDATED_EVENT,
+  STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS,
+  BUILDING_CAPACITY_UPDATED_EVENT,
+  getStoredBuildingMaxCapacityTons,
+  saveStoredBuildingMaxCapacityTons,
+  normalizeBuildingMaxCapacityTons,
   BuildingId,
 } from "../data/masterBasketStorage";
 import type { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
@@ -498,23 +503,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     const unsubSpaceConfig = subscribeToSlitSpaceConfig((cloudConfig) => {
       setIsSpaceConfigLoaded(true);
       if (!cloudConfig) {
-        // Seed initial space configuration to Cloud Firestore if not yet created
-        let initialCap: Record<"H" | "F" | "E9" | "E10" | "I", number> = {
-          H: 8000,
-          F: 8000,
-          E9: 8000,
-          E10: 8000,
-          I: 8000,
-        };
-        try {
-          const saved = localStorage.getItem("tmt_wms_building_max_capacity_tons_v1");
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (parsed && typeof parsed === "object") {
-              initialCap = { ...initialCap, ...parsed };
-            }
-          }
-        } catch {}
+        const initialCap = getStoredBuildingMaxCapacityTons();
         saveSlitSpaceConfigToCloud({
           buildingMaxCapacityTons: initialCap,
           masterLayout: getStoredMasterBasketLayout(),
@@ -524,13 +513,16 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       }
 
       if (cloudConfig.buildingMaxCapacityTons && typeof cloudConfig.buildingMaxCapacityTons === "object") {
+        const normalizedCloudCap = normalizeBuildingMaxCapacityTons(cloudConfig.buildingMaxCapacityTons);
+        saveStoredBuildingMaxCapacityTons(normalizedCloudCap, { skipCloudWrite: true });
         setBuildingMaxCapacityTons((prev) => {
-          const next = { ...prev, ...cloudConfig.buildingMaxCapacityTons };
-          if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
-          try {
-            localStorage.setItem("tmt_wms_building_max_capacity_tons_v1", JSON.stringify(next));
-          } catch {}
-          return next;
+          const isSame =
+            prev.H === normalizedCloudCap.H &&
+            prev.F === normalizedCloudCap.F &&
+            prev.E9 === normalizedCloudCap.E9 &&
+            prev.E10 === normalizedCloudCap.E10 &&
+            prev.I === normalizedCloudCap.I;
+          return isSame ? prev : normalizedCloudCap;
         });
       }
 
@@ -545,12 +537,49 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         });
       }
     });
+
+    const handleCapacitySyncEvent = (e: Event) => {
+      const customEvt = e as CustomEvent<Record<BuildingId, number>>;
+      const nextCap = customEvt.detail
+        ? normalizeBuildingMaxCapacityTons(customEvt.detail)
+        : getStoredBuildingMaxCapacityTons();
+      setBuildingMaxCapacityTons((prev) => {
+        const isSame =
+          prev.H === nextCap.H &&
+          prev.F === nextCap.F &&
+          prev.E9 === nextCap.E9 &&
+          prev.E10 === nextCap.E10 &&
+          prev.I === nextCap.I;
+        return isSame ? prev : nextCap;
+      });
+    };
+
+    const handleStorageEvent = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS) {
+        const nextCap = getStoredBuildingMaxCapacityTons();
+        setBuildingMaxCapacityTons((prev) => {
+          const isSame =
+            prev.H === nextCap.H &&
+            prev.F === nextCap.F &&
+            prev.E9 === nextCap.E9 &&
+            prev.E10 === nextCap.E10 &&
+            prev.I === nextCap.I;
+          return isSame ? prev : nextCap;
+        });
+      }
+    };
+
+    window.addEventListener(BUILDING_CAPACITY_UPDATED_EVENT, handleCapacitySyncEvent);
+    window.addEventListener("storage", handleStorageEvent);
+
     return () => {
       unsubIn();
       unsubOut();
       unsubPick();
       unsubSap();
       unsubSpaceConfig();
+      window.removeEventListener(BUILDING_CAPACITY_UPDATED_EVENT, handleCapacitySyncEvent);
+      window.removeEventListener("storage", handleStorageEvent);
     };
   }, []);
 
@@ -655,26 +684,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     }
   }, [spaceData]);
 
-  // Building Max Storage Capacity (Tons) - User configurable per building & persisted in LocalStorage
-  const [buildingMaxCapacityTons, setBuildingMaxCapacityTons] = useState<Record<"H" | "F" | "E9" | "E10" | "I", number>>(() => {
-    const defaults: Record<"H" | "F" | "E9" | "E10" | "I", number> = {
-      H: 8000,
-      F: 8000,
-      E9: 8000,
-      E10: 8000,
-      I: 8000,
-    };
-    try {
-      const saved = localStorage.getItem("tmt_wms_building_max_capacity_tons_v1");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === "object") {
-          return { ...defaults, ...parsed };
-        }
-      }
-    } catch {}
-    return defaults;
-  });
+  // Building Max Storage Capacity (Tons) - User configurable per building & persisted in Cloud Firestore + LocalStorage
+  const [buildingMaxCapacityTons, setBuildingMaxCapacityTons] = useState<Record<"H" | "F" | "E9" | "E10" | "I", number>>(
+    () => getStoredBuildingMaxCapacityTons()
+  );
 
   const [editingCapacityBuildingId, setEditingCapacityBuildingId] = useState<"H" | "F" | "E9" | "E10" | "I" | null>(null);
   const [editingCapacityValue, setEditingCapacityValue] = useState<string>("");
@@ -690,15 +703,76 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       });
       return;
     }
-    const updated = {
+    const updated = normalizeBuildingMaxCapacityTons({
       ...buildingMaxCapacityTons,
       [buildingId]: parsed,
-    };
+    });
     setBuildingMaxCapacityTons(updated);
-    try {
-      localStorage.setItem("tmt_wms_building_max_capacity_tons_v1", JSON.stringify(updated));
-    } catch {}
-    saveSlitSpaceConfigToCloud({ buildingMaxCapacityTons: updated }).catch(console.error);
+    saveStoredBuildingMaxCapacityTons(updated, { skipCloudWrite: true });
+
+    // Compute updated building summaries and combined summary snapshot immediately for atomic Cloud Firestore sync
+    const updatedBuildingSummaries = spaceData.map((b) => {
+      let totalB = 0;
+      let usedB = 0;
+      let totalCoils = 0;
+      let totalInboundWeight = 0;
+      b.rows.forEach((r) => {
+        r.baskets.forEach((bk) => {
+          totalB++;
+          if (bk.status === "occupied" || bk.status === "full") usedB++;
+          totalCoils += bk.coils.length;
+          totalInboundWeight += bk.coils.reduce((sum, c) => sum + (Number(c.weightKg) || 0), 0);
+        });
+      });
+      const percent = totalB > 0 ? Math.round((usedB / totalB) * 100) : 0;
+      const maxCapacityTons = updated[b.buildingId] ?? 8000;
+      const usedSpaceTons = Number((totalInboundWeight / 1000).toFixed(3));
+      const remainingSpaceTons = Number((maxCapacityTons - usedSpaceTons).toFixed(3));
+      const spaceUsagePercent = maxCapacityTons > 0 ? Math.round((usedSpaceTons / maxCapacityTons) * 100) : 0;
+
+      return {
+        buildingId: b.buildingId,
+        buildingNameTh: b.buildingNameTh,
+        percent,
+        totalBaskets: totalB,
+        usedBaskets: usedB,
+        totalCoils,
+        maxCapacityTons,
+        usedSpaceTons,
+        remainingSpaceTons,
+        spaceUsagePercent,
+      };
+    });
+
+    const totalMaxCapacityTons = updatedBuildingSummaries.reduce((sum, b) => sum + b.maxCapacityTons, 0);
+    const totalUsedSpaceTons = Number(
+      updatedBuildingSummaries.reduce((sum, b) => sum + b.usedSpaceTons, 0).toFixed(3)
+    );
+    const totalRemainingSpaceTons = Number((totalMaxCapacityTons - totalUsedSpaceTons).toFixed(3));
+    const totalBaskets = updatedBuildingSummaries.reduce((sum, b) => sum + b.totalBaskets, 0);
+    const totalUsedBaskets = updatedBuildingSummaries.reduce((sum, b) => sum + b.usedBaskets, 0);
+    const totalCoils = updatedBuildingSummaries.reduce((sum, b) => sum + b.totalCoils, 0);
+    const basketPercent = totalBaskets > 0 ? Math.round((totalUsedBaskets / totalBaskets) * 100) : 0;
+    const spacePercent = totalMaxCapacityTons > 0 ? Math.round((totalUsedSpaceTons / totalMaxCapacityTons) * 100) : 0;
+
+    const summarySnapshot = {
+      totalMaxCapacityTons,
+      totalUsedSpaceTons,
+      totalRemainingSpaceTons,
+      totalBaskets,
+      totalUsedBaskets,
+      totalCoils,
+      basketPercent,
+      spacePercent,
+      buildings: updatedBuildingSummaries,
+    };
+    lastSyncedSummaryRef.current = JSON.stringify(summarySnapshot);
+
+    saveSlitSpaceConfigToCloud({
+      buildingMaxCapacityTons: updated,
+      summarySnapshot,
+    }).catch(console.error);
+
     setEditingCapacityBuildingId(null);
     Swal.fire({
       icon: "success",

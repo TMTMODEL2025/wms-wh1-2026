@@ -88,6 +88,154 @@ export const BUILDING_DEFINITIONS: Array<{
 const DEFAULT_ROWS = ["A", "B", "C", "D"];
 const DEFAULT_BASKETS_PER_ROW = 10;
 
+export const DEFAULT_BUILDING_MAX_CAPACITY_TONS: Record<BuildingId, number> = {
+  H: 8000,
+  F: 8000,
+  E9: 8000,
+  E10: 8000,
+  I: 8000,
+};
+
+export function normalizeBuildingMaxCapacityTons(
+  raw?: Partial<Record<BuildingId, number | string>> | null
+): Record<BuildingId, number> {
+  const result: Record<BuildingId, number> = { ...DEFAULT_BUILDING_MAX_CAPACITY_TONS };
+  if (!raw || typeof raw !== "object") return result;
+
+  (["H", "F", "E9", "E10", "I"] as BuildingId[]).forEach((bId) => {
+    const val = raw[bId];
+    if (val !== undefined && val !== null && val !== "") {
+      const num = typeof val === "number" ? val : parseFloat(String(val).replace(/,/g, "").trim());
+      if (!isNaN(num) && isFinite(num) && num >= 0) {
+        result[bId] = num;
+      }
+    }
+  });
+  return result;
+}
+
+export function getStoredBuildingMaxCapacityTons(): Record<BuildingId, number> {
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const saved = localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return normalizeBuildingMaxCapacityTons(parsed);
+      }
+    }
+  } catch (e) {
+    console.error("Failed to read building max capacity from localStorage:", e);
+  }
+  return { ...DEFAULT_BUILDING_MAX_CAPACITY_TONS };
+}
+
+export function saveStoredBuildingMaxCapacityTons(
+  capacities: Partial<Record<BuildingId, number | string>>,
+  options?: { skipCloudWrite?: boolean }
+): Record<BuildingId, number> {
+  const normalized = normalizeBuildingMaxCapacityTons(capacities);
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const serialized = JSON.stringify(normalized);
+      localStorage.setItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS, serialized);
+      window.dispatchEvent(
+        new CustomEvent(BUILDING_CAPACITY_UPDATED_EVENT, {
+          detail: normalized,
+        })
+      );
+    }
+    if (!options?.skipCloudWrite) {
+      saveSlitSpaceConfigToCloud({ buildingMaxCapacityTons: normalized }).catch(console.error);
+    }
+  } catch (e) {
+    console.error("Failed to save building max capacity:", e);
+  }
+  return normalized;
+}
+
+/**
+ * Check if a raw location string represents a valid warehouse building/basket location
+ */
+export function isValidWarehouseBasketLocation(rawLoc?: string): boolean {
+  if (!rawLoc) return false;
+  const loc = String(rawLoc).trim().toUpperCase().replace(/^อาคาร\s*/i, "").trim();
+  if (
+    !loc ||
+    loc === "-" ||
+    loc === "PENDING" ||
+    loc === "รอระบุ" ||
+    loc.includes("รอสแกน") ||
+    loc === "เตรียมออก" ||
+    loc.startsWith("เบิก") ||
+    loc.includes("เบิก") ||
+    ["CF", "ML", "ZF"].includes(loc) ||
+    /^(?:เบิก)?\s*(?:TM|CF|ML|ZF)\s*\d+/i.test(loc)
+  ) {
+    return false;
+  }
+  return /^(?:H|F|I|E-?9|E-?10)\b/i.test(loc) || /^(?:H|F|I|E-?9|E-?10)\d*\s*[-/_]?\s*O?[A-Z]/i.test(loc);
+}
+
+/**
+ * Parse a raw warehouse location string into buildingId, rowId, basketNo, and basketId
+ */
+export function parseWarehouseBasketLocation(rawLoc: string): {
+  bId: BuildingId;
+  rId: string;
+  bNo: string;
+  basketId: string;
+} {
+  let loc = String(rawLoc || "").trim().toUpperCase();
+  loc = loc.replace(/^อาคาร\s*/i, "").trim();
+
+  let bId: BuildingId = "H";
+  let rest = loc;
+
+  if (/^E-?10(?![0-9])/i.test(loc) && (loc.length <= 4 || /^E-?10[-/_ A-Z]/i.test(loc))) {
+    bId = "E10";
+    rest = loc.replace(/^E-?10\s*[-/_]?\s*/i, "");
+  } else if (/^E-?9(?![0-9])/i.test(loc) && (loc.length <= 3 || /^E-?9[-/_ A-Z]/i.test(loc))) {
+    bId = "E9";
+    rest = loc.replace(/^E-?9\s*[-/_]?\s*/i, "");
+  } else if (loc.startsWith("F")) {
+    bId = "F";
+    if (/^F\d+\s*[-/_]\s*[A-Z]/i.test(loc)) {
+      rest = loc.replace(/^F\d+\s*[-/_]\s*/i, "");
+    } else {
+      rest = loc.replace(/^F\s*[-/_]?\s*/i, "");
+    }
+  } else if (loc.startsWith("I")) {
+    bId = "I";
+    if (/^I\d+\s*[-/_]\s*[A-Z]/i.test(loc)) {
+      rest = loc.replace(/^I\d+\s*[-/_]\s*/i, "");
+    } else {
+      rest = loc.replace(/^I\s*[-/_]?\s*/i, "");
+    }
+  } else if (loc.startsWith("H")) {
+    bId = "H";
+    if (/^H\d+\s*[-/_]\s*[A-Z]/i.test(loc)) {
+      rest = loc.replace(/^H\d+\s*[-/_]\s*/i, "");
+    } else {
+      rest = loc.replace(/^H\s*[-/_]?\s*/i, "");
+    }
+  }
+
+  rest = rest.replace(/^O(?=[A-Z]\d)/i, "").trim();
+
+  const rowMatch = rest.match(/[A-Z]/);
+  const rId = rowMatch ? rowMatch[0] : "A";
+
+  const numMatch = rest.match(/\d+/);
+  const bNo = numMatch ? numMatch[0].padStart(2, "0") : "01";
+
+  return {
+    bId,
+    rId,
+    bNo,
+    basketId: `${bId}-${rId}${bNo}`,
+  };
+}
+
 let isWarehouseSpaceCloudSubscribed = false;
 let isWarehouseSpaceCloudLoaded = false;
 let lastCloudSerializedLayout = "";
@@ -99,22 +247,7 @@ export function ensureWarehouseSpaceCloudSync(): void {
   subscribeToSlitSpaceConfig((cloudConfig) => {
     isWarehouseSpaceCloudLoaded = true;
     if (!cloudConfig) {
-      let initialCap: Record<"H" | "F" | "E9" | "E10" | "I", number> = {
-        H: 8000,
-        F: 8000,
-        E9: 8000,
-        E10: 8000,
-        I: 8000,
-      };
-      try {
-        const savedCap = localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS);
-        if (savedCap) {
-          const parsed = JSON.parse(savedCap);
-          if (parsed && typeof parsed === "object") {
-            initialCap = { ...initialCap, ...parsed };
-          }
-        }
-      } catch {}
+      const initialCap = getStoredBuildingMaxCapacityTons();
       const currentLayout = getStoredMasterBasketLayout();
       lastCloudSerializedLayout = JSON.stringify(currentLayout);
       saveSlitSpaceConfigToCloud({
@@ -126,17 +259,7 @@ export function ensureWarehouseSpaceCloudSync(): void {
     }
 
     if (cloudConfig.buildingMaxCapacityTons && typeof cloudConfig.buildingMaxCapacityTons === "object") {
-      try {
-        const capStr = JSON.stringify(cloudConfig.buildingMaxCapacityTons);
-        if (localStorage.getItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS) !== capStr) {
-          localStorage.setItem(STORAGE_KEY_BUILDING_MAX_CAPACITY_TONS, capStr);
-          window.dispatchEvent(
-            new CustomEvent(BUILDING_CAPACITY_UPDATED_EVENT, {
-              detail: cloudConfig.buildingMaxCapacityTons,
-            })
-          );
-        }
-      } catch {}
+      saveStoredBuildingMaxCapacityTons(cloudConfig.buildingMaxCapacityTons, { skipCloudWrite: true });
     }
 
     if (Array.isArray(cloudConfig.masterLayout) && cloudConfig.masterLayout.length > 0) {
@@ -145,6 +268,8 @@ export function ensureWarehouseSpaceCloudSync(): void {
     }
   });
 }
+
+export const ensureMasterBasketCloudSync = ensureWarehouseSpaceCloudSync;
 
 if (typeof window !== "undefined") {
   ensureWarehouseSpaceCloudSync();
