@@ -59,6 +59,7 @@ import {
 } from "./data/officerData";
 import { Employee, Vehicle, VehicleAssignment } from "./types/officer";
 import { LanguageProvider, useLanguage, Translations } from "./contexts/LanguageContext";
+import { APP_VERSION, APP_BUILD_LABEL, APP_UPDATED_DATE } from "./config/version";
 
 interface RecordItem {
   id: number;
@@ -574,6 +575,22 @@ const CSS = `
     letter-spacing: 0.5px;
     line-height: 1;
     text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+  }
+
+  .brand-version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #38bdf8;
+    background: rgba(14, 165, 233, 0.16);
+    border: 1px solid rgba(56, 189, 248, 0.45);
+    box-shadow: 0 0 8px rgba(14, 165, 233, 0.25);
+    line-height: 1.2;
+    transform: translateY(-2px);
   }
 
   .brand-sub-row {
@@ -5234,6 +5251,12 @@ function WmsApp() {
                   <span className="brand-title-wms">WMS</span>
                   <span className="brand-divider">|</span>
                   <span className="brand-title-wh">Warehouse 1</span>
+                  <span
+                    className="brand-version-badge"
+                    title={`Version ${APP_BUILD_LABEL} • อัปเดตเมื่อ ${APP_UPDATED_DATE}`}
+                  >
+                    {APP_VERSION}
+                  </span>
                 </div>
                 <div className="brand-sub-row">
                   <span className="brand-status-badge">
@@ -5252,6 +5275,17 @@ function WmsApp() {
               <span className="topbar-sub-tag">
                 <span className="live-dot" />
                 SYSTEM ONLINE
+              </span>
+              <span
+                className="topbar-sub-tag"
+                style={{
+                  color: "#38bdf8",
+                  background: "rgba(14, 165, 233, 0.14)",
+                  borderColor: "rgba(56, 189, 248, 0.35)",
+                }}
+                title={`Version ${APP_BUILD_LABEL} • อัปเดตเมื่อ ${APP_UPDATED_DATE}`}
+              >
+                VER {APP_VERSION}
               </span>
               <span className="topbar-sub-desc hidden md:inline">คลังสินค้า 1 (Warehouse 1) • กะการทำงานปกติ</span>
               <LiveClock />
