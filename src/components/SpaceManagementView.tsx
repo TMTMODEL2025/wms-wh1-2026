@@ -503,12 +503,6 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     const unsubSpaceConfig = subscribeToSlitSpaceConfig((cloudConfig) => {
       setIsSpaceConfigLoaded(true);
       if (!cloudConfig) {
-        const initialCap = getStoredBuildingMaxCapacityTons();
-        saveSlitSpaceConfigToCloud({
-          buildingMaxCapacityTons: initialCap,
-          masterLayout: getStoredMasterBasketLayout(),
-          statusOverrides: {},
-        }).catch(console.error);
         return;
       }
 

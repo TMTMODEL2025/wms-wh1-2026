@@ -181,13 +181,62 @@ function fetchInitialSlitStateOnce(): Promise<any> {
   return initialStateFetchPromise;
 }
 
+function pollSlitStateNow(): void {
+  if (typeof window === "undefined") return;
+  fetch("/api/slit-state", { cache: "no-store" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((data) => {
+      if (!data || typeof data !== "object") return;
+      const updatedAtMap = data.updatedAtMap || {};
+      if (data.warehouseSpaceConfig) {
+        emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
+      }
+      if (data.machineStagingConfig) {
+        emitSharedEvent("machine_staging_state", data.machineStagingConfig);
+      }
+      if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
+        emitSharedEvent("slit_inbound", {
+          records: data.inboundRecords,
+          updatedAt: updatedAtMap.inbound || "",
+        });
+      }
+      if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
+        emitSharedEvent("slit_outbound", {
+          records: data.outboundRecords,
+          updatedAt: updatedAtMap.outbound || "",
+        });
+      }
+      if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
+        emitSharedEvent("slit_picklists", {
+          orders: data.pickLists,
+          updatedAt: updatedAtMap.pickLists || "",
+        });
+      }
+      if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
+        emitSharedEvent("slit_sap_updated", {
+          itemCount: data.sapItemCount,
+          updatedAt: updatedAtMap.sap || "",
+        });
+      }
+    })
+    .catch(() => {});
+}
+
 function ensureSharedRealtimeStream(): void {
   if (typeof window === "undefined") return;
 
   fetchInitialSlitStateOnce();
 
-  if (!sharedEventSource && typeof EventSource !== "undefined") {
+  const connectSse = () => {
+    if (typeof EventSource === "undefined") return;
     try {
+      if (sharedEventSource) {
+        try {
+          sharedEventSource.close();
+        } catch {
+          // ignore
+        }
+      }
       sharedEventSource = new EventSource("/api/space-config/stream");
       const events: SseEventName[] = [
         "warehouse_space_state",
@@ -208,51 +257,37 @@ function ensureSharedRealtimeStream(): void {
           }
         });
       }
+      sharedEventSource.onerror = () => {
+        if (sharedEventSource?.readyState === EventSource.CLOSED) {
+          sharedEventSource = null;
+          setTimeout(connectSse, 2500);
+        }
+      };
     } catch {
       // ignore EventSource init error
     }
+  };
+
+  if (!sharedEventSource) {
+    connectSse();
   }
 
   if (!sharedPollInterval) {
-    sharedPollInterval = setInterval(() => {
-      fetch("/api/slit-state", { cache: "no-store" })
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (!data || typeof data !== "object") return;
-          const updatedAtMap = data.updatedAtMap || {};
-          if (data.warehouseSpaceConfig) {
-            emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
+    sharedPollInterval = setInterval(pollSlitStateNow, 3000);
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") {
+          pollSlitStateNow();
+          if (!sharedEventSource || sharedEventSource.readyState === EventSource.CLOSED) {
+            connectSse();
           }
-          if (data.machineStagingConfig) {
-            emitSharedEvent("machine_staging_state", data.machineStagingConfig);
-          }
-          if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
-            emitSharedEvent("slit_inbound", {
-              records: data.inboundRecords,
-              updatedAt: updatedAtMap.inbound || "",
-            });
-          }
-          if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
-            emitSharedEvent("slit_outbound", {
-              records: data.outboundRecords,
-              updatedAt: updatedAtMap.outbound || "",
-            });
-          }
-          if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
-            emitSharedEvent("slit_picklists", {
-              orders: data.pickLists,
-              updatedAt: updatedAtMap.pickLists || "",
-            });
-          }
-          if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
-            emitSharedEvent("slit_sap_updated", {
-              itemCount: data.sapItemCount,
-              updatedAt: updatedAtMap.sap || "",
-            });
-          }
-        })
-        .catch(() => {});
-    }, 5000);
+        }
+      });
+      window.addEventListener("focus", () => {
+        pollSlitStateNow();
+      });
+    }
   }
 }
 
@@ -1230,39 +1265,6 @@ export function subscribeToSlitSpaceConfig(
   let latestUpdatedAt = "";
   let latestDoc: SlitWarehouseSpaceCloudDoc | null = null;
   let apiResponded = false;
-  let firestoreResponded = false;
-
-  const mergeWithNewerLocalCapacity = (
-    docData: SlitWarehouseSpaceCloudDoc
-  ): { mergedDoc: SlitWarehouseSpaceCloudDoc; localWasNewer: boolean } => {
-    try {
-      if (typeof window !== "undefined" && window.localStorage) {
-        const localCapUpdatedAt = window.localStorage.getItem(LOCAL_CAP_UPDATED_AT_KEY) || "";
-        const localCapRaw = window.localStorage.getItem(LOCAL_CAP_STORAGE_KEY);
-        const docUpdatedAt = docData.updatedAt || "";
-
-        if (localCapRaw && localCapUpdatedAt && localCapUpdatedAt > docUpdatedAt) {
-          const parsedLocalCap = JSON.parse(localCapRaw);
-          if (parsedLocalCap && typeof parsedLocalCap === "object") {
-            return {
-              mergedDoc: {
-                ...docData,
-                buildingMaxCapacityTons: {
-                  ...(docData.buildingMaxCapacityTons || {}),
-                  ...parsedLocalCap,
-                },
-                updatedAt: localCapUpdatedAt,
-              },
-              localWasNewer: true,
-            };
-          }
-        }
-      }
-    } catch {
-      // ignore localStorage read error
-    }
-    return { mergedDoc: docData, localWasNewer: false };
-  };
 
   const handleIncomingDoc = (
     rawDoc: SlitWarehouseSpaceCloudDoc | null,
@@ -1271,60 +1273,51 @@ export function subscribeToSlitSpaceConfig(
     if (isDisposed) return;
 
     if (source === "api") apiResponded = true;
-    if (source === "firestore") firestoreResponded = true;
 
     if (!rawDoc) {
-      if (latestDoc === null && apiResponded && firestoreResponded) {
+      if (latestDoc === null && apiResponded) {
         onData(null);
       }
       return;
     }
 
-    // If server API has already responded with live state, ignore older Firestore snapshots
-    // (since Firestore daily write quota may be exhausted while Server API has the newest cross-device state)
-    if (source === "firestore" && apiResponded && latestDoc) {
-      const fsTs = rawDoc.updatedAt || "";
-      if (!fsTs || (latestUpdatedAt && fsTs <= latestUpdatedAt)) {
+    const incomingTs = rawDoc.updatedAt || "";
+
+    // The Server API and SSE are authoritative across all devices.
+    // If we already received live server state, ignore stale or cached Firestore snapshots.
+    if (source === "firestore") {
+      if (apiResponded && latestDoc) {
+        return;
+      }
+      if (latestUpdatedAt && incomingTs && incomingTs <= latestUpdatedAt) {
         return;
       }
     }
 
-    let mergedDoc = rawDoc;
-    let localWasNewer = false;
-
-    if (source === "firestore" && !apiResponded) {
-      const res = mergeWithNewerLocalCapacity(rawDoc);
-      mergedDoc = res.mergedDoc;
-      localWasNewer = res.localWasNewer;
-    }
-
-    const incomingTs = mergedDoc.updatedAt || "";
-
-    if (source === "firestore") {
-      fetch("/api/space-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...mergedDoc,
-          seedOnly: !localWasNewer,
-        }),
-      }).catch(() => {});
-    }
-
-    if (source === "firestore" && latestDoc && latestUpdatedAt && incomingTs && incomingTs < latestUpdatedAt) {
-      return;
-    }
-
     latestDoc = {
       ...(latestDoc || {}),
-      ...mergedDoc,
+      ...rawDoc,
       buildingMaxCapacityTons: {
         ...(latestDoc?.buildingMaxCapacityTons || {}),
-        ...(mergedDoc.buildingMaxCapacityTons || {}),
+        ...(rawDoc.buildingMaxCapacityTons || {}),
       },
     };
-    if (incomingTs > latestUpdatedAt || source === "api") {
+
+    if (source === "api" || incomingTs > latestUpdatedAt) {
       latestUpdatedAt = incomingTs || new Date().toISOString();
+    }
+
+    // Sync authoritative capacities to localStorage for offline cache
+    if (latestDoc.buildingMaxCapacityTons && typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem(
+          LOCAL_CAP_STORAGE_KEY,
+          JSON.stringify(latestDoc.buildingMaxCapacityTons)
+        );
+        window.localStorage.setItem(LOCAL_CAP_UPDATED_AT_KEY, latestUpdatedAt);
+      } catch {
+        // ignore
+      }
     }
 
     onData(latestDoc);
@@ -1363,7 +1356,6 @@ export function subscribeToSlitSpaceConfig(
       handleIncomingDoc(snapshot.data() as SlitWarehouseSpaceCloudDoc, "firestore");
     },
     (error) => {
-      firestoreResponded = true;
       onError?.(error);
       handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
     }

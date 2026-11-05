@@ -90,11 +90,11 @@ const DEFAULT_ROWS = ["A", "B", "C", "D"];
 const DEFAULT_BASKETS_PER_ROW = 10;
 
 export const DEFAULT_BUILDING_MAX_CAPACITY_TONS: Record<BuildingId, number> = {
-  H: 8000,
-  F: 8000,
-  E9: 8000,
-  E10: 8000,
-  I: 8000,
+  H: 2780,
+  F: 3123,
+  E9: 780,
+  E10: 780,
+  I: 1140,
 };
 
 export function normalizeBuildingMaxCapacityTons(
@@ -250,14 +250,6 @@ export function ensureWarehouseSpaceCloudSync(): void {
   subscribeToSlitSpaceConfig((cloudConfig) => {
     isWarehouseSpaceCloudLoaded = true;
     if (!cloudConfig) {
-      const initialCap = getStoredBuildingMaxCapacityTons();
-      const currentLayout = getStoredMasterBasketLayout();
-      lastCloudSerializedLayout = JSON.stringify(currentLayout);
-      saveSlitSpaceConfigToCloud({
-        buildingMaxCapacityTons: initialCap,
-        masterLayout: currentLayout,
-        statusOverrides: {},
-      }).catch(console.error);
       return;
     }
 
