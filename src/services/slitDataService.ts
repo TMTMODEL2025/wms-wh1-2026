@@ -1294,25 +1294,31 @@ export function subscribeToSlitSpaceConfig(
       }
     }
 
-    latestDoc = {
+    const mergedCapacities: Record<"H" | "F" | "E9" | "E10" | "I", number> | undefined =
+      latestDoc?.buildingMaxCapacityTons || rawDoc.buildingMaxCapacityTons
+        ? ({
+            ...(latestDoc?.buildingMaxCapacityTons || {}),
+            ...(rawDoc.buildingMaxCapacityTons || {}),
+          } as Record<"H" | "F" | "E9" | "E10" | "I", number>)
+        : undefined;
+
+    const nextDoc: SlitWarehouseSpaceCloudDoc = {
       ...(latestDoc || {}),
       ...rawDoc,
-      buildingMaxCapacityTons: {
-        ...(latestDoc?.buildingMaxCapacityTons || {}),
-        ...(rawDoc.buildingMaxCapacityTons || {}),
-      },
+      ...(mergedCapacities ? { buildingMaxCapacityTons: mergedCapacities } : {}),
     };
+    latestDoc = nextDoc;
 
     if (source === "api" || incomingTs > latestUpdatedAt) {
       latestUpdatedAt = incomingTs || new Date().toISOString();
     }
 
     // Sync authoritative capacities to localStorage for offline cache
-    if (latestDoc.buildingMaxCapacityTons && typeof window !== "undefined" && window.localStorage) {
+    if (nextDoc.buildingMaxCapacityTons && typeof window !== "undefined" && window.localStorage) {
       try {
         window.localStorage.setItem(
           LOCAL_CAP_STORAGE_KEY,
-          JSON.stringify(latestDoc.buildingMaxCapacityTons)
+          JSON.stringify(nextDoc.buildingMaxCapacityTons)
         );
         window.localStorage.setItem(LOCAL_CAP_UPDATED_AT_KEY, latestUpdatedAt);
       } catch {
@@ -1320,7 +1326,7 @@ export function subscribeToSlitSpaceConfig(
       }
     }
 
-    onData(latestDoc);
+    onData(nextDoc);
   };
 
   const unsubSse = subscribeSharedSse("warehouse_space_state", (payload) => {
