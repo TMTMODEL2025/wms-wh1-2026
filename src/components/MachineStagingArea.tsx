@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import Swal from "sweetalert2";
 import {
+  showToast,
+  showSuccessAlert,
+  showWarningAlert,
+  showErrorAlert,
+  showConfirmDialog,
+} from "../utils/swalUtils";
+import {
   Cpu,
   Layers,
   Plus,
@@ -404,15 +411,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
       })
     );
 
-    Swal.fire({
-      icon: "success",
-      title: "เพิ่มแคร่ใหม่สำเร็จ",
-      text: `เพิ่มแคร่ ${newRackName} ความยาว 2 เมตร สำเร็จแล้ว`,
-      timer: 1500,
-      showConfirmButton: false,
-      toast: true,
-      position: "top-end"
-    });
+    showToast(`เพิ่มแคร่ ${newRackName} ความยาว 2 เมตร สำเร็จแล้ว`, "success");
   };
 
   // Handler: Adjust Rack Length (in meters)
@@ -477,89 +476,67 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
   };
 
   // Handler: Delete Rack (Only if empty)
-  const handleDeleteRack = (rackId: string) => {
+  const handleDeleteRack = async (rackId: string) => {
     const targetRack = currentMachine.racks.find((r) => r.rackId === rackId);
     if (!targetRack) return;
 
     if ((targetRack.usedMeters ?? 0) > 0) {
-      Swal.fire({
-        icon: "error",
-        title: "ไม่สามารถลบแคร่ได้",
-        text: "แคร่นี้ยังมีปริมาณการใช้งานอยู่ กรุณาปรับเป็น 0 เมตรก่อนลบ"
-      });
+      showErrorAlert(
+        "ไม่สามารถลบแคร่ได้",
+        "แคร่นี้ยังมีปริมาณการใช้งานอยู่ กรุณาปรับเป็น 0 เมตรก่อนลบ"
+      );
       return;
     }
 
     if (currentMachine.racks.length <= 1) {
-      Swal.fire({
-        icon: "warning",
-        title: "ไม่อนุญาตให้ลบ",
-        text: "แต่ละเครื่องจักรต้องมีแคร่วัตถุดิบอย่างน้อย 1 แคร่"
-      });
+      showWarningAlert(
+        "ไม่อนุญาตให้ลบ",
+        "แต่ละเครื่องจักรต้องมีแคร่วัตถุดิบอย่างน้อย 1 แคร่"
+      );
       return;
     }
 
     const rackDisplayName = formatRackName(targetRack.rackNo, currentMachine);
 
-    Swal.fire({
+    const confirmed = await showConfirmDialog({
       title: "ยืนยันลบแคร่นี้?",
       text: `ต้องการลบแคร่ ${rackDisplayName} ใช่หรือไม่?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      cancelButtonColor: "#64748b",
       confirmButtonText: "ยืนยันการลบ",
-      cancelButtonText: "ยกเลิก"
-    }).then((result) => {
-      if (result.isConfirmed) {
-        setMachines((prev) =>
-          prev.map((m) => {
-            if (m.machineId !== currentMachine.machineId) return m;
-            return {
-              ...m,
-              racks: m.racks.filter((r) => r.rackId !== rackId)
-            };
-          })
-        );
-
-        Swal.fire({
-          icon: "success",
-          title: "ลบแคร่สำเร็จ",
-          timer: 1400,
-          showConfirmButton: false,
-          toast: true,
-          position: "top-end"
-        });
-      }
+      isDestructive: true,
     });
+
+    if (confirmed) {
+      setMachines((prev) =>
+        prev.map((m) => {
+          if (m.machineId !== currentMachine.machineId) return m;
+          return {
+            ...m,
+            racks: m.racks.filter((r) => r.rackId !== rackId)
+          };
+        })
+      );
+
+      showToast("ลบแคร่สำเร็จ", "success");
+    }
   };
 
   // Handler: Reset all racks on all machines to empty
-  const handleResetAllRacksToEmpty = () => {
-    Swal.fire({
+  const handleResetAllRacksToEmpty = async () => {
+    const confirmed = await showConfirmDialog({
       title: "ล้างข้อมูลแคร่ทั้งหมด?",
       text: "ต้องการปรับปริมาณการใช้งานแคร่ทุกเครื่องให้เป็น 0 เมตร (แคร่ว่าง) ใช่หรือไม่?",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      cancelButtonColor: "#64748b",
       confirmButtonText: "ยืนยันล้างข้อมูล",
-      cancelButtonText: "ยกเลิก"
-    }).then((result) => {
-      if (result.isConfirmed) {
-        const emptyData = resetAllMachineStagingToEmpty();
-        setMachines(emptyData);
-        Swal.fire({
-          icon: "success",
-          title: "ล้างข้อมูลเรียบร้อย",
-          text: "แคร่ทุกเครื่องว่างพร้อมรับงานแล้ว",
-          timer: 1600,
-          showConfirmButton: false,
-          toast: true,
-          position: "top-end"
-        });
-      }
+      isDestructive: true,
     });
+
+    if (confirmed) {
+      const emptyData = resetAllMachineStagingToEmpty();
+      setMachines(emptyData);
+      showSuccessAlert(
+        "ล้างข้อมูลเรียบร้อย",
+        "แคร่ทุกเครื่องว่างพร้อมรับงานแล้ว"
+      );
+    }
   };
 
   // Helper: Status badge info
@@ -601,120 +578,188 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
       {/* Top Banner */}
       <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 p-3 sm:p-6 md:p-8 text-white shadow-xl border border-cyan-500/30">
         <div className="relative z-10 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-2.5 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-between sm:justify-start">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 shrink-0">
                 <Cpu size={18} className="sm:w-[26px] sm:h-[26px]" />
               </div>
               <h1 className="text-sm sm:text-xl md:text-2xl font-black text-white flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <span className="truncate">แคร่วัตถุดิบหน้าเครื่อง</span>
-                <span className="hidden sm:inline-block text-cyan-400 font-extrabold text-sm px-2.5 py-0.5 rounded-lg bg-cyan-950/90 border border-cyan-500/40 shrink-0">
-                  {currentMachine.machineNameTh}
-                </span>
               </h1>
-            </div>
-            <span className="sm:hidden text-cyan-300 font-extrabold text-[11px] px-2 py-0.5 rounded-md bg-cyan-950/90 border border-cyan-500/40 shrink-0">
-              {currentMachine.machineNameTh}
-            </span>
-          </div>
-
-          {/* Quick Overall Summary KPIs */}
-          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2 sm:gap-3 bg-white/10 backdrop-blur-md px-2.5 sm:px-4 py-1.5 sm:py-2.5 rounded-lg sm:rounded-xl border border-white/15">
-            <div className="w-full sm:w-auto sm:text-right">
-              <div className="hidden sm:block text-[11px] text-slate-300 font-medium">
-                รวมทั้งหมดทุกกลุ่ม ({allCategoriesSummary.all.totalMachines} เครื่อง · TM 1-14 & CF 1, 2, 4, 5)
-              </div>
-              <div className="text-[11px] sm:text-sm font-bold text-white flex flex-wrap items-center justify-between sm:justify-end gap-1.5 sm:gap-2">
-                <span>
-                  <span className="text-emerald-300 font-mono tabular-nums">
-                    {formatTons(allCategoriesSummary.all.usedTons)} / {formatTons(allCategoriesSummary.all.totalCapacityTons)}
-                  </span>{" "}
-                  ตัน
-                </span>
-                <span className="text-white/40">·</span>
-                <span>
-                  <span className="text-cyan-300 font-mono tabular-nums">
-                    {allCategoriesSummary.all.usedMeters} / {allCategoriesSummary.all.totalCapacityMeters}
-                  </span>{" "}
-                  เมตร
-                </span>
-                <span className="text-white/40">·</span>
-                <span>
-                  <span className="text-amber-300 font-mono tabular-nums">
-                    {allCategoriesSummary.all.usagePercent}%
-                  </span>{" "}
-                  ใช้งาน
-                </span>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* 3 Overall Summary Cards (All Machines: TM + CF) */}
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-3 mt-2.5 sm:mt-6 pt-2.5 sm:pt-6 border-t border-white/10">
-          {/* การ์ดที่ 1: จำนวนแคร่หน้าเครื่อง */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0">
-            <div className="text-slate-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
-              จำนวนแคร่หน้าเครื่อง
+        {/* 5 Overall Summary Cards (All Machines: TM + CF) */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 mt-2.5 sm:mt-6 pt-2.5 sm:pt-6 border-t border-white/10">
+          {/* การ์ดที่ 1: พื้นที่จัดเก็บทั้งหมด (ตัน) */}
+          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-slate-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
+                  พื้นที่จัดเก็บทั้งหมด (ตัน)
+                </span>
+                <span className="text-[10px] font-black font-mono tabular-nums text-cyan-300 bg-cyan-500/20 px-1.5 py-0.2 rounded border border-cyan-400/30 shrink-0">
+                  100%
+                </span>
+              </div>
+              <div className="text-xs sm:text-lg md:text-xl font-black text-white mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
+                <span className="text-cyan-300">{formatTons(allCategoriesSummary.all.totalCapacityTons)}</span>{" "}
+                <span className="font-sans text-[9.5px] sm:text-xs font-bold text-slate-200">ตัน</span>
+              </div>
             </div>
-            <div className="text-xs sm:text-lg md:text-xl font-black text-white mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
-              <span className="text-cyan-300">{formatTons(allCategoriesSummary.all.totalCapacityTons)}</span>{" "}
-              <span className="font-sans text-[9.5px] sm:text-xs font-bold text-slate-200">ตัน</span>{" "}
-              <span className="block sm:inline text-[9.5px] sm:text-sm md:text-base font-bold text-slate-200 mt-0.5 sm:mt-0">
-                ({allCategoriesSummary.all.totalRacks}{" "}
-                <span className="font-sans text-[9px] sm:text-xs font-normal text-slate-300">แคร่</span> /{" "}
-                {allCategoriesSummary.all.totalCapacityMeters}{" "}
-                <span className="font-sans text-[9px] sm:text-xs font-normal text-slate-300">ม.</span>)
-              </span>
-            </div>
-            <div className="hidden sm:block text-[10px] text-cyan-300 mt-1">
-              รวมทุกเครื่องทั้งกลุ่ม TM และ CF ({allCategoriesSummary.all.totalMachines} เครื่องจักร)
+
+            <div className="mt-2 space-y-0.5">
+              <div className="flex justify-between items-center text-[9.5px] sm:text-[10px] font-bold text-cyan-300">
+                <span>ความจุรวม</span>
+                <span>100%</span>
+              </div>
+              <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                <div className="h-full bg-cyan-400 rounded-full transition-all duration-300 w-full" />
+              </div>
             </div>
           </div>
 
-          {/* การ์ดที่ 2: ปริมาณที่ใช้งานแล้ว */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0">
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-sky-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
-                ปริมาณที่ใช้งานแล้ว
-              </span>
-              <span className="hidden sm:inline-block text-[10px] font-black font-mono tabular-nums text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-md border border-amber-400/30 shrink-0">
-                {allCategoriesSummary.all.usagePercent}%
-              </span>
+          {/* การ์ดที่ 2: พื้นที่ใช้ไป (ตัน) */}
+          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-amber-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
+                  พื้นที่ใช้ไป (ตัน)
+                </span>
+                <span className="text-[10px] font-black font-mono tabular-nums text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400/30 shrink-0">
+                  {allCategoriesSummary.all.usagePercent}%
+                </span>
+              </div>
+              <div className="text-xs sm:text-lg md:text-xl font-black text-amber-300 mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
+                <span>{formatTons(allCategoriesSummary.all.usedTons)}</span>{" "}
+                <span className="font-sans text-[9.5px] sm:text-xs font-bold text-slate-200">ตัน</span>
+              </div>
             </div>
-            <div className="text-xs sm:text-lg md:text-xl font-black text-sky-400 mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
-              <span className="text-amber-300">{formatTons(allCategoriesSummary.all.usedTons)}</span>{" "}
-              <span className="font-sans text-[9.5px] sm:text-xs font-bold text-slate-200">ตัน</span>{" "}
-              <span className="block sm:inline text-[9.5px] sm:text-sm md:text-base font-bold text-sky-200 mt-0.5 sm:mt-0">
-                ({allCategoriesSummary.all.usedRacks}{" "}
-                <span className="font-sans text-[9px] sm:text-xs font-normal text-slate-300">แคร่</span> /{" "}
-                {allCategoriesSummary.all.usedMeters}{" "}
-                <span className="font-sans text-[9px] sm:text-xs font-normal text-slate-300">ม.</span>)
-              </span>
-            </div>
-            <div className="hidden sm:block text-[10px] text-sky-200 mt-1">
-              กำลังใช้งาน {allCategoriesSummary.all.occupiedRacks} แคร่ · เต็มพิกัด {allCategoriesSummary.all.fullRacks} แคร่
+
+            <div className="mt-2 space-y-0.5">
+              <div className="flex justify-between items-center text-[9.5px] sm:text-[10px] font-bold text-amber-300">
+                <span>สัดส่วนใช้ไป</span>
+                <span>{allCategoriesSummary.all.usagePercent}%</span>
+              </div>
+              <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, allCategoriesSummary.all.usagePercent)}%` }}
+                />
+              </div>
             </div>
           </div>
 
-          {/* การ์ดที่ 3: แคร่ว่างพร้อมรับวัตถุดิบ */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0">
-            <div className="text-emerald-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
-              แคร่ว่างพร้อมรับวัตถุดิบ
+          {/* การ์ดที่ 3: พื้นที่คงเหลือ (ตัน) */}
+          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-emerald-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
+                  พื้นที่คงเหลือ (ตัน)
+                </span>
+                <span className="text-[10px] font-black font-mono tabular-nums text-emerald-300 bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-400/30 shrink-0">
+                  {Math.max(0, 100 - allCategoriesSummary.all.usagePercent)}%
+                </span>
+              </div>
+              <div className="text-xs sm:text-lg md:text-xl font-black text-emerald-400 mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
+                <span>{formatTons(allCategoriesSummary.all.availableTons)}</span>{" "}
+                <span className="font-sans text-[9.5px] sm:text-xs font-bold text-slate-200">ตัน</span>
+              </div>
             </div>
-            <div className="text-xs sm:text-lg md:text-xl font-black text-emerald-400 mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
-              <span>{formatTons(allCategoriesSummary.all.availableTons)}</span>{" "}
-              <span className="font-sans text-[9.5px] sm:text-xs font-bold text-slate-200">ตัน</span>{" "}
-              <span className="block sm:inline text-[9.5px] sm:text-sm md:text-base font-bold text-emerald-200 mt-0.5 sm:mt-0">
-                ({allCategoriesSummary.all.availableRacks}{" "}
-                <span className="font-sans text-[9px] sm:text-xs font-normal text-slate-300">แคร่</span> /{" "}
-                {allCategoriesSummary.all.availableMeters}{" "}
-                <span className="font-sans text-[9px] sm:text-xs font-normal text-slate-300">ม.</span>)
-              </span>
+
+            <div className="mt-2 space-y-0.5">
+              <div className="flex justify-between items-center text-[9.5px] sm:text-[10px] font-bold text-emerald-300">
+                <span>สัดส่วนคงเหลือ</span>
+                <span>{Math.max(0, 100 - allCategoriesSummary.all.usagePercent)}%</span>
+              </div>
+              <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-400 rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.max(0, 100 - allCategoriesSummary.all.usagePercent))}%` }}
+                />
+              </div>
             </div>
-            <div className="hidden sm:block text-[10px] text-emerald-200 mt-1">
-              พร้อมวางวัตถุดิบรวมทุกเครื่องทั้งกลุ่ม TM และ CF
-            </div>
+          </div>
+
+          {/* การ์ดที่ 4: จำนวนแคร่ทั้งหมด */}
+          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+            {(() => {
+              const rackUsagePercent = allCategoriesSummary.all.totalRacks > 0
+                ? Math.round((allCategoriesSummary.all.usedRacks / allCategoriesSummary.all.totalRacks) * 100)
+                : 0;
+              return (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-sky-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
+                        จำนวนแคร่ทั้งหมด
+                      </span>
+                      <span className="text-[10px] font-black font-mono tabular-nums text-sky-300 bg-sky-500/20 px-1.5 py-0.2 rounded border border-sky-400/30 shrink-0">
+                        {rackUsagePercent}%
+                      </span>
+                    </div>
+                    <div className="text-xs sm:text-lg md:text-xl font-black text-sky-400 mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
+                      <span>{allCategoriesSummary.all.totalRacks.toLocaleString()}</span>{" "}
+                      <span className="font-sans text-[9.5px] sm:text-xs font-normal text-slate-300">แคร่</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 space-y-0.5">
+                    <div className="flex justify-between items-center text-[9.5px] sm:text-[10px] font-bold text-sky-300">
+                      <span>สัดส่วนใช้งานแคร่</span>
+                      <span>{rackUsagePercent}%</span>
+                    </div>
+                    <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-sky-400 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, rackUsagePercent)}%` }}
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* การ์ดที่ 5: จำนวนเมตรทั้งหมด */}
+          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 col-span-2 sm:col-span-1 flex flex-col justify-between">
+            {(() => {
+              const meterUsagePercent = allCategoriesSummary.all.totalCapacityMeters > 0
+                ? Math.round((allCategoriesSummary.all.usedMeters / allCategoriesSummary.all.totalCapacityMeters) * 100)
+                : 0;
+              return (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-indigo-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
+                        จำนวนเมตรทั้งหมด
+                      </span>
+                      <span className="text-[10px] font-black font-mono tabular-nums text-indigo-300 bg-indigo-500/20 px-1.5 py-0.2 rounded border border-indigo-400/30 shrink-0">
+                        {meterUsagePercent}%
+                      </span>
+                    </div>
+                    <div className="text-xs sm:text-lg md:text-xl font-black text-indigo-300 mt-0.5 sm:mt-1.5 font-mono tabular-nums leading-tight">
+                      <span>{allCategoriesSummary.all.totalCapacityMeters.toLocaleString()}</span>{" "}
+                      <span className="font-sans text-[9.5px] sm:text-xs font-normal text-slate-300">ม.</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 space-y-0.5">
+                    <div className="flex justify-between items-center text-[9.5px] sm:text-[10px] font-bold text-indigo-300">
+                      <span>สัดส่วนใช้งานเมตร</span>
+                      <span>{meterUsagePercent}%</span>
+                    </div>
+                    <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-400 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, meterUsagePercent)}%` }}
+                      />
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -769,58 +814,88 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {/* 1. มีแคร่ทั้งหมด */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
-                มีแคร่ทั้งหมด
+            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+                  มีแคร่ทั้งหมด
+                </div>
+                <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums leading-tight">
+                  <span className="text-cyan-600 dark:text-cyan-400">{formatTons(allCategoriesSummary.tm.totalCapacityTons)}</span>{" "}
+                  <span className="font-sans text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">ตัน</span>{" "}
+                  <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 sm:mt-0">
+                    ({allCategoriesSummary.tm.totalRacks} แคร่ / {allCategoriesSummary.tm.totalCapacityMeters} ม.)
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums leading-tight">
-                <span className="text-cyan-600 dark:text-cyan-400">{formatTons(allCategoriesSummary.tm.totalCapacityTons)}</span>{" "}
-                <span className="font-sans text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">ตัน</span>{" "}
-                <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 sm:mt-0">
-                  ({allCategoriesSummary.tm.totalRacks} แคร่ / {allCategoriesSummary.tm.totalCapacityMeters} ม.)
-                </span>
-              </div>
-              <div className="hidden sm:block mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                ความจุรวมทุกเครื่องในหมวด TM (80 ตัน/เครื่อง)
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  <span>สัดส่วนความจุ</span>
+                  <span>100%</span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                  <div className="h-full bg-cyan-500 rounded-full transition-all duration-300 w-full" />
+                </div>
               </div>
             </div>
 
             {/* 2. ใช้ไป */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
-                  ใช้ไป
-                </span>
-                <span className="text-[9.5px] sm:text-[10px] font-black font-mono tabular-nums text-sky-600 dark:text-sky-400">
-                  {allCategoriesSummary.tm.usagePercent}%
-                </span>
+            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
+                    ใช้ไป
+                  </span>
+                  <span className="text-[9.5px] sm:text-[10px] font-black font-mono tabular-nums text-sky-600 dark:text-sky-400">
+                    {allCategoriesSummary.tm.usagePercent}%
+                  </span>
+                </div>
+                <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-sky-700 dark:text-sky-300 font-mono tabular-nums leading-tight">
+                  <span>{formatTons(allCategoriesSummary.tm.usedTons)}</span>{" "}
+                  <span className="font-sans text-[10px] sm:text-xs font-bold text-sky-600/80 dark:text-sky-400/80">ตัน</span>{" "}
+                  <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-sky-700/90 dark:text-sky-300/90 mt-0.5 sm:mt-0">
+                    ({allCategoriesSummary.tm.usedRacks} แคร่ / {allCategoriesSummary.tm.usedMeters} ม.)
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-sky-700 dark:text-sky-300 font-mono tabular-nums leading-tight">
-                <span>{formatTons(allCategoriesSummary.tm.usedTons)}</span>{" "}
-                <span className="font-sans text-[10px] sm:text-xs font-bold text-sky-600/80 dark:text-sky-400/80">ตัน</span>{" "}
-                <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-sky-700/90 dark:text-sky-300/90 mt-0.5 sm:mt-0">
-                  ({allCategoriesSummary.tm.usedRacks} แคร่ / {allCategoriesSummary.tm.usedMeters} ม.)
-                </span>
-              </div>
-              <div className="hidden sm:block mt-0.5 text-[10px] text-sky-600/80 dark:text-sky-400/70">
-                กำลังใช้ {allCategoriesSummary.tm.occupiedRacks} · เต็มพิกัด {allCategoriesSummary.tm.fullRacks} แคร่
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-sky-700 dark:text-sky-300">
+                  <span>สัดส่วนใช้ไป</span>
+                  <span>{allCategoriesSummary.tm.usagePercent}%</span>
+                </div>
+                <div className="w-full bg-sky-200/60 dark:bg-sky-900/60 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-sky-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, allCategoriesSummary.tm.usagePercent)}%` }}
+                  />
+                </div>
               </div>
             </div>
 
             {/* 3. คงเหลือ */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-                คงเหลือ
+            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                  คงเหลือ
+                </div>
+                <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-emerald-700 dark:text-emerald-300 font-mono tabular-nums leading-tight">
+                  <span>{formatTons(allCategoriesSummary.tm.availableTons)}</span>{" "}
+                  <span className="font-sans text-[10px] sm:text-xs font-bold text-emerald-600/80 dark:text-emerald-400/80">ตัน</span>{" "}
+                  <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 sm:mt-0">
+                    ({allCategoriesSummary.tm.availableRacks} แคร่ / {allCategoriesSummary.tm.availableMeters} ม.)
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-emerald-700 dark:text-emerald-300 font-mono tabular-nums leading-tight">
-                <span>{formatTons(allCategoriesSummary.tm.availableTons)}</span>{" "}
-                <span className="font-sans text-[10px] sm:text-xs font-bold text-emerald-600/80 dark:text-emerald-400/80">ตัน</span>{" "}
-                <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 sm:mt-0">
-                  ({allCategoriesSummary.tm.availableRacks} แคร่ / {allCategoriesSummary.tm.availableMeters} ม.)
-                </span>
-              </div>
-              <div className="hidden sm:block mt-0.5 text-[10px] text-emerald-600/80 dark:text-emerald-400/70">
-                แคร่ว่างพร้อมรับงาน / น้ำหนักรองรับคงเหลือ
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <span>สัดส่วนคงเหลือ</span>
+                  <span>{Math.max(0, 100 - allCategoriesSummary.tm.usagePercent)}%</span>
+                </div>
+                <div className="w-full bg-emerald-200/60 dark:bg-emerald-900/60 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.max(0, 100 - allCategoriesSummary.tm.usagePercent))}%` }}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -890,58 +965,88 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {/* 1. มีแคร่ทั้งหมด */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
-                มีแคร่ทั้งหมด
+            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+                  มีแคร่ทั้งหมด
+                </div>
+                <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums leading-tight">
+                  <span className="text-indigo-600 dark:text-indigo-400">{formatTons(allCategoriesSummary.cf.totalCapacityTons)}</span>{" "}
+                  <span className="font-sans text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">ตัน</span>{" "}
+                  <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 sm:mt-0">
+                    ({allCategoriesSummary.cf.totalRacks} แคร่ / {allCategoriesSummary.cf.totalCapacityMeters} ม.)
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums leading-tight">
-                <span className="text-indigo-600 dark:text-indigo-400">{formatTons(allCategoriesSummary.cf.totalCapacityTons)}</span>{" "}
-                <span className="font-sans text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">ตัน</span>{" "}
-                <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 sm:mt-0">
-                  ({allCategoriesSummary.cf.totalRacks} แคร่ / {allCategoriesSummary.cf.totalCapacityMeters} ม.)
-                </span>
-              </div>
-              <div className="hidden sm:block mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
-                ความจุรวมทุกเครื่องในหมวด CF (80 ตัน/เครื่อง)
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  <span>สัดส่วนความจุ</span>
+                  <span>100%</span>
+                </div>
+                <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full transition-all duration-300 w-full" />
+                </div>
               </div>
             </div>
 
             {/* 2. ใช้ไป */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
-                  ใช้ไป
-                </span>
-                <span className="text-[9.5px] sm:text-[10px] font-black font-mono tabular-nums text-sky-600 dark:text-sky-400">
-                  {allCategoriesSummary.cf.usagePercent}%
-                </span>
+            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
+                    ใช้ไป
+                  </span>
+                  <span className="text-[9.5px] sm:text-[10px] font-black font-mono tabular-nums text-sky-600 dark:text-sky-400">
+                    {allCategoriesSummary.cf.usagePercent}%
+                  </span>
+                </div>
+                <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-sky-700 dark:text-sky-300 font-mono tabular-nums leading-tight">
+                  <span>{formatTons(allCategoriesSummary.cf.usedTons)}</span>{" "}
+                  <span className="font-sans text-[10px] sm:text-xs font-bold text-sky-600/80 dark:text-sky-400/80">ตัน</span>{" "}
+                  <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-sky-700/90 dark:text-sky-300/90 mt-0.5 sm:mt-0">
+                    ({allCategoriesSummary.cf.usedRacks} แคร่ / {allCategoriesSummary.cf.usedMeters} ม.)
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-sky-700 dark:text-sky-300 font-mono tabular-nums leading-tight">
-                <span>{formatTons(allCategoriesSummary.cf.usedTons)}</span>{" "}
-                <span className="font-sans text-[10px] sm:text-xs font-bold text-sky-600/80 dark:text-sky-400/80">ตัน</span>{" "}
-                <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-sky-700/90 dark:text-sky-300/90 mt-0.5 sm:mt-0">
-                  ({allCategoriesSummary.cf.usedRacks} แคร่ / {allCategoriesSummary.cf.usedMeters} ม.)
-                </span>
-              </div>
-              <div className="hidden sm:block mt-0.5 text-[10px] text-sky-600/80 dark:text-sky-400/70">
-                กำลังใช้ {allCategoriesSummary.cf.occupiedRacks} · เต็มพิกัด {allCategoriesSummary.cf.fullRacks} แคร่
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-sky-700 dark:text-sky-300">
+                  <span>สัดส่วนใช้ไป</span>
+                  <span>{allCategoriesSummary.cf.usagePercent}%</span>
+                </div>
+                <div className="w-full bg-sky-200/60 dark:bg-sky-900/60 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-sky-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, allCategoriesSummary.cf.usagePercent)}%` }}
+                  />
+                </div>
               </div>
             </div>
 
             {/* 3. คงเหลือ */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0">
-              <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-                คงเหลือ
+            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                  คงเหลือ
+                </div>
+                <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-emerald-700 dark:text-emerald-300 font-mono tabular-nums leading-tight">
+                  <span>{formatTons(allCategoriesSummary.cf.availableTons)}</span>{" "}
+                  <span className="font-sans text-[10px] sm:text-xs font-bold text-emerald-600/80 dark:text-emerald-400/80">ตัน</span>{" "}
+                  <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 sm:mt-0">
+                    ({allCategoriesSummary.cf.availableRacks} แคร่ / {allCategoriesSummary.cf.availableMeters} ม.)
+                  </span>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-emerald-700 dark:text-emerald-300 font-mono tabular-nums leading-tight">
-                <span>{formatTons(allCategoriesSummary.cf.availableTons)}</span>{" "}
-                <span className="font-sans text-[10px] sm:text-xs font-bold text-emerald-600/80 dark:text-emerald-400/80">ตัน</span>{" "}
-                <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 sm:mt-0">
-                  ({allCategoriesSummary.cf.availableRacks} แคร่ / {allCategoriesSummary.cf.availableMeters} ม.)
-                </span>
-              </div>
-              <div className="hidden sm:block mt-0.5 text-[10px] text-emerald-600/80 dark:text-emerald-400/70">
-                แคร่ว่างพร้อมรับงาน / น้ำหนักรองรับคงเหลือ
+              <div className="mt-1.5 space-y-0.5">
+                <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <span>สัดส่วนคงเหลือ</span>
+                  <span>{Math.max(0, 100 - allCategoriesSummary.cf.usagePercent)}%</span>
+                </div>
+                <div className="w-full bg-emerald-200/60 dark:bg-emerald-900/60 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${Math.min(100, Math.max(0, 100 - allCategoriesSummary.cf.usagePercent))}%` }}
+                  />
+                </div>
               </div>
             </div>
           </div>

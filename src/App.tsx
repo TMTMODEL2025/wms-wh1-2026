@@ -929,31 +929,34 @@ const CSS = `
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 10px;
-    margin-top: 10px;
-    margin-bottom: 5px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: #94a3b8;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.8px;
+    padding: 8px 11px;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.12) 0%, rgba(15, 23, 42, 0.4) 100%);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-left: 3px solid #38bdf8;
+    border-radius: 7px;
+    color: #e2e8f0;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
     text-transform: uppercase;
     cursor: pointer;
     transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   }
   .nav-caption-btn:hover {
-    background: transparent;
-    color: #f1f5f9;
-    border-color: transparent;
-    box-shadow: none;
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.2) 0%, rgba(15, 28, 48, 0.65) 100%);
+    color: #ffffff;
+    border-color: rgba(56, 189, 248, 0.45);
+    border-left-color: #00e1ff;
   }
   .nav-caption-btn.active-group {
     color: #38bdf8;
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
+    border-color: rgba(56, 189, 248, 0.4);
+    border-left: 3.5px solid #00e1ff;
+    background: linear-gradient(90deg, rgba(14, 165, 233, 0.22) 0%, rgba(15, 28, 48, 0.75) 100%);
+    box-shadow: 0 2px 10px rgba(14, 165, 233, 0.18);
   }
   .nav-arrow-icon {
     display: inline-flex;
@@ -964,7 +967,7 @@ const CSS = `
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Industrial Steel Menu Button Cards */
+  /* Industrial Steel Main Menu Button Cards (Prominent Primary Level) */
   .nav-card-btn {
     width: 100%;
     position: relative;
@@ -973,19 +976,20 @@ const CSS = `
     align-items: center;
     gap: 11px;
     text-align: left;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.24);
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    color: #e2e8f0;
-    padding: 10px 12px;
-    margin-bottom: 6px;
-    border-radius: 7px;
-    font-size: 12px;
-    font-weight: 600;
+    color: #f8fafc;
+    padding: 11px 12px;
+    margin-bottom: 7px;
+    border-radius: 9px;
+    font-size: 13.5px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
     cursor: pointer;
     transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
   /* Dark steel protective overlay */
@@ -993,7 +997,7 @@ const CSS = `
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(105deg, rgba(11, 20, 36, 0.88) 0%, rgba(15, 28, 48, 0.8) 55%, rgba(11, 20, 36, 0.84) 100%);
+    background: linear-gradient(105deg, rgba(11, 22, 40, 0.88) 0%, rgba(15, 32, 56, 0.82) 55%, rgba(11, 22, 40, 0.86) 100%);
     transition: all 0.22s ease;
     z-index: 1;
   }
@@ -1006,16 +1010,16 @@ const CSS = `
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.35), transparent);
+    background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.4), transparent);
     z-index: 2;
   }
 
-  /* Clean background-free variant for non-Overview main menus */
+  /* Elevated Card Surface for Main Menus */
   .nav-card-btn:not(.nav-overview-hero) {
-    background: transparent !important;
-    background-image: none !important;
-    border-color: transparent;
-    box-shadow: none;
+    background: linear-gradient(135deg, rgba(16, 30, 52, 0.92) 0%, rgba(10, 20, 36, 0.95) 100%) !important;
+    background-image: linear-gradient(135deg, rgba(16, 30, 52, 0.92) 0%, rgba(10, 20, 36, 0.95) 100%) !important;
+    border-color: rgba(56, 189, 248, 0.22);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
   .nav-card-btn:not(.nav-overview-hero)::before {
     display: none;
@@ -1030,8 +1034,8 @@ const CSS = `
   }
 
   .nav-card-btn:hover {
-    border-color: rgba(56, 189, 248, 0.65);
-    box-shadow: 0 4px 14px rgba(14, 165, 233, 0.25), inset 0 0 10px rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.7);
+    box-shadow: 0 5px 15px rgba(14, 165, 233, 0.28), inset 0 0 12px rgba(56, 189, 248, 0.14);
     transform: translateY(-1px);
     color: #ffffff;
   }
@@ -1039,17 +1043,17 @@ const CSS = `
     background: linear-gradient(105deg, rgba(11, 25, 45, 0.74) 0%, rgba(14, 38, 65, 0.64) 55%, rgba(11, 25, 45, 0.7) 100%);
   }
   .nav-card-btn:not(.nav-overview-hero):hover {
-    background: transparent !important;
-    border-color: transparent;
-    box-shadow: none;
+    background: linear-gradient(135deg, rgba(20, 40, 68, 0.96) 0%, rgba(13, 28, 48, 0.98) 100%) !important;
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   }
 
   .nav-card-btn.active,
   .nav-card-btn.active-parent {
     border-color: #38bdf8;
     color: #ffffff;
-    font-weight: 700;
-    box-shadow: 0 0 14px rgba(56, 189, 248, 0.38), inset 0 0 14px rgba(56, 189, 248, 0.16);
+    font-weight: 800;
+    box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35), inset 0 0 14px rgba(56, 189, 248, 0.18);
   }
   .nav-card-btn.active::before,
   .nav-card-btn.active-parent::before {
@@ -1057,10 +1061,10 @@ const CSS = `
   }
   .nav-card-btn:not(.nav-overview-hero).active,
   .nav-card-btn:not(.nav-overview-hero).active-parent {
-    background: transparent !important;
-    border-color: transparent;
-    box-shadow: none;
-    color: #38bdf8;
+    background: linear-gradient(135deg, rgba(14, 116, 144, 0.45) 0%, rgba(15, 32, 58, 0.96) 100%) !important;
+    border-color: #38bdf8;
+    box-shadow: 0 4px 14px rgba(14, 165, 233, 0.3), inset 0 1px 1px rgba(56, 189, 248, 0.28);
+    color: #ffffff;
   }
 
   /* Glowing cyan active indicator strip on left */
@@ -1071,41 +1075,42 @@ const CSS = `
     top: 0;
     bottom: 0;
     left: 0;
-    width: 3.5px;
+    width: 4px;
     height: 100%;
-    background: #38bdf8;
-    box-shadow: 0 0 10px #38bdf8;
+    background: #00e1ff;
+    box-shadow: 0 0 12px #00e1ff;
     z-index: 4;
   }
 
   .nav-card-btn .nav-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    background: rgba(15, 23, 42, 0.65);
-    border: 1px solid rgba(148, 163, 184, 0.25);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.24) 0%, rgba(15, 23, 42, 0.85) 100%);
+    border: 1px solid rgba(56, 189, 248, 0.4);
     display: grid;
     place-items: center;
-    color: #93c5fd;
+    color: #38bdf8;
     flex-shrink: 0;
     transition: all 0.2s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
   }
   .nav-card-btn:not(.nav-overview-hero) .nav-icon {
-    background: transparent;
-    border-color: rgba(148, 163, 184, 0.2);
+    background: linear-gradient(135deg, rgba(14, 165, 233, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%);
+    border-color: rgba(56, 189, 248, 0.35);
   }
   .nav-card-btn:hover .nav-icon {
-    color: #38bdf8;
-    border-color: rgba(56, 189, 248, 0.6);
-    background: rgba(14, 165, 233, 0.18);
-    transform: scale(1.05);
+    color: #ffffff;
+    border-color: #38bdf8;
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    transform: scale(1.06);
   }
   .nav-card-btn.active .nav-icon,
   .nav-card-btn.active-parent .nav-icon {
-    color: #38bdf8;
-    border-color: #38bdf8;
-    background: rgba(14, 165, 233, 0.3);
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+    color: #ffffff;
+    border-color: #7dd3fc;
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
   }
 
   /* Collapsed sidebar styling for cards and icons */
@@ -1160,32 +1165,33 @@ const CSS = `
     display: none !important;
   }
 
-  /* Submenu */
+  /* Submenu (Visually Subordinate & Indented Tree Level) */
   .nav-submenu {
     display: flex;
     flex-direction: column;
-    padding-left: 8px;
-    margin-left: 14px;
-    border-left: 2px solid rgba(56, 189, 248, 0.3);
-    margin-bottom: 8px;
-    margin-top: 3px;
-    gap: 3px;
+    padding-left: 10px;
+    margin-left: 18px;
+    border-left: 1.5px dashed rgba(56, 189, 248, 0.28);
+    margin-bottom: 10px;
+    margin-top: 2px;
+    gap: 2px;
   }
 
   .nav-sub-btn {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 8px;
     text-align: left;
     border: 1px solid transparent;
-    background: rgba(15, 23, 42, 0.45);
+    border-left: 2px solid transparent;
+    background: transparent;
     color: #94a3b8;
-    padding: 7px 10px;
+    padding: 6px 10px;
     border-radius: 6px;
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 500;
-    transition: all 0.2s ease;
+    transition: all 0.18s ease;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
@@ -1198,16 +1204,17 @@ const CSS = `
     min-width: 0;
   }
   .nav-sub-btn:hover {
-    background: rgba(30, 41, 59, 0.7);
-    color: #f1f5f9;
-    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(30, 41, 59, 0.55);
+    color: #e2e8f0;
+    border-left-color: rgba(56, 189, 248, 0.45);
   }
   .nav-sub-btn.active {
-    background: rgba(14, 165, 233, 0.18);
-    color: #38bdf8;
-    font-weight: 700;
-    border-color: rgba(56, 189, 248, 0.55);
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.22);
+    background: rgba(14, 165, 233, 0.14);
+    color: #7dd3fc;
+    font-weight: 600;
+    border-color: rgba(56, 189, 248, 0.2);
+    border-left: 2.5px solid #38bdf8;
+    box-shadow: none;
   }
 
   .sidebar.collapsed .nav-sub-btn {
@@ -2223,21 +2230,21 @@ const CSS = `
     .nav-submenu {
       display: flex !important;
       flex-direction: column !important;
-      padding-left: 8px !important;
-      margin-left: 10px !important;
-      border-left: 2px solid rgba(56, 189, 248, 0.3) !important;
+      padding-left: 10px !important;
+      margin-left: 18px !important;
+      border-left: 1.5px dashed rgba(56, 189, 248, 0.28) !important;
       margin-bottom: 8px !important;
-      gap: 3px !important;
+      gap: 2px !important;
     }
 
     .nav-sub-btn {
       width: 100% !important;
       margin: 0 !important;
-      padding: 8px 10px !important;
+      padding: 6px 10px !important;
       border-left: 1px solid transparent !important;
       border-bottom: 1px solid transparent !important;
       border-radius: 6px !important;
-      font-size: 11.5px !important;
+      font-size: 11px !important;
     }
 
     .nav-sub-btn.active {

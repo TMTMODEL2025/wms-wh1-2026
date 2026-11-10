@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
-import { Camera, RefreshCw, Zap, ZapOff, AlertCircle, ZoomIn } from "lucide-react";
+import { Camera, RefreshCw, Zap, ZapOff, AlertCircle, ZoomIn, X } from "lucide-react";
 import { cleanBarcode } from "../utils/barcodeUtils";
 
 declare global {
@@ -164,10 +164,9 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         const canvas = offscreenCanvasRef.current;
 
         // ROI (Region of Interest) Cropping:
-        // Crop center 82% width and 45% height corresponding to viewfinder aiming box
-        // This reduces pixel volume by ~63%, dramatically accelerating decoding
-        const roiW = Math.round(vw * 0.82);
-        const roiH = Math.round(vh * 0.45);
+        // Crop center 90% width and 55% height corresponding to wider viewfinder aiming box
+        const roiW = Math.round(vw * 0.90);
+        const roiH = Math.round(vh * 0.55);
         const roiX = Math.round((vw - roiW) / 2);
         const roiY = Math.round((vh - roiH) / 2);
 
@@ -314,8 +313,8 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         const config = {
           fps: 12,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => ({
-            width: Math.min(Math.floor(viewfinderWidth * 0.85), 300),
-            height: Math.min(Math.floor(viewfinderHeight * 0.45), 140),
+            width: Math.min(Math.floor(viewfinderWidth * 0.90), 350),
+            height: Math.min(Math.floor(viewfinderHeight * 0.55), 180),
           }),
           videoConstraints: {
             deviceId: cameraId ? { exact: cameraId } : undefined,
@@ -464,7 +463,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
       `}</style>
 
       {/* Video Viewfinder Container */}
-      <div className="relative w-full h-[230px] sm:h-[260px] bg-black flex items-center justify-center overflow-hidden">
+      <div className="relative w-full h-[280px] sm:h-[330px] bg-black flex items-center justify-center overflow-hidden">
         {/* Hardware-accelerated Native Video Element */}
         <video
           ref={videoRef}
@@ -487,30 +486,31 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
             onClick={() => {
               stopScanner().then(() => onClose());
             }}
-            className="absolute top-2.5 right-2.5 z-20 px-2.5 py-1 rounded-lg text-xs font-medium text-rose-300 hover:text-white bg-black/50 hover:bg-rose-950/70 border border-rose-500/50 backdrop-blur-md flex items-center gap-1.5 cursor-pointer active:scale-95 transition-all shadow-md"
+            className="absolute top-2.5 right-2.5 z-20 p-2 rounded-lg text-rose-300 hover:text-white bg-black/60 hover:bg-rose-950/80 border border-rose-500/40 backdrop-blur-md flex items-center justify-center cursor-pointer active:scale-95 transition-all shadow-md"
+            title={isThai ? "ปิดกล้อง" : "Close Camera"}
+            aria-label={isThai ? "ปิดกล้อง" : "Close Camera"}
           >
-            <Camera size={13} className="text-rose-400" />
-            <span>{isThai ? "ปิดกล้อง" : "Close Cam"}</span>
+            <X size={16} className="text-rose-400" />
           </button>
         )}
 
-        {/* Overlay Aiming Frame: Clean white corner bracket overlays and thin red horizontal laser line */}
+        {/* Overlay Aiming Frame: Expanded white corner bracket overlays and thin red horizontal laser line */}
         {isScanning && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-4">
-            <div className="relative w-[82%] max-w-[290px] h-[130px]">
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-3">
+            <div className="relative w-[90%] max-w-[340px] h-[160px] sm:h-[180px]">
               {/* Subtle Clean White Corner Brackets */}
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-white rounded-tl" />
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-white rounded-tr" />
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-white rounded-bl" />
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-white rounded-br" />
+              <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-white rounded-tl-md" />
+              <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-white rounded-tr-md" />
+              <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-white rounded-bl-md" />
+              <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-white rounded-br-md" />
 
               {/* Thin Horizontal Red Aiming Laser Line */}
               <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-[1.5px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.95)] animate-pulse" />
             </div>
 
             {/* Bottom Dark Semi-Transparent Badge Overlay */}
-            <div className="absolute bottom-2.5 inset-x-0 flex justify-center pointer-events-none">
-              <span className="text-[11px] font-medium text-slate-100 bg-black/60 backdrop-blur-md px-3.5 py-1 rounded-full border border-white/15 shadow-md">
+            <div className="absolute bottom-2.5 inset-x-0 flex justify-center pointer-events-none px-2">
+              <span className="text-[11px] font-medium text-slate-100 bg-black/65 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 shadow-md truncate max-w-full">
                 {placeholderText || (isThai ? "เล็งกล้องไปที่บาร์โค้ด Batch 10 หลัก" : "Aim at the 10-digit Batch barcode")}
               </span>
             </div>
@@ -534,44 +534,48 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         )}
       </div>
 
-      {/* Camera Action Buttons Bar: Directly underneath viewport on a single balanced row */}
-      <div className="w-full px-3 py-2 bg-[#0a1526] border-t border-slate-800/80 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={switchCamera}
-          className="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
-        >
-          <RefreshCw size={13} className="text-slate-300" />
-          <span>{isThai ? "🔄 สลับกล้อง" : "🔄 Switch"}</span>
-        </button>
-
-        {hasZoom && (
+      {/* Camera Action Buttons Bar: Compact balanced mobile layout */}
+      <div className="w-full px-3 py-2 bg-[#0a1526] border-t border-slate-800/80 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* Switch Camera Button (Icon Only) */}
           <button
             type="button"
-            onClick={toggleZoom}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-700/70 bg-slate-800/80 text-cyan-300 hover:text-white flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all"
-            title={isThai ? "สลับระดับซูม 1x / 2x" : "Toggle zoom"}
+            onClick={switchCamera}
+            className="p-2.5 rounded-lg text-xs font-bold text-slate-200 hover:text-white bg-slate-800/90 hover:bg-slate-700/80 border border-slate-700/70 flex items-center justify-center cursor-pointer active:scale-95 transition-all shrink-0 min-w-[40px] min-h-[38px]"
+            title={isThai ? "สลับกล้อง" : "Switch Camera"}
+            aria-label={isThai ? "สลับกล้อง" : "Switch Camera"}
           >
-            <ZoomIn size={13} />
-            <span>{currentZoom >= 1.8 ? "2x" : "1.2x"}</span>
+            <RefreshCw size={16} className="text-slate-300" />
           </button>
-        )}
 
-        {hasTorch && (
-          <button
-            type="button"
-            onClick={toggleTorch}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all ${
-              isTorchOn
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-                : "bg-slate-800/80 text-slate-300 border-slate-700/70 hover:bg-slate-700"
-            }`}
-            title={isThai ? (isTorchOn ? "ปิดไฟฉาย" : "เปิดไฟฉาย") : isTorchOn ? "Flash Off" : "Flash"}
-          >
-            {isTorchOn ? <ZapOff size={13} /> : <Zap size={13} />}
-            <span>{isThai ? (isTorchOn ? "ปิดไฟ" : "ไฟฉาย") : isTorchOn ? "Off" : "On"}</span>
-          </button>
-        )}
+          {hasZoom && (
+            <button
+              type="button"
+              onClick={toggleZoom}
+              className="px-2.5 py-2 rounded-lg text-xs font-bold border border-slate-700/70 bg-slate-800/90 text-cyan-300 hover:text-white flex items-center justify-center gap-1 cursor-pointer active:scale-95 transition-all shrink-0 min-h-[38px]"
+              title={isThai ? "สลับระดับซูม 1x / 2x" : "Toggle zoom"}
+            >
+              <ZoomIn size={15} />
+              <span>{currentZoom >= 1.8 ? "2x" : "1.2x"}</span>
+            </button>
+          )}
+
+          {hasTorch && (
+            <button
+              type="button"
+              onClick={toggleTorch}
+              className={`px-3 py-2 rounded-lg text-xs font-bold border flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all shrink-0 min-h-[38px] ${
+                isTorchOn
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
+                  : "bg-slate-800/90 text-slate-300 border-slate-700/70 hover:bg-slate-700"
+              }`}
+              title={isThai ? (isTorchOn ? "ปิดไฟฉาย" : "เปิดไฟฉาย") : isTorchOn ? "Flash Off" : "Flash"}
+            >
+              {isTorchOn ? <ZapOff size={15} /> : <Zap size={15} />}
+              <span>{isThai ? (isTorchOn ? "ปิดไฟ" : "ไฟฉาย") : isTorchOn ? "Off" : "On"}</span>
+            </button>
+          )}
+        </div>
 
         {onClose && (
           <button
@@ -579,9 +583,10 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
             onClick={() => {
               stopScanner().then(() => onClose());
             }}
-            className="flex-1 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-200 hover:text-white bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all"
+            className="px-3.5 py-2 rounded-lg text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 border border-rose-500/50 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition-all shrink-0 min-h-[38px]"
           >
-            <span>{isThai ? "ปิดกล้อง" : "Turn off Camera"}</span>
+            <Camera size={14} />
+            <span>{isThai ? "ปิดกล้อง" : "Close"}</span>
           </button>
         )}
       </div>

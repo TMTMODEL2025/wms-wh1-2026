@@ -494,6 +494,28 @@ export function removeBasketFromRow(
 }
 
 /**
+ * Delete an entire row from a building in master layout
+ */
+export function removeRowFromBuilding(
+  buildingId: BuildingId,
+  rowId: string
+): boolean {
+  const layout = getStoredMasterBasketLayout();
+  const bIndex = layout.findIndex((b) => b.buildingId === buildingId);
+  if (bIndex === -1) return false;
+
+  const cleanRow = rowId.trim().toUpperCase();
+  const originalLen = layout[bIndex].rows.length;
+  layout[bIndex].rows = layout[bIndex].rows.filter((r) => r.rowId !== cleanRow);
+
+  if (layout[bIndex].rows.length !== originalLen) {
+    saveStoredMasterBasketLayout(layout);
+    return true;
+  }
+  return false;
+}
+
+/**
  * Automatically ensures a basket location is registered in Master Layout.
  * If not present, inserts it into the corresponding building and row automatically.
  */

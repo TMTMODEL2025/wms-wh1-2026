@@ -1,53 +1,124 @@
-# แผนการเชื่อมต่อระบบ "เตรียมเบิก" (Outbound Preparation) เข้าสู่ Cloud Database แบบ Real-time [เสร็จสมบูรณ์ 100%]
+# Implementation Plan: External Inbound Flow (รับเข้าภายนอก / Supplier Purchase)
 
-แผนงานนี้จัดทำขึ้นและดำเนินการเสร็จสิ้นเรียบร้อยแล้ว ในการเชื่อมต่อฟังก์ชันงานส่วน **เตรียมเบิก (Outbound Prep & Pick Lists)** เข้ากับฐานข้อมูล **Firebase Firestore** ตามคำตอบและการตัดสินใจของผู้ใช้ โดยยึดถือกฎเหล็ก **ห้ามเปลี่ยนหรือแก้ไข Workflow และ Logic เดิมโดยเด็ดขาด (Zero Regression & Strict Flow Preservation)**
-
----
-
-## 1. ผลการดำเนินงานตามขอบเขต (Implementation Completed)
-- [x] **เชื่อมต่อการนำเข้าใบสั่งเบิก (Pick List Import)**: เมื่อเจ้าหน้าที่นำเข้าข้อมูลใบสั่งเบิก (Excel / TSV / BOM) ระบบจะบันทึกและซิงค์ขึ้น Cloud Firestore (`slit_picklists`) ทันทีทุกใบสั่ง
-- [x] **เชื่อมต่อการสแกนตรวจสอบบาร์โค้ดหน้างาน (Outbound Scan Verification)**: เมื่อพนักงานยิงบาร์โค้ด 10 หลักผ่านแต่ละม้วน สถานะ `verified`, เวลาที่สแกน และจำนวนที่ตรวจสอบสำเร็จจะซิงค์ขึ้น Cloud แบบ Real-time ทันที
-- [x] **เชื่อมต่อการบันทึกฉบับร่างและการยืนยันเตรียมเบิก (Save Draft & Confirm Prep)**: บันทึกสถานะ `in_progress` หรือ `completed` พร้อมบันทึกรายการจ่ายออกลงคอลเลกชัน `slit_outbound` และอัปเดตเลขอ้างอิงใบสั่งในสต็อก
-- [x] **เชื่อมต่อการลบใบสั่งเบิก (Delete Order)**: ลบข้อมูลออกจาก Cloud เพื่อให้ทุกเครื่องแสดงผลตรงกัน
-- [x] **ซิงค์ข้อมูลเดิมอัตโนมัติ (Seamless Migration)**: ตรวจสอบและซิงค์ใบสั่งเบิกที่มีอยู่ในเครื่องขึ้น Cloud ให้อัตโนมัติเมื่อเริ่มต้นระบบ
+Integrate a dedicated **"รับเข้าภายนอก" (External Inbound / Purchase from Customer/Supplier)** workflow alongside the existing internal machine inbound (SM01-SM04), allowing operators to scan 10-digit batch barcodes, select target warehouse storage locations (Building H, F, E9, E10, I + Row/Basket), sync stock matching data to Cloud Firestore, and highlight external inbound items with clear badges in the Daily Inbound Report.
 
 ---
 
-## 2. รายละเอียดการปรับปรุงโค้ดที่ทำเสร็จแล้ว (Executed Code Details)
+## User Review & Confirmed Decisions
 
-### A. Service Layer (`src/services/slitDataService.ts`)
-1. **เพิ่มฟังก์ชัน `batchSavePickListsToCloud(orders: PickListOrder[])`**:
-   - รองรับการบันทึกและอัปเดตใบสั่งเบิกจำนวนมากพร้อมกันผ่าน Firestore `writeBatch` เมื่อนำเข้าใบสั่งเบิก
-2. **เพิ่มฟังก์ชัน `deletePickListFromCloud(orderIdOrNo: string)`**:
-   - ลบเอกสารใบสั่งเบิกออกจากคอลเลกชัน `slit_picklists` เมื่อผู้ใช้กดยืนยันการลบ
-3. **ปรับปรุง `syncLocalDataToFirestoreIfEmpty`**:
-   - เพิ่มการตรวจสอบและซิงค์รายการใบสั่งเบิกเดิมจาก LocalStorage ขึ้นสู่คอลเลกชัน `slit_picklists` อัตโนมัติหากบน Cloud ยังว่างอยู่
+> [!IMPORTANT]
+> The following choices were confirmed by the user in Phase 1:
 
-### B. คอมโพเนนต์หลัก (`src/components/SlitFilmManagement.tsx`)
-1. **จุดนำเข้าใบสั่งเบิก (`handleSaveImportedPickList`)**:
-   - ภายหลังจากการ Validate และคำนวณ `createdOrders` ตาม Logic เดิมครบถ้วน มีการเรียก `batchSavePickListsToCloud(createdOrders)` ทันที
-2. **จุดสแกนตรวจสอบบาร์โค้ด (`processOutboundBarcodeScan`)**:
-   - เมื่อบาร์โค้ดผ่านการตรวจสอบและจับคู่รายการใน Order สำเร็จ มีการเรียก `savePickListToCloud(updatedActiveOrder)` เพื่อซิงค์สถานะ Real-time ทันที
-3. **จุดบันทึกฉบับร่าง (`handleSaveOutboundDraft`)**:
-   - เมื่อกดบันทึกฉบับร่าง มีการเรียก `savePickListToCloud` สำหรับ Order นั้นด้วยสถานะ `in_progress`
-4. **จุดยืนยันการเตรียมเบิก (`handleConfirmOutboundFinal`)**:
-   - เรียก `savePickListToCloud` ด้วยสถานะ `completed`
-   - เรียก `batchSaveInboundToCloud` เพื่อบันทึกการอ้างอิงใบสั่งเบิกและสถานะในสต็อกคลังสินค้า
-5. **จุดลบใบสั่งเบิก (`handleConfirmDeleteOrder`)**:
-   - เมื่อผู้ใช้ยืนยันลบใบสั่งเบิก มีการเรียก `deletePickListFromCloud(ordNo)`
-6. **การรับข้อมูล Real-time (`subscribeToSlitPickLists`)**:
-   - รักษากระบวนการ Merge ข้อมูลเพื่อไม่ให้รบกวนหน้าจอที่ผู้ใช้กำลังสแกนอยู่ และอัปเดตตัวเลขความคืบหน้าให้ตรงกันทุกเครื่อง
+- **10-Digit Batch Scanning**: Scans 10-digit batch barcodes as usual (with automatic SAP Master record matching for material name, grade, thickness, width, and weight).
+- **Storage Location Selection**: Dedicated building dropdown (H, F, E9, E10, I) + Row and Basket selector during external inbound scanning.
+- **Unified Daily Inbound Report**: Integrated directly into the main Inbound report table in `DailyReportView.tsx`, with a distinct badge `[รับเข้าภายนอก]` (External Inbound) alongside `[SM01-SM04]` machine tags.
 
 ---
 
-## 3. การปฏิบัติตามกฎเหล็กความปลอดภัย (Strict Rule Compliance)
-- **Zero Code Regression**: ไม่ลบ ไม่เปลี่ยนชื่อตัวแปร CSS หรือฟังก์ชันเดิม
-- **Preserve App Flow**: คงขั้นตอนการทำงานเดิม 100% (เลือกเครื่อง -> เลือกใบสั่งเบิก -> สแกนบาร์โค้ด -> บันทึก/ยืนยัน)
-- **No Mock/Dummy Data**: ใช้ข้อมูลจริงที่ผู้ใช้นำเข้าหรือสแกนผ่านระบบเท่านั้น
-- **Clean Production UI**: ไม่เพิ่มปุ่มซ้ำซ้อน ไม่ใส่ข้อความส่วนเกิน ใช้ฟอนต์ **Noto Sans Thai** เป็นหลัก
+## 1. Overview & Core Concept
+
+### What It Does
+- **Inbound Mode Switch**: In `SlitFilmManagement.tsx` (Inbound Tab), operators can toggle between:
+  1. `รับเข้าจากเครื่องจักร (SM01-SM04)` — Internal Machine Inbound
+  2. `รับเข้าภายนอก (ซื้อจากลูกค้า/Supplier)` — External Inbound
+- **Barcode & Location Workflow**:
+  - Scanning or typing a 10-digit Batch barcode looks up SAP Master data automatically.
+  - Operator selects the target storage location (`Building` e.g., H, F, E9, E10, I + `Row` e.g., A-Z + `Basket` e.g., H-A01).
+- **Data Persistence & Cloud Sync**:
+  - Records created with `inboundType: "external"` (or `machine: "EXTERNAL"` / `conditionText: "รับเข้าภายนอก"`).
+  - Saved to local storage and automatically batch-synced to Cloud Firestore (`tmt_wms_slit_inbound_records`).
+- **Reporting & Visual Badges**:
+  - In `DailyReportView.tsx`, Section 1 "รายงานการรับเข้า" displays both internal machine records and external inbound records seamlessly.
+  - External inbound items feature a distinctive badge: `[รับเข้าภายนอก]` (Cyan / Indigo badge) to differentiate from `[SM01]`, `[SM02]`, etc.
 
 ---
 
-## 4. ผลการตรวจสอบความถูกต้อง (Verification Results)
-- [x] **TypeScript Validation (`lint_applet`)**: ผ่านสมบูรณ์ 0 errors
-- [x] **Build Compilation (`compile_applet`)**: ผ่านสมบูรณ์ (Build succeeded - the applet is compiled)
+## 2. User Experience & Visual Design
+
+### Inbound Workflow (SlitFilmManagement.tsx)
+1. **Mode Switcher Bar**:
+   - Clean segmented control at the top of Inbound Section:
+     - `[ 🏭 รับจากเครื่องจักร (SM01-SM04) ]` (Default)
+     - `[ 🚛 รับเข้าภายนอก (ซื้อลูกค้า/Supplier) ]`
+2. **External Inbound Panel**:
+   - **Barcode Input / Camera Scanner**: Accepts 10-digit batch barcode input.
+   - **Location Selector**:
+     - Building Selector (`อาคาร H`, `อาคาร F`, `อาคาร E9`, `อาคาร E10`, `อาคาร I`)
+     - Row & Basket Picker (e.g. `แถว A`, `ตะกร้า 01` -> `H-A01`).
+   - **Real-time SAP Material Match Card**: Shows Grade, Thickness, Width, and Weight (kg) preview upon scanning.
+   - **Continuous Scanner Mode**: Retains scanner window open for rapid multi-batch receiving.
+
+### Reporting Experience (DailyReportView.tsx)
+- In **Section 1: รายงานการรับเข้า**, external inbound entries are tagged with a bold badge `[รับเข้าภายนอก]` and supplier notes if applicable.
+- Full filter support for selected Date, Shift, and Pagination.
+
+---
+
+## 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: Unified Inbound Data Structure**:
+  - *Choice*: Extend existing `InboundCoilRecord` schema with `inboundType: "internal" | "external"` and set `machine: "EXTERNAL"` or `conditionText: "รับเข้าภายนอก (ซื้อลูกค้า)"`.
+  - *Rationale*: Avoids duplicating database collections or report components, maintaining 100% backward compatibility and Zero Code Regression.
+
+- **Decision 2: Location Picker Integration**:
+  - *Choice*: Reuse `getStoredMasterBasketLayout()` building & row structure to populate target location options.
+  - *Rationale*: Guarantees valid location codes (e.g., `H-A01`, `F-B05`) that immediately populate the Warehouse Storage Space grid.
+
+---
+
+## 4. Technical Architecture & Data Strategy
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   SlitFilmManagement (Inbound View)                     │
+│                                                                        │
+│  [ Toggle: รับจากเครื่องจักร (SM) ] | [ Toggle: รับเข้าภายนอก (External) ]│
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+               ┌────────────────────┴────────────────────┐
+               ▼                                         ▼
+   [ Internal SM01-SM04 ]                  [ External Inbound ]
+   - Machine: SM01-SM04                    - Source: External / Supplier
+   - Location: Machine Rack                - Target: Building H/F/E9/E10/I
+               │                                         │
+               └────────────────────┬────────────────────┘
+                                    │
+                                    ▼
+                      InboundCoilRecord Object
+              { batch, inboundType: "external", ... }
+                                    │
+                     ┌──────────────┴──────────────┐
+                     ▼                             ▼
+            localStorage Storage          Cloud Firestore Sync
+         (tmt_wms_slit_inbound)       (tmt_wms_slit_inbound_records)
+                                                   │
+                                                   ▼
+                                           DailyReportView.tsx
+                                      [Badge: รับเข้าภายนอก]
+```
+
+### Proposed Changes Across Files
+
+1. **`src/types/` / `SlitFilmManagement.tsx`**:
+   - Extend `InboundCoilRecord` interface: `inboundType?: "internal" | "external"; supplierName?: string;`.
+2. **`src/components/SlitFilmManagement.tsx`**:
+   - Add state `inboundSourceType: "internal" | "external"`.
+   - Add External Inbound form panel with Location Picker (`selectedExternalBuilding`, `selectedExternalRow`, `selectedExternalBasket`).
+   - Connect barcode scanner to create external inbound records.
+3. **`src/components/DailyReportView.tsx`**:
+   - Update Section 1 title and machine badge rendering: render `[รับเข้าภายนอก]` badge when `r.inboundType === "external"` or `r.machine === "EXTERNAL"`.
+4. **`src/config/version.ts`**:
+   - Bump app version to `v2.8.0`.
+
+---
+
+## Verification Plan
+
+### Automated Build & Syntax Verification
+1. Run `compile_applet` and `lint_applet` together to ensure build succeeds with 0 TypeScript/ESLint errors.
+2. Restart dev server using `restart_dev_server`.
+
+### Manual Testing Scenarios
+1. **External Inbound Scan**: Switch to "รับเข้าภายนอก", scan a 10-digit batch code, select Building H / Row A / Basket 01, and confirm receiving.
+2. **Storage Grid Verification**: Verify the scanned batch appears in Building H-A01 storage basket.
+3. **Daily Report Verification**: Check Section 1 in Daily Report to confirm the record displays with `[รับเข้าภายนอก]` badge.

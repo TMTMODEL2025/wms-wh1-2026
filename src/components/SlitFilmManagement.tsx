@@ -6,6 +6,13 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import Swal from "sweetalert2";
 import {
+  showToast,
+  showSuccessAlert,
+  showWarningAlert,
+  showErrorAlert,
+  showConfirmDialog,
+} from "../utils/swalUtils";
+import {
   Layers,
   ArrowDownRight,
   ArrowUpRight,
@@ -16,6 +23,8 @@ import {
   Eye,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
+  Zap,
   X,
   FileText,
   Volume2,
@@ -50,6 +59,7 @@ import {
   Loader2,
   Camera,
   Calendar,
+  Truck,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
@@ -120,7 +130,8 @@ export interface SlitBarcodeRecord {
   mode: "inbound" | "outbound";
   scanTimestamp: string;
   batch: string; // 10-character scanned barcode (e.g. '26SL00189A')
-  machine: string; // 8. รับจากเครื่อง (e.g. SM01, SM02, SM03, SM04)
+  machine: string; // 8. รับจากเครื่อง (e.g. SM01, SM02, SM03, SM04 หรือ EXTERNAL)
+  inboundType?: "internal" | "external"; // ประเภทการรับเข้า (internal = เครื่องจักร, external = รับเข้าภายนอก/ซื้อลูกค้า)
   location: string; // 9. Location (e.g. H2/A1)
   previousLocation?: string; // Location เดิมก่อนย้าย (Previous Location)
   orderNo?: string; // เลขที่ใบสั่งเบิก (Order No.)
@@ -139,6 +150,11 @@ export interface SlitBarcodeRecord {
   description?: string;
   coilNo?: string;
   conditionText?: string;
+  isTemporaryOrder?: boolean; // ระบุว่าเป็นการเบิกฉุกเฉิน (รอเลขที่ใบสั่งจริง)
+  tempOrderRef?: string; // เลขที่ใบสั่งชั่วคราวเดิม (เช่น TEMP-TM01-01)
+  matchedOrderNo?: string; // เลขที่ใบสั่งจริงที่ผูกย้อนหลังแล้ว
+  matchedAt?: string; // วันเวลาที่ทำการผูกย้อนหลัง
+  isMachineIssued?: boolean; // ระบุว่าพนักงานที่จ่ายหน้าเครื่องทำการสแกนรับแล้วหรือไม่
 }
 
 export interface PickListItem {
@@ -158,24 +174,29 @@ export interface PickListItem {
   scannedAt?: string;
   machineIssued?: boolean;
   machineIssuedAt?: string;
+  isTemporary?: boolean;
+  tempOrderRef?: string;
+  matchedAt?: string;
 }
 
 export interface PickListOrder {
   id?: string;
   orderNo: string;
   machineId: string;
-  machineType: "pipe" | "c_channel" | "mini" | "lip_channel";
+  machineType: "pipe" | "c_channel" | "mini" | "lip_channel" | string;
   createdAt: string;
   createdDate: string;
   status: "pending" | "in_progress" | "completed";
   items: PickListItem[];
   operatorDismissed?: boolean;
+  isTemporary?: boolean;
+  matchedOrderNo?: string;
 }
 
 export interface MachineDef {
   id: string;
   name: string;
-  type: "pipe" | "c_channel" | "mini" | "lip_channel";
+  type: "pipe" | "c_channel" | "mini" | "lip_channel" | string;
   categoryTh: string;
   categoryEn: string;
 }
@@ -940,6 +961,15 @@ export function SlitFilmManagement({
   // Step 1: Selected Source Machine for Inbound (Starts null so employee picks before scanning)
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
 
+  // Inbound Source Type: "internal" (SM01-SM04) vs "external" (รับเข้าภายนอก/ซื้อจากลูกค้า)
+  const [inboundSourceType, setInboundSourceType] = useState<"internal" | "external">("internal");
+  const [externalBuilding, setExternalBuilding] = useState<string>("H");
+  const [externalRow, setExternalRow] = useState<string>("A");
+  const [externalBasketNo, setExternalBasketNo] = useState<string>("1");
+  const [externalBatchInput, setExternalBatchInput] = useState<string>("");
+  const [externalBatchError, setExternalBatchError] = useState<string | null>(null);
+  const [externalScannedSuccessToast, setExternalScannedSuccessToast] = useState<string | null>(null);
+
   // Inbound Machines List (Default SM01-SM04, extensible by user and persisted in localStorage)
   const [inboundMachines, setInboundMachines] = useState<string[]>(() => {
     try {
@@ -1054,6 +1084,7 @@ export function SlitFilmManagement({
 
   // Mandatory Location Scanner Modal State (Chained Modal Workflow)
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(false);
+  const [isLocationCameraActive, setIsLocationCameraActive] = useState<boolean>(false);
   const [locationBarcode, setLocationBarcode] = useState<string>("");
   const [locationScanError, setLocationScanError] = useState<string | null>(null);
   const locationInputRef = useRef<HTMLInputElement>(null);
@@ -1608,7 +1639,7 @@ export function SlitFilmManagement({
   }, []);
 
   // Outbound active machine category & active machine selection
-  const [activeCategory, setActiveCategory] = useState<"pipe" | "c_channel" | "mini" | "lip_channel">("pipe");
+  const [activeCategory, setActiveCategory] = useState<string>("pipe");
   const [selectedOutboundMachine, setSelectedOutboundMachine] = useState<string>("TM01");
   const [selectedOrderNo, setSelectedOrderNo] = useState<string | null>(null);
 
@@ -1632,25 +1663,49 @@ export function SlitFilmManagement({
     } catch {}
   }, [outboundMachines]);
 
+  // Dynamic Categories (Predefined + User Custom)
+  const availableCategories = useMemo(() => {
+    const result = MACHINE_CATEGORIES.map((cat) => ({
+      key: cat.key as string,
+      labelTh: cat.labelTh,
+      labelEn: cat.labelEn,
+    }));
+
+    outboundMachines.forEach((m) => {
+      if (!result.some((r) => r.key === m.type)) {
+        result.push({
+          key: m.type,
+          labelTh: m.categoryTh || m.type,
+          labelEn: m.categoryEn || m.type,
+        });
+      }
+    });
+
+    return result;
+  }, [outboundMachines]);
+
   // Add New Outbound Machine Modal State
   const [isAddOutboundMachineOpen, setIsAddOutboundMachineOpen] = useState<boolean>(false);
-  const [newOutboundMachineCategory, setNewOutboundMachineCategory] = useState<"pipe" | "c_channel" | "mini" | "lip_channel">("pipe");
+  const [newOutboundMachineCategory, setNewOutboundMachineCategory] = useState<string>("pipe");
   const [newOutboundMachineCode, setNewOutboundMachineCode] = useState<string>("");
   const [addOutboundMachineError, setAddOutboundMachineError] = useState<string | null>(null);
 
   const getSuggestedNextOutboundMachine = useCallback(
-    (category: "pipe" | "c_channel" | "mini" | "lip_channel", machines: MachineDef[]) => {
-      const prefix =
-        category === "pipe"
-          ? "TM"
-          : category === "c_channel"
-          ? "CF"
-          : category === "mini"
-          ? "ML"
-          : "ZF";
+    (category: string, machines: MachineDef[]) => {
+      let prefix = "MC";
+      const lower = category.trim().toLowerCase();
+      if (lower.includes("pipe") || lower.includes("tm") || lower === "pipe") prefix = "TM";
+      else if (lower.includes("c_channel") || lower.includes("cf") || lower.includes("ตัวซี") || lower === "c_channel") prefix = "CF";
+      else if (lower.includes("mini") || lower.includes("ml") || lower.includes("มินิ") || lower === "mini") prefix = "ML";
+      else if (lower.includes("lip") || lower.includes("zf") || lower === "lip_channel") prefix = "ZF";
+      else if (category.trim()) {
+        const clean = category.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        prefix = clean.slice(0, 3) || "MC";
+      }
+
       let maxNum = 0;
       machines
-        .filter((m) => m.type === category)
+        .filter((m) => m.type === category || m.categoryTh === category)
         .forEach((m) => {
           const regex = new RegExp(`^${prefix}(\\d+)$`, "i");
           const match = regex.exec(m.id.trim());
@@ -1677,7 +1732,7 @@ export function SlitFilmManagement({
     const cleaned = newOutboundMachineCode.trim().toUpperCase();
     if (!cleaned) {
       setAddOutboundMachineError(
-        isThai ? "กรุณาระบุรหัสเครื่องจักร (เช่น TM15, CF06)" : "Please enter a machine code (e.g. TM15, CF06)"
+        isThai ? "กรุณาระบุรหัสเครื่องจักร (เช่น TM15, CF06, ST01)" : "Please enter a machine code (e.g. TM15, CF06, ST01)"
       );
       return;
     }
@@ -1688,26 +1743,46 @@ export function SlitFilmManagement({
       return;
     }
 
-    const catLabels: Record<
-      "pipe" | "c_channel" | "mini" | "lip_channel",
-      { categoryTh: string; categoryEn: string }
-    > = {
-      pipe: { categoryTh: "ผลิตท่อ", categoryEn: "Pipe Mill" },
-      c_channel: { categoryTh: "ตัวซี", categoryEn: "C-Channel" },
-      mini: { categoryTh: "มินิ", categoryEn: "Mini Line" },
-      lip_channel: { categoryTh: "ตัวซีมีขอบ", categoryEn: "Lip Channel" },
+    const cleanedCatInput = newOutboundMachineCategory.trim();
+    if (!cleanedCatInput) {
+      setAddOutboundMachineError(
+        isThai ? "กรุณาระบุกลุ่มประเภทเครื่องจักร" : "Please enter a machine category"
+      );
+      return;
+    }
+
+    const stdMap: Record<string, { typeKey: string; categoryTh: string; categoryEn: string }> = {
+      pipe: { typeKey: "pipe", categoryTh: "ผลิตท่อ", categoryEn: "Pipe Mill" },
+      tm: { typeKey: "pipe", categoryTh: "ผลิตท่อ", categoryEn: "Pipe Mill" },
+      "tm - ผลิตท่อ (pipe mill)": { typeKey: "pipe", categoryTh: "ผลิตท่อ", categoryEn: "Pipe Mill" },
+      c_channel: { typeKey: "c_channel", categoryTh: "ตัวซี", categoryEn: "C-Channel" },
+      cf: { typeKey: "c_channel", categoryTh: "ตัวซี", categoryEn: "C-Channel" },
+      "cf - ตัวซี (c-channel)": { typeKey: "c_channel", categoryTh: "ตัวซี", categoryEn: "C-Channel" },
+      mini: { typeKey: "mini", categoryTh: "มินิ", categoryEn: "Mini Line" },
+      ml: { typeKey: "mini", categoryTh: "มินิ", categoryEn: "Mini Line" },
+      "มินิ - mini line (ml)": { typeKey: "mini", categoryTh: "มินิ", categoryEn: "Mini Line" },
+      lip_channel: { typeKey: "lip_channel", categoryTh: "ตัวซีมีขอบ", categoryEn: "Lip Channel" },
+      zf: { typeKey: "lip_channel", categoryTh: "ตัวซีมีขอบ", categoryEn: "Lip Channel" },
+      "ตัวซีมีขอบ - lip channel (zf)": { typeKey: "lip_channel", categoryTh: "ตัวซีมีขอบ", categoryEn: "Lip Channel" },
     };
+
+    const lowerCatInput = cleanedCatInput.toLowerCase();
+    const matchedStd = stdMap[lowerCatInput];
+
+    const finalType = matchedStd ? matchedStd.typeKey : lowerCatInput.replace(/\s+/g, "_");
+    const finalCatTh = matchedStd ? matchedStd.categoryTh : cleanedCatInput;
+    const finalCatEn = matchedStd ? matchedStd.categoryEn : cleanedCatInput;
 
     const newMachine: MachineDef = {
       id: cleaned,
       name: cleaned,
-      type: newOutboundMachineCategory,
-      categoryTh: catLabels[newOutboundMachineCategory].categoryTh,
-      categoryEn: catLabels[newOutboundMachineCategory].categoryEn,
+      type: finalType,
+      categoryTh: finalCatTh,
+      categoryEn: finalCatEn,
     };
 
     setOutboundMachines((prev) => [...prev, newMachine]);
-    setActiveCategory(newOutboundMachineCategory);
+    setActiveCategory(finalType);
     setSelectedOutboundMachine(cleaned);
     setIsAddOutboundMachineOpen(false);
     setNewOutboundMachineCode("");
@@ -1871,6 +1946,27 @@ export function SlitFilmManagement({
   const [rawTableText, setRawTableText] = useState<string>("");
   const [importError, setImportError] = useState<string | null>(null);
 
+  // Emergency Pre-Staging (เบิกฉุกเฉินไปรอหน้าเครื่องชั่วคราว) States
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false);
+  const [isEmergencyCameraActive, setIsEmergencyCameraActive] = useState<boolean>(false);
+  const [emergencyMachineId, setEmergencyMachineId] = useState<string>("");
+  const [emergencyTempOrderNo, setEmergencyTempOrderNo] = useState<string>("");
+  const [emergencyBarcodeInput, setEmergencyBarcodeInput] = useState<string>("");
+  const [emergencyScannedBatches, setEmergencyScannedBatches] = useState<
+    Array<{
+      id: string;
+      batch: string;
+      sourceLoc: string;
+      weightKg: number;
+      width: string;
+      certThickness: string;
+      grade: string;
+      manufacturer: string;
+      description: string;
+    }>
+  >([]);
+  const emergencyBarcodeRef = useRef<HTMLInputElement>(null);
+
   // Outbound Scanner Modal State
   const [isOutboundScannerOpen, setIsOutboundScannerOpen] = useState<boolean>(false);
   const [isOutboundCameraActive, setIsOutboundCameraActive] = useState<boolean>(false);
@@ -1880,6 +1976,16 @@ export function SlitFilmManagement({
     message: string;
   } | null>(null);
   const outboundScannerInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus barcode input when Emergency Pre-Staging Modal opens or camera closes
+  useEffect(() => {
+    if (isEmergencyModalOpen && !isEmergencyCameraActive) {
+      const timer = setTimeout(() => {
+        emergencyBarcodeRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isEmergencyModalOpen, isEmergencyCameraActive]);
 
   // Auto-focus scanner input when Outbound Scanner Modal opens
   useEffect(() => {
@@ -1899,17 +2005,29 @@ export function SlitFilmManagement({
     outboundList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
-      if (r.orderNo) {
-        set.add(`${bKey}::${r.orderNo}`);
-      }
       const loc = (r.location || "").trim();
       const upperLoc = loc.toUpperCase();
       const cond = (r.conditionText || "").trim();
+
+      // Temporary emergency records waiting for machine operator scan should not be marked as issued
+      const isUnissuedTemp = Boolean(
+        (r.isTemporaryOrder || r.orderNo?.startsWith("TEMP-") || r.orderNo?.startsWith("DRAFT-")) &&
+        !cond.includes("รับงานหน้าเครื่อง") &&
+        !r.isMachineIssued
+      );
+      if (isUnissuedTemp) {
+        return;
+      }
+
+      if (r.orderNo) {
+        set.add(`${bKey}::${r.orderNo}`);
+      }
       if (
         loc.includes("เบิก") ||
         loc.startsWith("เบิก") ||
         ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc) ||
-        cond.includes("รับงานหน้าเครื่อง")
+        cond.includes("รับงานหน้าเครื่อง") ||
+        r.isMachineIssued
       ) {
         set.add(bKey);
       }
@@ -2014,8 +2132,308 @@ export function SlitFilmManagement({
     return match ? (match.location || match.storageLocation || null) : null;
   };
 
+  // Handler: Open Emergency Pre-Staging Modal (เบิกฉุกเฉินไปรอหน้าเครื่องชั่วคราว)
+  const handleOpenEmergencyModal = () => {
+    setEmergencyMachineId("");
+    setEmergencyTempOrderNo("");
+    setEmergencyBarcodeInput("");
+    setEmergencyScannedBatches([]);
+    setIsEmergencyCameraActive(false);
+    setIsEmergencyModalOpen(true);
+    setTimeout(() => {
+      emergencyBarcodeRef.current?.focus();
+    }, 120);
+  };
+
+  // Core handler: Process scanned/entered batch barcode for Emergency Pre-Staging
+  const processEmergencyBatchCode = (rawCode: string) => {
+    if (!emergencyMachineId) {
+      showWarningAlert(
+        isThai ? "กรุณาเลือกเครื่องจักรเป้าหมาย" : "Select Target Machine",
+        isThai ? "กรุณาเลือกเครื่องจักรเป้าหมายก่อนทำการสแกนหรือเพิ่มรายการ" : "Please select target machine first."
+      );
+      setEmergencyBarcodeInput("");
+      return;
+    }
+
+    const raw = rawCode.trim();
+    if (!raw) return;
+    const trimmed = cleanBarcode(raw);
+    if (!trimmed) return;
+
+    if (!/^[A-Za-z0-9]{10}$/.test(trimmed)) {
+      showErrorAlert(
+        isThai ? "รูปแบบบาร์โค้ดไม่ถูกต้อง" : "Invalid Barcode",
+        isThai ? "บาร์โค้ด Batch ต้องเป็นรหัส 10 หลักเท่านั้น" : "Batch must be 10 alphanumeric characters."
+      );
+      setEmergencyBarcodeInput("");
+      return;
+    }
+
+    // Check duplicate in emergency list
+    if (emergencyScannedBatches.some((b) => b.batch.toUpperCase() === trimmed.toUpperCase())) {
+      showWarningAlert(
+        isThai ? "สแกนบาร์โค้ดซ้ำ" : "Duplicate Barcode",
+        isThai ? `Batch [${trimmed}] ถูกสแกนในรายการฉุกเฉินนี้แล้ว` : `Batch [${trimmed}] already scanned in this session.`
+      );
+      setEmergencyBarcodeInput("");
+      return;
+    }
+
+    // Find batch details from inboundList or sapMasterMap
+    const inboundMatch = inboundList.find((i) => i.batch.toUpperCase() === trimmed.toUpperCase());
+    const sapMatch = sapMasterMap.get(trimmed.toUpperCase());
+
+    const weightKg = sapMatch?.weightKg || inboundMatch?.weightKg || 0;
+    const width = sapMatch?.width || inboundMatch?.width || "-";
+    const certThickness = sapMatch?.certThickness || inboundMatch?.certThickness || "-";
+    const grade = sapMatch?.grade || inboundMatch?.grade || "-";
+    const manufacturer = sapMatch?.manufacturer || inboundMatch?.manufacturer || "-";
+    const description = sapMatch?.description || inboundMatch?.description || "เหล็กสลิต";
+    const sourceLoc = inboundMatch?.location || inboundMatch?.storageLocation || "คลังสินค้า";
+
+    setEmergencyScannedBatches((prev) => [
+      ...prev,
+      {
+        id: `EMG-${Date.now()}-${trimmed}`,
+        batch: trimmed.toUpperCase(),
+        sourceLoc,
+        weightKg,
+        width,
+        certThickness,
+        grade,
+        manufacturer,
+        description,
+      },
+    ]);
+
+    if (soundEnabled) playScanSound(true);
+    setEmergencyBarcodeInput("");
+    setTimeout(() => {
+      emergencyBarcodeRef.current?.focus();
+    }, 50);
+  };
+
+  // Handler: Barcode scanned in Emergency Pre-Staging Modal
+  const handleEmergencyBarcodeSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    processEmergencyBatchCode(emergencyBarcodeInput);
+  };
+
+  // Handler: Remove batch from emergency scanned list
+  const handleRemoveEmergencyBatch = (batchId: string) => {
+    setEmergencyScannedBatches((prev) => prev.filter((b) => b.id !== batchId));
+  };
+
+  // Handler: Confirm Emergency Pre-Staging submission
+  const handleConfirmEmergencyStaging = async () => {
+    if (!emergencyMachineId) {
+      showWarningAlert(
+        isThai ? "กรุณาเลือกเครื่องจักรเป้าหมาย" : "Select Target Machine",
+        isThai ? "กรุณาเลือกเครื่องจักรเป้าหมายก่อนยืนยันรายการ" : "Please select target machine before confirming."
+      );
+      return;
+    }
+
+    if (emergencyScannedBatches.length === 0) {
+      showWarningAlert(
+        isThai ? "ยังไม่มีรายการสแกน" : "No Batches Scanned",
+        isThai ? "กรุณาสแกนบาร์โค้ด Batch อย่างน้อย 1 รายการ" : "Please scan at least 1 Batch."
+      );
+      return;
+    }
+
+    const tempOrderNo = (emergencyTempOrderNo.trim() || `TEMP-${emergencyMachineId}-${Date.now().toString().slice(-4)}`).toUpperCase();
+    const totalKg = emergencyScannedBatches.reduce((sum, b) => sum + b.weightKg, 0);
+    const totalTon = (totalKg / 1000).toFixed(3);
+
+    const nowStr = new Date().toLocaleString(isThai ? "th-TH" : "en-GB");
+    const mDef = outboundMachines.find((m) => m.id === emergencyMachineId);
+    const mType = mDef?.type || "pipe";
+
+    // 1. Remove coils from master layout basket in storage
+    emergencyScannedBatches.forEach((b) => {
+      removeCoilByBatch(b.batch);
+    });
+
+    // 2. Add coils to physical machine staging rack
+    const targetRacks = getRacksForMachine(emergencyMachineId);
+    const targetRackId =
+      targetRacks.find((r) => r.status !== "maintenance")?.rackId ||
+      `${emergencyMachineId}-R01`;
+
+    emergencyScannedBatches.forEach((b) => {
+      const wMm = parseFloat(b.width) || 150;
+      const thkMm = parseFloat(b.certThickness) || 1.5;
+      addCoilToMachineRack(emergencyMachineId, targetRackId, {
+        batch: b.batch,
+        widthMm: wMm,
+        thicknessMm: thkMm,
+        weightKg: b.weightKg,
+        grade: b.grade,
+        operator: `Operator ${emergencyMachineId}`,
+        notes: `เบิกฉุกเฉิน #${tempOrderNo}`
+      });
+    });
+
+    // 3. Create Outbound records marked as temporary emergency
+    const newOutboundRecords: SlitBarcodeRecord[] = emergencyScannedBatches.map((item) => ({
+      id: `OUT-TEMP-${Date.now()}-${item.batch}`,
+      mode: "outbound",
+      scanTimestamp: nowStr,
+      batch: item.batch,
+      machine: emergencyMachineId,
+      orderNo: tempOrderNo,
+      location: `หน้าเครื่อง ${emergencyMachineId}`,
+      storageLocation: `หน้าเครื่อง ${emergencyMachineId}`,
+      previousLocation: item.sourceLoc,
+      isTemporaryOrder: true,
+      tempOrderRef: tempOrderNo,
+      weightKg: item.weightKg,
+      width: item.width,
+      certThickness: item.certThickness,
+      grade: item.grade,
+      manufacturer: item.manufacturer,
+      description: item.description,
+      conditionText: `ย้ายรอหน้าเครื่องฉุกเฉิน (รอใบสั่งเบิกจริง: #${tempOrderNo})`,
+      hasSapData: true,
+      isMachineIssued: false,
+    }));
+
+    setOutboundList((prev) => [...newOutboundRecords, ...prev]);
+    batchSaveOutboundToCloud(newOutboundRecords).catch(console.error);
+
+    // 4. Create PickListOrder marked as temporary emergency (Status: "in_progress" / "เตรียมแล้ว")
+    const tempOrder: PickListOrder = {
+      orderNo: tempOrderNo,
+      machineId: emergencyMachineId,
+      machineType: mType,
+      createdAt: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+      createdDate: new Date().toISOString().slice(0, 10),
+      status: "in_progress",
+      isTemporary: true,
+      items: emergencyScannedBatches.map((b, idx) => ({
+        id: `PLI-TEMP-${Date.now()}-${idx}`,
+        bomItem: String(idx + 1).padStart(4, "0"),
+        material: b.grade,
+        description: `${b.description || "เหล็กสลิต"} ${b.certThickness}x${b.width}mm`,
+        reqQty: b.weightKg,
+        unit: "KG",
+        batch: b.batch,
+        status: "verified",
+        scannedAt: nowStr,
+        machineIssued: false,
+        isTemporary: true,
+        tempOrderRef: tempOrderNo,
+      })),
+    };
+
+    setPickLists((prev) => [tempOrder, ...prev]);
+    savePickListToCloud(tempOrder).catch(console.error);
+
+    setIsEmergencyModalOpen(false);
+    setEmergencyScannedBatches([]);
+    setEmergencyBarcodeInput("");
+    setSelectedOutboundMachine(emergencyMachineId);
+    setSelectedOrderNo(tempOrderNo);
+
+    if (soundEnabled) playScanSound(true);
+
+    showSuccessAlert(
+      isThai ? "เบิกฉุกเฉินไปรอหน้าเครื่องสำเร็จ!" : "Emergency Staging Complete!",
+      isThai
+        ? `ย้ายเหล็กสลิตจำนวน ${emergencyScannedBatches.length} รายการ (${totalKg.toLocaleString()} kg / ${totalTon} ตัน) ไปรอที่หน้าเครื่อง [${emergencyMachineId}] เรียบร้อยแล้ว (อ้างอิงชั่วคราว: #${tempOrderNo}) เมื่อสำนักงานนำเข้าใบสั่งจริง ระบบจะเชื่อมโยงให้อัตโนมัติ`
+        : `Staged ${emergencyScannedBatches.length} batches to [${emergencyMachineId}]. Will auto-match when official order is imported.`
+    );
+
+    onLogTransaction?.(
+      `Emergency Staged ${emergencyScannedBatches.length} batches to Machine ${emergencyMachineId} (Temp Order #${tempOrderNo})`,
+      tempOrderNo,
+      "Completed"
+    );
+  };
+
+  // Handler: Manual Link / Match Temporary Order to Real Order No (ปุ่ม "ผูกใบสั่งเบิกจริง" สำรอง)
+  const handleManualMatchTempOrder = async (tempOrderNo: string) => {
+    const targetOrder = pickLists.find((o) => o.orderNo === tempOrderNo);
+    if (!targetOrder) return;
+
+    const { value: realOrderNo } = await Swal.fire({
+      title: isThai ? "ผูกเลขที่ใบสั่งเบิกจริงย้อนหลัง" : "Match Real Order No",
+      text: isThai ? `ระบุเลขที่ใบสั่งเบิกจริงสำหรับแทนที่ #${tempOrderNo}:` : `Enter official Order No to replace #${tempOrderNo}:`,
+      input: "text",
+      inputPlaceholder: "เช่น 4500123456",
+      showCancelButton: true,
+      confirmButtonText: isThai ? "ยืนยันผูกใบสั่ง" : "Confirm Match",
+      cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
+      confirmButtonColor: "#0284c7",
+      cancelButtonColor: "#64748b",
+      inputValidator: (val) => {
+        if (!val || !val.trim()) {
+          return isThai ? "กรุณาระบุเลขที่ใบสั่งจริง" : "Please enter Order No.";
+        }
+        return null;
+      },
+    });
+
+    if (!realOrderNo) return;
+    const cleanRealOrder = realOrderNo.trim().toUpperCase();
+    const nowStr = new Date().toLocaleString(isThai ? "th-TH" : "en-GB");
+
+    // 1. Update outboundList
+    const updatedOutboundToSync: SlitBarcodeRecord[] = [];
+    setOutboundList((prev) => {
+      return prev.map((ob) => {
+        if (ob.orderNo === tempOrderNo || ob.tempOrderRef === tempOrderNo) {
+          const updated: SlitBarcodeRecord = {
+            ...ob,
+            orderNo: cleanRealOrder,
+            isTemporaryOrder: false,
+            tempOrderRef: tempOrderNo,
+            matchedOrderNo: cleanRealOrder,
+            matchedAt: nowStr,
+            conditionText: `ผูกใบสั่งเบิกจริง #${cleanRealOrder} ย้อนหลังเรียบร้อย (เดิม: #${tempOrderNo})`,
+          };
+          updatedOutboundToSync.push(updated);
+          return updated;
+        }
+        return ob;
+      });
+    });
+    if (updatedOutboundToSync.length > 0) {
+      batchSaveOutboundToCloud(updatedOutboundToSync).catch(console.error);
+    }
+
+    // 2. Update pickLists
+    const updatedOrder: PickListOrder = {
+      ...targetOrder,
+      orderNo: cleanRealOrder,
+      isTemporary: false,
+      matchedOrderNo: cleanRealOrder,
+      items: targetOrder.items.map((i) => ({
+        ...i,
+        isTemporary: false,
+        tempOrderRef: tempOrderNo,
+        matchedAt: nowStr,
+      })),
+    };
+
+    setPickLists((prev) =>
+      prev.map((o) => (o.orderNo === tempOrderNo ? updatedOrder : o))
+    );
+    deletePickListFromCloud(tempOrderNo).catch(console.error);
+    savePickListToCloud(updatedOrder).catch(console.error);
+
+    showSuccessAlert(
+      isThai ? "ผูกใบสั่งจริงสำเร็จ!" : "Order Matched!",
+      isThai
+        ? `ปรับปรุงข้อมูลจาก #${tempOrderNo} เป็นใบสั่งจริง #${cleanRealOrder} เรียบร้อยแล้ว`
+        : `Updated #${tempOrderNo} to #${cleanRealOrder}.`
+    );
+  };
+
   // Handler: Officer submits imported TSV text (Supports single or multi-orders)
-  const handleSaveImportedPickList = (e: React.FormEvent) => {
+  const handleSaveImportedPickList = async (e: React.FormEvent) => {
     e.preventDefault();
     setImportError(null);
 
@@ -2030,6 +2448,10 @@ export function SlitFilmManagement({
           ? "กรุณาใส่เลขที่ใบสั่งเบิก"
           : "Please enter the Order No."
       );
+      showWarningAlert(
+        isThai ? "ข้อมูลไม่ครบถ้วน" : "Incomplete Info",
+        isThai ? "กรุณาระบุเลขที่ใบสั่งเบิกก่อนดำเนินการ" : "Please specify Order No."
+      );
       return;
     }
 
@@ -2037,6 +2459,12 @@ export function SlitFilmManagement({
 
     if (parsedItems.length === 0) {
       setImportError(
+        isThai
+          ? "ไม่พบข้อมูล Batch ในข้อความที่วาง กรุณาตรวจสอบตารางและคัดลอกใหม่อีกครั้ง"
+          : "No valid Batch items parsed. Please check table formatting and paste again."
+      );
+      showWarningAlert(
+        isThai ? "ไม่พบข้อมูล Batch" : "No Batches Found",
         isThai
           ? "ไม่พบข้อมูล Batch ในข้อความที่วาง กรุณาตรวจสอบตารางและคัดลอกใหม่อีกครั้ง"
           : "No valid Batch items parsed. Please check table formatting and paste again."
@@ -2067,6 +2495,12 @@ export function SlitFilmManagement({
         isThai
           ? `ไม่สามารถนำเข้าได้: พบเลขที่ใบสั่งซ้ำในระบบ (${duplicateOrders.join(", ")}) กรุณาระบุเลขที่ใบสั่งที่ไม่ซ้ำกัน`
           : `Import rejected: Duplicate order number(s) found (${duplicateOrders.join(", ")}).`
+      );
+      showErrorAlert(
+        isThai ? "พบเลขที่ใบสั่งซ้ำในระบบ" : "Duplicate Order No.",
+        isThai
+          ? `พบเลขที่ใบสั่งซ้ำ (${duplicateOrders.join(", ")}) กรุณาระบุเลขที่ใบสั่งใหม่`
+          : `Duplicate orders: ${duplicateOrders.join(", ")}`
       );
       return;
     }
@@ -2100,6 +2534,159 @@ export function SlitFilmManagement({
       });
     }
 
+    const confirmed = await showConfirmDialog({
+      title: isThai ? "ยืนยันนำเข้าใบสั่งเบิก (Pick List)?" : "Confirm Import Pick List?",
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6;">
+          <p style="margin-bottom: 8px; color: #334155; font-weight: 500;">
+            ${isThai ? "ต้องการยืนยันการนำเข้าใบสั่งเบิกเข้าสู่ระบบใช่หรือไม่?" : "Do you want to confirm importing these Pick Lists?"}
+          </p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">${isThai ? "เครื่องจักรเป้าหมาย:" : "Machine:"}</span>
+              <span style="font-weight: bold; color: #0284c7;">${importMachineId}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">${isThai ? "จำนวนใบสั่ง:" : "Orders Count:"}</span>
+              <span style="font-weight: bold; color: #d97706;">${createdOrders.length} ${isThai ? "ใบ" : "orders"} (${targetOrderNos.join(", ")})</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #64748b;">${isThai ? "จำนวนแถบ (Batches):" : "Batches Count:"}</span>
+              <span style="font-weight: bold; color: #059669;">${formattedItems.length} ${isThai ? "รายการ" : "items"}</span>
+            </div>
+          </div>
+        </div>
+      `,
+      confirmButtonText: isThai ? "ยืนยันนำเข้า" : "Confirm Import",
+      icon: "question",
+    });
+
+    if (!confirmed) return;
+
+    // =========================================================================
+    // AUTOMATIC RETROACTIVE MATCHING ENGINE (ตรวจจับและผูกใบสั่งเบิกจริงย้อนหลัง)
+    // =========================================================================
+    const nowStr = new Date().toLocaleString(isThai ? "th-TH" : "en-GB");
+    const autoMatchedBatches: Array<{
+      batch: string;
+      tempOrderNo: string;
+      newOrderNo: string;
+      machineId: string;
+    }> = [];
+
+    // Map each batch in the newly imported orders to its real Order No
+    const incomingBatchToOrderMap = new Map<string, string>();
+    createdOrders.forEach((ord) => {
+      ord.items.forEach((item) => {
+        if (item.batch) {
+          incomingBatchToOrderMap.set(item.batch.trim().toUpperCase(), ord.orderNo);
+        }
+      });
+    });
+
+    // 1. Update outboundList: find records with isTemporaryOrder or orderNo starting with TEMP/DRAFT
+    const updatedOutboundToSync: SlitBarcodeRecord[] = [];
+    setOutboundList((prev) => {
+      let changed = false;
+      const next = prev.map((ob) => {
+        const bKey = (ob.batch || "").trim().toUpperCase();
+        const matchedRealOrderNo = incomingBatchToOrderMap.get(bKey);
+        const isTemp =
+          ob.isTemporaryOrder ||
+          (ob.orderNo && (ob.orderNo.toUpperCase().startsWith("TEMP") || ob.orderNo.toUpperCase().startsWith("DRAFT")));
+
+        if (isTemp && matchedRealOrderNo) {
+          changed = true;
+          const oldOrder = ob.orderNo || "TEMP";
+          autoMatchedBatches.push({
+            batch: ob.batch,
+            tempOrderNo: oldOrder,
+            newOrderNo: matchedRealOrderNo,
+            machineId: ob.machine || importMachineId,
+          });
+          const updatedRecord: SlitBarcodeRecord = {
+            ...ob,
+            orderNo: matchedRealOrderNo,
+            isTemporaryOrder: false,
+            tempOrderRef: oldOrder,
+            matchedOrderNo: matchedRealOrderNo,
+            matchedAt: nowStr,
+            conditionText: `ผูกใบสั่งเบิกจริง #${matchedRealOrderNo} ย้อนหลังเรียบร้อย (เดิม: #${oldOrder})`,
+          };
+          updatedOutboundToSync.push(updatedRecord);
+          return updatedRecord;
+        }
+        return ob;
+      });
+      return changed ? next : prev;
+    });
+
+    if (updatedOutboundToSync.length > 0) {
+      batchSaveOutboundToCloud(updatedOutboundToSync).catch(console.error);
+    }
+
+    // 2. Mark the matching items in createdOrders as verified (เตรียมแล้ว)
+    if (autoMatchedBatches.length > 0) {
+      const matchedBatchSet = new Set(autoMatchedBatches.map((m) => m.batch.trim().toUpperCase()));
+      createdOrders.forEach((ord) => {
+        let verifiedCount = 0;
+        let issuedCount = 0;
+        ord.items.forEach((item) => {
+          const bKey = (item.batch || "").trim().toUpperCase();
+          if (matchedBatchSet.has(bKey)) {
+            item.status = "verified";
+            item.scannedAt = nowStr;
+            item.matchedAt = nowStr;
+            verifiedCount++;
+
+            // Check if operator at machine already scanned this batch
+            const obRec = outboundList.find((ob) => (ob.batch || "").trim().toUpperCase() === bKey);
+            const isScannedAtMachine = Boolean(
+              obRec?.isMachineIssued ||
+              obRec?.conditionText?.includes("รับงานหน้าเครื่อง")
+            );
+
+            if (isScannedAtMachine) {
+              item.machineIssued = true;
+              item.machineIssuedAt = nowStr;
+              issuedCount++;
+            } else {
+              item.machineIssued = false;
+            }
+          }
+        });
+        if (issuedCount === ord.items.length && ord.items.length > 0) {
+          ord.status = "completed";
+        } else if (verifiedCount > 0) {
+          ord.status = "in_progress";
+        }
+      });
+
+      // 3. Dismiss previous temporary pickLists
+      setPickLists((prev) => {
+        return prev.map((ord) => {
+          const isTempOrder =
+            ord.isTemporary ||
+            (ord.orderNo && (ord.orderNo.toUpperCase().startsWith("TEMP") || ord.orderNo.toUpperCase().startsWith("DRAFT")));
+          if (isTempOrder) {
+            const hasRemainingUnmatched = ord.items.some(
+              (i) => !matchedBatchSet.has((i.batch || "").trim().toUpperCase())
+            );
+            if (!hasRemainingUnmatched) {
+              const dismissed = {
+                ...ord,
+                operatorDismissed: true,
+                matchedOrderNo: targetOrderNos.join(", "),
+              };
+              savePickListToCloud(dismissed).catch(console.error);
+              return dismissed;
+            }
+          }
+          return ord;
+        });
+      });
+    }
+
     setPickLists((prev) => [...createdOrders, ...prev]);
     if (createdOrders.length > 0) {
       batchSavePickListsToCloud(createdOrders).catch(console.error);
@@ -2122,8 +2709,47 @@ export function SlitFilmManagement({
         : `Successfully imported ${createdOrders.length} Pick Lists (${formattedItems.length} items) for Machine [${importMachineId}]`,
     });
 
+    if (autoMatchedBatches.length > 0) {
+      showSuccessAlert({
+        title: isThai ? "เชื่อมโยงใบสั่งจริงย้อนหลังสำเร็จ!" : "Retroactive Match Complete!",
+        html: `
+          <div style="text-align: left; font-size: 13px; line-height: 1.6;">
+            <p style="color: #059669; font-weight: bold; margin-bottom: 6px;">
+              ${isThai
+                ? `ระบบตรวจพบ Batch ที่วางรอหน้าเครื่องฉุกเฉินจำนวน ${autoMatchedBatches.length} รายการ และผูกเลขที่ใบสั่งจริงให้อัตโนมัติเรียบร้อยแล้ว:`
+                : `Auto-matched ${autoMatchedBatches.length} emergency pre-staged batches with official order numbers:`}
+            </p>
+            <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px; border-radius: 8px; font-family: monospace; font-size: 12px; margin-bottom: 8px;">
+              ${autoMatchedBatches
+                .map(
+                  (m) =>
+                    `<div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                      <span>Batch <b>${m.batch}</b> (${m.machineId})</span>
+                      <span style="color: #0284c7;">${m.tempOrderNo} ➔ <b>#${m.newOrderNo}</b></span>
+                    </div>`
+                )
+                .join("")}
+            </div>
+            <p style="color: #64748b; font-size: 11px;">
+              ${isThai
+                ? "* รายการดังกล่าวปรับสถานะเป็นจ่ายหน้าเครื่องแล้วทันที ไม่ต้องเดินไปสแกนซ้ำ"
+                : "* These items are already issued at the machine."}
+            </p>
+          </div>
+        `,
+      });
+    } else {
+      showSuccessAlert(
+        isThai ? "นำเข้าใบสั่งเบิกสำเร็จ!" : "Pick Lists Imported!",
+        isThai
+          ? `เพิ่มใบสั่งเบิกจำนวน ${createdOrders.length} ใบ (${formattedItems.length} รายการ Batch) ประจำเครื่อง [${importMachineId}] เรียบร้อย`
+          : `Successfully imported ${createdOrders.length} Pick Lists (${formattedItems.length} items) for [${importMachineId}].`
+      );
+    }
+
     onLogTransaction?.(
-      `Imported ${createdOrders.length} Pick Lists for Machine ${importMachineId} (${formattedItems.length} Batches)`,
+      `Imported ${createdOrders.length} Pick Lists for Machine ${importMachineId} (${formattedItems.length} Batches)` +
+        (autoMatchedBatches.length > 0 ? ` [Auto-matched ${autoMatchedBatches.length} pre-staged batches]` : ""),
       createdOrders.map((o) => o.orderNo).join(", "),
       "Completed"
     );
@@ -2271,7 +2897,7 @@ export function SlitFilmManagement({
   };
 
   // Handler: Final Confirm Outbound
-  const handleConfirmOutboundFinal = (targetOrderNo?: string) => {
+  const handleConfirmOutboundFinal = async (targetOrderNo?: string) => {
     const oNo = targetOrderNo || selectedOrderNo;
     const targetOrder = pickLists.find((o) => o.orderNo === oNo);
     if (!targetOrder) return;
@@ -2281,6 +2907,12 @@ export function SlitFilmManagement({
 
     if (verifiedItems.length === 0) {
       if (soundEnabled) playScanSound(false);
+      showWarningAlert(
+        isThai ? "ยังไม่มีรายการสแกนเบิก" : "No Items Scanned",
+        isThai
+          ? "ยังไม่มีรายการสแกนเบิกสำเร็จ กรุณายิงสแกนบาร์โค้ด Batch อย่างน้อย 1 รายการ"
+          : "No verified items. Please scan at least 1 Batch barcode."
+      );
       setNotificationToast({
         type: "success",
         message: isThai
@@ -2289,6 +2921,46 @@ export function SlitFilmManagement({
       });
       return;
     }
+
+    const totalOutboundKg = verifiedItems.reduce((sum, item) => {
+      const bKey = item.batch ? item.batch.trim().toUpperCase() : "";
+      const sapMatch = sapMasterMap ? sapMasterMap.get(bKey) : null;
+      return sum + (sapMatch?.weightKg || item.reqQty || 0);
+    }, 0);
+    const totalOutboundTon = (totalOutboundKg / 1000).toFixed(3);
+
+    const confirmed = await showConfirmDialog({
+      title: isThai ? "ยืนยันการเตรียมเบิก (Pick List)?" : "Confirm Outbound Prep?",
+      html: `
+        <div style="text-align: left; font-size: 13px; line-height: 1.6;">
+          <p style="margin-bottom: 8px; color: #334155; font-weight: 500;">
+            ${isThai ? "ต้องการยืนยันการเตรียมเบิกสินค้าตามใบสั่งนี้ใช่หรือไม่?" : "Confirm outbound preparation for this order?"}
+          </p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">${isThai ? "เลขที่ใบสั่งเบิก:" : "Order No:"}</span>
+              <span style="font-weight: bold; color: #d97706;">#${targetOrder.orderNo}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">${isThai ? "เครื่องจักรเป้าหมาย:" : "Machine:"}</span>
+              <span style="font-weight: bold; color: #0284c7;">${targetOrder.machineId}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span style="color: #64748b;">${isThai ? "จำนวนที่สแกนเบิก:" : "Verified Items:"}</span>
+              <span style="font-weight: bold; color: #059669;">${verifiedItems.length} / ${validItems.length} ${isThai ? "รายการ" : "items"}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #64748b;">${isThai ? "น้ำหนักรวม:" : "Total Weight:"}</span>
+              <span style="font-weight: bold; color: #059669;">${totalOutboundKg.toLocaleString()} kg (${totalOutboundTon} ตัน)</span>
+            </div>
+          </div>
+        </div>
+      `,
+      confirmButtonText: isThai ? "ยืนยันการเตรียมเบิก" : "Confirm Outbound",
+      icon: "question",
+    });
+
+    if (!confirmed) return;
 
     const nowStr = new Date().toLocaleString(isThai ? "th-TH" : "en-GB");
 
@@ -2352,6 +3024,13 @@ export function SlitFilmManagement({
         ? `ยืนยันการเตรียมเบิกสำเร็จ! ใบสั่ง [${targetOrder.orderNo}] จำนวน ${verifiedItems.length} รายการ พร้อมสำหรับจ่ายหน้าเครื่อง [${targetOrder.machineId}]`
         : `Confirmed Outbound Prep! Pick List [${targetOrder.orderNo}] with ${verifiedItems.length} items ready for [${targetOrder.machineId}]`,
     });
+
+    showSuccessAlert(
+      isThai ? "ยืนยันการเตรียมเบิกสำเร็จ!" : "Outbound Confirmed!",
+      isThai
+        ? `ใบสั่ง [${targetOrder.orderNo}] จำนวน ${verifiedItems.length} รายการ (${totalOutboundKg.toLocaleString()} kg / ${totalOutboundTon} ตัน) พร้อมสำหรับจ่ายหน้าเครื่อง [${targetOrder.machineId}] แล้ว`
+        : `Pick List [${targetOrder.orderNo}] with ${verifiedItems.length} items (${totalOutboundKg.toLocaleString()} kg) ready for [${targetOrder.machineId}].`
+    );
 
     onLogTransaction?.(
       `Confirmed Outbound Prep: Pick List ${targetOrder.orderNo} (Machine ${targetOrder.machineId}, ${verifiedItems.length} Batches)`,
@@ -2502,10 +3181,14 @@ export function SlitFilmManagement({
   // Auto-focus location input when Location Scanner Modal opens
   useEffect(() => {
     if (isLocationModalOpen) {
+      setLocationScanError(null);
+      setIsLocationCameraActive(false);
       const timer = setTimeout(() => {
-        locationInputRef.current?.focus();
-        locationInputRef.current?.select();
-      }, 120);
+        if (locationInputRef.current) {
+          locationInputRef.current.focus();
+          locationInputRef.current.select();
+        }
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [isLocationModalOpen]);
@@ -2727,33 +3410,38 @@ export function SlitFilmManagement({
       if (r.orderNo) {
         outboundBatchOrderSet.add(`${bKey}::${r.orderNo}`);
       }
+      const isTempEmergency = Boolean((r.isTemporaryOrder || r.orderNo?.startsWith("TEMP-")) && !r.matchedOrderNo);
       const loc = (r.location || "").trim();
       const upperLoc = loc.toUpperCase();
       if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
-        dispatchedBatchSet.add(bKey);
+        if (!isTempEmergency) {
+          dispatchedBatchSet.add(bKey);
+        }
       }
     });
 
     // 1. Gather all batches that have been scanned as prepared in pick lists (item status is verified and not yet dispatched)
-    const preparedBatchMap = new Map<string, { orderNo: string; machineId: string; createdDate?: string }>();
+    const preparedBatchMap = new Map<string, { orderNo: string; machineId: string; createdDate?: string; isTemporary?: boolean }>();
     pickLists.forEach((pl) => {
+      const isPlTemp = Boolean((pl.isTemporary || pl.orderNo?.startsWith("TEMP-")) && !pl.matchedOrderNo && !pl.operatorDismissed);
       (pl.items || []).forEach((item) => {
         if (!item.batch) return;
         const bKey = item.batch.trim().toUpperCase();
-        if (item.machineIssued) {
+        if (item.machineIssued && !isPlTemp) {
           dispatchedBatchSet.add(bKey);
           outboundBatchOrderSet.add(`${bKey}::${pl.orderNo}`);
         }
-        if (item.status === "verified") {
+        if (item.status === "verified" || isPlTemp) {
           // Check if already dispatched to machine in outboundList or movement history
           const isDispatched =
             dispatchedBatchSet.has(bKey) ||
-            outboundBatchOrderSet.has(`${bKey}::${pl.orderNo}`);
+            (!isPlTemp && outboundBatchOrderSet.has(`${bKey}::${pl.orderNo}`));
           if (!isDispatched) {
             preparedBatchMap.set(bKey, {
               orderNo: pl.orderNo,
               machineId: pl.machineId,
               createdDate: pl.createdDate,
+              isTemporary: isPlTemp,
             });
           }
         }
@@ -2796,6 +3484,7 @@ export function SlitFilmManagement({
 
       const matchedInbound = activeInboundMap.get(cleanKey);
       const prepInfo = preparedBatchMap.get(cleanKey);
+      const isTempStaged = Boolean(prepInfo?.isTemporary || prepInfo?.orderNo?.startsWith("TEMP-"));
 
       const locVal = (matchedInbound?.location || "").trim();
       const isPendingLoc = !locVal || locVal === "รอระบุ" || locVal === "-" || locVal.includes("รอสแกน");
@@ -2810,13 +3499,13 @@ export function SlitFilmManagement({
         mode: "inbound",
         scanTimestamp: matchedInbound?.scanTimestamp || prepInfo?.createdDate || "-",
         batch: sapItem.batch,
-        machine: matchedInbound?.machine || "-",
-        location: matchedInbound?.location || "-",
+        machine: isTempStaged ? (prepInfo?.machineId || "-") : (matchedInbound?.machine || "-"),
+        location: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (matchedInbound?.location || "-"),
         hasSapData: true,
         salesDoc: sapItem.salesDoc,
         materialNo: sapItem.materialNo,
         certThickness: sapItem.certThickness,
-        storageLocation: sapItem.storageLocation || matchedInbound?.location || "-",
+        storageLocation: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (sapItem.storageLocation || matchedInbound?.location || "-"),
         targetThickness: sapItem.targetThickness,
         width: sapItem.width,
         weightKg: sanitizeWeightKg(sapItem.weightKg, sapItem.unrestricted),
@@ -2826,7 +3515,9 @@ export function SlitFilmManagement({
         manufacturer: sapItem.manufacturer,
         description: sapItem.description,
         coilNo: sapItem.coilNo,
-        conditionText: prepInfo
+        conditionText: isTempStaged
+          ? `อยู่หน้าเครื่อง (รอเลขที่ใบสั่ง: #${prepInfo?.orderNo})`
+          : prepInfo
           ? `กำลังเตรียมเบิกเข้าเครื่อง ${prepInfo.machineId} (ใบสั่ง #${prepInfo.orderNo})`
           : matchedInbound
           ? (matchedInbound.conditionText || "รับเข้าแล้วพร้อมใช้งาน")
@@ -2848,6 +3539,7 @@ export function SlitFilmManagement({
         }
 
         const prepInfo = preparedBatchMap.get(cleanKey);
+        const isTempStaged = Boolean(prepInfo?.isTemporary || prepInfo?.orderNo?.startsWith("TEMP-"));
         const locVal = (inboundItem.location || "").trim();
         const isPendingLoc = !locVal || locVal === "รอระบุ" || locVal === "-" || locVal.includes("รอสแกน");
         const currentStatus: "ready" | "preparing" | "pending_location" = prepInfo
@@ -2858,11 +3550,15 @@ export function SlitFilmManagement({
 
         resultList.push({
           ...inboundItem,
+          location: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (inboundItem.location || "-"),
+          storageLocation: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (inboundItem.storageLocation || inboundItem.location || "-"),
           hasSapData: false,
           stockStatus: currentStatus,
           preparedOrderNo: prepInfo?.orderNo,
           preparedMachineId: prepInfo?.machineId,
-          conditionText: prepInfo
+          conditionText: isTempStaged
+            ? `อยู่หน้าเครื่อง (รอเลขที่ใบสั่ง: #${prepInfo?.orderNo})`
+            : prepInfo
             ? `กำลังเตรียมเบิกเข้าเครื่อง ${prepInfo.machineId} (ใบสั่ง #${prepInfo.orderNo})`
             : inboundItem.conditionText,
         });
@@ -2887,17 +3583,19 @@ export function SlitFilmManagement({
           if (foundItem) break;
         }
 
+        const isTempStaged = Boolean(prepInfo.isTemporary || prepInfo.orderNo?.startsWith("TEMP-"));
+
         resultList.push({
           id: `PREP-PL-${cleanKey}`,
           mode: "inbound",
           scanTimestamp: prepInfo.createdDate || foundItem?.scannedAt || "-",
           batch: cleanKey,
           machine: prepInfo.machineId || "-",
-          location: foundItem?.storageLocation || "รอระบุ",
+          location: isTempStaged ? `หน้าเครื่อง ${prepInfo.machineId || "-"}` : (foundItem?.storageLocation || "รอระบุ"),
           hasSapData: false,
           materialNo: foundItem?.material || "",
           certThickness: "-",
-          storageLocation: foundItem?.storageLocation || "รอระบุ",
+          storageLocation: isTempStaged ? `หน้าเครื่อง ${prepInfo.machineId || "-"}` : (foundItem?.storageLocation || "รอระบุ"),
           targetThickness: "-",
           width: "-",
           weightKg: foundItem?.reqQty || 0,
@@ -2906,12 +3604,64 @@ export function SlitFilmManagement({
           grade: "-",
           manufacturer: "-",
           description: foundItem?.description || "",
-          conditionText: `กำลังเตรียมเบิกเข้าเครื่อง ${prepInfo.machineId} (ใบสั่ง #${prepInfo.orderNo})`,
+          conditionText: isTempStaged
+            ? `อยู่หน้าเครื่อง (รอเลขที่ใบสั่ง: #${prepInfo.orderNo})`
+            : `กำลังเตรียมเบิกเข้าเครื่อง ${prepInfo.machineId} (ใบสั่ง #${prepInfo.orderNo})`,
           stockStatus: "preparing",
           preparedOrderNo: prepInfo.orderNo,
           preparedMachineId: prepInfo.machineId,
         });
       }
+    });
+
+    // 4. Ensure Temporary Emergency Staged Batches from outboundList waiting for real order are included
+    outboundList.forEach((r) => {
+      if (!r.batch) return;
+      const isTemp = Boolean((r.isTemporaryOrder || r.orderNo?.startsWith("TEMP-")) && !r.matchedOrderNo);
+      if (!isTemp) return;
+      const cleanKey = r.batch.trim().toUpperCase();
+
+      if (processedBatches.has(cleanKey)) {
+        const existingIdx = resultList.findIndex((item) => item.batch.trim().toUpperCase() === cleanKey);
+        if (existingIdx !== -1) {
+          resultList[existingIdx].location = `หน้าเครื่อง ${r.machine || "-"}`;
+          resultList[existingIdx].storageLocation = `หน้าเครื่อง ${r.machine || "-"}`;
+          resultList[existingIdx].conditionText = `อยู่หน้าเครื่อง (รอเลขที่ใบสั่ง: #${r.orderNo})`;
+          resultList[existingIdx].stockStatus = "preparing";
+          resultList[existingIdx].preparedOrderNo = r.orderNo;
+          resultList[existingIdx].preparedMachineId = r.machine;
+        }
+        return;
+      }
+
+      processedBatches.add(cleanKey);
+      const sapItem = sapMasterMap.get(cleanKey);
+      resultList.push({
+        id: r.id || `TEMP-STOCK-${cleanKey}`,
+        mode: "inbound",
+        scanTimestamp: r.scanTimestamp || "-",
+        batch: r.batch,
+        machine: r.machine || "-",
+        location: `หน้าเครื่อง ${r.machine || "-"}`,
+        hasSapData: Boolean(sapItem),
+        salesDoc: sapItem?.salesDoc || r.salesDoc || "-",
+        materialNo: sapItem?.materialNo || r.materialNo || "-",
+        certThickness: sapItem?.certThickness || r.certThickness || "-",
+        storageLocation: `หน้าเครื่อง ${r.machine || "-"}`,
+        targetThickness: sapItem?.targetThickness || r.targetThickness || "-",
+        width: sapItem?.width || r.width || "-",
+        weightKg: r.weightKg || (sapItem ? sanitizeWeightKg(sapItem.weightKg, sapItem.unrestricted) : 0),
+        unrestricted: `${(r.weightKg || (sapItem ? sanitizeWeightKg(sapItem.weightKg, sapItem.unrestricted) : 0)).toLocaleString()} kg`,
+        qualityClass: sapItem?.qualityClass || r.qualityClass || "-",
+        grade: sapItem?.grade || r.grade || "-",
+        manufacturer: sapItem?.manufacturer || r.manufacturer || "-",
+        description: sapItem?.description || r.description || "",
+        coilNo: sapItem?.coilNo || r.coilNo || "-",
+        conditionText: `อยู่หน้าเครื่อง (รอเลขที่ใบสั่ง: #${r.orderNo})`,
+        stockStatus: "preparing",
+        preparedOrderNo: r.orderNo,
+        preparedMachineId: r.machine,
+      });
     });
 
     return resultList;
@@ -2976,7 +3726,10 @@ export function SlitFilmManagement({
     return filteredStockList.reduce((sum, item) => sum + (sanitizeWeightKg(item.weightKg, item.unrestricted) || 0), 0);
   }, [filteredStockList]);
 
-  const stockTotalWeightTon = (stockTotalWeightKg / 1000).toFixed(3);
+  const stockTotalWeightTon = (stockTotalWeightKg / 1000).toLocaleString("en-US", {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  });
   const stockTotalPages = Math.max(1, Math.ceil(filteredStockList.length / stockPageSize));
   const validStockCurrentPage = Math.min(Math.max(1, stockCurrentPage), stockTotalPages);
   const stockStartIndex = (validStockCurrentPage - 1) * stockPageSize;
@@ -4215,6 +4968,91 @@ export function SlitFilmManagement({
     setSelectedBatchIds((prev) => prev.filter((id) => currentSessionBatches.some((r) => r.id === id)));
   }, [currentSessionBatches]);
 
+  // Handle confirming External Inbound (ซื้อจากลูกค้า/Supplier)
+  const handleConfirmExternalInbound = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const rawBatch = externalBatchInput.trim().toUpperCase();
+    if (!rawBatch) {
+      setExternalBatchError(
+        isThai ? "กรุณาสแกนหรือกรอกรหัส Batch 10 หลัก" : "Please scan or enter 10-character Batch code"
+      );
+      playScanSound(false);
+      return;
+    }
+    const cleanB = cleanBarcode(rawBatch);
+    if (!/^[A-Za-z0-9]{10}$/.test(cleanB)) {
+      setExternalBatchError(
+        isThai ? "รหัส Batch ต้องเป็นตัวอักษร/ตัวเลข 10 หลักเท่านั้น" : "Batch must be 10 alphanumeric characters"
+      );
+      playScanSound(false);
+      return;
+    }
+
+    const bId = parseInt(externalBasketNo, 10) || 1;
+    const locStr = `${externalBuilding}-${externalRow}${String(bId).padStart(2, "0")}`;
+
+    // Ensure target basket exists in master layout so it appears in Space Management
+    ensureBasketInMasterLayout(externalBuilding as any, externalRow, String(bId));
+    ensureMasterBasketCloudSync();
+
+    const matchedSap = sapMasterMap.get(cleanB);
+    const dateNow = new Date();
+    const dateStr = `${dateNow.getFullYear()}-${String(dateNow.getMonth() + 1).padStart(2, "0")}-${String(
+      dateNow.getDate()
+    ).padStart(2, "0")}`;
+    const timeStr = dateNow.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+    const newRecord: SlitBarcodeRecord = {
+      id: `SLIT-INBOUND-EXT-${Date.now()}-${cleanB}`,
+      mode: "inbound",
+      inboundType: "external",
+      scanTimestamp: `${dateStr} ${timeStr}`,
+      batch: cleanB,
+      machine: "EXTERNAL",
+      location: locStr,
+      storageLocation: locStr,
+      hasSapData: Boolean(matchedSap),
+      certThickness: matchedSap?.certThickness || "รอข้อมูล SAP",
+      width: matchedSap?.width || "รอข้อมูล SAP",
+      weightKg: matchedSap?.weightKg || 0,
+      unrestricted: matchedSap?.unrestricted || "0 kg",
+      grade: matchedSap?.grade || "รอข้อมูล SAP",
+      manufacturer: matchedSap?.manufacturer || "ซื้อภายนอก",
+      salesDoc: matchedSap?.salesDoc || "",
+      materialNo: matchedSap?.materialNo || "",
+      targetThickness: matchedSap?.targetThickness || matchedSap?.certThickness || "-",
+      qualityClass: matchedSap?.qualityClass || "-",
+      description: matchedSap?.description || "รับเข้าภายนอก",
+      coilNo: matchedSap?.coilNo || "",
+      conditionText: matchedSap?.conditionText || "รับเข้าภายนอก (ซื้อจากลูกค้า/Supplier)",
+    };
+
+    // Save/merge into inboundList
+    setInboundList((prev) => {
+      const existingIdx = prev.findIndex((r) => r.batch === cleanB);
+      if (existingIdx !== -1) {
+        const updated = [...prev];
+        updated[existingIdx] = mergeSlitBarcodeRecords(updated[existingIdx], newRecord, sapMasterMap);
+        return updated;
+      }
+      return [newRecord, ...prev];
+    });
+
+    // Cloud Firestore Sync
+    await batchSaveInboundToCloud([newRecord]);
+
+    playScanSound(true);
+    setExternalBatchError(null);
+    setExternalBatchInput("");
+    setExternalScannedSuccessToast(
+      isThai
+        ? `บันทึกรับเข้าภายนอก [ Batch: ${cleanB} ] ลงตำแหน่ง ${locStr} สำเร็จ!`
+        : `Saved External Inbound [ Batch: ${cleanB} ] to ${locStr}!`
+    );
+    setTimeout(() => setExternalScannedSuccessToast(null), 3500);
+    onLogTransaction?.(`External Inbound Batch ${cleanB}`, locStr, "Completed");
+  };
+
   // Machine selection action: Employee taps SM01, SM02, SM03, or SM04
   const handleSelectMachineAndOpenScanner = (machineId: string) => {
     setSelectedMachine(machineId);
@@ -4241,13 +5079,18 @@ export function SlitFilmManagement({
 
     if (isForbiddenQr) {
       if (soundEnabled) playScanSound(false);
+      const msg = isThai
+        ? "ปฏิเสธ: ตรวจพบ QR Code! ระบบรองรับเฉพาะบาร์โค้ด Batch 10 หลัก (Barcode-Only)"
+        : "Rejected: QR Code detected! System supports Barcode-Only 10 digits.";
       setScanStatus({
         type: "error",
-        message: isThai
-          ? "ปฏิเสธ: ตรวจพบ QR Code! ระบบรองรับเฉพาะบาร์โค้ด Batch 10 หลัก (Barcode-Only)"
-          : "Rejected: QR Code detected! System supports Barcode-Only 10 digits.",
+        message: msg,
         batch: trimmed,
       });
+      showErrorAlert(
+        isThai ? "ตรวจพบ QR Code" : "QR Code Detected",
+        msg
+      );
       setBarcodeInput("");
       return;
     }
@@ -4257,13 +5100,18 @@ export function SlitFilmManagement({
 
     if (!isExactly10Alphanumeric) {
       if (soundEnabled) playScanSound(false);
+      const msg = isThai
+        ? `ปฏิเสธ: บาร์โค้ดต้องเป็นรหัส Batch 10 หลักเท่านั้น (ตรวจพบ ${trimmed.length} ตัวอักษร เช่น '26SL00189A')`
+        : `Rejected: Must be exactly 10-character alphanumeric Batch (received ${trimmed.length} chars).`;
       setScanStatus({
         type: "error",
-        message: isThai
-          ? `ปฏิเสธ: บาร์โค้ดต้องเป็นรหัส Batch 10 หลักเท่านั้น (ตรวจพบ ${trimmed.length} ตัวอักษร เช่น '26SL00189A')`
-          : `Rejected: Must be exactly 10-character alphanumeric Batch (received ${trimmed.length} chars).`,
+        message: msg,
         batch: trimmed,
       });
+      showErrorAlert(
+        isThai ? "รูปแบบบาร์โค้ดไม่ถูกต้อง" : "Invalid Barcode Format",
+        msg
+      );
       setBarcodeInput("");
       return;
     }
@@ -4542,6 +5390,12 @@ export function SlitFilmManagement({
           : `Notice: Batch [${trimmed}] has already been scanned in this round!`,
         batch: trimmed,
       });
+      showWarningAlert(
+        isThai ? "สแกนบาร์โค้ดซ้ำในรอบนี้!" : "Duplicate Barcode in Round!",
+        isThai
+          ? `บาร์โค้ด Batch [${trimmed}] ถูกสแกนอยู่ในรายการรอบนี้แล้ว`
+          : `Batch [${trimmed}] has already been scanned in this round!`
+      );
       setBarcodeInput("");
       return;
     }
@@ -4557,6 +5411,12 @@ export function SlitFilmManagement({
           : `Notice: Batch [${trimmed}] already exists in the system!`,
         batch: trimmed,
       });
+      showWarningAlert(
+        isThai ? "บาร์โค้ดนี้มีอยู่ในระบบแล้ว!" : "Barcode Already in System!",
+        isThai
+          ? `บาร์โค้ด Batch [${trimmed}] ได้ถูกบันทึกรับเข้าไว้ในระบบเรียบร้อยแล้ว`
+          : `Batch [${trimmed}] already exists in the system records!`
+      );
       setBarcodeInput("");
       return;
     }
@@ -4734,7 +5594,15 @@ export function SlitFilmManagement({
   };
 
   // Delete a record
-  const handleDeleteRecord = (id: string, batch: string) => {
+  const handleDeleteRecord = async (id: string, batch: string) => {
+    const confirmed = await showConfirmDialog({
+      title: isThai ? "ยืนยันลบรายการ?" : "Confirm Delete Record?",
+      text: isThai ? `ต้องการลบรายการ Batch [${batch}] ออกจากระบบใช่หรือไม่?` : `Do you want to delete Batch [${batch}]?`,
+      confirmButtonText: isThai ? "ยืนยันการลบ" : "Delete",
+      isDestructive: true,
+    });
+    if (!confirmed) return;
+
     if (activeMode === "inbound") {
       setInboundList((prev) => prev.filter((r) => r.id !== id));
       deleteRecordFromCloud("slit_inbound", id);
@@ -4745,6 +5613,7 @@ export function SlitFilmManagement({
     if (selectedRecord?.id === id) {
       setSelectedRecord(null);
     }
+    showToast(isThai ? `ลบรายการ Batch [${batch}] เรียบร้อย` : `Deleted Batch [${batch}]`, "success");
     onLogTransaction?.(
       `Removed ${activeMode === "inbound" ? "Inbound" : "Outbound"} record Batch ${batch}`,
       batch,
@@ -4769,9 +5638,17 @@ export function SlitFilmManagement({
   };
 
   // Delete selected batches from current session
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     if (selectedBatchIds.length === 0) return;
     const count = selectedBatchIds.length;
+    const confirmed = await showConfirmDialog({
+      title: isThai ? "ยืนยันลบรายการที่เลือก?" : "Confirm Delete Selected?",
+      text: isThai ? `ต้องการลบรายการที่เลือกจำนวน ${count} รายการออกจากรอบนี้ใช่หรือไม่?` : `Delete ${count} selected items from this round?`,
+      confirmButtonText: isThai ? "ยืนยันการลบ" : "Delete",
+      isDestructive: true,
+    });
+    if (!confirmed) return;
+
     const remaining = currentSessionBatches.filter((r) => !selectedBatchIds.includes(r.id));
     const remainingWidthMm = remaining.reduce(
       (sum, item) => sum + getBatchWidthMm(item.batch, item.width),
@@ -4782,6 +5659,7 @@ export function SlitFilmManagement({
     }
     setCurrentSessionBatches(remaining);
     setSelectedBatchIds([]);
+    showToast(isThai ? `ลบรายการที่เลือกจำนวน ${count} รายการเรียบร้อย` : `Deleted ${count} items`, "success");
     setScanStatus({
       type: "success",
       message: isThai
@@ -4791,7 +5669,15 @@ export function SlitFilmManagement({
   };
 
   // Quick individual delete of single batch from current round
-  const handleDeleteRecordFromSession = (id: string, batch: string) => {
+  const handleDeleteRecordFromSession = async (id: string, batch: string) => {
+    const confirmed = await showConfirmDialog({
+      title: isThai ? "ยืนยันลบรายการ?" : "Confirm Delete?",
+      text: isThai ? `ต้องการลบ Batch [${batch}] ออกจากรอบนี้ใช่หรือไม่?` : `Remove Batch [${batch}] from this round?`,
+      confirmButtonText: isThai ? "ยืนยันการลบ" : "Delete",
+      isDestructive: true,
+    });
+    if (!confirmed) return;
+
     const remaining = currentSessionBatches.filter((r) => r.id !== id);
     const remainingWidthMm = remaining.reduce(
       (sum, item) => sum + getBatchWidthMm(item.batch, item.width),
@@ -4802,6 +5688,7 @@ export function SlitFilmManagement({
     }
     setCurrentSessionBatches(remaining);
     setSelectedBatchIds((prev) => prev.filter((x) => x !== id));
+    showToast(isThai ? `ลบ Batch [${batch}] ออกจากรอบนี้แล้ว` : `Removed Batch [${batch}]`, "success");
     setScanStatus({
       type: "success",
       message: isThai
@@ -4841,28 +5728,32 @@ export function SlitFilmManagement({
     }, 100);
   };
 
-  // Confirm Location Submission: Binds location to all batches in this round, commits to table, and opens SweetAlert
-  const handleConfirmLocationSubmission = (overrideLoc?: string) => {
+  // Confirm Location Submission: Binds location to all batches in this round and commits to storage
+  const handleConfirmLocationSubmission = async (overrideLoc?: string) => {
     const finalLocation = (overrideLoc || locationBarcode).trim().toUpperCase();
     if (!finalLocation) {
-      setLocationScanError(
-        isThai
-          ? "กรุณาสแกนหรือระบุตำแหน่งจัดเก็บ (Location ห้ามเว้นว่าง)"
-          : "Please scan or specify a storage location (Cannot be empty)"
-      );
-      locationInputRef.current?.focus();
+      const errText = isThai
+        ? "กรุณาสแกนหรือระบุตำแหน่งจัดเก็บ (Location ห้ามเว้นว่าง)"
+        : "Please scan or specify a storage location (Cannot be empty)";
+      setLocationScanError(errText);
+      if (locationInputRef.current) {
+        locationInputRef.current.focus();
+      }
       return;
     }
 
     if (currentSessionBatches.length === 0) {
-      setLocationScanError(
-        isThai ? "ยังไม่มีรายการสแกนในรอบนี้" : "No items scanned in this round."
-      );
+      const errText = isThai ? "ยังไม่มีรายการสแกนในรอบนี้" : "No items scanned in this round.";
+      setLocationScanError(errText);
       return;
     }
 
-    // Bind this Location to all batches in current inbound round
+    // Calculate totals for summary
+    const totalKg = currentSessionBatches.reduce((sum, item) => sum + (item.weightKg || 0), 0);
+    const totalTon = (totalKg / 1000).toFixed(3);
     const finalizedMachine = selectedMachine || "SM01";
+
+    // Bind this Location to all batches in current inbound round
     const committedBatches: SlitBarcodeRecord[] = currentSessionBatches.map((item) => {
       const sapMatch = !item.hasSapData && sapMasterMap ? sapMasterMap.get(item.batch.trim().toUpperCase()) : null;
       const cleanConditionText =
@@ -4943,41 +5834,34 @@ export function SlitFilmManagement({
 
     setSelectedLocation(finalLocation);
     setIsLocationModalOpen(false);
+    setIsLocationCameraActive(false);
     setLocationScanError(null);
 
     // Auto-expand summary table so employee can inspect the committed batches
     setIsTableCollapsed(false);
     setCurrentPage(1);
 
-    // Calculate totals for SweetAlert and toast
-    const totalKg = committedBatches.reduce((sum, item) => sum + (item.weightKg || 0), 0);
-    const totalTon = (totalKg / 1000).toFixed(3);
-    const nowStr = new Date().toLocaleString(isThai ? "th-TH" : "en-GB");
-
     if (soundEnabled) playScanSound(true);
 
-    // Show green notification toast
-    setNotificationToast({
-      type: "success",
-      message: isThai
-        ? `บันทึกจัดเก็บ ${committedBatches.length} รายการ เข้า Location [${finalLocation}] สำเร็จ`
-        : `Successfully stored ${committedBatches.length} items to Location [${finalLocation}]`,
-    });
+    // Log transaction
+    onLogTransaction?.(
+      `Confirmed Inbound: Machine ${finalizedMachine}, ${committedBatches.length} Batches (${totalKg.toLocaleString()} kg) stored to Location ${finalLocation}`,
+      `INBOUND-${Date.now()}`,
+      "Completed"
+    );
 
-    // Open SweetAlert-style modal with all required information
-    setSweetAlertData({
-      isOpen: true,
-      machine: finalizedMachine,
-      batchCount: committedBatches.length,
-      totalWeightKg: totalKg,
-      totalWeightTon: totalTon,
-      location: finalLocation,
-      timestamp: nowStr,
-    });
+    // Single Success Notification
+    showSuccessAlert(
+      isThai ? "บันทึกจัดเก็บสำเร็จ!" : "Stored Successfully!",
+      isThai
+        ? `บันทึกจัดเก็บเหล็กสลิตจำนวน ${committedBatches.length} รายการ (${totalKg.toLocaleString()} kg / ${totalTon} ตัน) เข้า Location [${finalLocation}] เรียบร้อยแล้ว`
+        : `Successfully stored ${committedBatches.length} items (${totalKg.toLocaleString()} kg / ${totalTon} tons) to [${finalLocation}].`
+    );
 
     // Clear session
     setCurrentSessionBatches([]);
     setSelectedBatchIds([]);
+    setLocationBarcode("");
   };
 
   // Confirm Inbound & Trigger Location Modal
@@ -5308,103 +6192,134 @@ export function SlitFilmManagement({
         />
       )}
 
-      {/* 2. Inbound Workflow: Machine Selection (Compact Android Material Design Grid) */}
+      {/* 2. Inbound Workflow: Machine Selection & External Inbound Switcher */}
       {activeMode === "inbound" && (
-        <section className="p-2 sm:p-2.5 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-          {/* Header row */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 mb-2 border-b border-slate-100 dark:border-[#1e3a5f]/60">
-            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-              <Cpu size={14} className="text-emerald-500" />
-              <span>
-                {isThai
-                  ? `เลือกเครื่องจักรรับเข้า (${inboundMachines[0] || "SM01"} - ${inboundMachines[inboundMachines.length - 1] || "SM04"}):`
-                  : `Select Inbound Machine (${inboundMachines[0] || "SM01"} - ${inboundMachines[inboundMachines.length - 1] || "SM04"}):`}
-              </span>
-            </span>
+        <section className="space-y-2.5">
+          {/* Mode Switcher Segmented Control */}
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
+            <button
+              type="button"
+              onClick={() => setInboundSourceType("internal")}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                inboundSourceType === "internal"
+                  ? "bg-emerald-600 text-white shadow-xs font-extrabold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Cpu size={15} />
+              <span>{isThai ? "รับจากเครื่องจักร (SM01 - SM04)" : "Internal Machine (SM01 - SM04)"}</span>
+            </button>
 
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-[10px] font-mono font-medium text-slate-400">
-                {isThai ? "แตะเพื่อเริ่มสแกน" : "Tap to scan"}
-              </span>
-              <button
-                type="button"
-                onClick={handleOpenAddInboundMachine}
-                className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all"
-              >
-                <Plus size={13} />
-                <span>{isThai ? "เพิ่มเครื่องใหม่" : "Add Machine"}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setInboundSourceType("external")}
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                inboundSourceType === "external"
+                  ? "bg-purple-600 text-white shadow-xs font-extrabold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
+              }`}
+            >
+              <Truck size={15} />
+              <span>{isThai ? "รับเข้าภายนอก (ซื้อจากลูกค้า/Supplier)" : "External Purchase Inbound"}</span>
+            </button>
           </div>
 
-          {/* Machine Cards in a tight, structured Android Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
-            {inboundMachines.map((machineId) => {
-              const isSelected = selectedMachine === machineId;
-              const machineBatchCount = inboundList.filter((item) => item.machine === machineId).length;
-              const isCustomMachine = !AVAILABLE_MACHINES.includes(machineId);
+          {inboundSourceType === "internal" ? (
+            <div className="p-2 sm:p-2.5 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
+              {/* Header row */}
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-1.5 mb-2 border-b border-slate-100 dark:border-[#1e3a5f]/60">
+                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Cpu size={14} className="text-emerald-500" />
+                  <span>
+                    {isThai
+                      ? `เลือกเครื่องจักรรับเข้า (${inboundMachines[0] || "SM01"} - ${inboundMachines[inboundMachines.length - 1] || "SM04"}):`
+                      : `Select Inbound Machine (${inboundMachines[0] || "SM01"} - ${inboundMachines[inboundMachines.length - 1] || "SM04"}):`}
+                  </span>
+                </span>
 
-              return (
-                <button
-                  key={machineId}
-                  type="button"
-                  onClick={() => handleSelectMachineAndOpenScanner(machineId)}
-                  className={`group relative flex flex-col items-center justify-center py-2 px-2 sm:py-2.5 sm:px-3 rounded-xl border transition-all active:scale-[0.98] cursor-pointer min-h-[66px] sm:min-h-[72px] ${
-                    isSelected
-                      ? "bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/25 ring-2 ring-emerald-400/60"
-                      : "bg-slate-50/70 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-[#152646] shadow-xs"
-                  }`}
-                >
-                  {isCustomMachine && (
-                    <span
-                      role="button"
-                      tabIndex={0}
-                      onClick={(e) => handleDeleteInboundMachine(machineId, e)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          handleDeleteInboundMachine(machineId, e as unknown as React.MouseEvent);
-                        }
-                      }}
-                      title={isThai ? `ลบเครื่อง ${machineId}` : `Remove ${machineId}`}
-                      className={`absolute top-1.5 left-1.5 p-1 rounded-md transition-colors ${
+                <div className="flex items-center gap-2">
+                  <span className="hidden sm:inline text-[10px] font-mono font-medium text-slate-400">
+                    {isThai ? "แตะเพื่อเริ่มสแกน" : "Tap to scan"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddInboundMachine}
+                    className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all"
+                  >
+                    <Plus size={13} />
+                    <span>{isThai ? "เพิ่มเครื่องใหม่" : "Add Machine"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Machine Cards in a tight, structured Android Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+                {inboundMachines.map((machineId) => {
+                  const isSelected = selectedMachine === machineId;
+                  const machineBatchCount = inboundList.filter((item) => item.machine === machineId).length;
+                  const isCustomMachine = !AVAILABLE_MACHINES.includes(machineId);
+
+                  return (
+                    <button
+                      key={machineId}
+                      type="button"
+                      onClick={() => handleSelectMachineAndOpenScanner(machineId)}
+                      className={`group relative flex flex-col items-center justify-center py-2 px-2 sm:py-2.5 sm:px-3 rounded-xl border transition-all active:scale-[0.98] cursor-pointer min-h-[66px] sm:min-h-[72px] ${
                         isSelected
-                          ? "text-emerald-100 hover:bg-white/20 hover:text-white"
-                          : "text-slate-400 hover:bg-rose-100 dark:hover:bg-rose-950/60 hover:text-rose-600 dark:hover:text-rose-400"
+                          ? "bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/25 ring-2 ring-emerald-400/60"
+                          : "bg-slate-50/70 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-[#152646] shadow-xs"
                       }`}
                     >
-                      <Trash2 size={11} />
-                    </span>
-                  )}
+                      {isCustomMachine && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => handleDeleteInboundMachine(machineId, e)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              handleDeleteInboundMachine(machineId, e as unknown as React.MouseEvent);
+                            }
+                          }}
+                          title={isThai ? `ลบเครื่อง ${machineId}` : `Remove ${machineId}`}
+                          className={`absolute top-1.5 left-1.5 p-1 rounded-md transition-colors ${
+                            isSelected
+                              ? "text-emerald-100 hover:bg-white/20 hover:text-white"
+                              : "text-slate-400 hover:bg-rose-100 dark:hover:bg-rose-950/60 hover:text-rose-600 dark:hover:text-rose-400"
+                          }`}
+                        >
+                          <Trash2 size={11} />
+                        </span>
+                      )}
 
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className={`text-[9px] font-extrabold uppercase tracking-wider ${isSelected ? "text-emerald-100" : "text-slate-500 dark:text-slate-400"}`}>
-                      {isThai ? "เครื่องจักร" : "Machine"}
-                    </span>
-                    {machineBatchCount > 0 && (
-                      <span className={`px-1 py-0.2 rounded-full text-[9px] font-mono font-extrabold ${isSelected ? "bg-white/20 text-white" : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"}`}>
-                        {machineBatchCount}
-                      </span>
-                    )}
-                  </div>
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <span className={`text-[9px] font-extrabold uppercase tracking-wider ${isSelected ? "text-emerald-100" : "text-slate-500 dark:text-slate-400"}`}>
+                          {isThai ? "เครื่องจักร" : "Machine"}
+                        </span>
+                        {machineBatchCount > 0 && (
+                          <span className={`px-1 py-0.2 rounded-full text-[9px] font-mono font-extrabold ${isSelected ? "bg-white/20 text-white" : "bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300"}`}>
+                            {machineBatchCount}
+                          </span>
+                        )}
+                      </div>
 
-                  <div className={`text-lg sm:text-xl font-black font-mono tracking-tight leading-none ${isSelected ? "text-white" : "text-slate-900 dark:text-slate-100"}`}>
-                    {machineId}
-                  </div>
+                      <div className={`text-lg sm:text-xl font-black font-mono tracking-tight leading-none ${isSelected ? "text-white" : "text-slate-900 dark:text-slate-100"}`}>
+                        {machineId}
+                      </div>
 
-                  <div className={`text-[10px] font-semibold mt-1 flex items-center gap-1 ${isSelected ? "text-emerald-100" : "text-emerald-600 dark:text-emerald-400"}`}>
-                    <Barcode size={12} />
-                    <span>{isThai ? "แตะเพื่อสแกน" : "Scan"}</span>
-                  </div>
+                      <div className={`text-[10px] font-semibold mt-1 flex items-center gap-1 ${isSelected ? "text-emerald-100" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        <Barcode size={12} />
+                        <span>{isThai ? "แตะเพื่อสแกน" : "Scan"}</span>
+                      </div>
 
-                  {isSelected && (
-                    <div className="absolute top-1.5 right-1.5 p-0.5 rounded-full bg-white/25 text-white">
-                      <Check size={10} />
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                      {isSelected && (
+                        <div className="absolute top-1.5 right-1.5 p-0.5 rounded-full bg-white/25 text-white">
+                          <Check size={10} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
 
           {/* Add New Inbound Machine Modal */}
           {isAddInboundMachineOpen && (
@@ -5507,6 +6422,180 @@ export function SlitFilmManagement({
               </button>
             </div>
           )}
+        </div>
+      ) : (
+            /* External Purchase Inbound Form Panel */
+            <div className="p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-[#111e38] border-purple-200 dark:border-purple-900/60 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between border-b border-purple-100 dark:border-purple-900/40 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                    <Truck size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                      {isThai ? "รับเข้าภายนอก (ซื้อจากลูกค้า / Supplier)" : "External Purchase Inbound Receiving"}
+                    </h3>
+                    <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                      {isThai
+                        ? "สแกน Batch 10 หลัก และเลือกคลัง/ตำแหน่งจัดเก็บ ข้อมูล spec จะดึงจาก SAP อัตโนมัติ"
+                        : "Scan 10-digit Batch & select storage location. Specs match automatically with SAP."}
+                    </p>
+                  </div>
+                </div>
+
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800">
+                  EXTERNAL
+                </span>
+              </div>
+
+              {externalScannedSuccessToast && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-bold flex items-center gap-2 animate-fade-in">
+                  <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                  <span>{externalScannedSuccessToast}</span>
+                </div>
+              )}
+
+              {externalBatchError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-rose-500 shrink-0" />
+                  <span>{externalBatchError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleConfirmExternalInbound} className="space-y-3">
+                {/* 1. Storage Location Picker (Building + Row + Basket) */}
+                <div className="p-3 rounded-xl bg-purple-50/50 dark:bg-[#0c1930] border border-purple-200/80 dark:border-[#1e3a5f] space-y-2">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <MapPin size={13} className="text-purple-500" />
+                      <span>{isThai ? "เลือกตำแหน่งจัดเก็บ (Storage Location):" : "Select Storage Location:"}</span>
+                    </span>
+                    <span className="font-mono text-[11px] font-black text-purple-600 dark:text-purple-400">
+                      {externalBuilding}-{externalRow}{String(parseInt(externalBasketNo, 10) || 1).padStart(2, "0")}
+                    </span>
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {/* Building Selection */}
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        {isThai ? "1. คลัง/อาคาร:" : "1. Building:"}
+                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {["H", "F", "E9", "E10", "I"].map((bld) => (
+                          <button
+                            key={bld}
+                            type="button"
+                            onClick={() => setExternalBuilding(bld)}
+                            className={`px-2 py-1 rounded-lg text-xs font-black font-mono cursor-pointer transition-all ${
+                              externalBuilding === bld
+                                ? "bg-purple-600 text-white shadow-xs"
+                                : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#1e3a5f]"
+                            }`}
+                          >
+                            {bld}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Row Selection */}
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        {isThai ? "2. แถว (Row):" : "2. Row:"}
+                      </span>
+                      <select
+                        value={externalRow}
+                        onChange={(e) => setExternalRow(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] text-xs font-mono font-black text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"].map((r) => (
+                          <option key={r} value={r}>
+                            {isThai ? `แถว ${r}` : `Row ${r}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Basket Number Input */}
+                    <div>
+                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                        {isThai ? "3. ตะกร้าที่:" : "3. Basket No:"}
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={300}
+                        value={externalBasketNo}
+                        onChange={(e) => setExternalBasketNo(e.target.value)}
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] text-xs font-mono font-black text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Batch Barcode Input */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {isThai ? "สแกนหรือกรอกรหัส Batch 10 หลัก (10-Digit Batch Code):" : "Scan/Enter 10-Digit Batch Code:"}
+                  </label>
+                  <div className="relative flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={externalBatchInput}
+                      onChange={(e) => {
+                        setExternalBatchInput(e.target.value.toUpperCase());
+                        if (externalBatchError) setExternalBatchError(null);
+                      }}
+                      placeholder={isThai ? "เช่น 26SL00189A หรือ CH00227080..." : "e.g. 26SL00189A..."}
+                      maxLength={12}
+                      className="w-full px-3.5 py-2.5 text-sm font-mono font-black tracking-wider rounded-xl bg-white dark:bg-[#0c1930] border-2 border-purple-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-purple-500/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Live SAP Spec Preview Card */}
+                {externalBatchInput.trim().length >= 8 && (() => {
+                  const matched = sapMasterMap.get(cleanBarcode(externalBatchInput).toUpperCase());
+                  return (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-xs font-mono space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-slate-600 dark:text-slate-400">
+                          {isThai ? "ข้อมูล spec จาก SAP Master:" : "SAP Master Spec:"}
+                        </span>
+                        {matched ? (
+                          <span className="px-1.5 py-0.2 rounded font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                            {isThai ? "พบในระบบ SAP" : "Matched"}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 rounded font-bold bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300">
+                            {isThai ? "ไม่พบใน SAP (จะบันทึกเริ่มต้น)" : "Not in SAP"}
+                          </span>
+                        )}
+                      </div>
+                      {matched && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] text-slate-800 dark:text-slate-200 font-bold">
+                          <div>เกรด: <span className="text-purple-600 dark:text-purple-400">{matched.grade || "-"}</span></div>
+                          <div>ความหนา: <span className="text-purple-600 dark:text-purple-400">{matched.certThickness || "-"}</span></div>
+                          <div>ความกว้าง: <span className="text-purple-600 dark:text-purple-400">{matched.width || "-"}</span></div>
+                          <div>น้ำหนัก: <span className="text-purple-600 dark:text-purple-400">{(matched.weightKg || 0).toLocaleString()} kg</span></div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Submit button */}
+                <button
+                  type="submit"
+                  className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs sm:text-sm shadow-md active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Truck size={16} />
+                  <span>{isThai ? "บันทึกรับเข้าภายนอก" : "Confirm External Inbound"}</span>
+                </button>
+              </form>
+            </div>
+          )}
         </section>
       )}
 
@@ -5540,8 +6629,8 @@ export function SlitFilmManagement({
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-1 sm:gap-1.5">
-              {MACHINE_CATEGORIES.map((cat) => {
+            <div className="flex flex-wrap gap-1 sm:gap-1.5">
+              {availableCategories.map((cat) => {
                 const isActive = activeCategory === cat.key;
                 const catCount = outboundMachines.filter((m) => m.type === cat.key).length;
                 return (
@@ -5554,7 +6643,7 @@ export function SlitFilmManagement({
                       const firstM = outboundMachines.find((m) => m.type === cat.key);
                       if (firstM) setSelectedOutboundMachine(firstM.id);
                     }}
-                    className={`py-1.5 px-1 sm:px-2 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all border flex items-center justify-between cursor-pointer ${
+                    className={`py-1.5 px-2 sm:px-3 rounded-lg text-[10px] sm:text-[11px] font-bold transition-all border flex items-center justify-between gap-2 cursor-pointer ${
                       isActive
                         ? "bg-gradient-to-r from-indigo-600 to-blue-600 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-400/40"
                         : "bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f] hover:border-indigo-400 hover:bg-indigo-50/40 dark:hover:bg-[#132240]"
@@ -5574,7 +6663,7 @@ export function SlitFilmManagement({
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1">
                 <span>{isThai ? "เลือกหมายเลขเครื่องจักร:" : "Select Machine No.:"}</span>
                 <span className="text-amber-600 dark:text-amber-400 font-mono font-black">
-                  [ {MACHINE_CATEGORIES.find((c) => c.key === activeCategory)?.labelTh} ]
+                  [ {availableCategories.find((c) => c.key === activeCategory)?.labelTh || activeCategory} ]
                 </span>
               </span>
             </div>
@@ -5691,23 +6780,34 @@ export function SlitFilmManagement({
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      {isThai ? "กลุ่มประเภทเครื่องจักร:" : "Machine Category:"}
+                      {isThai
+                        ? "กลุ่มประเภทเครื่องจักร (เลือกจากรายการ หรือ พิมพ์ชื่อกลุ่มใหม่ได้อิสระ):"
+                        : "Machine Category (Select or type new group freely):"}
                     </label>
-                    <select
+                    <input
+                      type="text"
+                      list="outbound-machine-category-list"
                       value={newOutboundMachineCategory}
                       onChange={(e) => {
-                        const nextCat = e.target.value as "pipe" | "c_channel" | "mini" | "lip_channel";
+                        const nextCat = e.target.value;
                         setNewOutboundMachineCategory(nextCat);
                         setNewOutboundMachineCode(getSuggestedNextOutboundMachine(nextCat, outboundMachines));
                         if (addOutboundMachineError) setAddOutboundMachineError(null);
                       }}
-                      className="w-full px-3 py-2 text-xs font-bold rounded-xl bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer"
-                    >
-                      <option value="pipe">{isThai ? "TM - ผลิตท่อ (Pipe Mill)" : "TM - Pipe Mill"}</option>
-                      <option value="c_channel">{isThai ? "CF - ตัวซี (C-Channel)" : "CF - C-Channel"}</option>
-                      <option value="mini">{isThai ? "มินิ - Mini Line (ML)" : "ML - Mini Line"}</option>
-                      <option value="lip_channel">{isThai ? "ตัวซีมีขอบ - Lip Channel (ZF)" : "ZF - Lip Channel"}</option>
-                    </select>
+                      placeholder={isThai ? "พิมพ์หรือเลือกกลุ่มเครื่องจักร (เช่น TM, CF, มินิ, ตัวซีมีขอบ, ST...)" : "Type or select category (e.g. TM, CF, Mini, Lip Channel, ST...)"}
+                      className="w-full px-3.5 py-2.5 text-xs font-bold rounded-xl bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 font-sans"
+                    />
+                    <datalist id="outbound-machine-category-list">
+                      <option value="TM - ผลิตท่อ (Pipe Mill)">TM - ผลิตท่อ (Pipe Mill)</option>
+                      <option value="CF - ตัวซี (C-Channel)">CF - ตัวซี (C-Channel)</option>
+                      <option value="มินิ - Mini Line (ML)">มินิ - Mini Line (ML)</option>
+                      <option value="ตัวซีมีขอบ - Lip Channel (ZF)">ตัวซีมีขอบ - Lip Channel (ZF)</option>
+                      {availableCategories.map((cat) => (
+                        <option key={cat.key} value={cat.labelTh}>
+                          {cat.labelTh} ({cat.labelEn})
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
 
                   <div>
@@ -5752,38 +6852,49 @@ export function SlitFilmManagement({
           {/* Active Machine Orders Collapsible Cards Section (Compact Android Style) */}
           <div className="p-2 sm:p-2.5 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs space-y-1.5 sm:space-y-2">
             {/* Machine Section Toolbar Header */}
-            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-100 dark:border-[#1e3a5f]/60">
-              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-[#1e3a5f]/60">
+              <div className="flex items-center gap-2 min-w-0">
                 <div className="p-1 sm:p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex-shrink-0">
-                  <ClipboardList size={14} />
+                  <ClipboardList size={16} />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10.5px] sm:text-[11px] font-mono font-black text-amber-600 dark:text-amber-400">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] sm:text-xs font-mono font-black text-amber-600 dark:text-amber-400">
                       [ เครื่อง {selectedOutboundMachine} ]
                     </span>
-                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                       {outboundMachineOrders.length} {isThai ? "ใบสั่ง" : "orders"}
                     </span>
                   </div>
-                  <h3 className="text-[11px] sm:text-xs font-extrabold text-slate-900 dark:text-slate-100 leading-tight truncate">
+                  <h3 className="text-xs font-extrabold text-slate-900 dark:text-slate-100 leading-tight truncate">
                     {isThai ? "รายการใบสั่งเบิกวัตถุดิบ (Pick List Orders)" : "Pick List Orders"}
                   </h3>
                 </div>
               </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {/* Import Pick List Button - Desktop View Only (hidden on Mobile <640px) */}
+              {/* Action buttons - Stacked & full-width on mobile, single row on desktop */}
+              <div className="flex items-center gap-1.5 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800/60 justify-end">
+                {/* Emergency Pre-Staging Button */}
+                <button
+                  type="button"
+                  onClick={handleOpenEmergencyModal}
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded-lg text-xs sm:text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
+                  title={isThai ? "ย้ายเหล็กสลิตไปวางรอหน้าเครื่องแบบฉุกเฉิน (ยังไม่มีเลขที่ใบสั่ง)" : "Emergency Staging to Machine"}
+                >
+                  <Zap size={13} className="text-yellow-300 animate-pulse shrink-0" />
+                  <span>{isThai ? "เบิกฉุกเฉิน (TEMP)" : "Emergency Staging"}</span>
+                </button>
+
+                {/* Import Pick List Button */}
                 <button
                   type="button"
                   onClick={() => {
                     setImportMachineId(selectedOutboundMachine);
                     setIsImportModalOpen(true);
                   }}
-                  className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs cursor-pointer active:scale-95"
+                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded-lg text-xs sm:text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all whitespace-nowrap"
                 >
-                  <Plus size={13} />
+                  <Plus size={13} className="shrink-0" />
                   <span>{isThai ? "นำเข้าใบเบิก" : "Import Pick List"}</span>
                 </button>
               </div>
@@ -5801,6 +6912,7 @@ export function SlitFilmManagement({
 
                   const scannedCount = verifiedItems.length;
                   const totalCount = validItems.length;
+                  const isTempOrder = Boolean(order.isTemporary || order.orderNo.startsWith("TEMP-"));
                   const dynamicStatus =
                     order.status === "completed" || (totalCount > 0 && scannedCount === totalCount)
                       ? "completed"
@@ -5829,6 +6941,18 @@ export function SlitFilmManagement({
                                 {`ใบสั่งเบิก: ${order.orderNo}`}
                               </span>
 
+                              {isTempOrder && (
+                                <span className="flex-shrink-0 px-1.5 py-0.2 rounded text-[8.5px] sm:text-[10px] font-bold border leading-tight bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-800 animate-pulse">
+                                  {isThai ? "เบิกฉุกเฉิน (รอเลขที่ใบสั่ง)" : "Emergency Temp"}
+                                </span>
+                              )}
+
+                              {order.matchedOrderNo && (
+                                <span className="flex-shrink-0 px-1.5 py-0.2 rounded text-[8.5px] sm:text-[10px] font-bold border leading-tight bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800">
+                                  {isThai ? `ผูกแล้ว: #${order.matchedOrderNo}` : `Linked: #${order.matchedOrderNo}`}
+                                </span>
+                              )}
+
                               <span
                                 className={`flex-shrink-0 px-1 sm:px-1.5 py-0.2 rounded text-[8.5px] sm:text-[10px] font-bold border leading-tight ${
                                   dynamicStatus === "completed"
@@ -5849,6 +6973,18 @@ export function SlitFilmManagement({
 
                           {/* Card Header Quick Actions (Same row as Order No., compact size matching header) */}
                           <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {isTempOrder && (
+                              <button
+                                type="button"
+                                onClick={() => handleManualMatchTempOrder(order.orderNo)}
+                                className="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[9.5px] sm:text-[11px] font-bold leading-tight bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs inline-flex items-center gap-0.5 sm:gap-1 cursor-pointer active:scale-95 whitespace-nowrap"
+                                title={isThai ? "ผูกกับเลขที่ใบสั่งเบิกจริงย้อนหลัง" : "Link Real Order No"}
+                              >
+                                <Zap size={10} className="text-yellow-300" />
+                                <span>{isThai ? "ผูกใบสั่งจริง" : "Link Real Order"}</span>
+                              </button>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => {
@@ -6202,8 +7338,8 @@ export function SlitFilmManagement({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              {MACHINE_CATEGORIES.map((cat) => {
+            <div className="flex flex-wrap gap-1.5">
+              {availableCategories.map((cat) => {
                 const isActive = activeCategory === cat.key;
                 const catCount = outboundMachines.filter((m) => m.type === cat.key).length;
                 return (
@@ -6215,7 +7351,7 @@ export function SlitFilmManagement({
                       const firstM = outboundMachines.find((m) => m.type === cat.key);
                       if (firstM) setSelectedOutboundMachine(firstM.id);
                     }}
-                    className={`py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-all border flex items-center justify-between ${
+                    className={`py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-all border flex items-center justify-between gap-2 ${
                       isActive
                         ? "bg-blue-600 text-white border-blue-500 shadow-xs ring-1 ring-blue-400/50"
                         : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f] hover:border-blue-400"
@@ -6443,6 +7579,7 @@ export function SlitFilmManagement({
                                   <table className="w-full text-left border-collapse text-[10.5px] sm:text-xs whitespace-nowrap">
                                     <colgroup>
                                       <col className="w-10 sm:w-12" />
+                                      <col className="w-24 sm:w-32" />
                                       <col className="w-20 sm:w-28" />
                                       <col className="w-20 sm:w-28" />
                                       <col className="w-20 sm:w-28" />
@@ -6451,6 +7588,7 @@ export function SlitFilmManagement({
                                     <thead className="bg-slate-100 dark:bg-[#152646] text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider text-[10px] sm:text-[11px] border-b border-slate-200 dark:border-[#1e3a5f]">
                                       <tr>
                                         <th className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center whitespace-nowrap">No.</th>
+                                        <th className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center whitespace-nowrap">Batch</th>
                                         <th className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center whitespace-nowrap">{isThai ? "ความหนา" : "Thickness"}</th>
                                         <th className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center whitespace-nowrap">{isThai ? "หน้ากว้าง" : "Width"}</th>
                                         <th className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center whitespace-nowrap">Req Qty</th>
@@ -6517,6 +7655,9 @@ export function SlitFilmManagement({
                                             }`}
                                           >
                                             <td className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center font-mono text-slate-500 whitespace-nowrap">{rowNumber}</td>
+                                            <td className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center font-mono font-black text-amber-600 dark:text-amber-400 whitespace-nowrap">
+                                              {item.batch.trim()}
+                                            </td>
                                             <td className="!py-2 !px-1.5 sm:!p-2.5 sm:!px-3 !text-center font-mono font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
                                               {thicknessDisplay}
                                             </td>
@@ -7121,7 +8262,7 @@ export function SlitFilmManagement({
                 </div>
               )}
 
-              {/* 1. Location Barcode Input Form (Moved to Very Top) */}
+              {/* 1. Location Barcode Input Form */}
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -7130,20 +8271,63 @@ export function SlitFilmManagement({
                 className="space-y-3"
               >
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                       <Barcode size={15} className="text-cyan-500" />
                       <span>{isThai ? "สแกนบาร์โค้ด Location จัดเก็บ:" : "Scan Location Barcode:"}</span>
-                    </span>
-                    <span className="text-[10px] text-rose-500 font-extrabold uppercase">
-                      {isThai ? "* บังคับระบุ" : "* Required"}
-                    </span>
-                  </label>
+                      <span className="text-[10px] text-rose-500 font-extrabold uppercase ml-0.5">
+                        {isThai ? "* บังคับระบุ" : "* Required"}
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationCameraActive((prev) => !prev)}
+                      className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 transition-all cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <Camera size={13} />
+                      <span>{isLocationCameraActive ? (isThai ? "ปิดกล้อง" : "Close Cam") : (isThai ? "เปิดกล้องสแกน" : "Camera Scan")}</span>
+                    </button>
+                  </div>
+
+                  {/* Camera Barcode Scanner Viewfinder for Location */}
+                  {isLocationCameraActive && (
+                    <div className="mb-2">
+                      <CameraBarcodeScanner
+                        isThai={isThai}
+                        placeholderText={isThai ? "เล็งกล้องไปที่บาร์โค้ด Location จัดเก็บ" : "Aim camera at Location barcode"}
+                        onScan={(decoded) => {
+                          const rawVal = cleanBarcode(decoded)
+                            .replace(/[\r\n\t\0\x02\x03\x04]+/g, "")
+                            .replace(/^\*+|\*+$/g, "")
+                            .toUpperCase();
+                          if (rawVal) {
+                            setLocationBarcode(rawVal);
+                            if (locationScanError) setLocationScanError(null);
+                            setIsLocationCameraActive(false);
+                            setTimeout(() => {
+                              if (locationInputRef.current) {
+                                locationInputRef.current.focus();
+                              }
+                            }, 100);
+                          }
+                        }}
+                        onClose={() => {
+                          setIsLocationCameraActive(false);
+                          setTimeout(() => {
+                            if (locationInputRef.current) {
+                              locationInputRef.current.focus();
+                            }
+                          }, 100);
+                        }}
+                      />
+                    </div>
+                  )}
 
                   <div className="relative">
                     <input
                       ref={locationInputRef}
                       type="text"
+                      autoFocus
                       autoComplete="off"
                       autoCorrect="off"
                       autoCapitalize="characters"
@@ -7158,11 +8342,16 @@ export function SlitFilmManagement({
                         if (locationScanError) setLocationScanError(null);
                       }}
                       placeholder={isThai ? "ยิงบาร์โค้ด Location จัดเก็บ..." : "Scan Location barcode..."}
-                      className="w-full pl-4 pr-10 py-2.5 text-base sm:text-lg font-mono font-black tracking-wider rounded-xl bg-white dark:bg-[#0c1930] border-2 border-cyan-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/20 shadow-inner"
+                      className="w-full pl-4 pr-11 py-2.5 text-base sm:text-lg font-mono font-black tracking-wider rounded-xl bg-white dark:bg-[#0c1930] border-2 border-cyan-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/20 shadow-inner"
                     />
-                    <div className="absolute right-3 top-3 text-cyan-500">
-                      <Layers size={20} />
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsLocationCameraActive((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 p-1 rounded-lg text-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                      title={isThai ? "เปิด/ปิดกล้องสแกนบาร์โค้ด Location" : "Toggle camera scanner"}
+                    >
+                      <Camera size={20} />
+                    </button>
                   </div>
                 </div>
 
@@ -7202,6 +8391,7 @@ export function SlitFilmManagement({
                     type="button"
                     onClick={() => {
                       setIsLocationModalOpen(false);
+                      setIsLocationCameraActive(false);
                       setIsScannerModalOpen(true);
                     }}
                     className="px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#172b4d] border border-slate-300 dark:border-[#1e3a5f] cursor-pointer"
@@ -7891,7 +9081,7 @@ export function SlitFilmManagement({
                     {isThai ? "รวมน้ำหนักคลัง:" : "Total Stock:"}
                   </span>
                   <div className="px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs">
-                    {stockTotalWeightKg.toLocaleString()} kg ({stockTotalWeightTon} TON)
+                    {stockTotalWeightTon} TON
                   </div>
                 </div>
               </div>
@@ -8150,9 +9340,8 @@ export function SlitFilmManagement({
             <div className="font-semibold text-slate-700 dark:text-slate-300">
               {isThai ? "ยอดรวมน้ำหนักคงคลังทั้งหมด (หน้าปัจจุบัน):" : "Total Current Stock Weight:"}{" "}
               <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-sm ml-1">
-                {stockTotalWeightKg.toLocaleString()} kg
-              </span>{" "}
-              <span className="text-slate-400">({stockTotalWeightTon} TON)</span>
+                {stockTotalWeightTon} TON
+              </span>
             </div>
 
             {/* Pagination Controls */}
@@ -9248,6 +10437,295 @@ export function SlitFilmManagement({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Emergency Pre-Staging Modal (เบิกฉุกเฉินไปรอหน้าเครื่องจักรโดยยังไม่มีเลขที่ใบสั่ง) */}
+      {isEmergencyModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in"
+          onMouseDown={() => setIsEmergencyModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-3.5 sm:p-4 border-b flex items-center justify-between bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-transparent dark:from-rose-950/40 dark:via-amber-950/20 dark:to-transparent border-slate-200 dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="p-2 sm:p-2.5 rounded-xl bg-rose-500 text-white shadow-md shadow-rose-500/30 flex-shrink-0 animate-pulse">
+                  <Zap size={20} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                      {isThai ? "เบิกฉุกเฉินเหล็กสลิตไปรอหน้าเครื่อง (TEMP Staging)" : "Emergency Steel Staging to Machine"}
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800">
+                      ฉุกเฉิน / ไม่มีใบสั่ง
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
+                    {isThai
+                      ? "สแกนย้ายเหล็กสลิตไปรอหน้าเครื่องจักร ระบบจะตัดออกจากคลังทันที และผูกกับใบเบิกจริงให้อัตโนมัติเมื่อนำเข้าภายหลัง"
+                      : "Staging steel slit coils to machine rack before real order is released. Auto-links upon import."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEmergencyModalOpen(false);
+                  setIsEmergencyCameraActive(false);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 text-slate-900 dark:text-slate-100">
+              {/* 1. Barcode Scanner Input Form (Moved to TOP for instant scanning) */}
+              <form onSubmit={handleEmergencyBarcodeSubmit} className="space-y-1.5 p-3 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border-2 border-rose-400 dark:border-rose-500/60 shadow-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200 truncate">
+                    {isThai ? "สแกนหรือกรอกรหัสบาร์โค้ด Batch (10 หลัก):" : "Scan Batch Barcode (10 chars):"} <span className="text-rose-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!emergencyMachineId) {
+                        showWarningAlert(
+                          isThai ? "กรุณาเลือกเครื่องจักรเป้าหมาย" : "Select Target Machine",
+                          isThai ? "กรุณาเลือกเครื่องจักรเป้าหมายก่อนเปิดกล้องสแกน" : "Please select target machine first."
+                        );
+                        return;
+                      }
+                      setIsEmergencyCameraActive((prev) => !prev);
+                    }}
+                    className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-95 ${
+                      isEmergencyCameraActive
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600"
+                    }`}
+                    title={isThai ? (isEmergencyCameraActive ? "ปิดกล้อง" : "สแกนด้วยกล้อง") : (isEmergencyCameraActive ? "Close Camera" : "Camera Scan")}
+                    aria-label={isThai ? "สแกนด้วยกล้อง" : "Camera Scan"}
+                  >
+                    <Camera size={16} />
+                  </button>
+                </div>
+
+                {/* Camera Scanner View if active */}
+                {isEmergencyCameraActive && (
+                  <div className="my-2 rounded-xl overflow-hidden border-2 border-rose-500 bg-black">
+                    <CameraBarcodeScanner
+                      onScan={(scannedCode: string) => {
+                        processEmergencyBatchCode(scannedCode);
+                        // Continuous scanning mode: Keep camera active for sequential scans
+                      }}
+                      onClose={() => {
+                        setIsEmergencyCameraActive(false);
+                        setTimeout(() => emergencyBarcodeRef.current?.focus(), 100);
+                      }}
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      ref={emergencyBarcodeRef}
+                      type="text"
+                      value={emergencyBarcodeInput}
+                      onChange={(e) => setEmergencyBarcodeInput(e.target.value)}
+                      placeholder={
+                        !emergencyMachineId
+                          ? (isThai ? "-- เลือกเครื่องจักรเป้าหมายก่อนสแกน --" : "-- Select machine first --")
+                          : (isThai ? "ยิงบาร์โค้ด Batch 10 หลัก..." : "Scan 10-char batch barcode...")
+                      }
+                      className="w-full px-3 py-2 pr-9 text-xs font-mono font-bold rounded-lg bg-white dark:bg-[#0c1930] border border-rose-300 dark:border-rose-500/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!emergencyMachineId) {
+                          showWarningAlert(
+                            isThai ? "กรุณาเลือกเครื่องจักรเป้าหมาย" : "Select Target Machine",
+                            isThai ? "กรุณาเลือกเครื่องจักรเป้าหมายก่อนเปิดกล้องสแกน" : "Please select target machine first."
+                          );
+                          return;
+                        }
+                        setIsEmergencyCameraActive((prev) => !prev);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 p-1 rounded-md transition-colors cursor-pointer"
+                      title={isThai ? "สแกนด้วยกล้อง" : "Camera Scan"}
+                      aria-label="Camera Scan"
+                    >
+                      <Camera size={15} />
+                    </button>
+                  </div>
+                  <button
+                    type="submit"
+                    className="p-2.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-xs cursor-pointer active:scale-95 transition-all flex items-center justify-center shrink-0 min-w-[40px]"
+                    title={isThai ? "เพิ่มรายการ" : "Add Batch"}
+                    aria-label={isThai ? "เพิ่มรายการ" : "Add Batch"}
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+              </form>
+
+              {/* 2. Machine & Temp Order Settings Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
+                <div className="min-w-0">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 truncate">
+                    {isThai ? "เลือกเครื่องจักรเป้าหมาย:" : "Target Machine:"} <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={emergencyMachineId}
+                    onChange={(e) => {
+                      const newM = e.target.value;
+                      setEmergencyMachineId(newM);
+                      if (newM) {
+                        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+                        const rand4 = Math.floor(1000 + Math.random() * 9000);
+                        setEmergencyTempOrderNo(`TEMP-${newM}-${dateStr}-${rand4}`);
+                        setTimeout(() => emergencyBarcodeRef.current?.focus(), 100);
+                      } else {
+                        setEmergencyTempOrderNo("");
+                      }
+                    }}
+                    className={`w-full max-w-full px-3 py-2.5 sm:py-2 text-xs font-bold rounded-lg bg-white dark:bg-[#111e38] border ${
+                      !emergencyMachineId
+                        ? "border-amber-400 dark:border-amber-500 text-amber-700 dark:text-amber-400"
+                        : "border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100"
+                    } focus:outline-none focus:border-rose-500 truncate cursor-pointer`}
+                  >
+                    <option value="">{isThai ? "-- กรุณาเลือกเครื่องจักรเป้าหมาย --" : "-- Select Target Machine --"}</option>
+                    {outboundMachines.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || `เครื่องจักร ${m.id}`} ({m.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 truncate">
+                    {isThai ? "เลขที่อ้างอิงชั่วคราว (TEMP Order No):" : "Temp Reference No:"}
+                  </label>
+                  <input
+                    type="text"
+                    value={emergencyTempOrderNo}
+                    onChange={(e) => setEmergencyTempOrderNo(e.target.value.toUpperCase())}
+                    placeholder="TEMP-TM01-YYYYMMDD-XXXX"
+                    className="w-full max-w-full px-3 py-2.5 sm:py-2 text-xs font-mono font-bold rounded-lg bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-rose-600 dark:text-rose-400 focus:outline-none focus:border-rose-500 truncate"
+                  />
+                </div>
+              </div>
+
+              {/* 3. Scanned Batches Table */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                    {isThai ? "รายการเหล็กสลิตที่จะย้ายไปรอหน้าเครื่อง" : "Batches to Staging Rack"} ({emergencyScannedBatches.length} {isThai ? "ม้วน" : "coils"})
+                  </span>
+                  {emergencyScannedBatches.length > 0 && (
+                    <span className="text-xs font-bold text-rose-600 dark:text-rose-400 font-mono">
+                      {emergencyScannedBatches.reduce((sum, b) => sum + b.weightKg, 0).toLocaleString()} kg ({(emergencyScannedBatches.reduce((sum, b) => sum + b.weightKg, 0) / 1000).toFixed(2)} ตัน)
+                    </span>
+                  )}
+                </div>
+
+                <div className="max-h-56 overflow-y-auto border rounded-xl bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f]">
+                  {emergencyScannedBatches.length > 0 ? (
+                    <table className="w-full text-[11px] text-left border-collapse">
+                      <thead className="bg-slate-200/70 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 sticky top-0 font-bold">
+                        <tr>
+                          <th className="py-2 px-2.5 text-center w-10">#</th>
+                          <th className="py-2 px-2.5">Batch Barcode</th>
+                          <th className="py-2 px-2.5">สเปก / ขนาด</th>
+                          <th className="py-2 px-2.5">ตำแหน่งเดิมในคลัง</th>
+                          <th className="py-2 px-2.5 text-right">น้ำหนัก (kg)</th>
+                          <th className="py-2 px-2.5 text-center w-12">จัดการ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800 font-mono">
+                        {emergencyScannedBatches.map((item, idx) => (
+                          <tr key={item.id} className="hover:bg-white/80 dark:hover:bg-[#111e38] transition-colors">
+                            <td className="py-1.5 px-2.5 text-center text-slate-400">{idx + 1}</td>
+                            <td className="py-1.5 px-2.5 font-black text-rose-600 dark:text-rose-400">{item.batch}</td>
+                            <td className="py-1.5 px-2.5 text-slate-700 dark:text-slate-300 font-sans truncate max-w-[150px]">
+                              {item.certThickness && item.certThickness !== "-" ? `${item.certThickness} x ${item.width} mm` : item.description}
+                              {item.grade && item.grade !== "-" ? ` (${item.grade})` : ""}
+                            </td>
+                            <td className="py-1.5 px-2.5 text-slate-600 dark:text-slate-400 font-sans">{item.sourceLoc}</td>
+                            <td className="py-1.5 px-2.5 text-right font-bold text-slate-900 dark:text-slate-100">{item.weightKg.toLocaleString()}</td>
+                            <td className="py-1.5 px-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEmergencyBatch(item.id)}
+                                className="p-1 rounded text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950/60 hover:text-rose-700 cursor-pointer"
+                                title="ลบรายการนี้"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="py-8 text-center text-xs text-slate-400 dark:text-slate-500 space-y-1">
+                      <Barcode size={24} className="mx-auto opacity-40 mb-1" />
+                      <p className="font-semibold">{isThai ? "ยังไม่มีรายการสแกน" : "No batches scanned"}</p>
+                      <p className="text-[10px]">{isThai ? "กรุณาสแกนหรือกรอกรหัส Batch 10 หลักในช่องด้านบน" : "Scan or enter 10-char batch code above"}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-slate-100 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between gap-3">
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {emergencyScannedBatches.length > 0 && (
+                  <span>
+                    {isThai ? "รวมทั้งหมด" : "Total"}: <strong className="text-slate-900 dark:text-slate-100">{emergencyScannedBatches.length}</strong> {isThai ? "รายการ" : "items"} |{" "}
+                    <strong className="text-rose-600 dark:text-rose-400">{emergencyScannedBatches.reduce((sum, b) => sum + b.weightKg, 0).toLocaleString()} kg</strong>
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEmergencyModalOpen(false);
+                    setIsEmergencyCameraActive(false);
+                  }}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  {isThai ? "ยกเลิก" : "Cancel"}
+                </button>
+                <button
+                  type="button"
+                  disabled={emergencyScannedBatches.length === 0}
+                  onClick={handleConfirmEmergencyStaging}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-md ${
+                    emergencyScannedBatches.length === 0
+                      ? "opacity-50 bg-slate-300 dark:bg-slate-700 text-slate-500 cursor-not-allowed shadow-none"
+                      : "bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20"
+                  }`}
+                >
+                  <Zap size={14} className="text-yellow-300" />
+                  <span>{isThai ? "ยืนยันย้ายไปรอหน้าเครื่อง (TEMP)" : "Confirm Emergency Staging"}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

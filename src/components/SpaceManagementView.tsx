@@ -43,6 +43,7 @@ import {
   addBasketToRow,
   addNewRowToBuilding,
   removeBasketFromRow,
+  removeRowFromBuilding,
   ensureBasketInMasterLayout,
   STORAGE_KEY_MASTER_BASKET_LAYOUT,
   MASTER_BASKET_LAYOUT_UPDATED_EVENT,
@@ -53,6 +54,13 @@ import {
   normalizeBuildingMaxCapacityTons,
   BuildingId,
 } from "../data/masterBasketStorage";
+import {
+  showToast,
+  showSuccessAlert,
+  showErrorAlert,
+  showWarningAlert,
+  showConfirmDialog,
+} from "../utils/swalUtils";
 import type { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
 import {
   subscribeToSlitInbound,
@@ -695,12 +703,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
   const handleSaveBuildingCapacity = (buildingId: "H" | "F" | "E9" | "E10" | "I") => {
     const parsed = parseFloat(editingCapacityValue.replace(/,/g, "").trim());
     if (isNaN(parsed) || parsed < 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "ค่าความจุไม่ถูกต้อง",
-        text: "กรุณาระบุพื้นที่จัดเก็บอาคารเป็นตัวเลขที่มากกว่าหรือเท่ากับ 0 ตัน",
-        confirmButtonColor: "#0891b2",
-      });
+      showWarningAlert(
+        "ค่าความจุไม่ถูกต้อง",
+        "กรุณาระบุพื้นที่จัดเก็บอาคารเป็นตัวเลขที่มากกว่าหรือเท่ากับ 0 ตัน"
+      );
       return;
     }
     const nowIso = new Date().toISOString();
@@ -775,15 +781,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     }).catch(console.error);
 
     setEditingCapacityBuildingId(null);
-    Swal.fire({
-      icon: "success",
-      title: "บันทึกพื้นที่จัดเก็บอาคารสำเร็จ",
-      text: `กำหนดความจุสูงสุด อาคาร ${buildingId} = ${parsed.toLocaleString()} ตัน`,
-      timer: 1400,
-      showConfirmButton: false,
-      toast: true,
-      position: "top-end",
-    });
+    showSuccessAlert(
+      "บันทึกพื้นที่จัดเก็บอาคารสำเร็จ",
+      `กำหนดความจุสูงสุด อาคาร ${buildingId} = ${parsed.toLocaleString()} ตัน เรียบร้อยแล้ว`
+    );
   };
 
   // Current Active Building Data
@@ -841,12 +842,14 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       let usedB = 0;
       let totalCoils = 0;
       let totalInboundWeight = 0;
+      let totalMeters = 0;
       b.rows.forEach((r) => {
         r.baskets.forEach((bk) => {
           totalB++;
           if (bk.status === "occupied" || bk.status === "full") usedB++;
           totalCoils += bk.coils.length;
           totalInboundWeight += bk.coils.reduce((sum, c) => sum + (Number(c.weightKg) || 0), 0);
+          totalMeters += calculateBasketTotalWidthMeters(bk.coils);
         });
       });
       const percent = totalB > 0 ? Math.round((usedB / totalB) * 100) : 0;
@@ -862,6 +865,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         totalBaskets: totalB,
         usedBaskets: usedB,
         totalCoils,
+        totalMeters,
         maxCapacityTons,
         usedSpaceTons,
         remainingSpaceTons,
@@ -880,6 +884,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     const totalBaskets = buildingTabSummaries.reduce((sum, b) => sum + b.totalBaskets, 0);
     const totalUsedBaskets = buildingTabSummaries.reduce((sum, b) => sum + b.usedBaskets, 0);
     const totalCoils = buildingTabSummaries.reduce((sum, b) => sum + b.totalCoils, 0);
+    const totalMeters = buildingTabSummaries.reduce((sum, b) => sum + b.totalMeters, 0);
     const basketPercent = totalBaskets > 0 ? Math.round((totalUsedBaskets / totalBaskets) * 100) : 0;
     const spacePercent = totalMaxCapacityTons > 0 ? Math.round((totalUsedSpaceTons / totalMaxCapacityTons) * 100) : 0;
 
@@ -890,6 +895,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       totalBaskets,
       totalUsedBaskets,
       totalCoils,
+      totalMeters,
       basketPercent,
       spacePercent,
     };
@@ -985,15 +991,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       })
     );
 
-    Swal.fire({
-      icon: "success",
-      title: "อัปเดตสถานะตะกร้าเรียบร้อย",
-      text: `ปรับเปลี่ยนสถานะตะกร้า ${basketId} เป็นเรียบร้อยแล้ว`,
-      timer: 1500,
-      showConfirmButton: false,
-      toast: true,
-      position: "top-end"
-    });
+    const statusLabels: Record<string, string> = {
+      available: "ว่าง (พร้อมใช้งาน)",
+      occupied: "มีสินค้า (ใช้งาน)",
+      full: "เต็ม",
+      maintenance: "ปิดซ่อมบำรุง",
+    };
+    showToast(`อัปเดตสถานะตะกร้า ${basketId} เป็น "${statusLabels[newStatus] || newStatus}" เรียบร้อย`, "success");
   };
 
   // Handler: Remove Coil from Basket
@@ -1155,17 +1159,20 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
   // Handler: Add New Row to Current Building (Requirement 1)
   const handleAddNewRow = async () => {
+    const dark = document.documentElement.classList.contains("dark");
     const { value: formValues } = await Swal.fire({
       title: `เพิ่มแถวใหม่ใน ${currentBuilding.buildingNameTh}`,
+      background: dark ? "#0f172a" : "#ffffff",
+      color: dark ? "#f8fafc" : "#0f172a",
       html: `
         <div class="text-left space-y-3 p-1 font-sans">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">รหัสแถว (เช่น E, F, G หรือ AA):</label>
-            <input id="swal-row-id" class="w-full p-2 border border-slate-300 rounded-lg text-sm uppercase font-mono font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500" placeholder="E" maxlength="4" />
+            <label class="block text-xs font-bold ${dark ? "text-slate-300" : "text-slate-700"} mb-1">รหัสแถว (เช่น E, F, G หรือ AA):</label>
+            <input id="swal-row-id" class="w-full p-2 border ${dark ? "border-slate-700 bg-slate-800 text-white" : "border-slate-300 bg-white text-slate-800"} rounded-lg text-sm uppercase font-mono font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500" placeholder="E" maxlength="4" />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">จำนวนตะกร้าตั้งต้นในแถวนี้ (ค่าเริ่มต้น 10 ตะกร้า):</label>
-            <input id="swal-basket-count" type="number" min="1" max="50" value="10" class="w-full p-2 border border-slate-300 rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+            <label class="block text-xs font-bold ${dark ? "text-slate-300" : "text-slate-700"} mb-1">จำนวนตะกร้าตั้งต้นในแถวนี้ (ค่าเริ่มต้น 10 ตะกร้า):</label>
+            <input id="swal-basket-count" type="number" min="1" max="50" value="10" class="w-full p-2 border ${dark ? "border-slate-700 bg-slate-800 text-white" : "border-slate-300 bg-white text-slate-800"} rounded-lg text-sm font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500" />
           </div>
         </div>
       `,
@@ -1173,7 +1180,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       showCancelButton: true,
       confirmButtonText: "สร้างแถวใหม่",
       cancelButtonText: "ยกเลิก",
-      confirmButtonColor: "#0891b2",
+      confirmButtonColor: "#0284c7",
       cancelButtonColor: "#64748b",
       preConfirm: () => {
         const rowIdInput = document.getElementById("swal-row-id") as HTMLInputElement;
@@ -1191,11 +1198,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     if (formValues) {
       const ok = addNewRowToBuilding(activeBuildingId, formValues.rowId, formValues.basketCount);
       if (!ok) {
-        Swal.fire({
-          icon: "error",
-          title: "ไม่สามารถเพิ่มแถวได้",
-          text: `แถว ${formValues.rowId} มีอยู่แล้วใน ${currentBuilding.buildingNameTh}`
-        });
+        showErrorAlert(
+          "ไม่สามารถเพิ่มแถวได้",
+          `แถว ${formValues.rowId} มีอยู่แล้วใน ${currentBuilding.buildingNameTh}`
+        );
         return;
       }
       saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
@@ -1208,19 +1214,14 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
           statusOverrides
         )
       );
-      Swal.fire({
-        icon: "success",
-        title: "เพิ่มแถวสำเร็จ",
-        text: `สร้างแถว ${formValues.rowId} พร้อมตะกร้า ${formValues.basketCount} ใบ ใน ${currentBuilding.buildingNameTh} เรียบร้อย`,
-        timer: 1600,
-        showConfirmButton: false,
-        toast: true,
-        position: "top-end"
-      });
+      showSuccessAlert(
+        "เพิ่มแถวใหม่สำเร็จ",
+        `สร้างแถว ${formValues.rowId} พร้อมตะกร้า ${formValues.basketCount} ใบ ใน ${currentBuilding.buildingNameTh} เรียบร้อยแล้ว`
+      );
     }
   };
 
-  // Handler: Add Basket to Row (Requirement 1)
+  // Handler: Add Basket to Row
   const handleAddBasketToRow = (rowId: string) => {
     const newBasket = addBasketToRow(activeBuildingId, rowId);
     if (newBasket) {
@@ -1234,63 +1235,80 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
           statusOverrides
         )
       );
-      Swal.fire({
-        icon: "success",
-        title: "เพิ่มตะกร้าสำเร็จ",
-        text: `เพิ่มตะกร้า ${newBasket.id} ในแถว ${rowId} เรียบร้อย`,
-        timer: 1500,
-        showConfirmButton: false,
-        toast: true,
-        position: "top-end"
-      });
+      showToast(`เพิ่มตะกร้า ${newBasket.id} ในแถว ${rowId} เรียบร้อย`, "success");
+    }
+  };
+
+  // Handler: Delete Row from Current Building
+  const handleDeleteRow = async (rowId: string, rowNameTh: string, coilCount: number) => {
+    if (coilCount > 0) {
+      showErrorAlert(
+        "ไม่สามารถลบแถวได้",
+        `แถว ${rowNameTh} (รหัส ${rowId}) ยังมีสินค้าจัดเก็บอยู่จำนวน ${coilCount} แถบ กรุณาย้ายหรือนำสินค้าออกก่อนทำการลบ`
+      );
+      return;
+    }
+
+    const confirmed = await showConfirmDialog({
+      title: `ยืนยันลบแถว ${rowNameTh}?`,
+      text: `ต้องการลบแถว ${rowNameTh} (รหัส ${rowId}) และตะกร้าทั้งหมดในแถวนี้ออกจาก ${currentBuilding.buildingNameTh} ใช่หรือไม่?`,
+      confirmButtonText: "ยืนยันการลบแถว",
+      isDestructive: true,
+    });
+
+    if (confirmed) {
+      const ok = removeRowFromBuilding(activeBuildingId, rowId);
+      if (!ok) {
+        showErrorAlert("ไม่สามารถลบแถวได้", "ไม่พบข้อมูลแถวในระบบ หรือแถวยังมีสินค้าอยู่");
+        return;
+      }
+      saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
+      setSpaceData(
+        loadSpaceDataFromInventory(
+          effectiveInbound,
+          effectivePickLists,
+          effectiveOutbound,
+          effectiveSapMasterMap,
+          statusOverrides
+        )
+      );
+      showToast(`ลบแถว ${rowNameTh} ออกจาก ${currentBuilding.buildingNameTh} เรียบร้อย`, "success");
     }
   };
 
   // Handler: Delete Empty Basket from Row
-  const handleDeleteEmptyBasket = (basketId: string, rowId: string) => {
+  const handleDeleteEmptyBasket = async (basketId: string, rowId: string) => {
     if (selectedBasket && selectedBasket.coils.length > 0) {
-      Swal.fire({
-        icon: "error",
-        title: "ไม่สามารถลบตะกร้าได้",
-        text: "ตะกร้านี้ยังมีสินค้าบรรจุอยู่ กรุณานำสินค้าออกก่อนทำการลบ"
-      });
+      showErrorAlert(
+        "ไม่สามารถลบตะกร้าได้",
+        "ตะกร้านี้ยังมีสินค้าบรรจุอยู่ กรุณานำสินค้าออกก่อนทำการลบ"
+      );
       return;
     }
 
-    Swal.fire({
+    const confirmed = await showConfirmDialog({
       title: "ยืนยันลบตะกร้า?",
       text: `ต้องการลบตะกร้า ${basketId} ออกจากแถว ${rowId} ใช่หรือไม่?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      cancelButtonColor: "#64748b",
       confirmButtonText: "ยืนยันการลบ",
-      cancelButtonText: "ยกเลิก"
-    }).then((result) => {
-      if (result.isConfirmed) {
-        removeBasketFromRow(activeBuildingId, rowId, basketId);
-        saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
-        setIsDetailModalOpen(false);
-        setSelectedBasket(null);
-        setSpaceData(
-          loadSpaceDataFromInventory(
-            effectiveInbound,
-            effectivePickLists,
-            effectiveOutbound,
-            effectiveSapMasterMap,
-            statusOverrides
-          )
-        );
-        Swal.fire({
-          icon: "success",
-          title: "ลบตะกร้าเรียบร้อย",
-          timer: 1400,
-          showConfirmButton: false,
-          toast: true,
-          position: "top-end"
-        });
-      }
+      isDestructive: true,
     });
+
+    if (confirmed) {
+      removeBasketFromRow(activeBuildingId, rowId, basketId);
+      saveSlitSpaceConfigToCloud({ masterLayout: getStoredMasterBasketLayout() }).catch(console.error);
+      setIsDetailModalOpen(false);
+      setSelectedBasket(null);
+      setSpaceData(
+        loadSpaceDataFromInventory(
+          effectiveInbound,
+          effectivePickLists,
+          effectiveOutbound,
+          effectiveSapMasterMap,
+          statusOverrides
+        )
+      );
+      showToast(`ลบตะกร้า ${basketId} เรียบร้อยแล้ว`, "success");
+    }
   };
 
   // Handler: Add New Basket to Current Building
@@ -1308,7 +1326,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     });
 
     if (exists) {
-      Swal.fire({ icon: "error", title: "รหัสตะกร้าซ้ำ", text: `ตะกร้า ${newBasketId} มีอยู่แล้วในระบบ` });
+      showErrorAlert("รหัสตะกร้าซ้ำ", `ตะกร้า ${newBasketId} มีอยู่แล้วในระบบ`);
       return;
     }
 
@@ -1326,15 +1344,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
     setIsAddBasketModalOpen(false);
     setNewBasketNo("");
-    Swal.fire({
-      icon: "success",
-      title: "เพิ่มตะกร้าจัดเก็บสำเร็จ",
-      text: `สร้างตะกร้าใหม่รหัส ${newBasketId} ในอาคาร ${activeBuildingId} แถว ${newBasketRowId} เรียบร้อย`,
-      timer: 1600,
-      showConfirmButton: false,
-      toast: true,
-      position: "top-end"
-    });
+    showToast(`เพิ่มตะกร้า ${newBasketId} ในแถว ${newBasketRowId} เรียบร้อย`, "success");
   };
 
   // Helper: Status badge color & width-based calculation
@@ -1423,88 +1433,152 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                   <span>สรุปปริมาณพื้นที่จัดเก็บเหล็กสลิตรวมทุกพื้นที่ (อาคาร H, F, E9, E10, I)</span>
                 </div>
               </div>
-
-              <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold shrink-0">
-                <span className="px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-white/10 backdrop-blur-md text-cyan-300 border border-cyan-400/30 whitespace-nowrap">
-                  ตะกร้า {allStorageAreasSummary.totalUsedBaskets.toLocaleString()}/{allStorageAreasSummary.totalBaskets.toLocaleString()} ({allStorageAreasSummary.basketPercent}%)
-                </span>
-              </div>
             </div>
 
-            <div className="relative z-10 grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 mt-2.5 pt-2.5 sm:mt-6 sm:pt-6 border-t border-white/10">
+            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-3 mt-2.5 pt-2.5 sm:mt-6 sm:pt-6 border-t border-white/10">
               {/* 1. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 flex flex-col justify-between">
-                <div className="text-slate-300 text-[10px] sm:text-xs font-semibold truncate">
-                  <span className="sm:hidden">ความจุรวม</span>
-                  <span className="hidden sm:inline">พื้นที่จัดเก็บทั้งหมด (ตัน)</span>
+              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-slate-300 text-[10px] sm:text-xs font-semibold truncate">
+                      <span className="sm:hidden">ความจุรวม</span>
+                      <span className="hidden sm:inline">พื้นที่จัดเก็บทั้งหมด (ตัน)</span>
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-cyan-300 bg-cyan-500/20 px-1.5 py-0.2 rounded border border-cyan-400/30 shrink-0">
+                      100%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-white tabular-nums leading-tight">
+                    {allStorageAreasSummary.totalMaxCapacityTons.toLocaleString()}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">ตัน</span>
+                  </div>
                 </div>
-                <div className="mt-0.5 sm:mt-1.5 font-mono text-sm sm:text-xl md:text-2xl font-black text-white tabular-nums leading-tight">
-                  {allStorageAreasSummary.totalMaxCapacityTons.toLocaleString()}{" "}
-                  <span className="text-[9.5px] sm:text-xs font-normal text-slate-300">ตัน</span>
+
+                {/* Progress Bar with Percentage Label */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-cyan-300">
+                    <span>ความจุรวมเต็มพิกัด</span>
+                    <span>100%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-400 rounded-full transition-all duration-300 w-full" />
+                  </div>
                 </div>
               </div>
 
               {/* 2. พื้นที่ใช้ไป (ตัน) */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 flex flex-col justify-between">
-                <div className="text-amber-300 text-[10px] sm:text-xs font-semibold truncate">
-                  <span className="sm:hidden">ใช้ไป</span>
-                  <span className="hidden sm:inline">พื้นที่ใช้ไป (ตัน)</span>
+              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-amber-300 text-[10px] sm:text-xs font-semibold truncate">
+                      <span className="sm:hidden">ใช้ไป</span>
+                      <span className="hidden sm:inline">พื้นที่ใช้ไป (ตัน)</span>
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400/30 shrink-0">
+                      {allStorageAreasSummary.spacePercent}%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-amber-300 tabular-nums leading-tight">
+                    {allStorageAreasSummary.totalUsedSpaceTons.toLocaleString(undefined, { maximumFractionDigits: 3 })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">ตัน</span>
+                  </div>
                 </div>
-                <div className="mt-0.5 sm:mt-1.5 font-mono text-sm sm:text-xl md:text-2xl font-black text-amber-300 tabular-nums leading-tight">
-                  {allStorageAreasSummary.totalUsedSpaceTons.toLocaleString(undefined, { maximumFractionDigits: 3 })}{" "}
-                  <span className="text-[9.5px] sm:text-xs font-normal text-slate-300">ตัน</span>
+
+                {/* Progress Bar with Percentage Label */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-amber-300">
+                    <span>สัดส่วนพื้นที่ใช้ไป</span>
+                    <span>{allStorageAreasSummary.spacePercent}%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, allStorageAreasSummary.spacePercent)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* 3. พื้นที่คงเหลือ (ตัน) */}
               <div
-                className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border flex flex-col justify-between ${
+                className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border flex flex-col justify-between ${
                   allStorageAreasSummary.totalRemainingSpaceTons < 0
                     ? "bg-rose-500/20 border-rose-400/40"
                     : "bg-white/10 border-white/15"
                 }`}
               >
-                <div
-                  className={`text-[10px] sm:text-xs font-semibold truncate ${
-                    allStorageAreasSummary.totalRemainingSpaceTons < 0
-                      ? "text-rose-300"
-                      : "text-emerald-300"
-                  }`}
-                >
-                  <span className="sm:hidden">คงเหลือ</span>
-                  <span className="hidden sm:inline">พื้นที่คงเหลือ (ตัน)</span>
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={`text-[10px] sm:text-xs font-semibold truncate ${
+                        allStorageAreasSummary.totalRemainingSpaceTons < 0
+                          ? "text-rose-300"
+                          : "text-emerald-300"
+                      }`}
+                    >
+                      <span className="sm:hidden">คงเหลือ</span>
+                      <span className="hidden sm:inline">พื้นที่คงเหลือ (ตัน)</span>
+                    </span>
+                    <span
+                      className={`text-[10px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded border shrink-0 ${
+                        allStorageAreasSummary.totalRemainingSpaceTons < 0
+                          ? "text-rose-300 bg-rose-500/30 border-rose-400/40"
+                          : "text-emerald-300 bg-emerald-500/20 border-emerald-400/30"
+                      }`}
+                    >
+                      {allStorageAreasSummary.totalRemainingSpaceTons < 0
+                        ? "0%"
+                        : `${Math.max(0, 100 - allStorageAreasSummary.spacePercent)}%`}
+                    </span>
+                  </div>
+                  <div
+                    className={`mt-1 font-mono text-base sm:text-xl md:text-2xl font-black tabular-nums leading-tight ${
+                      allStorageAreasSummary.totalRemainingSpaceTons < 0
+                        ? "text-rose-400"
+                        : "text-emerald-400"
+                    }`}
+                  >
+                    {allStorageAreasSummary.totalRemainingSpaceTons.toLocaleString(undefined, { maximumFractionDigits: 3 })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">ตัน</span>
+                  </div>
                 </div>
-                <div
-                  className={`mt-0.5 sm:mt-1.5 font-mono text-sm sm:text-xl md:text-2xl font-black tabular-nums leading-tight ${
-                    allStorageAreasSummary.totalRemainingSpaceTons < 0
-                      ? "text-rose-400"
-                      : "text-emerald-400"
-                  }`}
-                >
-                  {allStorageAreasSummary.totalRemainingSpaceTons.toLocaleString(undefined, { maximumFractionDigits: 3 })}{" "}
-                  <span className="text-[9.5px] sm:text-xs font-normal text-slate-300">ตัน</span>
-                </div>
-              </div>
 
-              {/* 4. จำนวนตะกร้า */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 flex flex-col justify-between col-span-1">
-                <div className="text-sky-300 text-[10px] sm:text-xs font-semibold truncate">
-                  จำนวนตะกร้า
-                </div>
-                <div className="mt-0.5 sm:mt-1.5 font-mono text-sm sm:text-xl md:text-2xl font-black text-sky-400 tabular-nums leading-tight">
-                  {allStorageAreasSummary.totalBaskets.toLocaleString()}{" "}
-                  <span className="text-[9.5px] sm:text-xs font-normal text-slate-300">ใบ</span>
-                </div>
-              </div>
-
-              {/* 5. จำนวนแถบ */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 flex flex-col justify-between col-span-2 sm:col-span-1">
-                <div className="text-indigo-300 text-[10px] sm:text-xs font-semibold truncate">
-                  จำนวนแถบ
-                </div>
-                <div className="mt-0.5 sm:mt-1.5 font-mono text-sm sm:text-xl md:text-2xl font-black text-indigo-300 tabular-nums leading-tight">
-                  {allStorageAreasSummary.totalCoils.toLocaleString()}{" "}
-                  <span className="text-[9.5px] sm:text-xs font-normal text-slate-300">แถบ</span>
+                {/* Progress Bar with Percentage Label */}
+                <div className="mt-2.5 space-y-1">
+                  <div
+                    className={`flex justify-between text-[9.5px] sm:text-[10px] font-bold ${
+                      allStorageAreasSummary.totalRemainingSpaceTons < 0
+                        ? "text-rose-300"
+                        : "text-emerald-300"
+                    }`}
+                  >
+                    <span>
+                      {allStorageAreasSummary.totalRemainingSpaceTons < 0
+                        ? "พื้นที่เกินความจุ!"
+                        : "สัดส่วนพื้นที่คงเหลือ"}
+                    </span>
+                    <span>
+                      {allStorageAreasSummary.totalRemainingSpaceTons < 0
+                        ? "0%"
+                        : `${Math.max(0, 100 - allStorageAreasSummary.spacePercent)}%`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        allStorageAreasSummary.totalRemainingSpaceTons < 0
+                          ? "bg-rose-500"
+                          : "bg-emerald-400"
+                      }`}
+                      style={{
+                        width: `${
+                          allStorageAreasSummary.totalRemainingSpaceTons < 0
+                            ? 100
+                            : Math.max(0, 100 - allStorageAreasSummary.spacePercent)
+                        }%`,
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -1565,7 +1639,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                   </span>
                 </div>
 
-                {/* 5 Building Summary Metrics */}
+                {/* Building Summary Metrics */}
                 <div className="w-full space-y-1 sm:space-y-1.5 text-[10px] sm:text-xs">
                   {/* ข้อ 1: พื้นที่จัดเก็บอาคาร = ตัน (แก้ไข/กำหนดเองได้) */}
                   <div
@@ -1659,7 +1733,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                     </span>
                   </div>
 
-                  {/* ข้อ 3: พื้นที่คงเหลือ (แสดงค่าติดลบเมื่อพื้นที่ใช้ไป > พื้นที่จัดเก็บ) */}
+                  {/* ข้อ 3: พื้นที่คงเหลือ */}
                   <div
                     className={`flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-lg border ${
                       isNegativeRemaining
@@ -1681,40 +1755,31 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                       {tab.remainingSpaceTons.toLocaleString(undefined, { maximumFractionDigits: 3 })} <span className="text-[9.5px] sm:text-[10px] font-normal">ตัน</span>
                     </span>
                   </div>
-
-                  {/* ข้อ 4 & 5: จำนวนตะกร้า & จำนวนแถบ */}
-                  <div className="flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-lg bg-white/50 dark:bg-slate-900/40">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                      <span className="sm:hidden">4.ตะกร้า:</span>
-                      <span className="hidden sm:inline">4. จำนวนตะกร้า:</span>
-                    </span>
-                    <span className="font-mono font-bold text-cyan-600 dark:text-cyan-400 tabular-nums">
-                      {tab.totalBaskets.toLocaleString()} <span className="text-[9.5px] sm:text-[10px] font-normal text-slate-500 dark:text-slate-400">ตะกร้า</span>
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-lg bg-white/50 dark:bg-slate-900/40">
-                    <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-400">
-                      <span className="sm:hidden">5.แถบ:</span>
-                      <span className="hidden sm:inline">5. จำนวนแถบ:</span>
-                    </span>
-                    <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
-                      {tab.totalCoils.toLocaleString()} <span className="text-[9.5px] sm:text-[10px] font-normal text-slate-500 dark:text-slate-400">แถบ</span>
-                    </span>
-                  </div>
                 </div>
 
-                {/* Footer: Basket Usage & Progress Bar */}
-                <div className="mt-1.5 pt-1.5 sm:mt-3 sm:pt-2 border-t border-slate-200/70 dark:border-slate-700/70 w-full space-y-1">
-                  <div className="flex justify-between text-[9.5px] sm:text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                    <span>ใช้งาน {tab.usedBaskets}/{tab.totalBaskets} ตะกร้า</span>
-                    {isNegativeRemaining && (
-                      <span className="text-rose-600 dark:text-rose-400 font-bold">เกินความจุ!</span>
-                    )}
+                {/* Footer: Basket Usage & Enhanced Progress Bar */}
+                <div className="mt-1.5 pt-1.5 sm:mt-3 sm:pt-2 border-t border-slate-200/70 dark:border-slate-700/70 w-full space-y-1.5">
+                  <div className="flex justify-between items-center text-[10px] sm:text-[11px] font-bold">
+                    <span className="text-slate-600 dark:text-slate-400">
+                      ใช้งาน {tab.usedBaskets}/{tab.totalBaskets} ตะกร้า
+                    </span>
+                    <span
+                      className={`font-mono ${
+                        isNegativeRemaining
+                          ? "text-rose-600 dark:text-rose-400 font-extrabold"
+                          : tab.percent >= 85
+                          ? "text-purple-600 dark:text-purple-400"
+                          : tab.percent >= 50
+                          ? "text-cyan-600 dark:text-cyan-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                      }`}
+                    >
+                      {isNegativeRemaining ? "เกินความจุ!" : `${tab.percent}%`}
+                    </span>
                   </div>
 
                   {/* Progress Bar */}
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-1 sm:h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 sm:h-2 rounded-full overflow-hidden shadow-inner">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
                         isNegativeRemaining
@@ -1929,7 +1994,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                       <span><strong className="text-amber-600 dark:text-amber-400">{rowCoilCount} แถบ</strong> <span className="hidden xs:inline">({rowTotalKg.toLocaleString()} kg)</span></span>
                     </div>
 
-                    {/* Add Basket to Row Button (Desktop only, hidden on Mobile) */}
+                    {/* Add Basket to Row Button */}
                     <button
                       type="button"
                       onClick={() => handleAddBasketToRow(row.rowId)}
@@ -1938,6 +2003,17 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                     >
                       <Plus size={12} />
                       <span>เพิ่มตะกร้าในแถว</span>
+                    </button>
+
+                    {/* Delete Row Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRow(row.rowId, row.rowNameTh, rowCoilCount)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-xs font-bold transition-all shadow-xs whitespace-nowrap"
+                      title={`ลบแถว ${row.rowNameTh}`}
+                    >
+                      <Trash2 size={12} />
+                      <span className="hidden md:inline">ลบแถว</span>
                     </button>
                   </div>
                 </div>

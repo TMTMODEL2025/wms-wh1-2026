@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Boxes,
   Building2,
+  Truck,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -149,6 +150,14 @@ export function DailyReportView({
   const [showOnlyActiveDays, setShowOnlyActiveDays] = useState<boolean>(false);
   const [monthlyLedgerPage, setMonthlyLedgerPage] = useState<number>(1);
   const [monthlyLedgerPageSize, setMonthlyLedgerPageSize] = useState<number>(10);
+
+  // Section 1: SM01-SM04 Inbound Report Table Pagination State
+  const [smInboundPage, setSmInboundPage] = useState<number>(1);
+  const [smInboundPageSize, setSmInboundPageSize] = useState<number>(10);
+
+  useEffect(() => {
+    setSmInboundPage(1);
+  }, [selectedDate, selectedShift]);
 
   // Storage Space Report Filter States
   const [spaceReportSubTab, setSpaceReportSubTab] = useState<"all" | "warehouse" | "machine">("all");
@@ -390,8 +399,9 @@ export function DailyReportView({
 
       if (!isRecordInSelectedShift(item.scanTimestamp)) continue;
 
+      const isExternal = item.inboundType === "external" || item.machine === "EXTERNAL" || item.conditionText?.includes("ภายนอก");
       const rawMachine = (item.machine || "SM01").trim().toUpperCase();
-      const machine = rawMachine.startsWith("SM") ? rawMachine : "SM01";
+      const machine = isExternal ? "EXTERNAL" : (rawMachine.startsWith("SM") ? rawMachine : "SM01");
 
       if (!map.has(bKey)) {
         const sapMatch = sapMasterMap.get(bKey);
@@ -417,9 +427,11 @@ export function DailyReportView({
         continue;
       }
 
+      const isExternal = item.inboundType === "external" || item.machine === "EXTERNAL" || item.conditionText?.includes("ภายนอก");
       const rawMachine = (item.machine || "SM01").trim().toUpperCase();
-      const machine = !rawMachine || rawMachine === "-" ? "SM01" : rawMachine;
+      const machine = isExternal ? "EXTERNAL" : (!rawMachine || rawMachine === "-" ? "SM01" : rawMachine);
       const isSmMachine =
+        isExternal ||
         machine.startsWith("SM") ||
         ["SM01", "SM02", "SM03", "SM04"].includes(machine) ||
         item.mode === "inbound";
@@ -431,7 +443,7 @@ export function DailyReportView({
       const sapMatch = sapMasterMap.get(bKey);
       map.set(bKey, {
         ...item,
-        machine: machine.startsWith("SM") ? machine : "SM01",
+        machine: isExternal ? "EXTERNAL" : (machine.startsWith("SM") ? machine : "SM01"),
         weightKg: item.weightKg || sapMatch?.weightKg || 0,
         grade: item.grade || sapMatch?.grade || "-",
         certThickness: formatDimension2Decimals(item.certThickness || sapMatch?.certThickness, "2.50 mm"),
@@ -444,6 +456,36 @@ export function DailyReportView({
 
   const totalSmInboundWeightKg = useMemo(() => {
     return smInboundRecords.reduce((sum, r) => sum + (r.weightKg || 0), 0);
+  }, [smInboundRecords]);
+
+  const {
+    internalSmInboundRecords,
+    externalInboundRecords,
+    totalInternalSmInboundWeightKg,
+    totalExternalInboundWeightKg,
+  } = useMemo(() => {
+    const internal: SlitBarcodeRecord[] = [];
+    const external: SlitBarcodeRecord[] = [];
+    let intKg = 0;
+    let extKg = 0;
+
+    smInboundRecords.forEach((r) => {
+      const isExt = r.machine === "EXTERNAL" || r.inboundType === "external" || r.conditionText?.includes("ภายนอก");
+      if (isExt) {
+        external.push(r);
+        extKg += r.weightKg || 0;
+      } else {
+        internal.push(r);
+        intKg += r.weightKg || 0;
+      }
+    });
+
+    return {
+      internalSmInboundRecords: internal,
+      externalInboundRecords: external,
+      totalInternalSmInboundWeightKg: intKg,
+      totalExternalInboundWeightKg: extKg,
+    };
   }, [smInboundRecords]);
 
   // =========================================================================
@@ -547,27 +589,23 @@ export function DailyReportView({
   // SECTION 3 DATA: Modern Visual Charts & KPI Analytics
   // =========================================================================
 
-  // Chart 1 Data: Inbound SM01 - SM04 pure inbound weight & coil count
+  // Chart 1 Data: Inbound SM01 - SM04 & External Inbound
   const smInboundChartData = useMemo(() => {
-    const smMachines = ["SM01", "SM02", "SM03", "SM04"];
+    const smMachines = ["SM01", "SM02", "SM03", "SM04", "EXTERNAL"];
     const inboundMap: Record<string, { kg: number; coils: number }> = {
       SM01: { kg: 0, coils: 0 },
       SM02: { kg: 0, coils: 0 },
       SM03: { kg: 0, coils: 0 },
       SM04: { kg: 0, coils: 0 },
+      EXTERNAL: { kg: 0, coils: 0 },
     };
 
     smInboundRecords.forEach((r) => {
       let m = (r.machine || "SM01").trim().toUpperCase();
-      if (!smMachines.includes(m)) {
-        if (m.startsWith("SM")) {
-          if (!inboundMap[m]) inboundMap[m] = { kg: 0, coils: 0 };
-          inboundMap[m].kg += r.weightKg || 0;
-          inboundMap[m].coils += 1;
-          return;
-        }
-        m = "SM01";
+      if (r.inboundType === "external" || r.conditionText?.includes("ภายนอก")) {
+        m = "EXTERNAL";
       }
+      if (!inboundMap[m]) inboundMap[m] = { kg: 0, coils: 0 };
       inboundMap[m].kg += r.weightKg || 0;
       inboundMap[m].coils += 1;
     });
@@ -575,11 +613,12 @@ export function DailyReportView({
     const activeSmMachines = Array.from(new Set([...smMachines, ...Object.keys(inboundMap)]));
 
     return activeSmMachines.map((m) => ({
-      machine: m,
+      machine: m === "EXTERNAL" ? (isThai ? "รับเข้าภายนอก" : "EXTERNAL") : m,
+      machineKey: m,
       inboundKg: inboundMap[m]?.kg || 0,
       coilCount: inboundMap[m]?.coils || 0,
     }));
-  }, [smInboundRecords]);
+  }, [smInboundRecords, isThai]);
 
   const maxSmInboundKg = useMemo(() => {
     let max = 1000;
@@ -1729,6 +1768,7 @@ export function DailyReportView({
       let totalCoils = 0;
       let totalWeightKg = 0;
       let maxCapacityKg = 0;
+      let totalBasketCapacityMm = 0;
 
       allRowKeys.forEach((rId) => {
         const masterRow = masterB?.rows.find((r) => r.rowId === rId);
@@ -1741,17 +1781,18 @@ export function DailyReportView({
 
         allBasketKeys.forEach((bKey, idx) => {
           const coils = inboundBasketsObj[bKey] || [];
-          const totalWidthMm = coils.reduce((s, c) => s + c.widthMm, 0);
+          const basketTotalWidthMm = coils.reduce((s, c) => s + c.widthMm, 0);
           const basketWeightKg = coils.reduce((s, c) => s + c.weightKg, 0);
           const existingInfo = existingStatusMap[bKey];
           const basketMaxCapKg = existingInfo?.maxCapacityKg || 2500;
+          const basketMaxCapMm = 2000;
 
           let status: "available" | "occupied" | "full" | "maintenance" = "available";
           if (existingInfo?.status === "maintenance") {
             status = "maintenance";
           } else if (coils.length === 0) {
             status = "available";
-          } else if (totalWidthMm >= 2000) {
+          } else if (basketTotalWidthMm >= 2000) {
             status = "full";
           } else {
             status = "occupied";
@@ -1761,6 +1802,7 @@ export function DailyReportView({
           maxCapacityKg += basketMaxCapKg;
           totalCoils += coils.length;
           totalWeightKg += basketWeightKg;
+          totalBasketCapacityMm += basketMaxCapMm;
 
           if (status === "available") availableBaskets += 1;
           else if (status === "occupied") occupiedBaskets += 1;
@@ -1775,8 +1817,8 @@ export function DailyReportView({
             basketNo: String(idx + 1).padStart(2, "0"),
             status,
             coilCount: coils.length,
-            totalWidthMm,
-            totalWidthMeters: Number((totalWidthMm / 1000).toFixed(2)),
+            totalWidthMm: basketTotalWidthMm,
+            totalWidthMeters: Number((basketTotalWidthMm / 1000).toFixed(2)),
             totalWeightKg: basketWeightKg,
             maxCapacityKg: basketMaxCapKg,
             coils,
@@ -1784,6 +1826,7 @@ export function DailyReportView({
         });
       });
 
+      const totalMeters = Number((totalBasketCapacityMm / 1000).toFixed(2));
       const occupancyPercent =
         totalBaskets > 0 ? Math.round(((occupiedBaskets + fullBaskets) / totalBaskets) * 100) : 0;
 
@@ -1798,6 +1841,7 @@ export function DailyReportView({
         totalCoils,
         totalWeightKg,
         maxCapacityKg,
+        totalMeters,
         occupancyPercent,
       };
     });
@@ -1812,6 +1856,7 @@ export function DailyReportView({
         acc.totalCoils += b.totalCoils;
         acc.totalWeightKg += b.totalWeightKg;
         acc.maxCapacityKg += b.maxCapacityKg;
+        acc.totalMeters += b.totalMeters;
         return acc;
       },
       {
@@ -1823,6 +1868,7 @@ export function DailyReportView({
         totalCoils: 0,
         totalWeightKg: 0,
         maxCapacityKg: 0,
+        totalMeters: 0,
       }
     );
 
@@ -1972,7 +2018,7 @@ export function DailyReportView({
       "อาคาร (Building)": b.buildingNameTh,
       "รายละเอียดโซน": b.subtitleTh,
       "จำนวนแถว": b.rowCount,
-      "ตะกร้าทั้งหมด": b.totalBaskets,
+      "จำนวนเมตรทั้งหมด (m)": b.totalMeters,
       "ตะกร้าว่าง": b.availableBaskets,
       "ตะกร้าใช้งาน": b.occupiedBaskets,
       "ตะกร้าเต็ม": b.fullBaskets,
@@ -2257,11 +2303,11 @@ export function DailyReportView({
           SECTION 3 KPI SUMMARY CARDS (Top Overview Dashboard)
           ========================================================================= */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-        {/* KPI 1: SM Inbound Weight */}
+        {/* KPI 1: Total Inbound Weight (SM01-SM04 + External) */}
         <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-cyan-500 relative overflow-hidden">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
-              {isThai ? "รับเข้า SM01 - SM04" : "SM01-SM04 Inbound"}
+              {isThai ? "รับเข้าคลังรวม (เครื่อง & ภายนอก)" : "Total Inbound"}
             </span>
             <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-cyan-500/10 text-cyan-500 shrink-0">
               <TrendingUp size={14} className="sm:w-[18px] sm:h-[18px]" />
@@ -2278,7 +2324,28 @@ export function DailyReportView({
           </div>
         </div>
 
-        {/* KPI 2: Machine Dispensed Weight */}
+        {/* KPI 2: External Purchase Inbound Weight (Placed right next to Total Inbound) */}
+        <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-purple-500 relative overflow-hidden">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
+              {isThai ? "รับเข้าภายนอก (ซื้อลูกค้า)" : "External Inbound"}
+            </span>
+            <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-purple-500/10 text-purple-500 shrink-0">
+              <Truck size={14} className="sm:w-[18px] sm:h-[18px]" />
+            </div>
+          </div>
+          <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
+            <span className="text-base sm:text-2xl font-black text-purple-600 dark:text-purple-400 font-mono">
+              {totalExternalInboundWeightKg.toLocaleString()}
+            </span>
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500">kg</span>
+          </div>
+          <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs text-purple-600 dark:text-purple-400 font-bold font-mono truncate">
+            = {(totalExternalInboundWeightKg / 1000).toFixed(3)} TON ({externalInboundRecords.length} {isThai ? "รายการ" : "coils"})
+          </div>
+        </div>
+
+        {/* KPI 3: Machine Dispensed Weight */}
         <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-amber-500 relative overflow-hidden">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
@@ -2299,7 +2366,7 @@ export function DailyReportView({
           </div>
         </div>
 
-        {/* KPI 3: Net Movement Balance */}
+        {/* KPI 4: Net Movement Balance */}
         <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-emerald-500 relative overflow-hidden">
           <div className="flex items-center justify-between gap-1">
             <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
@@ -2326,45 +2393,23 @@ export function DailyReportView({
             {isThai ? "ผลต่างรับเข้า vs เบิกจ่าย" : "Inbound vs Dispensed Delta"}
           </div>
         </div>
-
-        {/* KPI 4: Active Machines */}
-        <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-purple-500 relative overflow-hidden">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
-              {isThai ? "เครื่องจักรที่มีการเดินงาน" : "Active Machines"}
-            </span>
-            <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-purple-500/10 text-purple-500 shrink-0">
-              <Cpu size={14} className="sm:w-[18px] sm:h-[18px]" />
-            </div>
-          </div>
-          <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-            <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {smInboundChartData.filter((m) => m.inboundKg > 0 || m.coilCount > 0).length +
-                machineDispensingChartData.filter((m) => m.dispensedKg > 0 || m.coilCount > 0).length}
-            </span>
-            <span className="text-[10px] sm:text-xs font-bold text-slate-500">{isThai ? "เครื่อง" : "units"}</span>
-          </div>
-          <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs text-purple-600 dark:text-purple-400 font-bold truncate">
-            {isThai ? "กำลังการผลิตปกติ" : "Normal Operation"}
-          </div>
-        </div>
       </div>
 
       {/* =========================================================================
           SECTION 3: SEPARATED MACHINE CHARTS (Inbound vs Dispensing)
           ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6">
-        {/* Chart 1: Inbound SM01 - SM04 Chart */}
+        {/* Chart 1: Inbound SM01 - SM04 & External Inbound Chart */}
         <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-4">
           <div className="flex items-center justify-between border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
             <div className="flex items-center gap-1.5 sm:gap-2">
               <BarChart3 size={16} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
-                {isThai ? "1. กราฟสรุปการรับเข้าวัตถุดิบ (SM01 - SM04)" : "1. Material Inbound Summary (SM01 - SM04)"}
+                {isThai ? "1. กราฟสรุปการรับเข้าวัตถุดิบ (SM01-04 & รับเข้าภายนอก)" : "1. Material Inbound Summary (SM01-04 & External)"}
               </h3>
             </div>
             <span className="hidden sm:inline-block text-xs px-2.5 py-0.5 rounded-full font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800">
-              {isThai ? "รับเข้าจากเครื่อง SM01-04" : "Pure Inbound"}
+              {isThai ? "รับเข้าเครื่อง & ภายนอก" : "Inbound Total"}
             </span>
           </div>
 
@@ -2391,7 +2436,7 @@ export function DailyReportView({
               {smInboundChartData.map((d, idx) => {
                 const groupWidth = 435 / smInboundChartData.length;
                 const xCenter = 55 + idx * groupWidth + groupWidth / 2;
-                const barWidth = 32;
+                const barWidth = smInboundChartData.length > 4 ? 26 : 32;
 
                 const inboundHeight =
                   d.inboundKg > 0
@@ -2401,16 +2446,17 @@ export function DailyReportView({
                     : 0;
                 const xInbound = xCenter - barWidth / 2;
                 const yInbound = 160 - inboundHeight;
+                const isExt = d.machineKey === "EXTERNAL";
 
                 return (
-                  <g key={d.machine} className="group cursor-pointer">
+                  <g key={d.machineKey || d.machine} className="group cursor-pointer">
                     <rect
                       x={xInbound}
                       y={yInbound}
                       width={barWidth}
                       height={Math.max(3, inboundHeight)}
                       rx="4"
-                      fill="url(#gradientPureInbound)"
+                      fill={isExt ? "url(#gradientExternalInbound)" : "url(#gradientPureInbound)"}
                       className="transition-all duration-300 hover:opacity-80"
                     />
 
@@ -2419,9 +2465,9 @@ export function DailyReportView({
                         x={xCenter}
                         y={yInbound - 6}
                         textAnchor="middle"
-                        fontSize="9"
+                        fontSize="8.5"
                         fontWeight="bold"
-                        fill="#0284c7"
+                        fill={isExt ? "#a855f7" : "#0284c7"}
                         className="font-mono"
                       >
                         {d.inboundKg > 0
@@ -2434,9 +2480,9 @@ export function DailyReportView({
                       x={xCenter}
                       y="182"
                       textAnchor="middle"
-                      fontSize="11"
+                      fontSize={isExt ? "9.5" : "11"}
                       fontWeight="bold"
-                      fill="#64748b"
+                      fill={isExt ? "#a855f7" : "#64748b"}
                       className="font-mono"
                     >
                       {d.machine}
@@ -2449,6 +2495,10 @@ export function DailyReportView({
                 <linearGradient id="gradientPureInbound" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#38bdf8" />
                   <stop offset="100%" stopColor="#0284c7" />
+                </linearGradient>
+                <linearGradient id="gradientExternalInbound" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#c084fc" />
+                  <stop offset="100%" stopColor="#9333ea" />
                 </linearGradient>
               </defs>
             </svg>
@@ -2859,15 +2909,15 @@ export function DailyReportView({
             </div>
             <div>
               <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5 sm:gap-2">
-                <span>{isThai ? "ส่วนที่ 1: รายงานการรับเข้าจากเครื่องจักร SM01 - SM04" : "Section 1: SM01 - SM04 Machine Inbound Report"}</span>
+                <span>{isThai ? "ส่วนที่ 1: รายงานการรับเข้าคลังทั้งหมด (เครื่องจักร SM01-SM04 & รับเข้าภายนอก)" : "Section 1: Total Warehouse Inbound Report (SM01-04 & External)"}</span>
                 <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold bg-cyan-100 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300">
                   {smInboundRecords.length} {isThai ? "รายการ" : "records"}
                 </span>
               </h3>
               <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 {isThai
-                  ? "ตารางสรุปรายการวัตถุดิบเหล็กสลิตที่สแกนรับเข้าจากเครื่อง SM01 ถึง SM04 ในกะและวันที่เลือก"
-                  : "Summary of raw materials received from SM01 to SM04 machines"}
+                  ? "ตารางสรุปรายการวัตถุดิบเหล็กสลิตที่รับเข้าจากเครื่องจักร SM01 - SM04 และการรับเข้าภายนอกในกะและวันที่เลือก"
+                  : "Summary of raw materials received from SM01-04 machines and external purchases"}
               </p>
             </div>
           </div>
@@ -2881,84 +2931,164 @@ export function DailyReportView({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-[10.5px] sm:text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
-                <th className="!p-1.5 sm:!p-3 !text-center w-10 sm:w-14">#</th>
-                <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "เวลา" : "Time"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "เลขที่ Batch" : "Batch Barcode"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "เครื่องจักร" : "Machine"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "เกรด (Grade)" : "Grade"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ความหนา" : "Thickness"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ความกว้าง" : "Width"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนัก (kg)" : "Weight (kg)"}</th>
-                <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ผู้บันทึก" : "Recorded By"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-              {smInboundRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="!p-5 sm:!p-8 !text-center text-slate-400 text-[11px] sm:text-xs font-medium">
-                    {isThai
-                      ? `ไม่พบข้อมูลการรับเข้าจากเครื่องจักร SM01 - SM04 ในวันที่ ${selectedDate} (${
-                          selectedShift === "day" ? "กะเช้า" : "กะดึก"
-                        })`
-                      : "No SM01-SM04 inbound data found for selected date and shift."}
-                  </td>
-                </tr>
-              ) : (
-                smInboundRecords.map((r, idx) => (
-                  <tr
-                    key={r.id || r.batch + idx}
-                    className="hover:bg-cyan-50/40 dark:hover:bg-cyan-950/20 transition-colors whitespace-nowrap"
-                  >
-                    <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-400 tabular-nums">{idx + 1}</td>
-                    <td className="!p-1.5 sm:!p-3 !text-center font-mono font-bold text-slate-600 dark:text-slate-300 tabular-nums">
-                      {formatTimeDisplay(r.scanTimestamp)}
-                    </td>
-                    <td className="!p-1.5 sm:!p-3 !text-left font-mono font-black text-cyan-600 dark:text-cyan-400">{r.batch}</td>
-                    <td className="!p-1.5 sm:!p-3 !text-center">
-                      <span className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold font-mono bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800">
-                        {r.machine || "SM01"}
-                      </span>
-                    </td>
-                    <td className="!p-1.5 sm:!p-3 !text-center font-mono font-bold text-slate-800 dark:text-slate-200">
-                      {r.grade || "SS400"}
-                    </td>
-                    <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-600 dark:text-slate-300 tabular-nums">
-                      {formatDimension2Decimals(r.certThickness, "2.50 mm")}
-                    </td>
-                    <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-600 dark:text-slate-300 tabular-nums">
-                      {formatDimension2Decimals(r.width, "100.00 mm")}
-                    </td>
-                    <td className="!p-1.5 sm:!p-3 !text-right font-mono font-black text-slate-900 dark:text-white tabular-nums">
-                      {(r.weightKg || 0).toLocaleString()} kg
-                    </td>
-                    <td className="!p-1.5 sm:!p-3 !text-center text-slate-600 dark:text-slate-400 text-[10.5px] sm:text-[11.5px]">
-                      {r.conditionText || "Operator SM"}
-                    </td>
-                  </tr>
-                ))
+        {(() => {
+          const totalSmRecords = smInboundRecords.length;
+          const totalSmPages = Math.max(1, Math.ceil(totalSmRecords / smInboundPageSize));
+          const currentSmPage = Math.min(Math.max(1, smInboundPage), totalSmPages);
+          const smStartIndex = (currentSmPage - 1) * smInboundPageSize;
+          const smEndIndex = Math.min(smStartIndex + smInboundPageSize, totalSmRecords);
+          const paginatedSmInboundRecords = smInboundRecords.slice(smStartIndex, smEndIndex);
+
+          return (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[10.5px] sm:text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
+                      <th className="!p-1.5 sm:!p-3 !text-center w-10 sm:w-14">#</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "เวลา" : "Time"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "เลขที่ Batch" : "Batch Barcode"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "เครื่องจักร" : "Machine"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "เกรด (Grade)" : "Grade"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ความหนา" : "Thickness"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ความกว้าง" : "Width"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนัก (kg)" : "Weight (kg)"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ผู้บันทึก" : "Recorded By"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                    {totalSmRecords === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="!p-5 sm:!p-8 !text-center text-slate-400 text-[11px] sm:text-xs font-medium">
+                          {isThai
+                            ? `ไม่พบข้อมูลการรับเข้าจากเครื่องจักร SM01 - SM04 ในวันที่ ${selectedDate} (${
+                                selectedShift === "day" ? "กะเช้า" : "กะดึก"
+                              })`
+                            : "No SM01-SM04 inbound data found for selected date and shift."}
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedSmInboundRecords.map((r, pIdx) => {
+                        const globalIdx = smStartIndex + pIdx + 1;
+                        return (
+                          <tr
+                            key={r.id || r.batch + pIdx}
+                            className="hover:bg-cyan-50/40 dark:hover:bg-cyan-950/20 transition-colors whitespace-nowrap"
+                          >
+                            <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-400 tabular-nums">{globalIdx}</td>
+                            <td className="!p-1.5 sm:!p-3 !text-center font-mono font-bold text-slate-600 dark:text-slate-300 tabular-nums">
+                              {formatTimeDisplay(r.scanTimestamp)}
+                            </td>
+                            <td className="!p-1.5 sm:!p-3 !text-left font-mono font-black text-cyan-600 dark:text-cyan-400">{r.batch}</td>
+                            <td className="!p-1.5 sm:!p-3 !text-center">
+                              {r.machine === "EXTERNAL" || r.inboundType === "external" ? (
+                                <span className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold font-mono bg-purple-100 dark:bg-purple-950/80 text-purple-800 dark:text-purple-300 border border-purple-300 dark:border-purple-800 inline-flex items-center gap-1">
+                                  <Truck size={12} />
+                                  <span>{isThai ? "รับเข้าภายนอก" : "EXTERNAL"}</span>
+                                </span>
+                              ) : (
+                                <span className="px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px] font-bold font-mono bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-800">
+                                  {r.machine || "SM01"}
+                                </span>
+                              )}
+                            </td>
+                            <td className="!p-1.5 sm:!p-3 !text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                              {r.grade || "SS400"}
+                            </td>
+                            <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-600 dark:text-slate-300 tabular-nums">
+                              {formatDimension2Decimals(r.certThickness, "2.50 mm")}
+                            </td>
+                            <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-600 dark:text-slate-300 tabular-nums">
+                              {formatDimension2Decimals(r.width, "100.00 mm")}
+                            </td>
+                            <td className="!p-1.5 sm:!p-3 !text-right font-mono font-black text-slate-900 dark:text-white tabular-nums">
+                              {(r.weightKg || 0).toLocaleString()} kg
+                            </td>
+                            <td className="!p-1.5 sm:!p-3 !text-center text-slate-600 dark:text-slate-400 text-[10.5px] sm:text-[11.5px]">
+                              {r.conditionText || "Operator SM"}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                  {totalSmRecords > 0 && (
+                    <tfoot className="bg-slate-100 dark:bg-[#0c1930] font-bold border-t-2 border-slate-300 dark:border-[#1e3a5f] whitespace-nowrap">
+                      <tr>
+                        <td colSpan={7} className="!p-1.5 sm:!p-3 !text-right uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                          {isThai ? "ยอดรวมน้ำหนักรับเข้าทั้งหมด (Total Inbound Weight):" : "Total Inbound Weight:"}
+                        </td>
+                        <td className="!p-1.5 sm:!p-3 !text-right font-mono font-black text-xs sm:text-sm text-cyan-600 dark:text-cyan-400 tabular-nums">
+                          {totalSmInboundWeightKg.toLocaleString()} kg
+                        </td>
+                        <td className="!p-1.5 sm:!p-3 !text-center font-mono text-[10.5px] sm:text-xs text-slate-500 tabular-nums">
+                          ({(totalSmInboundWeightKg / 1000).toFixed(3)} TON)
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              {/* Section 1 Pagination Control Bar */}
+              {totalSmRecords > 0 && (
+                <div className="p-2.5 sm:p-4 bg-slate-50/80 dark:bg-[#0d1b33]/80 border-t border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {/* Left: Info & Rows per page selector */}
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs">
+                    <span>
+                      {isThai
+                        ? `แสดงรายการที่ ${smStartIndex + 1} - ${smEndIndex} จากทั้งหมด ${totalSmRecords.toLocaleString()} รายการ`
+                        : `Showing ${smStartIndex + 1} - ${smEndIndex} of ${totalSmRecords.toLocaleString()} records`}
+                    </span>
+                    <div className="flex items-center gap-1 ml-1 sm:ml-2">
+                      <span className="text-[10px] sm:text-[11px] text-slate-400">{isThai ? "แสดงหน้าละ:" : "Per page:"}</span>
+                      <select
+                        value={smInboundPageSize}
+                        onChange={(e) => {
+                          setSmInboundPageSize(Number(e.target.value));
+                          setSmInboundPage(1);
+                        }}
+                        className="px-2 py-0.5 sm:py-1 text-[11px] sm:text-xs font-bold rounded-lg bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Right: Previous / Next & Page indicator */}
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={currentSmPage <= 1}
+                      onClick={() => setSmInboundPage((p) => Math.max(1, p - 1))}
+                      className="px-2.5 py-1 sm:py-1.5 rounded-lg border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-cyan-950/40 cursor-pointer transition-all flex items-center gap-1 active:scale-95 text-xs font-bold shadow-xs"
+                    >
+                      <ChevronLeft size={14} />
+                      <span>{isThai ? "หน้าก่อนหน้า" : "Prev"}</span>
+                    </button>
+
+                    <span className="px-3 py-1 rounded-lg bg-cyan-500/10 dark:bg-cyan-950/80 text-cyan-600 dark:text-cyan-400 font-mono font-black text-xs border border-cyan-500/30">
+                      {isThai ? `หน้า ${currentSmPage} / ${totalSmPages}` : `Page ${currentSmPage} of ${totalSmPages}`}
+                    </span>
+
+                    <button
+                      type="button"
+                      disabled={currentSmPage >= totalSmPages}
+                      onClick={() => setSmInboundPage((p) => Math.min(totalSmPages, p + 1))}
+                      className="px-2.5 py-1 sm:py-1.5 rounded-lg border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-cyan-950/40 cursor-pointer transition-all flex items-center gap-1 active:scale-95 text-xs font-bold shadow-xs"
+                    >
+                      <span>{isThai ? "หน้าถัดไป" : "Next"}</span>
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
               )}
-            </tbody>
-            {smInboundRecords.length > 0 && (
-              <tfoot className="bg-slate-100 dark:bg-[#0c1930] font-bold border-t-2 border-slate-300 dark:border-[#1e3a5f] whitespace-nowrap">
-                <tr>
-                  <td colSpan={7} className="!p-1.5 sm:!p-3 !text-right uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                    {isThai ? "ยอดรวมน้ำหนักรับเข้าทั้งหมด (Total Inbound Weight):" : "Total Inbound Weight:"}
-                  </td>
-                  <td className="!p-1.5 sm:!p-3 !text-right font-mono font-black text-xs sm:text-sm text-cyan-600 dark:text-cyan-400 tabular-nums">
-                    {totalSmInboundWeightKg.toLocaleString()} kg
-                  </td>
-                  <td className="!p-1.5 sm:!p-3 !text-center font-mono text-[10.5px] sm:text-xs text-slate-500 tabular-nums">
-                    ({(totalSmInboundWeightKg / 1000).toFixed(3)} TON)
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
+            </>
+          );
+        })()}
       </section>
 
       {/* =========================================================================
@@ -4272,7 +4402,7 @@ export function DailyReportView({
                       <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
                         <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "อาคาร" : "Building"}</th>
                         <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "จำนวนแถว" : "Rows"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "ตะกร้าทั้งหมด" : "Total Baskets"}</th>
+                        <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "จำนวนเมตรทั้งหมด" : "Total Meters"}</th>
                         <th className="!p-1.5 sm:!p-3 !text-center !text-emerald-600 dark:!text-emerald-400">{isThai ? "ว่าง" : "Avail"}</th>
                         <th className="!p-1.5 sm:!p-3 !text-center !text-amber-600 dark:!text-amber-400">{isThai ? "ใช้งาน" : "Occupied"}</th>
                         <th className="!p-1.5 sm:!p-3 !text-center !text-rose-600 dark:!text-rose-400">{isThai ? "เต็ม" : "Full"}</th>
@@ -4294,8 +4424,8 @@ export function DailyReportView({
                           <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold">
                             {b.rowCount}
                           </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold">
-                            {b.totalBaskets}
+                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-cyan-600 dark:text-cyan-400">
+                            {b.totalMeters.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ม.
                           </td>
                           <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
                             {b.availableBaskets}
@@ -4342,8 +4472,8 @@ export function DailyReportView({
                         <td colSpan={2} className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-700 dark:text-slate-200">
                           {isThai ? "รวมทุกอาคารคลังสินค้า (Total)" : "All Buildings Total"}
                         </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums">
-                          {storageSpaceAnalytics.warehouseTotals.totalBaskets}
+                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-black text-cyan-600 dark:text-cyan-400">
+                          {storageSpaceAnalytics.warehouseTotals.totalMeters.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ม.
                         </td>
                         <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
                           {storageSpaceAnalytics.warehouseTotals.availableBaskets}
