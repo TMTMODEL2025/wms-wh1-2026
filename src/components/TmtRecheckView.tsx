@@ -1285,7 +1285,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               <button
                 type="button"
                 onClick={() => handleOpenWeightTicketModal()}
-                className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 rounded-lg text-[11px] sm:text-xs font-bold flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer"
+                className="hidden sm:inline-flex px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 rounded-lg text-[11px] sm:text-xs font-bold items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
                 title="พิมพ์บัตรชั่งน้ำหนัก (แยกตาม DO)"
               >
                 <Scale size={14} />
@@ -1295,7 +1295,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               <button
                 type="button"
                 onClick={expandAllVehicles}
-                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-lg text-[11px] sm:text-xs font-semibold inline-flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0"
                 title="ขยายตารางทั้งหมด"
               >
                 <ChevronDown size={14} />
@@ -1305,7 +1305,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               <button
                 type="button"
                 onClick={collapseAllVehicles}
-                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] sm:text-xs font-semibold flex items-center gap-1 transition-all active:scale-95"
+                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] sm:text-xs font-semibold inline-flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0"
                 title="ย่อตารางทั้งหมด"
               >
                 <ChevronUp size={14} />
@@ -1315,7 +1315,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 shrink-0"
+                className="hidden sm:inline-flex px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold items-center gap-1.5 shrink-0 whitespace-nowrap"
               >
                 <Printer size={14} />
                 <span>พิมพ์</span>
@@ -1372,7 +1372,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                             e.stopPropagation();
                             handleOpenWeightTicketModal(v.vehicleId);
                           }}
-                          className="text-amber-400 hover:text-amber-300 flex items-center gap-1 font-sans text-xs underline font-semibold cursor-pointer"
+                          className="hidden sm:inline-flex text-amber-400 hover:text-amber-300 items-center gap-1 font-sans text-xs underline font-semibold cursor-pointer whitespace-nowrap shrink-0"
                           title="พิมพ์บัตรชั่งของคันนี้"
                         >
                           <Scale size={13} />
