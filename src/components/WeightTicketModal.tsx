@@ -68,22 +68,32 @@ export function generateDefaultTicketNo(index = 1, date = new Date()): string {
 }
 
 /**
- * Helper: Determine default "สินค้า :" based on all items/batches in a DO:
- * - Slit steel (hasSlit): Material contains "2SLIT" or "4SLIT" OR Description contains "เหล็กม้วนสลิต"
- * - Scrap (hasScrap): Material contains "2SCRAP-W" OR Description contains "เศษคืนลูกค้า"
+ * Helper: Determine default "สินค้า :" based on all items/batches in a DO or vehicle:
+ * - Slit steel (hasSlit): Material contains "2SLIT" or "4SLIT" or "SLIT" OR Description contains "เหล็กม้วนสลิต" / "สลิต"
+ * - Scrap (hasScrap): Material contains "SCRAP-W" or "2SCRAP-W" or "4SCRAP-W" or "SCRAP" OR Description contains "เศษคืนลูกค้า" / "เศษ"
  *
  * Rules:
- * - Condition 1: Both Slit and Scrap -> "เหล็กม้วนสลิต+เศษคืนลูกค้า"
- * - Condition 2: Only Slit -> "เหล็กม้วนสลิต"
- * - Condition 3: Only Scrap -> "เศษคืนลูกค้า"
+ * - Condition 1: Both Slit and Scrap (2SLIT/4SLIT and SCRAP-W) -> "เหล็กม้วนสลิต+เศษคืนลูกค้า"
+ * - Condition 2: Only Slit (2SLIT/4SLIT without scrap) -> "เหล็กม้วนสลิต"
+ * - Condition 3: Only Scrap (SCRAP-W without slit) -> "เศษคืนลูกค้า"
  */
-export function determineDoProductName(items: { material?: string; description?: string }[]): {
+export function determineDoProductName(
+  items: { material?: string; description?: string }[],
+  fallbackItems?: { material?: string; description?: string }[]
+): {
   productName: string;
   hasSlit: boolean;
   hasScrap: boolean;
   materialsList: string[];
 } {
-  if (!items || items.length === 0) {
+  const itemsToCheck =
+    items && items.length > 0
+      ? items
+      : fallbackItems && fallbackItems.length > 0
+      ? fallbackItems
+      : [];
+
+  if (itemsToCheck.length === 0) {
     return {
       productName: "เหล็กม้วนสลิต",
       hasSlit: true,
@@ -96,35 +106,51 @@ export function determineDoProductName(items: { material?: string; description?:
   let hasScrap = false;
   const rawMaterialsSet = new Set<string>();
 
-  for (const item of items) {
-    const mat = (item.material || "").trim().toUpperCase();
+  for (const item of itemsToCheck) {
+    const rawMat = (item.material || "").trim();
+    const mat = rawMat.toUpperCase();
     const desc = (item.description || "").trim();
+    const descUpper = desc.toUpperCase();
 
-    if (mat) {
-      rawMaterialsSet.add(mat);
+    if (rawMat) {
+      rawMaterialsSet.add(rawMat);
     }
 
-    // Check Slit: "2SLIT" or "4SLIT" in material OR "เหล็กม้วนสลิต" in description
-    if (mat.includes("2SLIT") || mat.includes("4SLIT") || desc.includes("เหล็กม้วนสลิต")) {
-      hasSlit = true;
-    }
+    // Check Slit: 2SLIT or 4SLIT or SLIT in material OR เหล็กม้วนสลิต/สลิต in description
+    const isSlit =
+      mat.includes("2SLIT") ||
+      mat.includes("4SLIT") ||
+      mat.includes("SLIT") ||
+      desc.includes("เหล็กม้วนสลิต") ||
+      desc.includes("เหล็กม้วนสิลต") ||
+      desc.includes("สลิต") ||
+      desc.includes("สิลต") ||
+      descUpper.includes("SLIT");
 
-    // Check Scrap: "2SCRAP-W" in material OR "เศษคืนลูกค้า" in description (or 2SCRAP)
-    if (mat.includes("2SCRAP-W") || mat.includes("2SCRAP") || desc.includes("เศษคืนลูกค้า") || desc.includes("เศษ")) {
-      hasScrap = true;
-    }
+    // Check Scrap: SCRAP-W, 2SCRAP-W, 4SCRAP-W, SCRAP in material OR เศษคืนลูกค้า/เศษ in description
+    const isScrap =
+      mat.includes("SCRAP-W") ||
+      mat.includes("2SCRAP-W") ||
+      mat.includes("4SCRAP-W") ||
+      mat.includes("SCRAP") ||
+      desc.includes("เศษคืนลูกค้า") ||
+      desc.includes("เศษ") ||
+      descUpper.includes("SCRAP");
+
+    if (isSlit) hasSlit = true;
+    if (isScrap) hasScrap = true;
   }
 
   let productName = "เหล็กม้วนสลิต";
-  // Condition 1: Both Slit and Scrap
+  // Condition 1: Both Slit and Scrap (e.g. 2SLIT/4SLIT and SCRAP-W)
   if (hasSlit && hasScrap) {
     productName = "เหล็กม้วนสลิต+เศษคืนลูกค้า";
   }
-  // Condition 2: Only Slit
+  // Condition 2: Only Slit (2SLIT หรือ 4SLIT)
   else if (hasSlit) {
     productName = "เหล็กม้วนสลิต";
   }
-  // Condition 3: Only Scrap
+  // Condition 3: Only Scrap (SCRAP-W หรือ เศษ)
   else if (hasScrap) {
     productName = "เศษคืนลูกค้า";
   }
@@ -239,9 +265,20 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
       });
     }
 
+    const isSingleDoVehicle = doMap.size === 1 || (vehicle.doNumbers && vehicle.doNumbers.length === 1);
+
     const generatedTickets: DoWeightTicketData[] = Array.from(doMap.entries()).map(
       ([doNo, data], idx) => {
-        const { productName, materialsList, hasSlit, hasScrap } = determineDoProductName(data.items);
+        // When vehicle has 1 DO, all vehicle items belong to this vehicle/DO
+        const itemsToEvaluate =
+          isSingleDoVehicle && vehicle.items && vehicle.items.length > 0
+            ? vehicle.items
+            : (data.items && data.items.length > 0 ? data.items : (vehicle.items || []));
+
+        const { productName, materialsList, hasSlit, hasScrap } = determineDoProductName(
+          itemsToEvaluate,
+          vehicle.items
+        );
         return {
           doNo,
           customerName: data.customerName,
@@ -682,8 +719,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                         .map((ticket) => (
                           <div
                             key={ticket.doNo}
-                            className="bg-white rounded-lg shadow-xl p-6 sm:p-8 max-w-xl mx-auto text-black border border-slate-300"
-                            style={{ fontFamily: "'Sarabun', 'TH Sarabun New', Tahoma, sans-serif" }}
+                            className="bg-white rounded-lg shadow-xl p-4 max-w-2xl mx-auto border border-slate-300"
                           >
                             <WeightTicketSlipContent ticket={ticket} />
                           </div>
@@ -738,12 +774,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
             {printQueue.map((ticket) => (
               <div
                 key={ticket.doNo}
-                className="weight-ticket-print-sheet bg-white text-black p-6 max-w-xl mx-auto"
-                style={{
-                  fontFamily: "'Sarabun', 'TH Sarabun New', Tahoma, sans-serif",
-                  pageBreakAfter: "always",
-                  breakAfter: "page",
-                }}
+                className="weight-ticket-print-sheet"
               >
                 <WeightTicketSlipContent ticket={ticket} />
               </div>
@@ -751,163 +782,212 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
           </div>,
           document.body
         )}
+
+      {/* Exact Print Styles for 5.5in x 9.5in continuous form */}
+      <style>{`
+        @media print {
+          @page {
+            size: 5.5in 9.5in;
+            margin: 0.05in;
+          }
+          body {
+            visibility: hidden;
+            background: transparent !important;
+          }
+          #tmt-weight-ticket-print-portal,
+          #tmt-weight-ticket-print-portal * {
+            visibility: visible;
+          }
+          #tmt-weight-ticket-print-portal {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            display: block !important;
+            background: #ffffff !important;
+          }
+          .weight-ticket-print-sheet {
+            page-break-after: always;
+            break-after: page;
+            width: 100% !important;
+          }
+          #printable-area {
+            width: 100% !important;
+            padding: 8px 4px !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            font-family: 'Angsana New', 'Cordia New', serif !important;
+            line-height: 1.25 !important;
+          }
+        }
+      `}</style>
     </>
   );
 };
 
 // ============================================================================
-// Exact Layout Subcomponent for the TMT Weight Ticket Slip
+// Exact Layout Subcomponent for the TMT Weight Ticket Slip (100% Spec Match)
 // ============================================================================
 export const WeightTicketSlipContent: React.FC<{ ticket: DoWeightTicketData }> = ({
   ticket,
 }) => {
   return (
-    <div className="w-full text-black leading-tight select-text text-[13px]">
+    <div
+      id="printable-area"
+      className="w-full text-black px-1 py-2 bg-white select-text leading-tight"
+      style={{
+        fontFamily: "'Angsana New', 'Cordia New', serif",
+        lineHeight: 1.25,
+      }}
+    >
       {/* 1. Header (Centered) */}
-      <div className="text-center space-y-1 pb-2">
-        <h1 className="text-base sm:text-lg font-bold tracking-tight">
+      <div className="text-center pb-1">
+        <h1 className="text-[35px] font-extrabold text-center tracking-tight leading-tight">
           บริษัท ทีเอ็มที สตีล จำกัด (มหาชน)
         </h1>
-        <p className="text-[11.5px] sm:text-xs">
+        <p className="text-[19px] font-normal text-center leading-tight">
           สาขาวังน้อย : 332-333 หมู่ที่5 ถนนพหลโยธิน ต.ลำไทร อ.วังน้อย พระนครศรีอยุธยา 13170
         </p>
-        <div className="pt-2">
-          <h2 className="text-sm sm:text-base font-bold underline underline-offset-4 tracking-wide">
+        <div className="mt-2">
+          <h2 className="text-[25px] font-bold text-center leading-tight">
             ใบชั่งน้ำหนัก
           </h2>
         </div>
       </div>
 
-      {/* 2. General Information (2 Columns Left - Right) */}
-      <div className="pt-2 text-[12.5px] sm:text-[13px]">
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          {/* Left Column */}
-          <div className="space-y-1">
-            <div className="flex items-center">
-              <span className="w-20 sm:w-22 inline-block font-semibold">เลขที่บัตร</span>
-              <span className="w-3 text-center">:</span>
-              <span className="font-semibold flex-1">{ticket.ticketNo}</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-20 sm:w-22 inline-block font-semibold">ทะเบียนรถ</span>
-              <span className="w-3 text-center">:</span>
-              <span className="font-semibold flex-1">{ticket.vehicleId}</span>
-            </div>
+      {/* 2. Upper General Information (.row.default 2 Columns) */}
+      <div className="grid grid-cols-2 gap-x-4 mt-2 text-[24px]">
+        {/* Left Column */}
+        <div className="space-y-1">
+          <div className="flex items-center">
+            <span className="whitespace-nowrap">เลขที่บัตร</span>
+            <span className="px-1">:</span>
+            <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+              {ticket.ticketNo}
+            </span>
           </div>
+          <div className="flex items-center">
+            <span className="whitespace-nowrap">ทะเบียนรถ</span>
+            <span className="px-1">:</span>
+            <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+              {ticket.vehicleId}
+            </span>
+          </div>
+        </div>
 
-          {/* Right Column */}
-          <div className="space-y-1">
-            <div className="flex items-center">
-              <span className="w-16 sm:w-18 inline-block font-semibold">คู่ค้า</span>
-              <span className="w-3 text-center">:</span>
-              <span className="font-semibold flex-1 truncate" title={ticket.customerName}>
-                {ticket.customerName}
-              </span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-16 sm:w-18 inline-block font-semibold">สินค้า</span>
-              <span className="w-3 text-center">:</span>
-              <span className="font-semibold flex-1 truncate" title={ticket.productName}>
-                {ticket.productName}
-              </span>
-            </div>
+        {/* Right Column */}
+        <div className="space-y-1">
+          <div className="flex items-center">
+            <span className="whitespace-nowrap">คู่ค้า</span>
+            <span className="px-1">:</span>
+            <span
+              className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis"
+              title={ticket.customerName}
+            >
+              {ticket.customerName}
+            </span>
+          </div>
+          <div className="flex items-center">
+            <span className="whitespace-nowrap">สินค้า</span>
+            <span className="px-1">:</span>
+            <span
+              className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis"
+              title={ticket.productName}
+            >
+              {ticket.productName}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Dashed Line */}
-      <div className="border-b border-dashed border-black my-2" />
+      {/* Dashed Line 1 */}
+      <hr className="border-t border-dashed border-black my-2" />
 
       {/* 3. Table Column Headers 2 Sides (Bold, Centered) */}
-      <div className="grid grid-cols-2 text-center font-bold text-[13px] sm:text-sm">
+      <div className="grid grid-cols-2 gap-x-6 text-[24px] font-bold text-center">
         <div>รถเข้า</div>
         <div>รถออก</div>
       </div>
 
-      {/* Dashed Line */}
-      <div className="border-b border-dashed border-black my-2" />
+      {/* Dashed Line 2 */}
+      <hr className="border-t border-dashed border-black my-2" />
 
-      {/* 4. Weighing Details (2 Columns Left - Right with aligned colons) */}
-      <div className="text-[12.5px] sm:text-[13px]">
-        <div className="grid grid-cols-2 gap-x-4">
-          {/* Left Side: รถเข้า */}
-          <div className="space-y-1">
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">วันที่ชั่งเข้า</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">{ticket.inDate || "-"}</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">เวลาชั่งเข้า</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">{ticket.inTime || "-"}</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">น้ำหนักรถเข้า</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">- กก.</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">น้ำหนักตามบิล</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">- กก.</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">น้ำหนักต่าง</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">- กก.</span>
-            </div>
+      {/* 4. Weighing Details (2 Columns Left - Right with .row.tight) */}
+      <div className="grid grid-cols-2 gap-x-6 text-[24px] font-normal">
+        {/* Left Side: รถเข้า */}
+        <div className="space-y-1">
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">วันที่ชั่งเข้า</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">{ticket.inDate || "-"}</span>
           </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">เวลาชั่งเข้า</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">{ticket.inTime || "-"}</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">น้ำหนักรถเข้า</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">- กก.</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">น้ำหนักตามบิล</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">- กก.</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">น้ำหนักต่าง</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">- กก.</span>
+          </div>
+        </div>
 
-          {/* Right Side: รถออก */}
-          <div className="space-y-1">
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">วันที่ชั่งออก</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">{ticket.outDate || "-"}</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">เวลาชั่งออก</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">{ticket.outTime || "-"}</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">น้ำหนักรถเข้า</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">- กก.</span>
-            </div>
-            <div className="flex items-center">
-              <span className="w-24 sm:w-26 inline-block">น้ำหนักรถออก</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">- กก.</span>
-            </div>
-            <div className="flex items-center font-bold">
-              <span className="w-24 sm:w-26 inline-block">น้ำหนักสุทธิ</span>
-              <span className="w-4 text-center">:</span>
-              <span className="flex-1">
-                {(Number(ticket.netWeightKg) || 0).toLocaleString()} กก.
-              </span>
-            </div>
+        {/* Right Side: รถออก */}
+        <div className="space-y-1">
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">วันที่ชั่งออก</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">{ticket.outDate || "-"}</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">เวลาชั่งออก</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">{ticket.outTime || "-"}</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">น้ำหนักรถเข้า</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">- กก.</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">น้ำหนักรถออก</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">- กก.</span>
+          </div>
+          <div className="flex items-center">
+            <span className="w-[115px] whitespace-nowrap shrink-0">น้ำหนักสุทธิ</span>
+            <span className="w-[10px] text-center shrink-0">:</span>
+            <span className="pl-[28px] flex-1">
+              {(Number(ticket.netWeightKg) || 0).toLocaleString()} กก.
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Dashed Line */}
-      <div className="border-b border-dashed border-black my-2" />
+      {/* Dashed Line 3 */}
+      <hr className="border-t border-dashed border-black my-2" />
 
-      {/* 5. Footer */}
-      <div className="pt-1 space-y-5 text-[12.5px] sm:text-[13px]">
-        {/* หมายเหตุ */}
-        <div className="flex items-center">
-          <span className="w-20 sm:w-22 inline-block font-semibold">หมายเหตุ</span>
-          <span className="w-4 text-center">:</span>
-          <span className="font-semibold">DO NO. {ticket.doNo}</span>
-        </div>
+      {/* 5. หมายเหตุ (.row.tight) */}
+      <div className="mt-2 flex items-center text-[24px]">
+        <span className="w-[115px] whitespace-nowrap shrink-0">หมายเหตุ</span>
+        <span className="w-[10px] text-center shrink-0">:</span>
+        <span className="pl-[28px] flex-1">DO NO. {ticket.doNo}</span>
+      </div>
 
-        {/* ลายเซ็นพนักงานชั่ง */}
-        <div className="text-right pt-4">
-          <span className="inline-block">พนักงานชั่งน้ำหนัก............................................</span>
-        </div>
+      {/* 6. ลายเซ็นพนักงานชั่ง */}
+      <div className="mt-1 text-right text-[24px]">
+        <span>พนักงานชั่งน้ำหนัก........................................</span>
       </div>
     </div>
   );

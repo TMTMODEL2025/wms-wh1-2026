@@ -190,8 +190,10 @@ export function isInvalidVehicleCard(v: TmtRecheckVehicleGroup): boolean {
   if (/^[0-9.,\s]+$/.test(cleanV) || cleanV.includes(",")) return true;
   if (Array.isArray(v.items)) {
     if (v.items.length === 0) return true;
-    const hasValidSloc = v.items.some((i) => i.sloc && i.sloc.trim().length > 0);
-    if (!hasValidSloc) return true;
+    const hasValidMaterial = v.items.some(
+      (i) => (i.material && i.material.trim().length > 0) || (i.sloc && i.sloc.trim().length > 0)
+    );
+    if (!hasValidMaterial) return true;
   }
   return false;
 }
@@ -210,7 +212,7 @@ export function sanitizeVehicleGroups(list: TmtRecheckVehicleGroup[]): TmtRechec
       const desc = item.description || "";
       if (!mat) {
         if (desc.includes("เศษ") || desc.toUpperCase().includes("SCRAP")) {
-          mat = "2SCRAP-W";
+          mat = "SCRAP-W";
         } else {
           mat = "2SLIT";
         }
@@ -338,6 +340,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       .filter((l) => l.length > 0);
 
     const parsedRows: TmtRecheckSapRow[] = [];
+    let lastSeenDo = "";
+    let lastSeenExternalId = "";
 
     lines.forEach((line, idx) => {
       let cols = line.split("\t");
@@ -346,30 +350,50 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       }
 
       if (cols.length >= 5) {
-        // Requirement 1: Column 9 (index 8) is Sloc. Only include rows that have Sloc data!
-        const sloc = cols[8]?.trim() || "";
-        if (!sloc || sloc.trim() === "") {
-          return; // Skip sub-total / summary rows where Sloc is empty
+        // Skip table header row if present
+        if (
+          cols[0]?.trim().toUpperCase() === "DO" ||
+          cols[0]?.trim().toUpperCase() === "DELIVERY" ||
+          cols[1]?.trim().toUpperCase() === "EXTERNAL ID 1" ||
+          cols[1]?.trim().toUpperCase().includes("ทะเบียน") ||
+          cols[4]?.trim().toUpperCase() === "MATERIAL" ||
+          cols[8]?.trim().toUpperCase() === "SLOC"
+        ) {
+          return;
         }
 
-        const externalId1 = cols[1]?.trim() || "";
+        // User requirement: ยึดที่คอลัมน์ Material เป็นหลัก ไม่ต้องสนใจคอลัมน์ Batch
+        // แถวสินค้าจริง (ทั้ง 2SLIT, 4SLIT, 2SCRAP-W, SCRAP-W) จะมีชื่อใน Material
+        // แถว Sub-total / ผลรวมของ SAP คอลัมน์ Material จะเป็นค่าว่าง
+        const rawMaterial = (cols[4] || "").trim().replace(/^["']|["']$/g, "");
+        if (!rawMaterial || rawMaterial === "") {
+          return; // Skip summary / subtotal rows where Material is empty
+        }
+
+        const externalId1 = cols[1]?.trim() || lastSeenExternalId || "";
         // If External ID 1 is empty or a numeric subtotal (e.g. "9,780.000"), skip
         if (!externalId1 || /^[0-9.,\s]+$/.test(externalId1) || externalId1.includes(",")) {
           return; // Skip subtotal rows
         }
 
-        const doNo = cols[0]?.trim() || `DO_${idx + 1}`;
+        if (cols[1]?.trim() && !/^[0-9.,\s]+$/.test(cols[1].trim())) {
+          lastSeenExternalId = cols[1].trim();
+        }
+
+        const rawDo = cols[0]?.trim() || "";
+        if (rawDo) {
+          lastSeenDo = rawDo;
+        }
+        const doNo = rawDo || (lastSeenExternalId === externalId1 && lastSeenDo ? lastSeenDo : `DO_${idx + 1}`);
         const soNo = cols[2]?.trim() || "-";
         const soItem = cols[3]?.trim() || "10";
-        const rawMaterial = cols[4]?.trim() || "";
         const customerName = cols[5]?.trim() || "ไม่ระบุชื่อลูกค้า";
-        const description = cols[6]?.trim() || "เหล็กม้วนสลิต";
-        const material =
-          rawMaterial ||
-          (description.includes("เศษ") || description.toUpperCase().includes("SCRAP")
-            ? "2SCRAP-W"
-            : "2SLIT");
+        const description =
+          cols[6]?.trim() ||
+          (rawMaterial.toUpperCase().includes("SCRAP") ? "เศษคืนลูกค้า (KG)" : "เหล็กม้วนสลิต");
+        const material = rawMaterial;
         const batch = cols[7]?.trim() || "";
+        const sloc = cols[8]?.trim() || "-";
         const doQty = parseWeightNum(cols[9]);
         const grossWeight = parseWeightNum(cols[10]); // Use comma-safe parseWeightNum
         const docCreator = cols[11]?.trim() || "-";
@@ -380,6 +404,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
         const shipmentNo = cols[16]?.trim() || "-";
         const pmtTrmTxt = cols[17]?.trim() || "-";
 
+        // Requires scan only if Batch is present and length >= 3 (e.g. coils)
+        // Rows without Batch (e.g. 2SCRAP-W) do not require scanning
         const requiresScan = Boolean(batch && batch.length >= 3);
 
         parsedRows.push({
@@ -409,7 +435,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
     });
 
     if (parsedRows.length === 0) {
-      setImportStatusMessage("ไม่พบรายการที่มีข้อมูล Sloc ถูกต้อง กรุณาตรวจสอบรูปแบบ TSV 18 คอลัมน์");
+      setImportStatusMessage("ไม่พบรายการที่มีข้อมูล Material ถูกต้อง กรุณาตรวจสอบรูปแบบ TSV 18 คอลัมน์");
       return;
     }
 
