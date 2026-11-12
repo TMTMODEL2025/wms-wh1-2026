@@ -64,6 +64,7 @@ import {
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
 import { SpaceManagementView } from "./SpaceManagementView";
+import { TmtRecheckView } from "./TmtRecheckView";
 import {
   ensureBasketInMasterLayout,
   ensureMasterBasketCloudSync,
@@ -233,8 +234,8 @@ export interface ReturnItemRow {
 
 interface SlitFilmManagementProps {
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
-  activeMode?: "inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report";
-  onModeChange?: (mode: "inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report") => void;
+  activeMode?: "inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report";
+  onModeChange?: (mode: "inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report") => void;
 }
 
 const STORAGE_KEY_INBOUND = "tmt_wms_slit_inbound_records";
@@ -950,10 +951,10 @@ export function SlitFilmManagement({
   const { language } = useLanguage();
   const isThai = language === "th";
 
-  // Mode: Inbound vs Outbound vs Operator Receive vs Movement History vs Relocate Layout vs Stock Balance vs Space Management vs Return Warehouse vs Equipment Inspection vs Transfer Car Report
-  const [internalMode, setInternalMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report">("inbound");
+  // Mode: Inbound vs Outbound vs Operator Receive vs Movement History vs Relocate Layout vs Stock Balance vs Space Management vs Return Warehouse vs Equipment Inspection vs Transfer Car Report vs TMT Recheck vs TMT Recheck Report
+  const [internalMode, setInternalMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
   const activeMode = externalMode ?? internalMode;
-  const setActiveMode = (mode: "inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report") => {
+  const setActiveMode = (mode: "inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report") => {
     setInternalMode(mode);
     onModeChange?.(mode);
   };
@@ -5971,7 +5972,7 @@ export function SlitFilmManagement({
       )}
 
       {/* 1. Mode Switcher & Action Bar (Material Design Compact Card) - Hidden on Mobile (<640px), Visible on Desktop (>=640px) */}
-      {activeMode !== "movement_history" && activeMode !== "relocate_layout" && activeMode !== "stock_balance" && activeMode !== "space_management" && activeMode !== "daily_report" && activeMode !== "equipment_inspection" && activeMode !== "transfer_car_report" && (
+      {activeMode !== "movement_history" && activeMode !== "relocate_layout" && activeMode !== "stock_balance" && activeMode !== "space_management" && activeMode !== "daily_report" && activeMode !== "equipment_inspection" && activeMode !== "transfer_car_report" && activeMode !== "tmt_recheck" && activeMode !== "tmt_recheck_report" && (
         <div className="hidden sm:flex w-full box-border sm:flex-nowrap items-center justify-between gap-1.5 p-1.5 sm:p-2 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs max-w-full overflow-hidden slit-top-action-bar">
           <div className="grid grid-cols-4 sm:flex sm:flex-initial items-center gap-1.5 w-full sm:w-auto flex-1 max-w-full min-w-0">
             {/* Inbound Mode Tab (+ รับเข้า) */}
@@ -6190,6 +6191,16 @@ export function SlitFilmManagement({
           sapMasterMap={sapMasterMap}
           isThai={isThai}
         />
+      )}
+
+      {/* TMT Recheck View (ระบบตรวจสอบการขึ้นสินค้า) */}
+      {activeMode === "tmt_recheck" && (
+        <TmtRecheckView defaultTab="officer" />
+      )}
+
+      {/* Daily Loading Inspection Report View (รายงานการขึ้นสินค้าประจำวัน) */}
+      {activeMode === "tmt_recheck_report" && (
+        <TmtRecheckView defaultTab="report" />
       )}
 
       {/* 2. Inbound Workflow: Machine Selection & External Inbound Switcher */}

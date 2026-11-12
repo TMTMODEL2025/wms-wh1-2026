@@ -35,3 +35,23 @@ svg text,
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* TMT Weight Ticket Printing Rules */
+@media print {
+  body.printing-weight-ticket > *:not(#tmt-weight-ticket-print-portal) {
+    display: none !important;
+  }
+  body.printing-weight-ticket #tmt-weight-ticket-print-portal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  body.printing-weight-ticket .weight-ticket-print-sheet {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+}

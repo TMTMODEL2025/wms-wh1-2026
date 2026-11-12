@@ -102,6 +102,7 @@ type SseEventName =
   | "slit_outbound"
   | "slit_picklists"
   | "slit_sap_updated"
+  | "tmt_recheck_updated"
   | "warehouse_space_reset";
 
 const sseListeners: Record<SseEventName, Set<(payload: any) => void>> = {
@@ -111,6 +112,7 @@ const sseListeners: Record<SseEventName, Set<(payload: any) => void>> = {
   slit_outbound: new Set(),
   slit_picklists: new Set(),
   slit_sap_updated: new Set(),
+  tmt_recheck_updated: new Set(),
   warehouse_space_reset: new Set(),
 };
 
@@ -173,6 +175,13 @@ function fetchInitialSlitStateOnce(): Promise<any> {
               updatedAt: updatedAtMap.sap || new Date().toISOString(),
             });
           }
+          if (Array.isArray(data.tmtRecheckActiveVehicles) || Array.isArray(data.tmtRecheckCompletedReports)) {
+            emitSharedEvent("tmt_recheck_updated", {
+              activeVehicles: data.tmtRecheckActiveVehicles || [],
+              completedReports: data.tmtRecheckCompletedReports || [],
+              updatedAt: updatedAtMap.tmtRecheck || new Date().toISOString(),
+            });
+          }
         }
         return data;
       })
@@ -218,6 +227,13 @@ function pollSlitStateNow(): void {
           updatedAt: updatedAtMap.sap || "",
         });
       }
+      if (Array.isArray(data.tmtRecheckActiveVehicles) || Array.isArray(data.tmtRecheckCompletedReports)) {
+        emitSharedEvent("tmt_recheck_updated", {
+          activeVehicles: data.tmtRecheckActiveVehicles || [],
+          completedReports: data.tmtRecheckCompletedReports || [],
+          updatedAt: updatedAtMap.tmtRecheck || "",
+        });
+      }
     })
     .catch(() => {});
 }
@@ -245,6 +261,7 @@ function ensureSharedRealtimeStream(): void {
         "slit_outbound",
         "slit_picklists",
         "slit_sap_updated",
+        "tmt_recheck_updated",
         "warehouse_space_reset",
       ];
       for (const evtName of events) {
@@ -1710,4 +1727,39 @@ export async function syncLocalDataToFirestoreIfEmpty(
   _localPickLists?: PickListOrder[]
 ): Promise<void> {
   clearLegacySlitLocalStorage();
+}
+
+export function subscribeToTmtRecheck(
+  callback: (data: { activeVehicles: any[]; completedReports: any[]; updatedAt: string }) => void
+): () => void {
+  ensureSharedRealtimeStream();
+  const set = sseListeners.tmt_recheck_updated;
+  set.add(callback);
+  if (latestSsePayloads.tmt_recheck_updated) {
+    try {
+      callback(latestSsePayloads.tmt_recheck_updated);
+    } catch {
+      // ignore
+    }
+  }
+  return () => {
+    set.delete(callback);
+  };
+}
+
+export async function syncTmtRecheckState(
+  activeVehicles: any[],
+  completedReports: any[]
+): Promise<void> {
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/tmt-recheck/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeVehicles, completedReports }),
+      });
+    } catch {
+      // ignore server sync error fallback
+    }
+  }
 }

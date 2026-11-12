@@ -5066,7 +5066,7 @@ function WmsApp() {
     }
     return false;
   });
-  const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report">("inbound");
+  const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
@@ -5809,6 +5809,44 @@ function WmsApp() {
                                        </span>
                                        <span>{language === "th" ? "ตรวจสอบอุปกรณ์" : "Equipment Inspection"}</span>
                                      </button>
+
+                                     <button
+                                       type="button"
+                                       className={`nav-sub-btn ${slitMode === "tmt_recheck" ? "active" : ""}`}
+                                       onClick={() => {
+                                         setActive("slit");
+                                         setSlitMode("tmt_recheck");
+                                         setSelectedRecord(null);
+                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                           setSidebarCollapsed(true);
+                                         }
+                                       }}
+                                       title="TMT Recheck"
+                                     >
+                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
+                                         <ShieldCheck size={14} />
+                                       </span>
+                                       <span>TMT Recheck</span>
+                                     </button>
+
+                                     <button
+                                       type="button"
+                                       className={`nav-sub-btn ${slitMode === "tmt_recheck_report" ? "active" : ""}`}
+                                       onClick={() => {
+                                         setActive("slit");
+                                         setSlitMode("tmt_recheck_report");
+                                         setSelectedRecord(null);
+                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                           setSidebarCollapsed(true);
+                                         }
+                                       }}
+                                       title="รายงานการขึ้นสินค้าประจำวัน"
+                                     >
+                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
+                                         <FileText size={14} />
+                                       </span>
+                                       <span>รายงานการขึ้นสินค้าประจำวัน</span>
+                                     </button>
                                    </div>
                                  )}
                               </div>
@@ -5881,40 +5919,42 @@ function WmsApp() {
           </aside>
 
           <main className="main">
-            <div className={`page-heading ${active === "slit" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : ""}`}>
-              <div>
-                <h1>{pageTitle}</h1>
-                {active !== "slit" &&
-                  active !== "dashboard" &&
-                  active !== "pre-start" &&
-                  active !== "vehicles" &&
-                  active !== "employees" &&
-                  active !== "fuel" &&
-                  activeInfo?.subtitle && (
-                    <div className="page-subtitle">
-                      {activeInfo.subtitle}
-                    </div>
-                  )}
-              </div>
-
-              {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && (
-                <div className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}>
-                  {active !== "transport" && active !== "slit" && (
-                    <button className="button secondary print-export-btn hidden sm:inline-flex" onClick={() => window.print()}>
-                      <Printer size={13} />
-                      <span>{translations.printExport}</span>
-                    </button>
-                  )}
-
-                  {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "fuel" && active !== "slit" ? (
-                    <button className="button" onClick={() => setShowModal(true)}>
-                      <Plus size={14} />
-                      {translations.newEntry}
-                    </button>
-                  ) : null}
+            {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && (
+              <div className={`page-heading ${active === "slit" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : ""}`}>
+                <div>
+                  <h1>{pageTitle}</h1>
+                  {active !== "slit" &&
+                    active !== "dashboard" &&
+                    active !== "pre-start" &&
+                    active !== "vehicles" &&
+                    active !== "employees" &&
+                    active !== "fuel" &&
+                    activeInfo?.subtitle && (
+                      <div className="page-subtitle">
+                        {activeInfo.subtitle}
+                      </div>
+                    )}
                 </div>
-              )}
-            </div>
+
+                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && (
+                  <div className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}>
+                    {active !== "transport" && active !== "slit" && (
+                      <button className="button secondary print-export-btn hidden sm:inline-flex" onClick={() => window.print()}>
+                        <Printer size={13} />
+                        <span>{translations.printExport}</span>
+                      </button>
+                    )}
+
+                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "fuel" && active !== "slit" ? (
+                      <button className="button" onClick={() => setShowModal(true)}>
+                        <Plus size={14} />
+                        {translations.newEntry}
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            )}
 
             {active === "dashboard" ? (
               <DashboardView

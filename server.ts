@@ -14,6 +14,7 @@ interface UpdatedAtMap {
   sap?: string;
   spaceConfig?: string;
   machineStaging?: string;
+  tmtRecheck?: string;
 }
 
 interface PersistedServerState {
@@ -23,6 +24,8 @@ interface PersistedServerState {
   outboundRecords: Record<string, unknown>[];
   pickLists: Record<string, unknown>[];
   sapItems: Record<string, unknown>[];
+  tmtRecheckActiveVehicles: Record<string, unknown>[];
+  tmtRecheckCompletedReports: Record<string, unknown>[];
   updatedAtMap: UpdatedAtMap;
 }
 
@@ -74,6 +77,12 @@ function loadServerState(): PersistedServerState {
             ? sortPickListsNewestFirst(parsed.pickLists)
             : [],
           sapItems: Array.isArray(parsed.sapItems) ? parsed.sapItems : [],
+          tmtRecheckActiveVehicles: Array.isArray(parsed.tmtRecheckActiveVehicles)
+            ? parsed.tmtRecheckActiveVehicles
+            : [],
+          tmtRecheckCompletedReports: Array.isArray(parsed.tmtRecheckCompletedReports)
+            ? parsed.tmtRecheckCompletedReports
+            : [],
           updatedAtMap:
             parsed.updatedAtMap && typeof parsed.updatedAtMap === "object"
               ? parsed.updatedAtMap
@@ -91,6 +100,8 @@ function loadServerState(): PersistedServerState {
     outboundRecords: [],
     pickLists: [],
     sapItems: [],
+    tmtRecheckActiveVehicles: [],
+    tmtRecheckCompletedReports: [],
     updatedAtMap: {},
   };
 }
@@ -162,6 +173,8 @@ async function startServer() {
       pickLists: serverState.pickLists,
       warehouseSpaceConfig: serverState.warehouseSpaceConfig,
       machineStagingConfig: serverState.machineStagingConfig,
+      tmtRecheckActiveVehicles: serverState.tmtRecheckActiveVehicles,
+      tmtRecheckCompletedReports: serverState.tmtRecheckCompletedReports,
       sapItemCount: serverState.sapItems.length,
       ...(includeSap ? { sapItems: serverState.sapItems } : {}),
       updatedAtMap: serverState.updatedAtMap,
@@ -231,6 +244,15 @@ async function startServer() {
         })}\n\n`
       );
     }
+    if (serverState.updatedAtMap.tmtRecheck || serverState.tmtRecheckActiveVehicles.length > 0 || serverState.tmtRecheckCompletedReports.length > 0) {
+      res.write(
+        `event: tmt_recheck_updated\ndata: ${JSON.stringify({
+          activeVehicles: serverState.tmtRecheckActiveVehicles,
+          completedReports: serverState.tmtRecheckCompletedReports,
+          updatedAt: serverState.updatedAtMap.tmtRecheck || new Date().toISOString(),
+        })}\n\n`
+      );
+    }
 
     const heartbeat = setInterval(() => {
       try {
@@ -245,6 +267,37 @@ async function startServer() {
       clearInterval(heartbeat);
       sseClients.delete(res);
     });
+  });
+
+  // TMT Recheck Endpoints
+  app.get("/api/tmt-recheck", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.json({
+      activeVehicles: serverState.tmtRecheckActiveVehicles,
+      completedReports: serverState.tmtRecheckCompletedReports,
+      updatedAt: serverState.updatedAtMap.tmtRecheck || "",
+    });
+  });
+
+  app.post("/api/tmt-recheck/sync", (req, res) => {
+    const { activeVehicles, completedReports } = req.body || {};
+    const nowIso = new Date().toISOString();
+    if (Array.isArray(activeVehicles)) {
+      serverState.tmtRecheckActiveVehicles = activeVehicles;
+    }
+    if (Array.isArray(completedReports)) {
+      serverState.tmtRecheckCompletedReports = completedReports;
+    }
+    serverState.updatedAtMap.tmtRecheck = nowIso;
+    saveServerState(serverState);
+
+    const payload = {
+      activeVehicles: serverState.tmtRecheckActiveVehicles,
+      completedReports: serverState.tmtRecheckCompletedReports,
+      updatedAt: nowIso,
+    };
+    broadcastSseEvent("tmt_recheck_updated", payload);
+    res.json(payload);
   });
 
   // Upsert Inbound records (Single or Batch)
