@@ -33,7 +33,7 @@ import { useLanguage } from "../contexts/LanguageContext";
 import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
 import {
   getStoredMachineStaging,
-  ensureMachineStagingCloudSync,
+  saveStoredMachineStaging,
   MACHINE_STAGING_UPDATED_EVENT,
   MachineStagingConfig,
   calculateAccumulatedWidthMm,
@@ -55,6 +55,7 @@ interface DailyReportViewProps {
   movementHistoryList: SlitBarcodeRecord[];
   pickLists: PickListOrder[];
   sapMasterMap: Map<string, SapMasterItem>;
+  onSelectedDateChange?: (date: string) => void;
 }
 
 const REPORT_BUILDING_META: Array<{
@@ -107,6 +108,7 @@ export function DailyReportView({
   movementHistoryList,
   pickLists,
   sapMasterMap,
+  onSelectedDateChange,
 }: DailyReportViewProps) {
   const { language } = useLanguage();
   const isThai = language === "th";
@@ -157,7 +159,8 @@ export function DailyReportView({
 
   useEffect(() => {
     setSmInboundPage(1);
-  }, [selectedDate, selectedShift]);
+    onSelectedDateChange?.(selectedDate);
+  }, [selectedDate, selectedShift, onSelectedDateChange]);
 
   // Storage Space Report Filter States
   const [spaceReportSubTab, setSpaceReportSubTab] = useState<"all" | "warehouse" | "machine">("all");
@@ -243,10 +246,12 @@ export function DailyReportView({
   }, [machineProductionStatus]);
 
   useEffect(() => {
-    ensureMachineStagingCloudSync();
-    ensureWarehouseSpaceCloudSync();
+    const unsubSpace = ensureWarehouseSpaceCloudSync();
 
     const unsubMachineCloud = subscribeToSlitMachineStaging((cloudDoc) => {
+      if (cloudDoc && Array.isArray(cloudDoc.machines) && cloudDoc.machines.length > 0) {
+        saveStoredMachineStaging(cloudDoc.machines, { skipCloudWrite: true });
+      }
       if (cloudDoc?.productionStatus && typeof cloudDoc.productionStatus === "object") {
         setMachineProductionStatus((prev) => {
           if (JSON.stringify(prev) === JSON.stringify(cloudDoc.productionStatus)) return prev;
@@ -280,6 +285,7 @@ export function DailyReportView({
     window.addEventListener(BUILDING_CAPACITY_UPDATED_EVENT, refreshStaging);
     window.addEventListener("storage", handleStorageSync);
     return () => {
+      unsubSpace();
       unsubMachineCloud();
       window.removeEventListener(MACHINE_STAGING_UPDATED_EVENT, refreshStaging);
       window.removeEventListener(MASTER_BASKET_LAYOUT_UPDATED_EVENT, refreshStaging);

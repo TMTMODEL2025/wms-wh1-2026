@@ -239,15 +239,18 @@ export function parseWarehouseBasketLocation(rawLoc: string): {
   };
 }
 
-let isWarehouseSpaceCloudSubscribed = false;
+let warehouseSpaceCloudUnsubscribe: (() => void) | null = null;
 let isWarehouseSpaceCloudLoaded = false;
 let lastCloudSerializedLayout = "";
 
-export function ensureWarehouseSpaceCloudSync(): void {
-  if (isWarehouseSpaceCloudSubscribed || typeof window === "undefined") return;
-  isWarehouseSpaceCloudSubscribed = true;
+export function ensureWarehouseSpaceCloudSync(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (warehouseSpaceCloudUnsubscribe) {
+    warehouseSpaceCloudUnsubscribe();
+    warehouseSpaceCloudUnsubscribe = null;
+  }
 
-  subscribeToSlitSpaceConfig((cloudConfig) => {
+  const unsub = subscribeToSlitSpaceConfig((cloudConfig) => {
     isWarehouseSpaceCloudLoaded = true;
     if (!cloudConfig) {
       return;
@@ -265,13 +268,17 @@ export function ensureWarehouseSpaceCloudSync(): void {
       saveStoredMasterBasketLayout(cloudConfig.masterLayout, { skipCloudWrite: true });
     }
   });
+
+  warehouseSpaceCloudUnsubscribe = unsub;
+  return () => {
+    if (warehouseSpaceCloudUnsubscribe === unsub) {
+      warehouseSpaceCloudUnsubscribe = null;
+    }
+    unsub();
+  };
 }
 
 export const ensureMasterBasketCloudSync = ensureWarehouseSpaceCloudSync;
-
-if (typeof window !== "undefined") {
-  ensureWarehouseSpaceCloudSync();
-}
 
 /**
  * Generate default baskets for a building and row (e.g. H-A01 to H-A10)

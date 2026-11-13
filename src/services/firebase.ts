@@ -3,6 +3,8 @@ import { getAuth } from "firebase/auth";
 import {
   getFirestore,
   initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   setLogLevel,
   doc,
   getDocFromServer,
@@ -14,22 +16,68 @@ import firebaseConfig from "../../firebase-applet-config.json";
 setLogLevel("silent");
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+export const appCoil =
+  getApps().find((a) => a.name === "tmt-coil-app") ||
+  initializeApp(firebaseConfig, "tmt-coil-app");
 
 function initDb(): Firestore {
   try {
     return initializeFirestore(
       app,
       {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
         experimentalAutoDetectLongPolling: true,
       },
       firebaseConfig.firestoreDatabaseId
     );
   } catch {
-    return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    try {
+      return initializeFirestore(
+        app,
+        {
+          localCache: persistentLocalCache(),
+          experimentalAutoDetectLongPolling: true,
+        },
+        firebaseConfig.firestoreDatabaseId
+      );
+    } catch {
+      return getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    }
+  }
+}
+
+function initCoilDb(): Firestore {
+  try {
+    return initializeFirestore(
+      appCoil,
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+        experimentalAutoDetectLongPolling: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    try {
+      return initializeFirestore(
+        appCoil,
+        {
+          localCache: persistentLocalCache(),
+          experimentalAutoDetectLongPolling: true,
+        },
+        firebaseConfig.firestoreDatabaseId
+      );
+    } catch {
+      return getFirestore(appCoil, firebaseConfig.firestoreDatabaseId);
+    }
   }
 }
 
 export const db = initDb();
+export const dbCoil = initCoilDb();
 export const auth = getAuth(app);
 
 export enum OperationType {
@@ -98,9 +146,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Initial connection test
+// Initial connection test (runs once per browser session to avoid redundant read quota on page refresh)
 async function testConnection() {
   try {
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      if (window.sessionStorage.getItem("tmt_firestore_conn_tested") === "1") {
+        return;
+      }
+      window.sessionStorage.setItem("tmt_firestore_conn_tested", "1");
+    }
     await getDocFromServer(doc(db, "test", "connection"));
   } catch (error) {
     if (error instanceof Error && error.message.includes("the client is offline")) {
@@ -109,4 +163,5 @@ async function testConnection() {
   }
 }
 testConnection();
+
 

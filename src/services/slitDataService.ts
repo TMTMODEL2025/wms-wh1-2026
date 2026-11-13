@@ -6,6 +6,9 @@ import {
   onSnapshot,
   writeBatch,
   getDocs,
+  getDoc,
+  query,
+  where,
 } from "firebase/firestore";
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import type { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "../components/SlitFilmManagement";
@@ -120,6 +123,198 @@ const latestSsePayloads: Partial<Record<SseEventName, any>> = {};
 let sharedEventSource: EventSource | null = null;
 let sharedPollInterval: ReturnType<typeof setInterval> | null = null;
 let initialStateFetchPromise: Promise<any> | null = null;
+
+// ============================================================================
+// Firestore Active Listener Registry & Cloud Real-Time Toggle Manager
+// Prevents duplicate onSnapshot listeners and supports switching to getDocs()
+// ============================================================================
+const CLOUD_REALTIME_STORAGE_KEY = "tmt_wms_cloud_realtime_enabled_v1";
+const activeFirestoreListeners = new Map<string, () => void>();
+const realtimeModeSubscribers = new Set<(enabled: boolean) => void>();
+
+let cloudRealtimeEnabled: boolean = (() => {
+  if (typeof window === "undefined") return true;
+  try {
+    const saved = window.localStorage.getItem(CLOUD_REALTIME_STORAGE_KEY);
+    return saved === null ? true : saved !== "false";
+  } catch {
+    return true;
+  }
+})();
+
+/**
+ * Unsubscribe and clear a specific Firestore listener channel before attaching a new one
+ */
+function registerFirestoreListener(channelKey: string, unsubFn: () => void): () => void {
+  const existing = activeFirestoreListeners.get(channelKey);
+  if (existing) {
+    try {
+      existing();
+    } catch {
+      // ignore cleanup error
+    }
+    activeFirestoreListeners.delete(channelKey);
+  }
+  activeFirestoreListeners.set(channelKey, unsubFn);
+  return () => {
+    try {
+      unsubFn();
+    } catch {
+      // ignore cleanup error
+    }
+    if (activeFirestoreListeners.get(channelKey) === unsubFn) {
+      activeFirestoreListeners.delete(channelKey);
+    }
+  };
+}
+
+/**
+ * Unsubscribe all active Firestore onSnapshot listeners immediately (used when switching menus or disabling Real-time)
+ */
+export function unsubscribeAllFirestoreListeners(): void {
+  activeFirestoreListeners.forEach((unsub) => {
+    try {
+      unsub();
+    } catch {
+      // ignore cleanup error
+    }
+  });
+  activeFirestoreListeners.clear();
+}
+
+export function getCloudRealtimeEnabled(): boolean {
+  return cloudRealtimeEnabled;
+}
+
+export function setCloudRealtimeEnabled(enabled: boolean): void {
+  if (cloudRealtimeEnabled === enabled) return;
+  cloudRealtimeEnabled = enabled;
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(CLOUD_REALTIME_STORAGE_KEY, enabled ? "true" : "false");
+    } catch {
+      // ignore storage error
+    }
+  }
+  if (!enabled) {
+    // Immediately unsubscribe all active onSnapshot listeners & stop background polling
+    unsubscribeAllFirestoreListeners();
+    if (sharedPollInterval) {
+      clearInterval(sharedPollInterval);
+      sharedPollInterval = null;
+    }
+    if (sharedEventSource) {
+      try {
+        sharedEventSource.close();
+      } catch {
+        // ignore
+      }
+      sharedEventSource = null;
+    }
+  } else {
+    ensureSharedRealtimeStream();
+  }
+  realtimeModeSubscribers.forEach((cb) => {
+    try {
+      cb(enabled);
+    } catch {
+      // ignore
+    }
+  });
+}
+
+export function subscribeCloudRealtimeMode(cb: (enabled: boolean) => void): () => void {
+  realtimeModeSubscribers.add(cb);
+  return () => {
+    realtimeModeSubscribers.delete(cb);
+  };
+}
+
+export interface SlitQueryOptions {
+  /** Query only records with remaining stock balance > 0 (weightKg > 0) */
+  onlyPositiveStock?: boolean;
+  /** Query only records matching the selected date (YYYY-MM-DD) */
+  dateFilter?: string;
+  /** Optional end date (YYYY-MM-DD) for shift spanning next morning */
+  endDateFilter?: string;
+}
+
+function normalizeScanTimestampYMD(rawTs?: string): string {
+  const now = new Date();
+  const fallbackYmd = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const fallbackTime = now.toTimeString().slice(0, 8);
+  if (!rawTs || !rawTs.trim() || rawTs.trim() === "-") {
+    return `${fallbackYmd} ${fallbackTime}`;
+  }
+  const s = rawTs.trim();
+  const mIso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(.*)$/);
+  if (mIso) {
+    let y = parseInt(mIso[1], 10);
+    if (y > 2400) y -= 543;
+    const mm = String(parseInt(mIso[2], 10)).padStart(2, "0");
+    const dd = String(parseInt(mIso[3], 10)).padStart(2, "0");
+    const rest = (mIso[4] || "").trim() || fallbackTime;
+    return `${y}-${mm}-${dd} ${rest}`;
+  }
+  const mDmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(.*)$/);
+  if (mDmy) {
+    let y = parseInt(mDmy[3], 10);
+    if (y > 2400) y -= 543;
+    const mm = String(parseInt(mDmy[2], 10)).padStart(2, "0");
+    const dd = String(parseInt(mDmy[1], 10)).padStart(2, "0");
+    const rest = (mDmy[4] || "").trim() || fallbackTime;
+    return `${y}-${mm}-${dd} ${rest}`;
+  }
+  if (/^\d{1,2}:\d{2}/.test(s)) {
+    return `${fallbackYmd} ${s}`;
+  }
+  return s;
+}
+
+function buildInboundFirestoreQuery(options?: SlitQueryOptions) {
+  const colRef = collection(db, INBOUND_COLLECTION);
+  if (options?.onlyPositiveStock) {
+    return query(colRef, where("weightKg", ">", 0));
+  }
+  if (options?.dateFilter && options.dateFilter.trim()) {
+    const startD = options.dateFilter.trim();
+    const endD = (options.endDateFilter || startD).trim();
+    return query(
+      colRef,
+      where("scanTimestamp", ">=", startD),
+      where("scanTimestamp", "<=", `${endD}\uf8ff`)
+    );
+  }
+  return colRef;
+}
+
+function buildOutboundFirestoreQuery(options?: SlitQueryOptions) {
+  const colRef = collection(db, OUTBOUND_COLLECTION);
+  if (options?.dateFilter && options.dateFilter.trim()) {
+    const startD = options.dateFilter.trim();
+    const endD = (options.endDateFilter || startD).trim();
+    return query(
+      colRef,
+      where("scanTimestamp", ">=", startD),
+      where("scanTimestamp", "<=", `${endD}\uf8ff`)
+    );
+  }
+  return colRef;
+}
+
+function buildPickListFirestoreQuery(options?: SlitQueryOptions) {
+  const colRef = collection(db, PICKLIST_COLLECTION);
+  if (options?.dateFilter && options.dateFilter.trim()) {
+    const startD = options.dateFilter.trim();
+    const endD = (options.endDateFilter || startD).trim();
+    return query(
+      colRef,
+      where("createdDate", ">=", startD),
+      where("createdDate", "<=", `${endD}\uf8ff`)
+    );
+  }
+  return colRef;
+}
 
 function emitSharedEvent(eventName: SseEventName, payload: any): void {
   if (eventName !== "warehouse_space_reset") {
@@ -331,7 +526,7 @@ function sanitizeRecordPayload(r: SlitBarcodeRecord): Record<string, unknown> {
   const payload: Record<string, unknown> = {
     id: String(r.id || `REC-${Date.now()}`),
     mode: r.mode || "inbound",
-    scanTimestamp: r.scanTimestamp || new Date().toISOString(),
+    scanTimestamp: normalizeScanTimestampYMD(r.scanTimestamp),
     batch: String(r.batch || "").trim().toUpperCase().slice(0, 32),
     machine: String(r.machine || "SM01").slice(0, 32),
     location: String(r.location || "WH1").slice(0, 64),
@@ -387,17 +582,38 @@ export function clearLegacySlitLocalStorage(): void {
 }
 
 /**
- * Real-time listener for Slit Inbound records (Hybrid Real-Time SSE + Cloud Firestore)
+ * Real-time listener (or one-time getDocs when Cloud Real-time is OFF) for Slit Inbound records
+ * Supports query filtering by positive stock (weightKg > 0) or selected date
  */
 export function subscribeToSlitInbound(
   onData: (records: SlitBarcodeRecord[]) => void,
-  onError?: (err: unknown) => void
+  onError?: (err: unknown) => void,
+  options?: SlitQueryOptions
 ): () => void {
+  let isDisposed = false;
   let hasServerState = false;
   let lastSerialized = "";
 
+  const applyClientFilterSafety = (rawRecords: SlitBarcodeRecord[]): SlitBarcodeRecord[] => {
+    let filtered = rawRecords;
+    if (options?.onlyPositiveStock) {
+      filtered = filtered.filter((r) => (Number(r.weightKg) || 0) > 0);
+    }
+    if (options?.dateFilter && options.dateFilter.trim()) {
+      const startD = options.dateFilter.trim();
+      const endD = (options.endDateFilter || startD).trim();
+      filtered = filtered.filter((r) => {
+        const norm = normalizeScanTimestampYMD(r.scanTimestamp).slice(0, 10);
+        return norm >= startD && norm <= endD;
+      });
+    }
+    return filtered;
+  };
+
   const emitSorted = (rawRecords: SlitBarcodeRecord[]) => {
-    const sorted = [...rawRecords].sort((a, b) =>
+    if (isDisposed) return;
+    const filtered = applyClientFilterSafety(rawRecords);
+    const sorted = [...filtered].sort((a, b) =>
       (b.scanTimestamp || "").localeCompare(a.scanTimestamp || "")
     );
     const serialized = JSON.stringify(sorted);
@@ -407,56 +623,110 @@ export function subscribeToSlitInbound(
     }
   };
 
-  const unsubSse = subscribeSharedSse("slit_inbound", (payload) => {
-    if (payload && Array.isArray(payload.records)) {
-      hasServerState = true;
-      emitSorted(payload.records as SlitBarcodeRecord[]);
-    }
-  });
+  const unsubSse = cloudRealtimeEnabled
+    ? subscribeSharedSse("slit_inbound", (payload) => {
+        if (payload && Array.isArray(payload.records)) {
+          hasServerState = true;
+          emitSorted(payload.records as SlitBarcodeRecord[]);
+        }
+      })
+    : () => {};
 
-  const colRef = collection(db, INBOUND_COLLECTION);
-  const unsubFirestore = onSnapshot(
-    colRef,
-    (snapshot) => {
-      const records: SlitBarcodeRecord[] = [];
-      snapshot.forEach((d) => {
-        records.push(d.data() as SlitBarcodeRecord);
-      });
-      if (records.length > 0 && typeof window !== "undefined") {
-        fetch("/api/slit-inbound", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ records, seedOnly: true }),
-        }).catch(() => {});
-      }
-      if (!hasServerState) {
+  const targetQuery = buildInboundFirestoreQuery(options);
+
+  if (!cloudRealtimeEnabled) {
+    // Cloud Real-time is OFF: use one-time getDocs() instead of onSnapshot
+    getDocs(targetQuery)
+      .then((snapshot) => {
+        if (isDisposed) return;
+        const records: SlitBarcodeRecord[] = [];
+        snapshot.forEach((d) => {
+          records.push(d.data() as SlitBarcodeRecord);
+        });
         emitSorted(records);
+      })
+      .catch((error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, INBOUND_COLLECTION);
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubSse();
+    };
+  }
+
+  const unsubFirestore = registerFirestoreListener(
+    INBOUND_COLLECTION,
+    onSnapshot(
+      targetQuery,
+      (snapshot) => {
+        if (isDisposed) return;
+        const records: SlitBarcodeRecord[] = [];
+        snapshot.forEach((d) => {
+          records.push(d.data() as SlitBarcodeRecord);
+        });
+        if (
+          records.length > 0 &&
+          !options?.onlyPositiveStock &&
+          !options?.dateFilter &&
+          typeof window !== "undefined"
+        ) {
+          fetch("/api/slit-inbound", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records, seedOnly: true }),
+          }).catch(() => {});
+        }
+        if (!hasServerState || options?.onlyPositiveStock || options?.dateFilter) {
+          emitSorted(records);
+        }
+      },
+      (error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, INBOUND_COLLECTION);
       }
-    },
-    (error) => {
-      onError?.(error);
-      handleFirestoreError(error, OperationType.GET, INBOUND_COLLECTION);
-    }
+    )
   );
 
   return () => {
+    isDisposed = true;
     unsubSse();
     unsubFirestore();
   };
 }
 
 /**
- * Real-time listener for Slit Outbound records (Hybrid Real-Time SSE + Cloud Firestore)
+ * Real-time listener (or one-time getDocs when Cloud Real-time is OFF) for Slit Outbound records
+ * Supports query filtering by selected date
  */
 export function subscribeToSlitOutbound(
   onData: (records: SlitBarcodeRecord[]) => void,
-  onError?: (err: unknown) => void
+  onError?: (err: unknown) => void,
+  options?: SlitQueryOptions
 ): () => void {
+  let isDisposed = false;
   let hasServerState = false;
   let lastSerialized = "";
 
+  const applyClientFilterSafety = (rawRecords: SlitBarcodeRecord[]): SlitBarcodeRecord[] => {
+    if (options?.dateFilter && options.dateFilter.trim()) {
+      const startD = options.dateFilter.trim();
+      const endD = (options.endDateFilter || startD).trim();
+      return rawRecords.filter((r) => {
+        const norm = normalizeScanTimestampYMD(r.scanTimestamp).slice(0, 10);
+        return norm >= startD && norm <= endD;
+      });
+    }
+    return rawRecords;
+  };
+
   const emitSorted = (rawRecords: SlitBarcodeRecord[]) => {
-    const sorted = [...rawRecords].sort((a, b) =>
+    if (isDisposed) return;
+    const filtered = applyClientFilterSafety(rawRecords);
+    const sorted = [...filtered].sort((a, b) =>
       (b.scanTimestamp || "").localeCompare(a.scanTimestamp || "")
     );
     const serialized = JSON.stringify(sorted);
@@ -466,56 +736,105 @@ export function subscribeToSlitOutbound(
     }
   };
 
-  const unsubSse = subscribeSharedSse("slit_outbound", (payload) => {
-    if (payload && Array.isArray(payload.records)) {
-      hasServerState = true;
-      emitSorted(payload.records as SlitBarcodeRecord[]);
-    }
-  });
+  const unsubSse = cloudRealtimeEnabled
+    ? subscribeSharedSse("slit_outbound", (payload) => {
+        if (payload && Array.isArray(payload.records)) {
+          hasServerState = true;
+          emitSorted(payload.records as SlitBarcodeRecord[]);
+        }
+      })
+    : () => {};
 
-  const colRef = collection(db, OUTBOUND_COLLECTION);
-  const unsubFirestore = onSnapshot(
-    colRef,
-    (snapshot) => {
-      const records: SlitBarcodeRecord[] = [];
-      snapshot.forEach((d) => {
-        records.push(d.data() as SlitBarcodeRecord);
-      });
-      if (records.length > 0 && typeof window !== "undefined") {
-        fetch("/api/slit-outbound", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ records, seedOnly: true }),
-        }).catch(() => {});
-      }
-      if (!hasServerState) {
+  const targetQuery = buildOutboundFirestoreQuery(options);
+
+  if (!cloudRealtimeEnabled) {
+    // Cloud Real-time is OFF: use one-time getDocs() instead of onSnapshot
+    getDocs(targetQuery)
+      .then((snapshot) => {
+        if (isDisposed) return;
+        const records: SlitBarcodeRecord[] = [];
+        snapshot.forEach((d) => {
+          records.push(d.data() as SlitBarcodeRecord);
+        });
         emitSorted(records);
+      })
+      .catch((error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, OUTBOUND_COLLECTION);
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubSse();
+    };
+  }
+
+  const unsubFirestore = registerFirestoreListener(
+    OUTBOUND_COLLECTION,
+    onSnapshot(
+      targetQuery,
+      (snapshot) => {
+        if (isDisposed) return;
+        const records: SlitBarcodeRecord[] = [];
+        snapshot.forEach((d) => {
+          records.push(d.data() as SlitBarcodeRecord);
+        });
+        if (records.length > 0 && !options?.dateFilter && typeof window !== "undefined") {
+          fetch("/api/slit-outbound", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ records, seedOnly: true }),
+          }).catch(() => {});
+        }
+        if (!hasServerState || options?.dateFilter) {
+          emitSorted(records);
+        }
+      },
+      (error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, OUTBOUND_COLLECTION);
       }
-    },
-    (error) => {
-      onError?.(error);
-      handleFirestoreError(error, OperationType.GET, OUTBOUND_COLLECTION);
-    }
+    )
   );
 
   return () => {
+    isDisposed = true;
     unsubSse();
     unsubFirestore();
   };
 }
 
 /**
- * Real-time listener for Slit Pick Lists (Hybrid Real-Time SSE + Cloud Firestore)
+ * Real-time listener (or one-time getDocs when Cloud Real-time is OFF) for Slit Pick Lists
+ * Supports query filtering by selected date
  */
 export function subscribeToSlitPickLists(
   onData: (orders: PickListOrder[]) => void,
-  onError?: (err: unknown) => void
+  onError?: (err: unknown) => void,
+  options?: SlitQueryOptions
 ): () => void {
+  let isDisposed = false;
   let hasServerState = false;
   let lastSerialized = "";
 
+  const applyClientFilterSafety = (rawOrders: PickListOrder[]): PickListOrder[] => {
+    if (options?.dateFilter && options.dateFilter.trim()) {
+      const startD = options.dateFilter.trim();
+      const endD = (options.endDateFilter || startD).trim();
+      return rawOrders.filter((o) => {
+        const dStr = (o.createdDate || "").trim().slice(0, 10);
+        return !dStr || (dStr >= startD && dStr <= endD);
+      });
+    }
+    return rawOrders;
+  };
+
   const emitSorted = (rawOrders: PickListOrder[]) => {
-    const sorted = [...rawOrders].sort((a, b) => {
+    if (isDisposed) return;
+    const filtered = applyClientFilterSafety(rawOrders);
+    const sorted = [...filtered].sort((a, b) => {
       const timeA = `${a.createdDate || ""} ${a.createdAt || ""}`;
       const timeB = `${b.createdDate || ""} ${b.createdAt || ""}`;
       return timeB.localeCompare(timeA);
@@ -527,39 +846,71 @@ export function subscribeToSlitPickLists(
     }
   };
 
-  const unsubSse = subscribeSharedSse("slit_picklists", (payload) => {
-    if (payload && Array.isArray(payload.orders)) {
-      hasServerState = true;
-      emitSorted(payload.orders as PickListOrder[]);
-    }
-  });
+  const unsubSse = cloudRealtimeEnabled
+    ? subscribeSharedSse("slit_picklists", (payload) => {
+        if (payload && Array.isArray(payload.orders)) {
+          hasServerState = true;
+          emitSorted(payload.orders as PickListOrder[]);
+        }
+      })
+    : () => {};
 
-  const colRef = collection(db, PICKLIST_COLLECTION);
-  const unsubFirestore = onSnapshot(
-    colRef,
-    (snapshot) => {
-      const orders: PickListOrder[] = [];
-      snapshot.forEach((d) => {
-        orders.push(d.data() as PickListOrder);
-      });
-      if (orders.length > 0 && typeof window !== "undefined") {
-        fetch("/api/slit-picklists", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ orders, seedOnly: true }),
-        }).catch(() => {});
-      }
-      if (!hasServerState) {
+  const targetQuery = buildPickListFirestoreQuery(options);
+
+  if (!cloudRealtimeEnabled) {
+    // Cloud Real-time is OFF: use one-time getDocs() instead of onSnapshot
+    getDocs(targetQuery)
+      .then((snapshot) => {
+        if (isDisposed) return;
+        const orders: PickListOrder[] = [];
+        snapshot.forEach((d) => {
+          orders.push(d.data() as PickListOrder);
+        });
         emitSorted(orders);
+      })
+      .catch((error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, PICKLIST_COLLECTION);
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubSse();
+    };
+  }
+
+  const unsubFirestore = registerFirestoreListener(
+    PICKLIST_COLLECTION,
+    onSnapshot(
+      targetQuery,
+      (snapshot) => {
+        if (isDisposed) return;
+        const orders: PickListOrder[] = [];
+        snapshot.forEach((d) => {
+          orders.push(d.data() as PickListOrder);
+        });
+        if (orders.length > 0 && !options?.dateFilter && typeof window !== "undefined") {
+          fetch("/api/slit-picklists", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ orders, seedOnly: true }),
+          }).catch(() => {});
+        }
+        if (!hasServerState || options?.dateFilter) {
+          emitSorted(orders);
+        }
+      },
+      (error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, PICKLIST_COLLECTION);
       }
-    },
-    (error) => {
-      onError?.(error);
-      handleFirestoreError(error, OperationType.GET, PICKLIST_COLLECTION);
-    }
+    )
   );
 
   return () => {
+    isDisposed = true;
     unsubSse();
     unsubFirestore();
   };
@@ -1087,48 +1438,72 @@ export function subscribeToSlitSapMaster(
 
   fetchServerSap();
 
-  const unsubSse = subscribeSharedSse("slit_sap_updated", (payload) => {
-    if (!payload) return;
-    if (payload.updatedAt && payload.updatedAt !== lastSapUpdatedAt) {
-      fetchServerSap();
-    }
-  });
+  const unsubSse = cloudRealtimeEnabled
+    ? subscribeSharedSse("slit_sap_updated", (payload) => {
+        if (!payload) return;
+        if (payload.updatedAt && payload.updatedAt !== lastSapUpdatedAt) {
+          fetchServerSap();
+        }
+      })
+    : () => {};
 
   const colRef = collection(db, SAP_CHUNKS_COLLECTION);
-  const unsubFirestore = onSnapshot(
-    colRef,
-    (snapshot) => {
-      const chunks: SlitSapChunkDoc[] = [];
-      snapshot.forEach((d) => {
-        const data = d.data() as SlitSapChunkDoc;
-        if (data && Array.isArray(data.items)) {
-          chunks.push(data);
-        }
-      });
-      chunks.sort((a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0));
-      const allItems: SapMasterItem[] = [];
-      for (const ch of chunks) {
-        for (const itm of ch.items) {
-          if (itm && itm.batch) {
-            allItems.push(itm);
-          }
+  const processSapChunksSnapshot = (snapshot: { forEach: (cb: (d: any) => void) => void }) => {
+    if (isDisposed) return;
+    const chunks: SlitSapChunkDoc[] = [];
+    snapshot.forEach((d) => {
+      const data = d.data() as SlitSapChunkDoc;
+      if (data && Array.isArray(data.items)) {
+        chunks.push(data);
+      }
+    });
+    chunks.sort((a, b) => (a.chunkIndex ?? 0) - (b.chunkIndex ?? 0));
+    const allItems: SapMasterItem[] = [];
+    for (const ch of chunks) {
+      for (const itm of ch.items) {
+        if (itm && itm.batch) {
+          allItems.push(itm);
         }
       }
-      if (allItems.length > 0 && typeof window !== "undefined") {
-        fetch("/api/slit-sap", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: allItems, seedOnly: true }),
-        }).catch(() => {});
-      }
-      if (!hasServerSap) {
-        onData(allItems, chunks.length);
-      }
-    },
-    (error) => {
-      onError?.(error);
-      handleFirestoreError(error, OperationType.GET, SAP_CHUNKS_COLLECTION);
     }
+    if (allItems.length > 0 && typeof window !== "undefined") {
+      fetch("/api/slit-sap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: allItems, seedOnly: true }),
+      }).catch(() => {});
+    }
+    if (!hasServerSap) {
+      onData(allItems, chunks.length);
+    }
+  };
+
+  if (!cloudRealtimeEnabled) {
+    getDocs(colRef)
+      .then(processSapChunksSnapshot)
+      .catch((error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, SAP_CHUNKS_COLLECTION);
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubSse();
+    };
+  }
+
+  const unsubFirestore = registerFirestoreListener(
+    SAP_CHUNKS_COLLECTION,
+    onSnapshot(
+      colRef,
+      processSapChunksSnapshot,
+      (error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, SAP_CHUNKS_COLLECTION);
+      }
+    )
   );
 
   return () => {
@@ -1346,9 +1721,11 @@ export function subscribeToSlitSpaceConfig(
     onData(nextDoc);
   };
 
-  const unsubSse = subscribeSharedSse("warehouse_space_state", (payload) => {
-    handleIncomingDoc(payload as SlitWarehouseSpaceCloudDoc, "api");
-  });
+  const unsubSse = cloudRealtimeEnabled
+    ? subscribeSharedSse("warehouse_space_state", (payload) => {
+        handleIncomingDoc(payload as SlitWarehouseSpaceCloudDoc, "api");
+      })
+    : () => {};
 
   if (typeof window !== "undefined") {
     fetch("/api/space-config", { cache: "no-store" })
@@ -1366,22 +1743,48 @@ export function subscribeToSlitSpaceConfig(
   }
 
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID);
-  const unsubFirestore = onSnapshot(
-    docRef,
-    (snapshot) => {
-      if (!snapshot.exists()) {
-        if (snapshot.metadata.fromCache) {
+
+  if (!cloudRealtimeEnabled) {
+    getDoc(docRef)
+      .then((snapshot) => {
+        if (isDisposed) return;
+        if (!snapshot.exists()) {
+          handleIncomingDoc(null, "firestore");
           return;
         }
-        handleIncomingDoc(null, "firestore");
-        return;
+        handleIncomingDoc(snapshot.data() as SlitWarehouseSpaceCloudDoc, "firestore");
+      })
+      .catch((error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubSse();
+    };
+  }
+
+  const unsubFirestore = registerFirestoreListener(
+    `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`,
+    onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          if (snapshot.metadata.fromCache) {
+            return;
+          }
+          handleIncomingDoc(null, "firestore");
+          return;
+        }
+        handleIncomingDoc(snapshot.data() as SlitWarehouseSpaceCloudDoc, "firestore");
+      },
+      (error) => {
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
       }
-      handleIncomingDoc(snapshot.data() as SlitWarehouseSpaceCloudDoc, "firestore");
-    },
-    (error) => {
-      onError?.(error);
-      handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${SPACE_CONFIG_DOC_ID}`);
-    }
+    )
   );
 
   return () => {
@@ -1563,9 +1966,11 @@ export function subscribeToSlitMachineStaging(
     onData(latestDoc);
   };
 
-  const unsubSse = subscribeSharedSse("machine_staging_state", (payload) => {
-    handleIncomingDoc(payload as SlitMachineStagingCloudDoc, "api");
-  });
+  const unsubSse = cloudRealtimeEnabled
+    ? subscribeSharedSse("machine_staging_state", (payload) => {
+        handleIncomingDoc(payload as SlitMachineStagingCloudDoc, "api");
+      })
+    : () => {};
 
   if (typeof window !== "undefined") {
     fetch("/api/space-config", { cache: "no-store" })
@@ -1583,23 +1988,50 @@ export function subscribeToSlitMachineStaging(
   }
 
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID);
-  const unsubFirestore = onSnapshot(
-    docRef,
-    (snapshot) => {
-      if (!snapshot.exists()) {
-        if (snapshot.metadata.fromCache) {
+
+  if (!cloudRealtimeEnabled) {
+    getDoc(docRef)
+      .then((snapshot) => {
+        if (isDisposed) return;
+        if (!snapshot.exists()) {
+          handleIncomingDoc(null, "firestore");
           return;
         }
-        handleIncomingDoc(null, "firestore");
-        return;
+        handleIncomingDoc(snapshot.data() as SlitMachineStagingCloudDoc, "firestore");
+      })
+      .catch((error) => {
+        if (isDisposed) return;
+        firestoreResponded = true;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubSse();
+    };
+  }
+
+  const unsubFirestore = registerFirestoreListener(
+    `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`,
+    onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          if (snapshot.metadata.fromCache) {
+            return;
+          }
+          handleIncomingDoc(null, "firestore");
+          return;
+        }
+        handleIncomingDoc(snapshot.data() as SlitMachineStagingCloudDoc, "firestore");
+      },
+      (error) => {
+        firestoreResponded = true;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
       }
-      handleIncomingDoc(snapshot.data() as SlitMachineStagingCloudDoc, "firestore");
-    },
-    (error) => {
-      firestoreResponded = true;
-      onError?.(error);
-      handleFirestoreError(error, OperationType.GET, `${SPACE_CONFIG_COLLECTION}/${MACHINE_STAGING_DOC_ID}`);
-    }
+    )
   );
 
   return () => {

@@ -49,6 +49,12 @@ import { FixFlushManagement } from "./components/FixFlushManagement";
 import { FuelManagement } from "./components/FuelManagement";
 import { PreStartInspection } from "./components/PreStartInspection";
 import { SlitFilmManagement } from "./components/SlitFilmManagement";
+import { CoilManagement } from "./components/CoilManagement";
+import {
+  unsubscribeAllCoilFirestoreListeners,
+  CoilModeTab,
+  CoilStockRecord,
+} from "./services/coilDataService";
 import {
   loadStoredAssignments,
   saveStoredAssignments,
@@ -5056,6 +5062,7 @@ function WmsApp() {
   const [materialHandlingExpanded, setMaterialHandlingExpanded] = useState<boolean>(false);
   const [warehouseInventoryExpanded, setWarehouseInventoryExpanded] = useState<boolean>(false);
   const [slitMenuExpanded, setSlitMenuExpanded] = useState<boolean>(false);
+  const [coilMenuExpanded, setCoilMenuExpanded] = useState<boolean>(false);
   const [administrationExpanded, setAdministrationExpanded] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -5067,6 +5074,14 @@ function WmsApp() {
     return false;
   });
   const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
+  const [coilMode, setCoilMode] = useState<CoilModeTab>("inbound");
+
+  // Strict Read-Quota Guard: immediately unsubscribe all Coil Firestore listeners when leaving Coil page
+  useEffect(() => {
+    if (active !== "coil") {
+      unsubscribeAllCoilFirestoreListeners();
+    }
+  }, [active]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
@@ -5589,15 +5604,30 @@ function WmsApp() {
                             const Icon = item.icon;
                             const isActive = active === item.id;
                             const isSlit = item.id === "slit";
+                            const isCoil = item.id === "coil";
 
                             return (
-                              <div key={item.id} style={{ marginBottom: isSlit && slitMenuExpanded ? 4 : 0 }}>
+                              <div
+                                key={item.id}
+                                style={{
+                                  marginBottom:
+                                    (isSlit && slitMenuExpanded) || (isCoil && coilMenuExpanded)
+                                      ? 4
+                                      : 0,
+                                }}
+                              >
                                 <button
                                   type="button"
                                   className={`nav-card-btn ${isActive ? "active" : ""}`}
                                   onClick={() => {
                                     if (isSlit) {
                                       setSlitMenuExpanded((prev) => !prev);
+                                      if (!isActive) {
+                                        setActive(item.id);
+                                        setSelectedRecord(null);
+                                      }
+                                    } else if (isCoil) {
+                                      setCoilMenuExpanded((prev) => !prev);
                                       if (!isActive) {
                                         setActive(item.id);
                                         setSelectedRecord(null);
@@ -5618,19 +5648,92 @@ function WmsApp() {
                                     </span>
                                     <span>{item.label}</span>
                                   </div>
-                                  {isSlit && (
+                                  {(isSlit || isCoil) && (
                                     <span
                                       className="nav-arrow-icon"
                                       style={{
                                         fontSize: 11,
                                         marginLeft: "auto",
-                                        transform: slitMenuExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                                        transform: (isSlit ? slitMenuExpanded : coilMenuExpanded)
+                                          ? "rotate(0deg)"
+                                          : "rotate(-90deg)",
                                       }}
                                     >
                                       <ChevronDown size={14} />
                                     </span>
                                   )}
                                 </button>
+
+                                {/* Submenu for Steel Coil (การจัดการเหล็กม้วน) */}
+                                {isCoil && coilMenuExpanded && (
+                                  <div className="nav-submenu">
+                                    {[
+                                      {
+                                        id: "inbound" as CoilModeTab,
+                                        labelTh: "+ รับเข้า",
+                                        labelEn: "+ Inbound",
+                                        icon: ArrowDownRight,
+                                        color: "#10b981",
+                                      },
+                                      {
+                                        id: "operator_receive" as CoilModeTab,
+                                        labelTh: "จ่ายออก",
+                                        labelEn: "Issue",
+                                        icon: Cpu,
+                                        color: "#38bdf8",
+                                      },
+                                      {
+                                        id: "outbound" as CoilModeTab,
+                                        labelTh: "- เตรียมเบิก",
+                                        labelEn: "- Staging",
+                                        icon: ArrowUpRight,
+                                        color: "#f59e0b",
+                                      },
+                                      {
+                                        id: "relocate_layout" as CoilModeTab,
+                                        labelTh: "ย้าย Layout",
+                                        labelEn: "Relocate Layout",
+                                        icon: ArrowRightLeft,
+                                        color: "#c084fc",
+                                      },
+                                      {
+                                        id: "stock_balance" as CoilModeTab,
+                                        labelTh: "สต๊อก",
+                                        labelEn: "Stock Balance",
+                                        icon: Package,
+                                        color: "#06b6d4",
+                                      },
+                                    ].map((sub) => {
+                                      const SubIcon = sub.icon;
+                                      return (
+                                        <button
+                                          key={sub.id}
+                                          type="button"
+                                          className={`nav-sub-btn ${
+                                            active === "coil" && coilMode === sub.id ? "active" : ""
+                                          }`}
+                                          onClick={() => {
+                                            setActive("coil");
+                                            setCoilMode(sub.id);
+                                            setSelectedRecord(null);
+                                            if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                              setSidebarCollapsed(true);
+                                            }
+                                          }}
+                                          title={language === "th" ? sub.labelTh : sub.labelEn}
+                                        >
+                                          <span
+                                            className="nav-icon"
+                                            style={{ width: 16, height: 16, color: sub.color }}
+                                          >
+                                            <SubIcon size={14} />
+                                          </span>
+                                          <span>{language === "th" ? sub.labelTh : sub.labelEn}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
 
                                  {/* Submenu for Slit / Film */}
                                  {isSlit && slitMenuExpanded && (
@@ -5920,10 +6023,11 @@ function WmsApp() {
 
           <main className="main">
             {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && (
-              <div className={`page-heading ${active === "slit" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : ""}`}>
+              <div className={`page-heading ${active === "slit" || active === "coil" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : ""}`}>
                 <div>
                   <h1>{pageTitle}</h1>
                   {active !== "slit" &&
+                    active !== "coil" &&
                     active !== "dashboard" &&
                     active !== "pre-start" &&
                     active !== "vehicles" &&
@@ -5936,7 +6040,7 @@ function WmsApp() {
                     )}
                 </div>
 
-                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && (
+                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && active !== "coil" && (
                   <div className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}>
                     {active !== "transport" && active !== "slit" && (
                       <button className="button secondary print-export-btn hidden sm:inline-flex" onClick={() => window.print()}>
@@ -6070,6 +6174,45 @@ function WmsApp() {
                   ]);
                 }}
               />
+            ) : active === "coil" ? (
+              <CoilManagement
+                activeMode={coilMode}
+                onModeChange={setCoilMode}
+                onStockSummaryChange={(coils: CoilStockRecord[]) => {
+                  setInventory((prev) => {
+                    const nonCoil = prev.filter((item) => item.module !== "coil");
+                    const mappedCoil: RecordItem[] = coils
+                      .filter((c) => c.weightKg > 0 && c.status !== "issued")
+                      .map((c, idx) => ({
+                        id: 900000 + idx,
+                        module: "coil",
+                        code: c.batch,
+                        name: `${c.grade} ${c.certThickness}x${c.width}mm (${c.manufacturer})`,
+                        location: c.location,
+                        qty: Number((c.weightKg / 1000).toFixed(2)),
+                        unit: "TON",
+                        status: c.status === "available" ? "Available" : "Pending",
+                        updatedAt: c.scanTimestamp,
+                      }));
+                    return [...mappedCoil, ...nonCoil];
+                  });
+                }}
+                onLogTransaction={(activity, reference, status) => {
+                  setTransactions((current) => [
+                    {
+                      time: new Date().toLocaleTimeString("en-GB", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                      reference,
+                      module: "Coil Management",
+                      activity,
+                      status,
+                    },
+                    ...current,
+                  ]);
+                }}
+              />
             ) : (
               <ModulePage
                 key={active}
@@ -6156,8 +6299,12 @@ function WmsApp() {
           </main>
         </div>
 
-        {/* Mobile Bottom Navigation Bar (Fixed Bottom - Visible on Mobile <768px Only) */}
-        <nav className="mobile-bottom-nav sm:hidden fixed bottom-0 left-0 right-0 h-14 z-40 bg-white/95 dark:bg-[#091322]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#1e3a5f] shadow-[0_-4px_16px_rgba(0,0,0,0.12)] px-0.5 flex items-center justify-around">
+        {/* Bottom Navigation Bar (5 Tabs: +รับเข้า, จ่ายออก, -เตรียมเบิก, ย้าย Layout, สต๊อก) */}
+        <nav
+          className={`mobile-bottom-nav ${
+            active === "coil" ? "flex" : "sm:hidden flex"
+          } fixed bottom-0 left-0 right-0 h-14 z-40 bg-white/95 dark:bg-[#091322]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#1e3a5f] shadow-[0_-4px_16px_rgba(0,0,0,0.12)] px-0.5 items-center justify-around`}
+        >
           {[
             {
               id: "inbound" as const,
@@ -6196,17 +6343,24 @@ function WmsApp() {
             },
           ].map((item) => {
             const Icon = item.icon;
-            const isItemActive = active === "slit" && slitMode === item.id;
+            const isItemActive =
+              active === "coil"
+                ? coilMode === item.id
+                : active === "slit" && slitMode === item.id;
 
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => {
-                  if (active !== "slit") {
-                    setActive("slit");
+                  if (active === "coil") {
+                    setCoilMode(item.id);
+                  } else {
+                    if (active !== "slit") {
+                      setActive("slit");
+                    }
+                    setSlitMode(item.id);
                   }
-                  setSlitMode(item.id);
                   setSelectedRecord(null);
                 }}
                 className={`flex-1 h-full flex flex-col items-center justify-center gap-0.5 py-1 px-0.5 transition-all cursor-pointer select-none ${

@@ -68,7 +68,6 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
   // Real-time synchronization: listen to Cloud Firestore & storage updates
   useEffect(() => {
-    ensureMachineStagingCloudSync();
     const unsubCloud = subscribeToSlitMachineStaging((cloudDoc) => {
       setIsMachineStagingCloudLoaded(true);
       if (cloudDoc && Array.isArray(cloudDoc.machines) && cloudDoc.machines.length > 0) {

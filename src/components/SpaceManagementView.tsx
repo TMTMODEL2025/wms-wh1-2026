@@ -498,16 +498,28 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
   useEffect(() => {
     clearLegacySlitLocalStorage();
-    const unsubIn = subscribeToSlitInbound((records) => setCloudInbound(records));
-    const unsubOut = subscribeToSlitOutbound((records) => setCloudOutbound(records));
-    const unsubPick = subscribeToSlitPickLists((orders) => setCloudPickLists(orders));
-    const unsubSap = subscribeToSlitSapMaster((items) => {
-      const m = new Map<string, SapMasterItem>();
-      items.forEach((itm) => {
-        if (itm?.batch) m.set(itm.batch.trim().toUpperCase(), itm);
-      });
-      setCloudSapMasterMap(m);
-    });
+    const unsubIn =
+      propInboundList !== undefined
+        ? () => {}
+        : subscribeToSlitInbound((records) => setCloudInbound(records));
+    const unsubOut =
+      propOutboundList !== undefined
+        ? () => {}
+        : subscribeToSlitOutbound((records) => setCloudOutbound(records));
+    const unsubPick =
+      propPickLists !== undefined
+        ? () => {}
+        : subscribeToSlitPickLists((orders) => setCloudPickLists(orders));
+    const unsubSap =
+      propSapMasterMap !== undefined
+        ? () => {}
+        : subscribeToSlitSapMaster((items) => {
+            const m = new Map<string, SapMasterItem>();
+            items.forEach((itm) => {
+              if (itm?.batch) m.set(itm.batch.trim().toUpperCase(), itm);
+            });
+            setCloudSapMasterMap(m);
+          });
     const unsubSpaceConfig = subscribeToSlitSpaceConfig((cloudConfig) => {
       setIsSpaceConfigLoaded(true);
       if (!cloudConfig) {
@@ -589,7 +601,12 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       window.removeEventListener(BUILDING_CAPACITY_UPDATED_EVENT, handleCapacitySyncEvent);
       window.removeEventListener("storage", handleStorageEvent);
     };
-  }, []);
+  }, [
+    propInboundList !== undefined,
+    propOutboundList !== undefined,
+    propPickLists !== undefined,
+    propSapMasterMap !== undefined,
+  ]);
 
   const effectiveInbound = propInboundList ?? cloudInbound;
   const effectiveOutbound = propOutboundList ?? cloudOutbound;

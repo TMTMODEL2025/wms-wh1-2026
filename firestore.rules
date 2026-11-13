@@ -37,6 +37,34 @@ service cloud.firestore {
       return data.id is string && data.id.size() <= 128;
     }
 
+    function isValidCoilStock(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.batch is string && data.batch.size() <= 64
+        && data.location is string && data.location.size() <= 64;
+    }
+
+    function isValidCoilTransaction(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.batch is string && data.batch.size() <= 64
+        && data.txType is string && data.txType.size() <= 32;
+    }
+
+    function isValidCoilStaging(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.orderNo is string && data.orderNo.size() <= 64;
+    }
+
+    function isValidCoilLayout(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.bayCode is string && data.bayCode.size() <= 64;
+    }
+
+    function isValidCoilSapChunk(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.chunkIndex is number
+        && data.items is list && data.items.size() <= 1000;
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -65,6 +93,36 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(configId) && isValidSpaceConfig(request.resource.data);
       allow delete: if isValidId(configId);
+    }
+
+    match /coil_stock/{recordId} {
+      allow read: if true;
+      allow create, update: if isValidId(recordId) && isValidCoilStock(request.resource.data);
+      allow delete: if isValidId(recordId);
+    }
+
+    match /coil_transactions/{txId} {
+      allow read: if true;
+      allow create, update: if isValidId(txId) && isValidCoilTransaction(request.resource.data);
+      allow delete: if isValidId(txId);
+    }
+
+    match /coil_staging/{stagingId} {
+      allow read: if true;
+      allow create, update: if isValidId(stagingId) && isValidCoilStaging(request.resource.data);
+      allow delete: if isValidId(stagingId);
+    }
+
+    match /coil_layouts/{layoutId} {
+      allow read: if true;
+      allow create, update: if isValidId(layoutId) && isValidCoilLayout(request.resource.data);
+      allow delete: if isValidId(layoutId);
+    }
+
+    match /coil_sap_chunks/{chunkId} {
+      allow read: if true;
+      allow create, update: if isValidId(chunkId) && isValidCoilSapChunk(request.resource.data);
+      allow delete: if isValidId(chunkId);
     }
 
     match /test/{docId} {

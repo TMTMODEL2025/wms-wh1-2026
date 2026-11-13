@@ -105,6 +105,11 @@ import {
   clearSapMasterChunksFromCloud,
   clearAllSlitDataFromCloud,
   clearLegacySlitLocalStorage,
+  getCloudRealtimeEnabled,
+  setCloudRealtimeEnabled,
+  subscribeCloudRealtimeMode,
+  unsubscribeAllFirestoreListeners,
+  SlitQueryOptions,
   SAP_CHUNK_SIZE,
 } from "../services/slitDataService";
 
@@ -1522,12 +1527,36 @@ export function SlitFilmManagement({
   const [pickLists, setPickLists] = useState<PickListOrder[]>([]);
   const [isCloudLoading, setIsCloudLoading] = useState<boolean>(true);
   const [isCloudSyncing] = useState<boolean>(true);
+  const [isCloudRealtime, setIsCloudRealtime] = useState<boolean>(() => getCloudRealtimeEnabled());
+  const [manualRefreshTick, setManualRefreshTick] = useState<number>(0);
+
+  // Default date filter for Daily Movement History & Daily Report (YYYY-MM-DD local time)
+  const getLocalTodayYMD = useCallback((): string => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+  const [historyDateFilter, setHistoryDateFilter] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const [dailyReportDate, setDailyReportDate] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+
+  useEffect(() => {
+    return subscribeCloudRealtimeMode((enabled) => {
+      setIsCloudRealtime(enabled);
+    });
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
     let loadedInbound = false;
     let loadedOutbound = false;
     let loadedPickLists = false;
+
+    setIsCloudLoading(true);
 
     const checkAllLoaded = () => {
       if (isMounted && loadedInbound && loadedOutbound && loadedPickLists) {
@@ -1538,7 +1567,39 @@ export function SlitFilmManagement({
     // Purge any legacy localStorage keys so old browser data never contaminates live Firestore state
     clearLegacySlitLocalStorage();
 
-    // Subscribe to Inbound collection in real-time (100% Cloud Source of Truth, including empty [])
+    // Ensure any previous listeners are cleared before attaching new menu/tab listeners
+    unsubscribeAllFirestoreListeners();
+
+    // Compute query options based on active menu/section to prevent full-collection reads
+    const inboundQueryOpts: SlitQueryOptions = {};
+    const outboundQueryOpts: SlitQueryOptions = {};
+    const pickListQueryOpts: SlitQueryOptions = {};
+
+    if (activeMode === "stock_balance") {
+      // Rule 4: For remaining stock balance, fetch only items with remaining balance > 0
+      inboundQueryOpts.onlyPositiveStock = true;
+    } else if (activeMode === "movement_history" && historyDateFilter) {
+      // Rule 4: For daily history, fetch only records for the selected date
+      inboundQueryOpts.dateFilter = historyDateFilter;
+      outboundQueryOpts.dateFilter = historyDateFilter;
+      pickListQueryOpts.dateFilter = historyDateFilter;
+    } else if (activeMode === "daily_report" && dailyReportDate) {
+      // Rule 4: For daily report, fetch records for the selected date (and next day for night shift 20:00-08:00)
+      const parts = dailyReportDate.split("-").map(Number);
+      let nextDayStr = dailyReportDate;
+      if (parts.length === 3 && !parts.some(isNaN)) {
+        const nextD = new Date(parts[0], parts[1] - 1, parts[2] + 1);
+        nextDayStr = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, "0")}-${String(nextD.getDate()).padStart(2, "0")}`;
+      }
+      inboundQueryOpts.dateFilter = dailyReportDate;
+      inboundQueryOpts.endDateFilter = nextDayStr;
+      outboundQueryOpts.dateFilter = dailyReportDate;
+      outboundQueryOpts.endDateFilter = nextDayStr;
+      pickListQueryOpts.dateFilter = dailyReportDate;
+      pickListQueryOpts.endDateFilter = nextDayStr;
+    }
+
+    // Subscribe to Inbound collection (or one-time getDocs when Cloud Real-time is OFF)
     const unsubscribeInbound = subscribeToSlitInbound(
       (cloudInbound) => {
         if (!isMounted || !Array.isArray(cloudInbound)) return;
@@ -1549,10 +1610,11 @@ export function SlitFilmManagement({
       () => {
         loadedInbound = true;
         checkAllLoaded();
-      }
+      },
+      inboundQueryOpts
     );
 
-    // Subscribe to Outbound collection in real-time (100% Cloud Source of Truth, including empty [])
+    // Subscribe to Outbound collection (or one-time getDocs when Cloud Real-time is OFF)
     const unsubscribeOutbound = subscribeToSlitOutbound(
       (cloudOutbound) => {
         if (!isMounted || !Array.isArray(cloudOutbound)) return;
@@ -1563,10 +1625,11 @@ export function SlitFilmManagement({
       () => {
         loadedOutbound = true;
         checkAllLoaded();
-      }
+      },
+      outboundQueryOpts
     );
 
-    // Subscribe to Pick Lists collection in real-time (100% Cloud Source of Truth, including empty [])
+    // Subscribe to Pick Lists collection (or one-time getDocs when Cloud Real-time is OFF)
     const unsubscribePickLists = subscribeToSlitPickLists(
       (cloudPickLists) => {
         if (!isMounted || !Array.isArray(cloudPickLists)) return;
@@ -1579,7 +1642,7 @@ export function SlitFilmManagement({
           const removedOrders = prev.filter(
             (o) => o.orderNo && !cloudOrderNoSet.has(o.orderNo.trim().toUpperCase())
           );
-          if (removedOrders.length > 0) {
+          if (removedOrders.length > 0 && !pickListQueryOpts.dateFilter) {
             removedOrders.forEach((remOrd) => {
               (remOrd.items || []).forEach((itm) => {
                 if (itm.batch) {
@@ -1588,7 +1651,7 @@ export function SlitFilmManagement({
               });
             });
           }
-          if (cloudPickLists.length === 0 && prev.length > 0) {
+          if (cloudPickLists.length === 0 && prev.length > 0 && !pickListQueryOpts.dateFilter) {
             resetAllMachineStagingToEmpty();
           }
           return cloudPickLists;
@@ -1599,10 +1662,11 @@ export function SlitFilmManagement({
       () => {
         loadedPickLists = true;
         checkAllLoaded();
-      }
+      },
+      pickListQueryOpts
     );
 
-    // Subscribe to Chunked SAP Master Data in real-time (800 items per chunk document)
+    // Subscribe to Chunked SAP Master Data (or one-time getDocs when Cloud Real-time is OFF)
     const unsubscribeSapMaster = subscribeToSlitSapMaster(
       (cloudSapItems, chunkCount) => {
         if (!isMounted || !Array.isArray(cloudSapItems)) return;
@@ -1637,7 +1701,7 @@ export function SlitFilmManagement({
       unsubscribePickLists();
       unsubscribeSapMaster();
     };
-  }, []);
+  }, [activeMode, isCloudRealtime, historyDateFilter, dailyReportDate, manualRefreshTick]);
 
   // Outbound active machine category & active machine selection
   const [activeCategory, setActiveCategory] = useState<string>("pipe");
@@ -3157,9 +3221,8 @@ export function SlitFilmManagement({
     batch?: string;
   } | null>(null);
 
-  // Search keyword & date filter in current table
+  // Search keyword in current table
   const [searchKeyword, setSearchKeyword] = useState("");
-  const [historyDateFilter, setHistoryDateFilter] = useState<string>("");
 
   // Inspect detail modal
   const [selectedRecord, setSelectedRecord] = useState<SlitBarcodeRecord | null>(null);
@@ -3665,7 +3728,8 @@ export function SlitFilmManagement({
       });
     });
 
-    return resultList;
+    // Rule 4: Only return items with remaining stock balance > 0
+    return resultList.filter((item) => (Number(item.weightKg) || 0) > 0);
   }, [inboundList, sapMasterMap, pickLists, outboundList, movementHistoryList]);
 
   const filteredStockList = useMemo(() => {
@@ -4994,7 +5058,6 @@ export function SlitFilmManagement({
 
     // Ensure target basket exists in master layout so it appears in Space Management
     ensureBasketInMasterLayout(externalBuilding as any, externalRow, String(bId));
-    ensureMasterBasketCloudSync();
 
     const matchedSap = sapMasterMap.get(cleanB);
     const dateNow = new Date();
@@ -5911,7 +5974,7 @@ export function SlitFilmManagement({
 
     const query = searchKeyword.trim().toLowerCase();
     return currentList.filter((r) => {
-      if (historyDateFilter) {
+      if (activeMode === "movement_history" && historyDateFilter) {
         const recDateYMD = extractDateYMD(r.scanTimestamp);
         if (recDateYMD !== historyDateFilter) return false;
       }
@@ -5926,7 +5989,7 @@ export function SlitFilmManagement({
         (r.machine || "").toLowerCase().includes(query)
       );
     });
-  }, [currentList, searchKeyword, historyDateFilter, pickLists, movementHistoryList]);
+  }, [currentList, searchKeyword, historyDateFilter, activeMode, pickLists, movementHistoryList]);
 
   // Calculate metrics
   const totalWeightKg = useMemo(() => {
@@ -6094,16 +6157,72 @@ export function SlitFilmManagement({
 
           {/* Utilities: Cloud Status, Sound & Reset */}
           <div className="flex items-center gap-1.5 ml-auto flex-shrink-0 pt-1 sm:pt-0">
-            <div
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 select-none"
-              title={isThai ? "เชื่อมต่อฐานข้อมูล Firebase Firestore แบบ Real-time สำเร็จ" : "Connected to Firebase Firestore Real-time"}
+            <button
+              type="button"
+              onClick={() => {
+                const nextState = !isCloudRealtime;
+                setCloudRealtimeEnabled(nextState);
+                setIsCloudRealtime(nextState);
+                showToast(
+                  nextState
+                    ? isThai
+                      ? "เปิดโหมด Cloud Real-time (ซิงค์ข้อมูลอัตโนมัติ)"
+                      : "Cloud Real-time ON"
+                    : isThai
+                    ? "ปิดโหมด Cloud Real-time (ดึงข้อมูลเฉพาะเมื่อกดโหลดหรือเปลี่ยนหน้า เพื่อประหยัดโควต้า Read)"
+                    : "Cloud Real-time OFF (Fetch on demand)",
+                  nextState ? "success" : "info"
+                );
+              }}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border select-none cursor-pointer transition-colors ${
+                isCloudRealtime
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
+                  : "bg-slate-100 dark:bg-slate-800/70 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700/70"
+              }`}
+              title={
+                isCloudRealtime
+                  ? isThai
+                    ? "คลิกเพื่อปิด Cloud Real-time (สลับไปใช้ getDocs เมื่อกดโหลดหรือเปลี่ยนหน้า)"
+                    : "Click to turn OFF Cloud Real-time (use getDocs on demand)"
+                  : isThai
+                  ? "คลิกเพื่อเปิด Cloud Real-time (ซิงค์ข้อมูลแบบสด)"
+                  : "Click to turn ON Cloud Real-time"
+              }
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isCloudRealtime ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                }`}
+              />
               <span className="hidden sm:inline">
-                {isCloudLoading ? (isThai ? "กำลังโหลด Cloud..." : "Syncing Cloud...") : "Cloud Real-time"}
+                {isCloudLoading
+                  ? isThai
+                    ? "กำลังโหลด Cloud..."
+                    : "Syncing Cloud..."
+                  : isCloudRealtime
+                  ? "Cloud Real-time"
+                  : "Cloud Real-time: OFF"}
               </span>
-              <span className="sm:hidden">Cloud</span>
-            </div>
+              <span className="sm:hidden">{isCloudRealtime ? "Cloud" : "Cloud OFF"}</span>
+            </button>
+
+            {!isCloudRealtime && (
+              <button
+                type="button"
+                onClick={() => {
+                  setManualRefreshTick((t) => t + 1);
+                  showToast(
+                    isThai ? "กำลังดึงข้อมูลล่าสุดจาก Cloud..." : "Fetching latest data from Cloud...",
+                    "info"
+                  );
+                }}
+                className="inline-flex items-center gap-1 p-1.5 sm:px-2 sm:py-1 rounded-lg text-[10px] font-bold border bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 cursor-pointer"
+                title={isThai ? "ดึงข้อมูลล่าสุดจาก Cloud (getDocs)" : "Reload Cloud Data (getDocs)"}
+              >
+                <RefreshCw size={12} className={isCloudLoading ? "animate-spin" : ""} />
+                <span className="hidden sm:inline">{isThai ? "โหลดข้อมูล" : "Reload"}</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -6163,6 +6282,7 @@ export function SlitFilmManagement({
           movementHistoryList={movementHistoryList}
           pickLists={pickLists}
           sapMasterMap={sapMasterMap}
+          onSelectedDateChange={setDailyReportDate}
         />
       )}
 

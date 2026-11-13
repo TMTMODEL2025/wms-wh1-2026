@@ -252,15 +252,18 @@ export function computeMachineStagingSummarySnapshot(
   };
 }
 
-let isMachineStagingCloudSubscribed = false;
+let machineStagingCloudUnsubscribe: (() => void) | null = null;
 let isMachineStagingCloudLoaded = false;
 let lastCloudSerializedMachines = "";
 
-export function ensureMachineStagingCloudSync(): void {
-  if (isMachineStagingCloudSubscribed || typeof window === "undefined") return;
-  isMachineStagingCloudSubscribed = true;
+export function ensureMachineStagingCloudSync(): () => void {
+  if (typeof window === "undefined") return () => {};
+  if (machineStagingCloudUnsubscribe) {
+    machineStagingCloudUnsubscribe();
+    machineStagingCloudUnsubscribe = null;
+  }
 
-  subscribeToSlitMachineStaging((cloudDoc) => {
+  const unsub = subscribeToSlitMachineStaging((cloudDoc) => {
     isMachineStagingCloudLoaded = true;
     if (!cloudDoc || !Array.isArray(cloudDoc.machines) || cloudDoc.machines.length === 0) {
       // Seed initial Machine Staging state (TM 1-14 / CF 1, 2, 4, 5) to Cloud Firestore
@@ -278,11 +281,14 @@ export function ensureMachineStagingCloudSync(): void {
     lastCloudSerializedMachines = cloudSerialized;
     saveStoredMachineStaging(cloudDoc.machines, { skipCloudWrite: true });
   });
-}
 
-// Automatically initialize real-time Cloud Firestore sync in browser runtime
-if (typeof window !== "undefined") {
-  ensureMachineStagingCloudSync();
+  machineStagingCloudUnsubscribe = unsub;
+  return () => {
+    if (machineStagingCloudUnsubscribe === unsub) {
+      machineStagingCloudUnsubscribe = null;
+    }
+    unsub();
+  };
 }
 
 export function resetAllMachineStagingToEmpty(): MachineStagingConfig[] {
