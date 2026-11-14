@@ -85,6 +85,16 @@ service cloud.firestore {
         && data.transactionNo is string && data.transactionNo.size() <= 64;
     }
 
+    function isValidMhDailyDuty(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.workingDate is string && data.workingDate.size() <= 32
+        && data.employeeName is string && data.employeeName.size() <= 128
+        && data.workArea is string && data.workArea.size() <= 128
+        && data.vehicleNumber is string && data.vehicleNumber.size() <= 64
+        && data.shift is string && data.shift.size() <= 64
+        && data.team is string && data.team.size() <= 64;
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -167,6 +177,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(tireTxId) && isValidMhTireStock(request.resource.data);
       allow delete: if isValidId(tireTxId);
+    }
+
+    match /mh_daily_duty/{dutyId} {
+      allow read: if true;
+      allow create, update: if isValidId(dutyId) && isValidMhDailyDuty(request.resource.data);
+      allow delete: if isValidId(dutyId);
     }
 
     match /test/{docId} {

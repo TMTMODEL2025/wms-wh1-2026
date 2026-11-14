@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   Users,
   Plus,
@@ -27,7 +27,8 @@ import {
   UserCheck,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  ClipboardList,
 } from "lucide-react";
 import {
   Employee,
@@ -38,6 +39,12 @@ import {
   AssignmentStatus
 } from "../types/officer";
 import { EMPLOYEE_ROLES, MASTER_DEPARTMENTS } from "../data/officerData";
+import {
+  MhDailyDutyRecord,
+  loadCachedMhDailyDuties,
+  subscribeToMhDailyDuties,
+} from "../services/forkliftDataService";
+import { DailyDutyAssignmentPanel } from "./DailyDutyAssignmentPanel";
 
 interface EmployeeManagementProps {
   employees: Employee[];
@@ -84,6 +91,19 @@ export function EmployeeManagement({
   // In-place confirmation state for Deactivation
   const [confirmingDeactivateId, setConfirmingDeactivateId] = useState<string | null>(null);
 
+  // Active Sub-Tab: Employee Registry vs Daily Duty Assignment (Supervisor)
+  const [activeSubTab, setActiveSubTab] = useState<"registry" | "daily_duty">("registry");
+  const [dailyDuties, setDailyDuties] = useState<MhDailyDutyRecord[]>(() =>
+    loadCachedMhDailyDuties()
+  );
+
+  useEffect(() => {
+    const unsub = subscribeToMhDailyDuties((cloudRecords) => {
+      setDailyDuties(cloudRecords);
+    });
+    return () => unsub();
+  }, []);
+
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
@@ -95,6 +115,18 @@ export function EmployeeManagement({
   };
 
   const todayDate = new Date().toISOString().slice(0, 10);
+
+  // Today's Daily Duty lookup by employeeId / employeeName
+  const todayDailyDutyMap = useMemo(() => {
+    const map = new Map<string, MhDailyDutyRecord>();
+    dailyDuties
+      .filter((d) => d.workingDate === todayDate)
+      .forEach((d) => {
+        if (d.employeeId) map.set(d.employeeId.trim().toLowerCase(), d);
+        if (d.employeeName) map.set(d.employeeName.trim().toLowerCase(), d);
+      });
+    return map;
+  }, [dailyDuties, todayDate]);
 
   // Active assignment lookup for drivers on today's working date
   const activeDriverAssignmentMap = useMemo(() => {
@@ -423,6 +455,66 @@ export function EmployeeManagement({
         </div>
       )}
 
+      {/* Sub-Navigation Tabs: Registry vs Daily Duty Assignment */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xs dark:border-[#1e3a5f] dark:bg-[#111e38]">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("registry")}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition ${
+              activeSubTab === "registry"
+                ? "bg-cyan-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#162544]"
+            }`}
+          >
+            <Users size={14} />
+            ทำเนียบพนักงาน (Employee Registry)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("daily_duty")}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition ${
+              activeSubTab === "daily_duty"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#162544]"
+            }`}
+          >
+            <ClipboardList size={14} />
+            มอบหมายงานประจำวัน (หัวหน้างาน)
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
+                activeSubTab === "daily_duty"
+                  ? "bg-white/20 text-white"
+                  : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200"
+              }`}
+            >
+              วันนี้ {dailyDuties.filter((d) => d.workingDate === todayDate).length} คน
+            </span>
+          </button>
+        </div>
+
+        {activeSubTab === "registry" && (
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("daily_duty")}
+            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200"
+          >
+            จัดตารางงานวันนี้ ➔
+          </button>
+        )}
+      </div>
+
+      {activeSubTab === "daily_duty" ? (
+        <DailyDutyAssignmentPanel
+          employees={employees}
+          vehicles={vehicles}
+          duties={dailyDuties}
+          onDutiesChange={setDailyDuties}
+          defaultDate={todayDate}
+        />
+      ) : (
+        <>
       {/* Workforce Summary KPI Cards */}
       <div className="kpi-grid">
         <div className="kpi">
@@ -661,6 +753,9 @@ export function EmployeeManagement({
               {paginatedEmployees.map((emp, index) => {
                 const isInactive = emp.employmentStatus === "Inactive";
                 const todayAssignment = activeDriverAssignmentMap.get(emp.employeeId);
+                const todayDuty =
+                  todayDailyDutyMap.get(emp.employeeId.trim().toLowerCase()) ||
+                  todayDailyDutyMap.get(emp.employeeName.trim().toLowerCase());
                 const rowNumber = (currentPage - 1) * pageSize + index + 1;
                 const isConfirming = confirmingDeactivateId === emp.employeeId;
 
@@ -681,7 +776,15 @@ export function EmployeeManagement({
 
                     <td>
                       <div className="emp-name">{emp.employeeName}</div>
-                      {emp.role === "Driver" && todayAssignment && (
+                      {todayDuty && (
+                        <div style={{ fontSize: 10, color: "#0369a1", marginTop: 2, fontWeight: 600 }}>
+                          {todayDuty.team} · {todayDuty.shift} · {todayDuty.workArea}
+                          {todayDuty.vehicleNumber && todayDuty.vehicleNumber !== "-"
+                            ? ` · รถ ${todayDuty.vehicleNumber}`
+                            : ""}
+                        </div>
+                      )}
+                      {!todayDuty && emp.role === "Driver" && todayAssignment && (
                         <div
                           style={{
                             fontSize: 10,
@@ -724,7 +827,19 @@ export function EmployeeManagement({
                     </td>
 
                     <td>
-                      {emp.role === "Driver" ? (
+                      {todayDuty ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                          <span className="status status-inuse" style={{ padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
+                            <Truck size={11} />
+                            {todayDuty.vehicleNumber && todayDuty.vehicleNumber !== "-"
+                              ? todayDuty.vehicleNumber
+                              : "ไม่ระบุรถ"}
+                          </span>
+                          <span style={{ fontSize: 10, color: "#64748b" }}>
+                            {todayDuty.team} | {todayDuty.shift} | {todayDuty.workArea}
+                          </span>
+                        </div>
+                      ) : emp.role === "Driver" ? (
                         todayAssignment ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                             <span className="status status-inuse" style={{ padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
@@ -903,6 +1018,8 @@ export function EmployeeManagement({
           )}
         </div>
       </section>
+      </>
+      )}
 
       {/* MODAL: ADD EMPLOYEE */}
       {showAddModal && (

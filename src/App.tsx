@@ -6000,7 +6000,7 @@ function WmsApp() {
 
           <main className="main">
             {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && (
-              <div className={`page-heading ${active === "slit" || active === "coil" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : ""}`}>
+              <div className={`page-heading ${active === "slit" || active === "coil" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : active === "transport" ? "!items-center" : ""}`}>
                 <div>
                   <h1>{pageTitle}</h1>
                   {active !== "slit" &&
@@ -6018,7 +6018,10 @@ function WmsApp() {
                 </div>
 
                 {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && active !== "coil" && (
-                  <div className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}>
+                  <div
+                    id="page-heading-actions"
+                    className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}
+                  >
                     {active !== "transport" && active !== "slit" && (
                       <button className="button secondary print-export-btn hidden sm:inline-flex" onClick={() => window.print()}>
                         <Printer size={13} />
@@ -6122,6 +6125,7 @@ function WmsApp() {
               <TransportOperations
                 vehicles={vehicles}
                 assignments={officerAssignments}
+                employees={employeeRoster}
                 onNavigateToAssignments={() => {
                   setActive("employees");
                   setSelectedRecord(null);

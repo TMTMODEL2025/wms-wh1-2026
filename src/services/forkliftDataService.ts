@@ -5,6 +5,7 @@ import {
   deleteDoc,
   onSnapshot,
   getDocs,
+  writeBatch,
 } from "firebase/firestore";
 import { dbForklift, handleFirestoreError, OperationType } from "./firebase";
 
@@ -16,6 +17,7 @@ export const MH_TRANSFERS_COLLECTION = "mh_transfers";
 export const MH_MAINTENANCE_COLLECTION = "mh_maintenance";
 export const MH_FUEL_STOCK_COLLECTION = "mh_fuel_stock";
 export const MH_TIRE_STOCK_COLLECTION = "mh_tire_stock";
+export const MH_DAILY_DUTY_COLLECTION = "mh_daily_duty";
 
 // ============================================================================
 // 1. Transport Operation (mh_transfers) Types
@@ -31,21 +33,71 @@ export interface MhTransferRecord {
   sku: string;
   itemName: string;
   productCategory: string;
+  transferType?: string; // งาน Stock | ทั่วไป | งานฝาก | อื่นๆ
   batchNumber: string;
   palletId: string;
   quantity: number;
   unit: string;
   weightTon: number;
+  // 3-field Weight Breakdown
+  fullBundles?: number; // จำนวนมัด (มัดเต็ม)
+  weightPerBundleKg?: number; // น้ำหนักต่อมัด (กก.)
+  remainderWeightKg?: number; // น้ำหนักเศษ (กก.)
+  totalBundles?: number; // รวมมัดทั้งหมด (มัดเต็ม + 1 ถ้ามีเศษ)
+  totalWeightKg?: number; // น้ำหนักรวมสุทธิ (กก.)
+  // SLA 20-minute Real-time Timing
+  startTime?: string; // HH:mm:ss
+  startTimeMs?: number; // epoch ms
+  endTime?: string; // HH:mm:ss
+  endTimeMs?: number; // epoch ms
+  durationSeconds?: number;
+  durationMinutes?: number;
+  isSlaOverdue?: boolean; // true when durationSeconds > 1200 (> 20 min)
+  // Multi-trip Batch
+  tripIndex?: number;
+  totalTrips?: number;
+  batchGroupId?: string;
   recorderName: string;
   workingDate: string;
   status: MhTransferStatus;
   priority: MhPriorityLevel;
   vehicleNumber: string;
   driverName: string;
+  workArea?: string; // พื้นที่การทำงานหลัก เช่น อาคาร A, อาคาร B, ลานพักสินค้า
+  shift?: string; // กะทำงาน เช่น กะเช้า, กะบ่าย, กะดึก, กะปกติ
+  team?: string; // ทีม A | ทีม B | ทีม C
   transportCost?: number;
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+// ============================================================================
+// 1B. Daily Duty Assignment (mh_daily_duty) Types & Constants
+// ============================================================================
+export const MH_TEAMS = ["ทีม A", "ทีม B", "ทีม C"] as const;
+export const MH_SHIFTS = ["กะเช้า", "กะบ่าย", "กะดึก", "กะปกติ"] as const;
+export const MH_WORK_AREAS = [
+  "อาคาร A",
+  "อาคาร B",
+  "อาคาร C",
+  "ลานพักสินค้า",
+  "คลังสินค้า 1",
+] as const;
+
+export interface MhDailyDutyRecord {
+  id: string;
+  workingDate: string; // YYYY-MM-DD
+  employeeId?: string;
+  employeeName: string;
+  workArea: string;
+  vehicleNumber: string;
+  shift: string;
+  team: string;
+  supervisorName?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================================================
@@ -386,8 +438,41 @@ export function subscribeForkliftCloudRealtimeMode(
 function sanitizeMhTransferPayload(
   r: Partial<MhTransferRecord> & { id: string }
 ): MhTransferRecord {
-  const { timestamp, dateYmd } = formatForkliftNowTimestamp();
+  const { timestamp, dateYmd, timeHms } = formatForkliftNowTimestamp();
   const docId = sanitizeDocId(r.id || r.transferCode || `TRF-${Date.now()}`);
+
+  const fullBundles =
+    typeof r.fullBundles === "number" && !isNaN(r.fullBundles)
+      ? Math.max(0, Math.floor(r.fullBundles))
+      : undefined;
+  const weightPerBundleKg =
+    typeof r.weightPerBundleKg === "number" && !isNaN(r.weightPerBundleKg)
+      ? Math.max(0, r.weightPerBundleKg)
+      : undefined;
+  const remainderWeightKg =
+    typeof r.remainderWeightKg === "number" && !isNaN(r.remainderWeightKg)
+      ? Math.max(0, r.remainderWeightKg)
+      : undefined;
+  const computedTotalKg =
+    fullBundles !== undefined && weightPerBundleKg !== undefined
+      ? fullBundles * weightPerBundleKg + (remainderWeightKg || 0)
+      : typeof r.totalWeightKg === "number" && !isNaN(r.totalWeightKg)
+      ? Math.max(0, r.totalWeightKg)
+      : undefined;
+  const computedTotalBundles =
+    fullBundles !== undefined
+      ? fullBundles + ((remainderWeightKg || 0) > 0 ? 1 : 0)
+      : typeof r.totalBundles === "number" && !isNaN(r.totalBundles)
+      ? Math.max(0, r.totalBundles)
+      : undefined;
+
+  const weightTon =
+    typeof r.weightTon === "number" && !isNaN(r.weightTon) && r.weightTon > 0
+      ? Math.max(0, r.weightTon)
+      : computedTotalKg !== undefined
+      ? Number((computedTotalKg / 1000).toFixed(3))
+      : 0;
+
   return stripUndefinedDeep({
     id: docId,
     transferCode: String(r.transferCode || docId).trim().slice(0, 64),
@@ -395,13 +480,43 @@ function sanitizeMhTransferPayload(
     destinationFacility: String(r.destinationFacility || "-").trim().slice(0, 128),
     sku: String(r.sku || "-").trim().slice(0, 64),
     itemName: String(r.itemName || "-").trim().slice(0, 128),
-    productCategory: String(r.productCategory || "Raw Material Coils").trim().slice(0, 64),
+    productCategory: String(r.productCategory || r.transferType || "งาน Stock").trim().slice(0, 64),
+    transferType: r.transferType ? String(r.transferType).trim().slice(0, 64) : undefined,
     batchNumber: String(r.batchNumber || "-").trim().slice(0, 64),
     palletId: String(r.palletId || "-").trim().slice(0, 64),
-    quantity: typeof r.quantity === "number" && !isNaN(r.quantity) ? Math.max(0, r.quantity) : 1,
-    unit: String(r.unit || "Coil").trim().slice(0, 32),
-    weightTon: typeof r.weightTon === "number" && !isNaN(r.weightTon) ? Math.max(0, r.weightTon) : 0,
-    recorderName: String(r.recorderName || "-").trim().slice(0, 128),
+    quantity:
+      typeof r.quantity === "number" && !isNaN(r.quantity)
+        ? Math.max(0, r.quantity)
+        : computedTotalBundles ?? 1,
+    unit: String(r.unit || "มัด").trim().slice(0, 32),
+    weightTon,
+    fullBundles,
+    weightPerBundleKg,
+    remainderWeightKg,
+    totalBundles: computedTotalBundles,
+    totalWeightKg: computedTotalKg,
+    startTime: r.startTime ? String(r.startTime).trim().slice(0, 32) : timeHms,
+    startTimeMs:
+      typeof r.startTimeMs === "number" && !isNaN(r.startTimeMs) ? r.startTimeMs : undefined,
+    endTime: r.endTime ? String(r.endTime).trim().slice(0, 32) : undefined,
+    endTimeMs: typeof r.endTimeMs === "number" && !isNaN(r.endTimeMs) ? r.endTimeMs : undefined,
+    durationSeconds:
+      typeof r.durationSeconds === "number" && !isNaN(r.durationSeconds)
+        ? Math.max(0, Math.round(r.durationSeconds))
+        : undefined,
+    durationMinutes:
+      typeof r.durationMinutes === "number" && !isNaN(r.durationMinutes)
+        ? Math.max(0, r.durationMinutes)
+        : undefined,
+    isSlaOverdue: typeof r.isSlaOverdue === "boolean" ? r.isSlaOverdue : undefined,
+    tripIndex:
+      typeof r.tripIndex === "number" && !isNaN(r.tripIndex) ? Math.max(1, r.tripIndex) : undefined,
+    totalTrips:
+      typeof r.totalTrips === "number" && !isNaN(r.totalTrips)
+        ? Math.max(1, r.totalTrips)
+        : undefined,
+    batchGroupId: r.batchGroupId ? String(r.batchGroupId).trim().slice(0, 64) : undefined,
+    recorderName: String(r.recorderName || r.driverName || "-").trim().slice(0, 128),
     workingDate: String(r.workingDate || dateYmd).trim().slice(0, 32),
     status:
       r.status === "Pending" ||
@@ -409,11 +524,14 @@ function sanitizeMhTransferPayload(
       r.status === "Completed" ||
       r.status === "Cancelled"
         ? r.status
-        : "Pending",
+        : "In Transit",
     priority:
       r.priority === "Urgent" || r.priority === "Express" ? r.priority : "Normal",
     vehicleNumber: String(r.vehicleNumber || "-").trim().slice(0, 64),
     driverName: String(r.driverName || "-").trim().slice(0, 128),
+    workArea: r.workArea ? String(r.workArea).trim().slice(0, 128) : undefined,
+    shift: r.shift ? String(r.shift).trim().slice(0, 64) : undefined,
+    team: r.team ? String(r.team).trim().slice(0, 64) : undefined,
     transportCost:
       typeof r.transportCost === "number" && !isNaN(r.transportCost)
         ? Math.max(0, r.transportCost)
@@ -426,6 +544,9 @@ function sanitizeMhTransferPayload(
 
 function sortMhTransfers(items: MhTransferRecord[]): MhTransferRecord[] {
   return [...items].sort((a, b) => {
+    const msA = typeof a.startTimeMs === "number" ? a.startTimeMs : 0;
+    const msB = typeof b.startTimeMs === "number" ? b.startTimeMs : 0;
+    if (msA !== msB) return msB - msA;
     const dtA = a.createdAt || a.workingDate || a.updatedAt || "";
     const dtB = b.createdAt || b.workingDate || b.updatedAt || "";
     if (dtA !== dtB) return dtB.localeCompare(dtA);
@@ -489,6 +610,26 @@ export async function saveMhTransferToCloud(record: MhTransferRecord): Promise<b
     () => setDoc(docRef, payload, { merge: true }),
     OperationType.WRITE,
     `${MH_TRANSFERS_COLLECTION}/${payload.id}`
+  );
+}
+
+export async function saveMhTransfersBatchToCloud(
+  records: MhTransferRecord[]
+): Promise<boolean> {
+  if (records.length === 0) return true;
+  if (records.length === 1) return saveMhTransferToCloud(records[0]);
+  return runForkliftFirestoreWriteWithGuard(
+    async () => {
+      const batch = writeBatch(dbForklift);
+      records.forEach((rec) => {
+        const payload = sanitizeMhTransferPayload(rec);
+        const docRef = doc(dbForklift, MH_TRANSFERS_COLLECTION, payload.id);
+        batch.set(docRef, payload, { merge: true });
+      });
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    MH_TRANSFERS_COLLECTION
   );
 }
 
@@ -896,5 +1037,205 @@ export async function deleteMhTireTransactionFromCloud(id: string): Promise<bool
     () => deleteDoc(docRef),
     OperationType.DELETE,
     `${MH_TIRE_STOCK_COLLECTION}/${cleanId}`
+  );
+}
+
+// ============================================================================
+// 5. mh_daily_duty (Daily Duty Assignments) CRUD, Local Cache & Subscription
+// ============================================================================
+const MH_DAILY_DUTY_CACHE_KEY = "tmt_mh_daily_duty_cache_v1";
+
+export function buildMhDailyDutyDocId(workingDate: string, employeeKey: string): string {
+  const cleanDate = String(workingDate || "").replace(/[^0-9\-]/g, "");
+  let hash = 0;
+  const raw = String(employeeKey || "").trim().toLowerCase();
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+  }
+  const asciiPart = raw.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 48);
+  return sanitizeDocId(`DUTY_${cleanDate}_${asciiPart || "emp"}_${hash.toString(36)}`);
+}
+
+function sanitizeMhDailyDutyPayload(
+  r: Partial<MhDailyDutyRecord> & { workingDate: string; employeeName: string }
+): MhDailyDutyRecord {
+  const { timestamp, dateYmd } = formatForkliftNowTimestamp();
+  const cleanDate = String(r.workingDate || dateYmd).trim().slice(0, 32);
+  const cleanName = String(r.employeeName || "-").trim().slice(0, 128);
+  const keyForId = String(r.employeeId || cleanName).trim();
+  const docId = sanitizeDocId(r.id || buildMhDailyDutyDocId(cleanDate, keyForId));
+
+  return stripUndefinedDeep({
+    id: docId,
+    workingDate: cleanDate,
+    employeeId: r.employeeId ? String(r.employeeId).trim().slice(0, 64) : undefined,
+    employeeName: cleanName,
+    workArea: String(r.workArea || "อาคาร A").trim().slice(0, 128),
+    vehicleNumber: String(r.vehicleNumber || "-").trim().slice(0, 64),
+    shift: String(r.shift || "กะเช้า").trim().slice(0, 64),
+    team: String(r.team || "ทีม A").trim().slice(0, 64),
+    supervisorName: r.supervisorName
+      ? String(r.supervisorName).trim().slice(0, 128)
+      : undefined,
+    notes: r.notes ? String(r.notes).trim().slice(0, 500) : undefined,
+    createdAt: String(r.createdAt || timestamp).slice(0, 64),
+    updatedAt: String(r.updatedAt || timestamp).slice(0, 64),
+  });
+}
+
+function sortMhDailyDuties(items: MhDailyDutyRecord[]): MhDailyDutyRecord[] {
+  return [...items].sort((a, b) => {
+    if (a.workingDate !== b.workingDate) {
+      return b.workingDate.localeCompare(a.workingDate);
+    }
+    if (a.team !== b.team) {
+      return a.team.localeCompare(b.team, "th");
+    }
+    return a.employeeName.localeCompare(b.employeeName, "th");
+  });
+}
+
+export function loadCachedMhDailyDuties(): MhDailyDutyRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MH_DAILY_DUTY_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sortMhDailyDuties(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedMhDailyDuties(records: MhDailyDutyRecord[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      MH_DAILY_DUTY_CACHE_KEY,
+      JSON.stringify(sortMhDailyDuties(records))
+    );
+  } catch {
+    // ignore storage quota error
+  }
+}
+
+export async function fetchMhDailyDutiesOnce(): Promise<MhDailyDutyRecord[]> {
+  try {
+    const snap = await getDocs(collection(dbForklift, MH_DAILY_DUTY_COLLECTION));
+    const records: MhDailyDutyRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as MhDailyDutyRecord;
+      if (data && data.id) {
+        records.push(data);
+      }
+    });
+    const sorted = sortMhDailyDuties(records);
+    if (sorted.length > 0) {
+      saveCachedMhDailyDuties(sorted);
+      return sorted;
+    }
+    return loadCachedMhDailyDuties();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, MH_DAILY_DUTY_COLLECTION);
+    return loadCachedMhDailyDuties();
+  }
+}
+
+export function subscribeToMhDailyDuties(
+  onData: (records: MhDailyDutyRecord[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const channelKey = "mh_daily_duty_listener";
+  if (!forkliftCloudRealtimeEnabled) {
+    fetchMhDailyDutiesOnce().then(onData).catch((err) => onError?.(err));
+    return () => {};
+  }
+
+  const colRef = collection(dbForklift, MH_DAILY_DUTY_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: MhDailyDutyRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as MhDailyDutyRecord;
+        if (data && data.id) {
+          records.push(data);
+        }
+      });
+      const sorted = sortMhDailyDuties(records);
+      if (sorted.length > 0 || !snapshot.metadata.fromCache) {
+        saveCachedMhDailyDuties(sorted);
+      }
+      onData(sorted);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, MH_DAILY_DUTY_COLLECTION);
+      onError?.(error);
+    }
+  );
+
+  return registerForkliftFirestoreListener(channelKey, unsub);
+}
+
+export async function saveMhDailyDutyToCloud(
+  record: Partial<MhDailyDutyRecord> & { workingDate: string; employeeName: string }
+): Promise<boolean> {
+  const payload = sanitizeMhDailyDutyPayload(record);
+  const cached = loadCachedMhDailyDuties();
+  const nextCache = [payload, ...cached.filter((item) => item.id !== payload.id)];
+  saveCachedMhDailyDuties(nextCache);
+
+  const docRef = doc(dbForklift, MH_DAILY_DUTY_COLLECTION, payload.id);
+  return runForkliftFirestoreWriteWithGuard(
+    () => setDoc(docRef, payload, { merge: true }),
+    OperationType.WRITE,
+    `${MH_DAILY_DUTY_COLLECTION}/${payload.id}`
+  );
+}
+
+export async function saveMhDailyDutiesBatchToCloud(
+  records: Array<Partial<MhDailyDutyRecord> & { workingDate: string; employeeName: string }>
+): Promise<boolean> {
+  if (records.length === 0) return true;
+  const payloads = records.map(sanitizeMhDailyDutyPayload);
+  const payloadIds = new Set(payloads.map((p) => p.id));
+  const cached = loadCachedMhDailyDuties();
+  const nextCache = [...payloads, ...cached.filter((item) => !payloadIds.has(item.id))];
+  saveCachedMhDailyDuties(nextCache);
+
+  if (payloads.length === 1) {
+    const docRef = doc(dbForklift, MH_DAILY_DUTY_COLLECTION, payloads[0].id);
+    return runForkliftFirestoreWriteWithGuard(
+      () => setDoc(docRef, payloads[0], { merge: true }),
+      OperationType.WRITE,
+      `${MH_DAILY_DUTY_COLLECTION}/${payloads[0].id}`
+    );
+  }
+
+  return runForkliftFirestoreWriteWithGuard(
+    async () => {
+      const batch = writeBatch(dbForklift);
+      payloads.forEach((payload) => {
+        const docRef = doc(dbForklift, MH_DAILY_DUTY_COLLECTION, payload.id);
+        batch.set(docRef, payload, { merge: true });
+      });
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    MH_DAILY_DUTY_COLLECTION
+  );
+}
+
+export async function deleteMhDailyDutyFromCloud(id: string): Promise<boolean> {
+  const cleanId = sanitizeDocId(id);
+  if (!cleanId) return false;
+  const cached = loadCachedMhDailyDuties();
+  saveCachedMhDailyDuties(cached.filter((item) => item.id !== cleanId));
+
+  const docRef = doc(dbForklift, MH_DAILY_DUTY_COLLECTION, cleanId);
+  return runForkliftFirestoreWriteWithGuard(
+    () => deleteDoc(docRef),
+    OperationType.DELETE,
+    `${MH_DAILY_DUTY_COLLECTION}/${cleanId}`
   );
 }
