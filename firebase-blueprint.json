@@ -124,6 +124,11 @@
         "orderNo": { "type": "string", "maxLength": 64 },
         "materialNo": { "type": "string", "maxLength": 64 },
         "description": { "type": "string", "maxLength": 256 },
+        "skinpass": { "type": "string", "maxLength": 64 },
+        "storageLocation": { "type": "string", "maxLength": 64 },
+        "conditionText": { "type": "string", "maxLength": 256 },
+        "heatNo": { "type": "string", "maxLength": 64 },
+        "actualWeightKg": { "type": "number" },
         "scanTimestamp": { "type": "string", "maxLength": 64 },
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
@@ -188,9 +193,101 @@
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
         "chunkIndex": { "type": "number" },
+        "totalChunks": { "type": "number" },
+        "totalItems": { "type": "number" },
+        "itemCount": { "type": "number" },
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "chunkIndex"]
+    },
+    "MhTransferRecord": {
+      "title": "Material Handling Transfer Record",
+      "description": "Forklift / Material Handling internal transport operation record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "transferCode": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "time": { "type": "string", "maxLength": 32 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "vehicleNumber": { "type": "string", "maxLength": 64 },
+        "vehicleType": { "type": "string", "maxLength": 64 },
+        "driverId": { "type": "string", "maxLength": 64 },
+        "driverName": { "type": "string", "maxLength": 128 },
+        "shift": { "type": "string", "maxLength": 64 },
+        "sourceLocation": { "type": "string", "maxLength": 128 },
+        "destinationLocation": { "type": "string", "maxLength": 128 },
+        "materialDescription": { "type": "string", "maxLength": 256 },
+        "tripCount": { "type": "number" },
+        "weightTons": { "type": "number" },
+        "priority": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "transferCode"]
+    },
+    "MhMaintenanceRecord": {
+      "title": "Material Handling Maintenance Record",
+      "description": "Forklift maintenance, repair, and tire replacement work order record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "workOrderNo": { "type": "string", "maxLength": 64 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "vehicleNumber": { "type": "string", "maxLength": 64 },
+        "vehicleType": { "type": "string", "maxLength": 64 },
+        "vehicleDescription": { "type": "string", "maxLength": 256 },
+        "repairType": { "type": "string", "maxLength": 128 },
+        "repairDescription": { "type": "string", "maxLength": 500 },
+        "estimatedCost": { "type": "number" },
+        "technicianName": { "type": "string", "maxLength": 128 },
+        "workshopBay": { "type": "string", "maxLength": 128 },
+        "operatingHours": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "managerStatus": { "type": "string", "maxLength": 64 },
+        "progressStatus": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "workOrderNo"]
+    },
+    "MhFuelStockRecord": {
+      "title": "Material Handling Fuel Stock Record",
+      "description": "Forklift & fleet fuel stock inbound and outbound transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "transactionNo": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "time": { "type": "string", "maxLength": 32 },
+        "transactionType": { "type": "string", "maxLength": 32 },
+        "fuelType": { "type": "string", "maxLength": 64 },
+        "liters": { "type": "number" },
+        "driverOrReceiver": { "type": "string", "maxLength": 128 },
+        "recordedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "transactionNo"]
+    },
+    "MhTireStockRecord": {
+      "title": "Material Handling Tire Stock Record",
+      "description": "Forklift & fleet tire stock inbound and replacement outbound record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "transactionNo": { "type": "string", "maxLength": 64 },
+        "date": { "type": "string", "maxLength": 32 },
+        "time": { "type": "string", "maxLength": 32 },
+        "transactionType": { "type": "string", "maxLength": 32 },
+        "tireSize": { "type": "string", "maxLength": 128 },
+        "brand": { "type": "string", "maxLength": 64 },
+        "qty": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "technicianOrReceiver": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "transactionNo"]
     }
   },
   "firestore": {
@@ -233,6 +330,22 @@
     "/coil_sap_chunks/{chunkId}": {
       "schema": "CoilSapChunk",
       "description": "Dedicated collection for steel coil SAP master data chunks"
+    },
+    "/mh_transfers/{transferId}": {
+      "schema": "MhTransferRecord",
+      "description": "Dedicated collection for Material Handling transport operations"
+    },
+    "/mh_maintenance/{maintenanceId}": {
+      "schema": "MhMaintenanceRecord",
+      "description": "Dedicated collection for Material Handling maintenance and repair work orders"
+    },
+    "/mh_fuel_stock/{fuelTxId}": {
+      "schema": "MhFuelStockRecord",
+      "description": "Dedicated collection for Material Handling fuel stock inbound and outbound records"
+    },
+    "/mh_tire_stock/{tireTxId}": {
+      "schema": "MhTireStockRecord",
+      "description": "Dedicated collection for Material Handling tire stock inbound and replacement records"
     }
   }
 }

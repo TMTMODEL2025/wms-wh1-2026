@@ -65,6 +65,26 @@ service cloud.firestore {
         && data.items is list && data.items.size() <= 1000;
     }
 
+    function isValidMhTransfer(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.transferCode is string && data.transferCode.size() <= 64;
+    }
+
+    function isValidMhMaintenance(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.workOrderNo is string && data.workOrderNo.size() <= 64;
+    }
+
+    function isValidMhFuelStock(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.transactionNo is string && data.transactionNo.size() <= 64;
+    }
+
+    function isValidMhTireStock(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.transactionNo is string && data.transactionNo.size() <= 64;
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -123,6 +143,30 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(chunkId) && isValidCoilSapChunk(request.resource.data);
       allow delete: if isValidId(chunkId);
+    }
+
+    match /mh_transfers/{transferId} {
+      allow read: if true;
+      allow create, update: if isValidId(transferId) && isValidMhTransfer(request.resource.data);
+      allow delete: if isValidId(transferId);
+    }
+
+    match /mh_maintenance/{maintenanceId} {
+      allow read: if true;
+      allow create, update: if isValidId(maintenanceId) && isValidMhMaintenance(request.resource.data);
+      allow delete: if isValidId(maintenanceId);
+    }
+
+    match /mh_fuel_stock/{fuelTxId} {
+      allow read: if true;
+      allow create, update: if isValidId(fuelTxId) && isValidMhFuelStock(request.resource.data);
+      allow delete: if isValidId(fuelTxId);
+    }
+
+    match /mh_tire_stock/{tireTxId} {
+      allow read: if true;
+      allow create, update: if isValidId(tireTxId) && isValidMhTireStock(request.resource.data);
+      allow delete: if isValidId(tireTxId);
     }
 
     match /test/{docId} {

@@ -19,6 +19,9 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 export const appCoil =
   getApps().find((a) => a.name === "tmt-coil-app") ||
   initializeApp(firebaseConfig, "tmt-coil-app");
+export const appForklift =
+  getApps().find((a) => a.name === "tmt-forklift-app") ||
+  initializeApp(firebaseConfig, "tmt-forklift-app");
 
 function initDb(): Firestore {
   try {
@@ -76,8 +79,37 @@ function initCoilDb(): Firestore {
   }
 }
 
+function initForkliftDb(): Firestore {
+  try {
+    return initializeFirestore(
+      appForklift,
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+        experimentalAutoDetectLongPolling: true,
+      },
+      firebaseConfig.firestoreDatabaseId
+    );
+  } catch {
+    try {
+      return initializeFirestore(
+        appForklift,
+        {
+          localCache: persistentLocalCache(),
+          experimentalAutoDetectLongPolling: true,
+        },
+        firebaseConfig.firestoreDatabaseId
+      );
+    } catch {
+      return getFirestore(appForklift, firebaseConfig.firestoreDatabaseId);
+    }
+  }
+}
+
 export const db = initDb();
 export const dbCoil = initCoilDb();
+export const dbForklift = initForkliftDb();
 export const auth = getAuth(app);
 
 export enum OperationType {

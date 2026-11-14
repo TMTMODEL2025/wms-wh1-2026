@@ -55,6 +55,7 @@ import {
   CoilModeTab,
   CoilStockRecord,
 } from "./services/coilDataService";
+import { unsubscribeAllForkliftFirestoreListeners } from "./services/forkliftDataService";
 import {
   loadStoredAssignments,
   saveStoredAssignments,
@@ -5076,10 +5077,13 @@ function WmsApp() {
   const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
   const [coilMode, setCoilMode] = useState<CoilModeTab>("inbound");
 
-  // Strict Read-Quota Guard: immediately unsubscribe all Coil Firestore listeners when leaving Coil page
+  // Strict Read-Quota Guard: immediately unsubscribe all Coil & Forklift Firestore listeners when leaving their respective pages
   useEffect(() => {
     if (active !== "coil") {
       unsubscribeAllCoilFirestoreListeners();
+    }
+    if (!["transport", "fix-flush", "pre-start", "vehicles", "employees", "fuel"].includes(active)) {
+      unsubscribeAllForkliftFirestoreListeners();
     }
   }, [active]);
 
@@ -5573,40 +5577,15 @@ function WmsApp() {
                       )}
                     </div>
 
-                    {/* 3. Warehouse Inventory section */}
-                    <div style={{ marginTop: 8, marginBottom: 4 }}>
-                      <button
-                        type="button"
-                        className={`nav-caption-btn ${isWarehouseInventoryActive ? "active-group" : ""}`}
-                        onClick={() => {
-                          setWarehouseInventoryExpanded(!warehouseInventoryExpanded);
-                        }}
-                        title={translations.warehouseInventory}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <Package size={13} className={isWarehouseInventoryActive ? "text-cyan-400" : "text-slate-400"} />
-                          <span>{translations.warehouseInventory}</span>
-                        </div>
-                        <span
-                          className="nav-arrow-icon"
-                          style={{
-                            transform: warehouseInventoryExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                          }}
-                        >
-                          <ChevronDown size={14} />
-                        </span>
-                      </button>
+                    {/* 3. Warehouse Inventory items promoted directly to top-level menu buttons */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, marginBottom: 4 }}>
+                      {warehouseInventoryItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = active === item.id;
+                        const isSlit = item.id === "slit";
+                        const isCoil = item.id === "coil";
 
-                      {/* Submenu / Items under Warehouse Inventory */}
-                      {warehouseInventoryExpanded && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
-                          {warehouseInventoryItems.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = active === item.id;
-                            const isSlit = item.id === "slit";
-                            const isCoil = item.id === "coil";
-
-                            return (
+                        return (
                               <div
                                 key={item.id}
                                 style={{
@@ -5955,8 +5934,6 @@ function WmsApp() {
                               </div>
                             );
                           })}
-                        </div>
-                      )}
                     </div>
 
                     {/* 4. Administration section */}

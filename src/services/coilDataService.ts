@@ -57,6 +57,11 @@ export interface CoilStockRecord {
   salesDoc?: string;
   qualityClass?: string;
   description?: string;
+  skinpass?: string;
+  storageLocation?: string;
+  conditionText?: string;
+  heatNo?: string;
+  actualWeightKg?: number;
   remark?: string;
   hasSapData?: boolean;
   scanTimestamp: string;
@@ -127,6 +132,29 @@ export interface CoilQueryOptions {
   dateFilter?: string;
   endDateFilter?: string;
 }
+
+export interface CoilSapMasterItem {
+  materialNo?: string;
+  description?: string;
+  batch: string;
+  certThickness: string;
+  targetThickness: string;
+  width: string;
+  grade: string;
+  manufacturer: string;
+  skinpass?: string;
+  storageLocation: string;
+  weightKg: number;
+  unrestricted: string;
+  coilNo?: string;
+  conditionText?: string;
+  heatNo?: string;
+  actualWeightKg?: number;
+  salesDoc?: string;
+  qualityClass?: string;
+}
+
+export const COIL_SAP_CHUNK_SIZE = 800;
 
 export const DEFAULT_COIL_LAYOUT_ZONES: CoilLayoutZone[] = [
   {
@@ -384,21 +412,31 @@ function sanitizeCoilStockPayload(r: Partial<CoilStockRecord> & { batch: string;
       ? r.initialWeightKg
       : safeWeight;
 
+  const cleanCoilNo = String(r.coilNo ?? "").trim().toUpperCase();
+  const cleanCertThick = String(r.certThickness ?? "").trim();
+  const cleanTargetThick = String(r.targetThickness ?? "").trim();
+  const cleanWidth = String(r.width ?? "").trim();
+  const cleanGrade = String(r.grade ?? "").trim().toUpperCase();
+  const cleanMfg = String(r.manufacturer ?? "").trim().toUpperCase();
+  const cleanSupplier = String(r.supplier ?? "").trim();
+
+  const cleanLocation = String(r.location ?? "").trim().toUpperCase();
+
   const payload: CoilStockRecord = {
     id: docId,
     batch: cleanBatch,
-    coilNo: String(r.coilNo || cleanBatch).trim().toUpperCase().slice(0, 64),
-    location: String(r.location || "CL1-A01").trim().toUpperCase().slice(0, 64),
+    coilNo: (cleanCoilNo || "-").slice(0, 64),
+    location: (cleanLocation || "-").slice(0, 64),
     previousLocation: String(r.previousLocation || "").trim().toUpperCase().slice(0, 64),
     status: r.status === "staged" || r.status === "issued" ? r.status : "available",
     weightKg: safeWeight,
     initialWeightKg: safeInitWeight,
-    certThickness: String(r.certThickness || "2.00").trim().slice(0, 32),
-    targetThickness: String(r.targetThickness || r.certThickness || "2.00").trim().slice(0, 32),
-    width: String(r.width || "1219").trim().slice(0, 32),
-    grade: String(r.grade || "SS400").trim().toUpperCase().slice(0, 64),
-    manufacturer: String(r.manufacturer || "SSI").trim().toUpperCase().slice(0, 64),
-    supplier: String(r.supplier || r.manufacturer || "SSI").trim().slice(0, 64),
+    certThickness: (cleanCertThick || "-").slice(0, 32),
+    targetThickness: (cleanTargetThick || cleanCertThick || "-").slice(0, 32),
+    width: (cleanWidth || "-").slice(0, 32),
+    grade: (cleanGrade || "-").slice(0, 64),
+    manufacturer: (cleanMfg || "-").slice(0, 64),
+    supplier: (cleanSupplier || cleanMfg || "-").slice(0, 64),
     machine: String(r.machine || "EXTERNAL").trim().toUpperCase().slice(0, 32),
     inboundType: r.inboundType === "internal" ? "internal" : "external",
     orderNo: String(r.orderNo || "").trim().slice(0, 64),
@@ -410,8 +448,16 @@ function sanitizeCoilStockPayload(r: Partial<CoilStockRecord> & { batch: string;
     issuedAt: String(r.issuedAt || "").trim().slice(0, 64),
     materialNo: String(r.materialNo || "").trim().slice(0, 64),
     salesDoc: String(r.salesDoc || "").trim().slice(0, 64),
-    qualityClass: String(r.qualityClass || "A").trim().slice(0, 32),
-    description: String(r.description || `Steel Coil ${r.grade || "SS400"} ${r.certThickness || "2.00"}x${r.width || "1219"}mm`).trim().slice(0, 256),
+    qualityClass: String(r.qualityClass || "-").trim().slice(0, 32),
+    description: String(r.description || "").trim().slice(0, 256),
+    skinpass: String(r.skinpass || "").trim().slice(0, 64),
+    storageLocation: String(r.storageLocation || "").trim().slice(0, 64),
+    conditionText: String(r.conditionText || "").trim().slice(0, 256),
+    heatNo: String(r.heatNo || "").trim().slice(0, 64),
+    actualWeightKg:
+      typeof r.actualWeightKg === "number" && !isNaN(r.actualWeightKg)
+        ? Math.max(0, r.actualWeightKg)
+        : 0,
     remark: String(r.remark || "").trim().slice(0, 256),
     hasSapData: Boolean(r.hasSapData),
     scanTimestamp: String(r.scanTimestamp || timestamp).trim().slice(0, 64),
@@ -432,16 +478,16 @@ function sanitizeCoilTransactionPayload(
     id: docId,
     txType: tx.txType,
     batch: cleanBatch,
-    coilNo: String(tx.coilNo || cleanBatch).trim().toUpperCase().slice(0, 64),
+    coilNo: String(tx.coilNo || "-").trim().toUpperCase().slice(0, 64),
     weightKg: typeof tx.weightKg === "number" && !isNaN(tx.weightKg) ? tx.weightKg : 0,
     fromLocation: String(tx.fromLocation || "-").trim().slice(0, 64),
     toLocation: String(tx.toLocation || "-").trim().slice(0, 64),
     machineId: String(tx.machineId || "").trim().slice(0, 32),
     orderNo: String(tx.orderNo || "").trim().slice(0, 64),
-    grade: String(tx.grade || "SS400").trim().slice(0, 64),
-    thickness: String(tx.thickness || "").trim().slice(0, 32),
-    width: String(tx.width || "").trim().slice(0, 32),
-    manufacturer: String(tx.manufacturer || "").trim().slice(0, 64),
+    grade: String(tx.grade || "-").trim().slice(0, 64),
+    thickness: String(tx.thickness || "-").trim().slice(0, 32),
+    width: String(tx.width || "-").trim().slice(0, 32),
+    manufacturer: String(tx.manufacturer || "-").trim().slice(0, 64),
     operator: String(tx.operator || "ADMIN").trim().slice(0, 64),
     remark: String(tx.remark || "").trim().slice(0, 256),
     timestamp: String(tx.timestamp || timestamp).trim().slice(0, 64),
@@ -460,12 +506,12 @@ function sanitizeCoilStagingPayload(order: CoilStagingOrder): CoilStagingOrder {
   const cleanItems: CoilStagingItem[] = (Array.isArray(order.items) ? order.items : []).map((itm, idx) => ({
     id: String(itm.id || `CSI-${docId}-${idx}`),
     batch: String(itm.batch || "").trim().toUpperCase().slice(0, 64),
-    coilNo: String(itm.coilNo || itm.batch || "").trim().toUpperCase().slice(0, 64),
-    grade: String(itm.grade || "SS400").trim().slice(0, 64),
-    thickness: String(itm.thickness || "2.00").trim().slice(0, 32),
-    width: String(itm.width || "1219").trim().slice(0, 32),
+    coilNo: String(itm.coilNo || "-").trim().toUpperCase().slice(0, 64),
+    grade: String(itm.grade || "-").trim().slice(0, 64),
+    thickness: String(itm.thickness || "-").trim().slice(0, 32),
+    width: String(itm.width || "-").trim().slice(0, 32),
     weightKg: typeof itm.weightKg === "number" && !isNaN(itm.weightKg) ? itm.weightKg : 0,
-    sourceLocation: String(itm.sourceLocation || "CL1-A01").trim().slice(0, 64),
+    sourceLocation: String(itm.sourceLocation || "E7/1").trim().slice(0, 64),
     status: itm.status === "issued" ? "issued" : itm.status === "staged" ? "staged" : "pending",
     stagedAt: String(itm.stagedAt || ""),
     issuedAt: String(itm.issuedAt || ""),
@@ -1194,4 +1240,378 @@ export async function clearAllCoilDataFromCloud(): Promise<void> {
       colName
     );
   }
+}
+
+// ============================================================================
+// SAP Master Data Chunks & SAP Stock Import for Steel Coils (dbCoil)
+// ============================================================================
+
+export function subscribeToCoilSapChunks(
+  onData: (items: CoilSapMasterItem[], chunkCount: number) => void,
+  onError?: (err: unknown) => void
+): () => void {
+  let isDisposed = false;
+  const colRef = collection(dbCoil, COIL_SAP_CHUNKS_COLLECTION);
+
+  const emitFromDocs = (docs: Array<{ chunkIndex?: number; items?: CoilSapMasterItem[] }>) => {
+    if (isDisposed) return;
+    const sorted = [...docs].sort((a, b) => (Number(a.chunkIndex) || 0) - (Number(b.chunkIndex) || 0));
+    const merged: CoilSapMasterItem[] = [];
+    for (const chunk of sorted) {
+      if (Array.isArray(chunk.items)) {
+        merged.push(...chunk.items);
+      }
+    }
+    onData(merged, sorted.length);
+  };
+
+  if (!coilCloudRealtimeEnabled) {
+    getDocs(colRef)
+      .then((snapshot) => {
+        if (isDisposed) return;
+        const docs: Array<{ chunkIndex?: number; items?: CoilSapMasterItem[] }> = [];
+        snapshot.forEach((d) => docs.push(d.data() as { chunkIndex?: number; items?: CoilSapMasterItem[] }));
+        emitFromDocs(docs);
+      })
+      .catch((error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, COIL_SAP_CHUNKS_COLLECTION);
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }
+
+  const unsub = registerCoilFirestoreListener(
+    COIL_SAP_CHUNKS_COLLECTION,
+    onSnapshot(
+      colRef,
+      (snapshot) => {
+        if (isDisposed) return;
+        const docs: Array<{ chunkIndex?: number; items?: CoilSapMasterItem[] }> = [];
+        snapshot.forEach((d) => docs.push(d.data() as { chunkIndex?: number; items?: CoilSapMasterItem[] }));
+        emitFromDocs(docs);
+      },
+      (error) => {
+        if (isDisposed) return;
+        onError?.(error);
+        handleFirestoreError(error, OperationType.GET, COIL_SAP_CHUNKS_COLLECTION);
+      }
+    )
+  );
+
+  return () => {
+    isDisposed = true;
+    unsub();
+  };
+}
+
+export async function saveCoilSapChunksToCloud(items: CoilSapMasterItem[]): Promise<number> {
+  const totalItems = items.length;
+  const totalChunks = totalItems === 0 ? 0 : Math.ceil(totalItems / COIL_SAP_CHUNK_SIZE);
+
+  await runCoilFirestoreWriteWithGuard(
+    async () => {
+      const existingSnap = await getDocs(collection(dbCoil, COIL_SAP_CHUNKS_COLLECTION));
+      const existingIds = existingSnap.docs.map((d) => d.id);
+      const keepIds = new Set<string>();
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkId = sanitizeDocId(`COIL_SAP_CHUNK_${i}`);
+        keepIds.add(chunkId);
+        const slice = items.slice(i * COIL_SAP_CHUNK_SIZE, (i + 1) * COIL_SAP_CHUNK_SIZE).map((item) =>
+          stripUndefinedDeep({
+            ...item,
+            batch: String(item.batch || "").trim().toUpperCase().slice(0, 64),
+          })
+        );
+        await setDoc(
+          doc(dbCoil, COIL_SAP_CHUNKS_COLLECTION, chunkId),
+          {
+            id: chunkId,
+            chunkIndex: i,
+            totalChunks,
+            totalItems,
+            itemCount: slice.length,
+            items: slice,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: false }
+        );
+      }
+
+      const staleIds = existingIds.filter((id) => !keepIds.has(id));
+      if (staleIds.length > 0) {
+        const batch = writeBatch(dbCoil);
+        staleIds.forEach((id) => batch.delete(doc(dbCoil, COIL_SAP_CHUNKS_COLLECTION, id)));
+        await batch.commit();
+      }
+    },
+    OperationType.WRITE,
+    COIL_SAP_CHUNKS_COLLECTION
+  );
+
+  return totalChunks;
+}
+
+export async function clearCoilSapChunksFromCloud(): Promise<void> {
+  await runCoilFirestoreWriteWithGuard(
+    async () => {
+      const snap = await getDocs(collection(dbCoil, COIL_SAP_CHUNKS_COLLECTION));
+      if (snap.empty) return;
+      const batch = writeBatch(dbCoil);
+      snap.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    },
+    OperationType.DELETE,
+    COIL_SAP_CHUNKS_COLLECTION
+  );
+}
+
+function isValidScannedCoilLocation(loc: unknown): boolean {
+  const s = String(loc ?? "").trim().toUpperCase();
+  if (!s || s === "-" || s === "SAP-STOCK" || s === "2E09" || s === "2E07" || /^2000+/.test(s)) {
+    return false;
+  }
+  if (/[\u0E00-\u0E7F]/.test(s)) return false;
+  if (/^\d+(\.\d+)?$/.test(s)) return false;
+  if (s.length > 16) return false;
+  return /^[A-Z0-9]{1,6}[\/\-][A-Z0-9]{1,8}$/.test(s) || /^(E7|E8|H7|H8|05|21)$/.test(s);
+}
+
+export async function importCoilSapStockToCloud(params: {
+  sapItems: CoilSapMasterItem[];
+  existingStock: CoilStockRecord[];
+  createMissingStock?: boolean;
+}): Promise<{ updatedCount: number; insertedCount: number }> {
+  const { sapItems, existingStock, createMissingStock = true } = params;
+  if (sapItems.length === 0) return { updatedCount: 0, insertedCount: 0 };
+
+  const existingByBatch = new Map<string, CoilStockRecord>();
+  existingStock.forEach((rec) => {
+    if (rec.batch) {
+      existingByBatch.set(rec.batch.trim().toUpperCase(), rec);
+    }
+  });
+
+  const { timestamp } = formatNowTimestamp();
+  const dedupedSap = new Map<string, CoilSapMasterItem>();
+  const materialNoSet = new Set<string>();
+  sapItems.forEach((item) => {
+    const b = String(item.batch || "").trim().toUpperCase();
+    if (b && !b.includes("-") && b.length <= 12) {
+      dedupedSap.set(b, { ...item, batch: b });
+    }
+    const mat = String(item.materialNo || "").trim().toUpperCase();
+    if (mat) materialNoSet.add(mat);
+  });
+
+  // Identify bogus records (e.g. Material No. saved as Batch, or corrupted unscanned records)
+  const bogusDocIdsToDelete: string[] = [];
+  existingStock.forEach((rec) => {
+    const b = String(rec.batch || "").trim().toUpperCase();
+    const isMaterialNoAsBatch =
+      b.includes("-") ||
+      b.length > 12 ||
+      materialNoSet.has(b) ||
+      /[\u0E00-\u0E7F]/.test(b);
+    const hasCorruptedFields =
+      rec.manufacturer === "AUTOSK" ||
+      rec.manufacturer === "NONSK" ||
+      /[\u0E00-\u0E7F]/.test(String(rec.location || ""));
+    if ((isMaterialNoAsBatch || hasCorruptedFields) && !dedupedSap.has(b)) {
+      bogusDocIdsToDelete.push(rec.id);
+    }
+  });
+
+  const payloadsToWrite: CoilStockRecord[] = [];
+  let updatedCount = 0;
+  let insertedCount = 0;
+
+  dedupedSap.forEach((sap, batchKey) => {
+    const existing = existingByBatch.get(batchKey);
+    const sapThick = String(sap.certThickness || "").replace(/\s*mm$/i, "").trim();
+    const cleanThick =
+      sapThick && sapThick !== "-"
+        ? sapThick
+        : existing?.certThickness && existing.certThickness !== "-" && !existing.certThickness.includes("-")
+        ? existing.certThickness
+        : "-";
+    const sapTargetThick = String(sap.targetThickness || "").replace(/\s*mm$/i, "").trim();
+    const cleanTargetThick =
+      sapTargetThick && sapTargetThick !== "-" ? sapTargetThick : cleanThick;
+    const sapWidth = String(sap.width || "").replace(/\s*mm$/i, "").trim();
+    const cleanWidth =
+      sapWidth && sapWidth !== "-"
+        ? sapWidth
+        : existing?.width && existing.width !== "-" && !/[\u0E00-\u0E7F]/.test(existing.width)
+        ? existing.width
+        : "-";
+    const safeWeight =
+      typeof sap.weightKg === "number" && sap.weightKg >= 0
+        ? sap.weightKg
+        : existing?.weightKg || 0;
+    const safeActualWeight =
+      typeof sap.actualWeightKg === "number" && sap.actualWeightKg >= 0
+        ? sap.actualWeightKg
+        : existing?.actualWeightKg || 0;
+    const cleanGrade =
+      sap.grade && sap.grade !== "-"
+        ? sap.grade.trim().toUpperCase()
+        : existing?.grade && existing.grade !== "-"
+        ? existing.grade.trim().toUpperCase()
+        : "-";
+    const cleanMfg =
+      sap.manufacturer && sap.manufacturer !== "-"
+        ? sap.manufacturer.trim().toUpperCase()
+        : existing?.manufacturer &&
+          existing.manufacturer !== "-" &&
+          existing.manufacturer !== "AUTOSK" &&
+          existing.manufacturer !== "NONSK"
+        ? existing.manufacturer.trim().toUpperCase()
+        : "-";
+    const cleanCoilNo =
+      sap.coilNo && sap.coilNo !== "-"
+        ? sap.coilNo.trim().toUpperCase()
+        : existing?.coilNo && existing.coilNo !== "-"
+        ? existing.coilNo.trim().toUpperCase()
+        : "-";
+    const cleanSkinpass =
+      sap.skinpass && sap.skinpass !== "-"
+        ? sap.skinpass.trim()
+        : existing?.skinpass || "";
+    const cleanStorageLoc =
+      sap.storageLocation && sap.storageLocation !== "-"
+        ? sap.storageLocation.trim().toUpperCase()
+        : existing?.storageLocation || "";
+    const cleanConditionText =
+      sap.conditionText && sap.conditionText !== "-"
+        ? sap.conditionText.trim()
+        : existing?.conditionText || "";
+    const cleanHeatNo =
+      sap.heatNo && sap.heatNo !== "-"
+        ? sap.heatNo.trim().toUpperCase()
+        : existing?.heatNo || "";
+
+    if (existing) {
+      // Preserve ONLY genuine shop-floor scanned Location (e.g. E7/7). Never keep SAP Storage Location or corrupted text.
+      const preservedScannedLocation = isValidScannedCoilLocation(existing.location)
+        ? String(existing.location).trim().toUpperCase()
+        : "-";
+
+      updatedCount++;
+      payloadsToWrite.push(
+        sanitizeCoilStockPayload({
+          ...existing,
+          location: preservedScannedLocation,
+          status: existing.status,
+          coilNo: cleanCoilNo,
+          weightKg: safeWeight,
+          initialWeightKg: safeWeight > 0 ? safeWeight : existing.initialWeightKg || 0,
+          actualWeightKg: safeActualWeight,
+          certThickness: cleanThick,
+          targetThickness: cleanTargetThick,
+          width: cleanWidth,
+          grade: cleanGrade,
+          manufacturer: cleanMfg,
+          supplier: cleanMfg,
+          materialNo: sap.materialNo || existing.materialNo || "",
+          salesDoc: sap.salesDoc || "",
+          qualityClass: sap.qualityClass || "-",
+          description: sap.description || existing.description || "",
+          skinpass: cleanSkinpass,
+          storageLocation: cleanStorageLoc,
+          conditionText: cleanConditionText,
+          heatNo: cleanHeatNo,
+          remark: cleanConditionText || "",
+          hasSapData: true,
+        })
+      );
+    } else if (createMissingStock) {
+      insertedCount++;
+      payloadsToWrite.push(
+        sanitizeCoilStockPayload({
+          id: `COIL-${batchKey}`,
+          batch: batchKey,
+          coilNo: cleanCoilNo,
+          location: "-", // Never overwrite Layout with SAP Storage Location; unscanned SAP items show "-"
+          status: "available",
+          weightKg: safeWeight,
+          initialWeightKg: safeWeight,
+          actualWeightKg: safeActualWeight,
+          certThickness: cleanThick,
+          targetThickness: cleanTargetThick,
+          width: cleanWidth,
+          grade: cleanGrade,
+          manufacturer: cleanMfg,
+          supplier: cleanMfg,
+          machine: "EXTERNAL",
+          inboundType: "external",
+          materialNo: sap.materialNo || "",
+          salesDoc: sap.salesDoc || "",
+          qualityClass: sap.qualityClass || "-",
+          description: sap.description || "",
+          skinpass: cleanSkinpass,
+          storageLocation: cleanStorageLoc,
+          conditionText: cleanConditionText,
+          heatNo: cleanHeatNo,
+          remark: cleanConditionText || "นำเข้าสต็อกจากระบบ SAP",
+          hasSapData: true,
+          scanTimestamp: timestamp,
+        })
+      );
+    }
+  });
+
+  // 1. Delete bogus records in safe chunks of 350
+  const CHUNK_LIMIT = 350;
+  for (let i = 0; i < bogusDocIdsToDelete.length; i += CHUNK_LIMIT) {
+    const delSlice = bogusDocIdsToDelete.slice(i, i + CHUNK_LIMIT);
+    await runCoilFirestoreWriteWithGuard(
+      async () => {
+        const batch = writeBatch(dbCoil);
+        for (const bogusId of delSlice) {
+          batch.delete(doc(dbCoil, COIL_STOCK_COLLECTION, sanitizeDocId(bogusId)));
+        }
+        await batch.commit();
+      },
+      OperationType.DELETE,
+      COIL_STOCK_COLLECTION
+    );
+  }
+
+  // 2. Write updated/inserted SAP stock records in safe chunks of 350
+  if (payloadsToWrite.length > 0) {
+    for (let i = 0; i < payloadsToWrite.length; i += CHUNK_LIMIT) {
+      const slice = payloadsToWrite.slice(i, i + CHUNK_LIMIT);
+      await runCoilFirestoreWriteWithGuard(
+        async () => {
+          const batch = writeBatch(dbCoil);
+          for (const rec of slice) {
+            batch.set(doc(dbCoil, COIL_STOCK_COLLECTION, rec.id), rec, { merge: true });
+          }
+          if (i === 0) {
+            const summaryTx = sanitizeCoilTransactionPayload({
+              txType: "inbound",
+              batch: `SAP-SYNC-${payloadsToWrite.length}`,
+              coilNo: "SAP-IMPORT",
+              weightKg: payloadsToWrite.reduce((s, r) => s + (Number(r.weightKg) || 0), 0),
+              fromLocation: "SAP",
+              toLocation: "COIL_STOCK",
+              remark: `นำเข้า/อัปเดตสต็อกเหล็กม้วนจากระบบ SAP (เพิ่มใหม่ ${insertedCount} / อัปเดต ${updatedCount} รายการ)`,
+              timestamp,
+            });
+            batch.set(doc(dbCoil, COIL_TRANSACTIONS_COLLECTION, summaryTx.id), summaryTx, { merge: true });
+          }
+          await batch.commit();
+        },
+        OperationType.WRITE,
+        COIL_STOCK_COLLECTION
+      );
+    }
+  }
+
+  return { updatedCount, insertedCount };
 }

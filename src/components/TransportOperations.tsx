@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Truck,
   ArrowRight,
@@ -22,32 +22,25 @@ import {
   User,
   Package,
   DollarSign,
-  Info
+  Info,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Trash2,
 } from "lucide-react";
 import { Vehicle, VehicleAssignment } from "../types/officer";
+import {
+  MhTransferRecord,
+  subscribeToMhTransfers,
+  fetchMhTransfersOnce,
+  saveMhTransferToCloud,
+  deleteMhTransferFromCloud,
+  getForkliftCloudRealtimeEnabled,
+  setForkliftCloudRealtimeEnabled,
+  subscribeForkliftCloudRealtimeMode,
+} from "../services/forkliftDataService";
 
-interface TransportTransferRecord {
-  id: string;
-  originFacility: string;
-  destinationFacility: string;
-  sku: string;
-  itemName: string;
-  productCategory: string;
-  batchNumber: string;
-  palletId: string;
-  quantity: number;
-  unit: string;
-  weightTon: number;
-  recorderName: string;
-  workingDate: string;
-  status: "Pending" | "In Transit" | "Completed" | "Cancelled";
-  priority: "Normal" | "Urgent" | "Express";
-  vehicleNumber: string;
-  driverName: string;
-  transportCost?: number;
-  notes?: string;
-  createdAt: string;
-}
+type TransportTransferRecord = MhTransferRecord;
 
 interface TransportOperationsProps {
   vehicles: Vehicle[];
@@ -76,10 +69,43 @@ export function TransportOperations({
   onNavigateToVehicles,
 }: TransportOperationsProps) {
   const [transfers, setTransfers] = useState<TransportTransferRecord[]>(INITIAL_TRANSFERS);
+  const [cloudRealtime, setCloudRealtime] = useState<boolean>(() =>
+    getForkliftCloudRealtimeEnabled()
+  );
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<TransportTransferRecord | null>(null);
+
+  // Subscribe to mh_transfers ONLY when TransportOperations is mounted, and unsubscribe immediately on unmount
+  useEffect(() => {
+    const unsubMode = subscribeForkliftCloudRealtimeMode((enabled) => {
+      setCloudRealtime(enabled);
+    });
+    return () => {
+      unsubMode();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeToMhTransfers((cloudRecords) => {
+      setTransfers(cloudRecords);
+    });
+    return () => {
+      unsub();
+    };
+  }, [cloudRealtime]);
+
+  const handleManualReload = async () => {
+    setIsRefreshing(true);
+    try {
+      const latest = await fetchMhTransfersOnce();
+      setTransfers(latest);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // New Form State
   const [originFacility, setOriginFacility] = useState(FACILITIES_LIST[0]);
@@ -106,10 +132,13 @@ export function TransportOperations({
   const inProgressCount = transfers.filter((t) => t.status === "In Transit").length;
   const completedCount = transfers.filter((t) => t.status === "Completed").length;
 
-  const handleCreateTransfer = (e: React.FormEvent) => {
+  const handleCreateTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
+    const recordId = `TRF-${new Date().getFullYear()}-${String(transfers.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
     const newRecord: TransportTransferRecord = {
-      id: `TRF-${new Date().getFullYear()}-${String(transfers.length + 1).padStart(3, "0")}`,
+      id: recordId,
+      transferCode: recordId,
       originFacility,
       destinationFacility,
       sku: sku.trim() || "-",
@@ -128,13 +157,38 @@ export function TransportOperations({
       driverName: driverName.trim() || "-",
       transportCost: Number(transportCost) || 0,
       notes,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      createdAt: nowStr,
+      updatedAt: nowStr,
     };
 
-    setTransfers([newRecord, ...transfers]);
+    setTransfers((prev) => [newRecord, ...prev]);
     setIsModalOpen(false);
-    // Reset form defaults
     setNotes("");
+    await saveMhTransferToCloud(newRecord);
+  };
+
+  const handleUpdateTransferStatus = async (
+    record: TransportTransferRecord,
+    nextStatus: "Pending" | "In Transit" | "Completed" | "Cancelled"
+  ) => {
+    const updated: TransportTransferRecord = {
+      ...record,
+      status: nextStatus,
+      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+    setTransfers((prev) => prev.map((item) => (item.id === record.id ? updated : item)));
+    if (selectedRecord && selectedRecord.id === record.id) {
+      setSelectedRecord(updated);
+    }
+    await saveMhTransferToCloud(updated);
+  };
+
+  const handleDeleteTransfer = async (id: string) => {
+    setTransfers((prev) => prev.filter((item) => item.id !== id));
+    if (selectedRecord?.id === id) {
+      setSelectedRecord(null);
+    }
+    await deleteMhTransferFromCloud(id);
   };
 
   const filteredTransfers = transfers.filter((t) => {
@@ -188,7 +242,34 @@ export function TransportOperations({
             <div className="panel-title">Transport Operation & Goods Movement Form</div>
           </div>
 
-          <div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
+              style={{
+                padding: "6px 10px",
+                fontSize: 11,
+                borderColor: cloudRealtime ? "#22c55e" : "#94a3b8",
+                color: cloudRealtime ? "#15803d" : "#475569",
+              }}
+              title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
+            >
+              {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {cloudRealtime ? "Cloud Real-time: ON" : "Cloud Real-time: OFF (ประหยัดโควต้า)"}
+            </button>
+            {!cloudRealtime && (
+              <button
+                type="button"
+                className="button secondary"
+                onClick={handleManualReload}
+                disabled={isRefreshing}
+                style={{ padding: "6px 10px", fontSize: 11 }}
+              >
+                <RefreshCw size={13} />
+                {isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}
+              </button>
+            )}
             <button className="button primary" onClick={() => setIsModalOpen(true)}>
               <Plus size={14} />
               + New Transfer Record
@@ -785,7 +866,40 @@ export function TransportOperations({
               )}
             </div>
 
-            <div className="modal-footer-box">
+            <div
+              className="modal-footer-box"
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}
+            >
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {selectedRecord.status !== "In Transit" && (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ padding: "5px 10px", fontSize: 11 }}
+                    onClick={() => handleUpdateTransferStatus(selectedRecord, "In Transit")}
+                  >
+                    In Transit
+                  </button>
+                )}
+                {selectedRecord.status !== "Completed" && (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    style={{ padding: "5px 10px", fontSize: 11, color: "#15803d", borderColor: "#86efac" }}
+                    onClick={() => handleUpdateTransferStatus(selectedRecord, "Completed")}
+                  >
+                    Mark Completed
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="button secondary"
+                  style={{ padding: "5px 10px", fontSize: 11, color: "#b91c1c", borderColor: "#fca5a5" }}
+                  onClick={() => handleDeleteTransfer(selectedRecord.id)}
+                >
+                  <Trash2 size={12} /> Delete
+                </button>
+              </div>
               <button
                 className="button primary"
                 onClick={() => setSelectedRecord(null)}

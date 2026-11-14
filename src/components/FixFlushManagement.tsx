@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Wrench,
   Clock,
@@ -25,14 +25,39 @@ import {
   UserCheck,
   HelpCircle,
   Check,
-  Ban
+  Ban,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Trash2,
+  Disc,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
+import {
+  MhMaintenanceRecord,
+  MhTireStockRecord,
+  MhTireSize,
+  subscribeToMhMaintenance,
+  fetchMhMaintenanceOnce,
+  saveMhMaintenanceToCloud,
+  deleteMhMaintenanceFromCloud,
+  subscribeToMhTireStock,
+  fetchMhTireStockOnce,
+  saveMhTireTransactionToCloud,
+  deleteMhTireTransactionFromCloud,
+  getForkliftCloudRealtimeEnabled,
+  setForkliftCloudRealtimeEnabled,
+  subscribeForkliftCloudRealtimeMode,
+} from "../services/forkliftDataService";
 
 interface SparePartItem {
+  id?: string;
   partCode: string;
   partName: string;
   qty: number;
+  unit?: string;
   unitCost: number;
 }
 
@@ -45,24 +70,7 @@ interface FeedbackMessage {
   timestamp: string;
 }
 
-interface FixFlushRecord {
-  id: string;
-  repairType: string;
-  vehicleId: string;
-  vehicleDescription: string;
-  workshopBay: string;
-  repairDescription: string;
-  status: "Pending Inspection" | "In Workshop" | "Testing" | "Approved" | "Completed";
-  managerStatus: "Pending Manager Approval" | "More Info Requested" | "Approved" | "Rejected";
-  operatingHours: number;
-  technicianName: string;
-  workingDate: string;
-  spareParts: SparePartItem[];
-  estimatedCost: number;
-  feedbackThread: FeedbackMessage[];
-  notes?: string;
-  createdAt: string;
-}
+type FixFlushRecord = MhMaintenanceRecord;
 
 interface FixFlushManagementProps {
   vehicles: Vehicle[];
@@ -76,6 +84,26 @@ const REPAIR_TYPES = [
   "ซ่อมระบบไฟฟ้า & แบตเตอรี่ (Electrical & Battery Repair)",
   "ตรวจเช็คตามรอบ 500 ชม. (500h Routine Maintenance)",
   "ซ่อมฉุกเฉิน / เบรก (Emergency Brake Repair)",
+];
+
+const TIRE_SIZE_OPTIONS: MhTireSize[] = [
+  "6.00-9 (ยางตันหน้า/หลัง 2.5T)",
+  "7.00-12 (ยางตันหน้า 2.5T-3.0T)",
+  "28x9-15 (ยางตันหน้า 3.0T-3.5T)",
+  "6.50-10 (ยางตันหลัง 3.0T-3.5T)",
+  "250-15 (ยางตันหน้า 4.0T-5.0T)",
+  "300-15 (ยางตันหน้า 5.0T-7.0T)",
+  "8.25-15 (ยางตันรถลากจูง/เทรลเลอร์)",
+];
+
+const WHEEL_POSITION_OPTIONS = [
+  "ล้อหน้าซ้าย (FL)",
+  "ล้อหน้าขวา (FR)",
+  "ล้อหลังซ้าย (RL)",
+  "ล้อหลังขวา (RR)",
+  "คู่ล้อหน้า (Front Pair)",
+  "คู่ล้อหลัง (Rear Pair)",
+  "ครบชุด 4 ล้อ (Full Set)",
 ];
 
 const WORKSHOP_BAYS = [
@@ -98,12 +126,98 @@ const INITIAL_FIX_RECORDS: FixFlushRecord[] = [];
 
 export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
   const [records, setRecords] = useState<FixFlushRecord[]>(INITIAL_FIX_RECORDS);
-  const [activeTab, setActiveTab] = useState<"technician" | "manager">("technician");
+  const [tireRecords, setTireRecords] = useState<MhTireStockRecord[]>([]);
+  const [cloudRealtime, setCloudRealtime] = useState<boolean>(() =>
+    getForkliftCloudRealtimeEnabled()
+  );
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const [activeTab, setActiveTab] = useState<"technician" | "manager" | "tire_stock">("technician");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [managerFilter, setManagerFilter] = useState("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FixFlushRecord | null>(null);
+
+  // Tire Stock Modal State
+  const [isTireModalOpen, setIsTireModalOpen] = useState<boolean>(false);
+  const [tireTxType, setTireTxType] = useState<"Inbound" | "Outbound">("Inbound");
+  const [tireSize, setTireSize] = useState<string>(TIRE_SIZE_OPTIONS[1]);
+  const [tireBrand, setTireBrand] = useState<string>("KOMACHI / PIO");
+  const [tireQty, setTireQty] = useState<number>(2);
+  const [tireUnitCost, setTireUnitCost] = useState<number>(3800);
+  const [tireSupplierOrInvoice, setTireSupplierOrInvoice] = useState<string>("");
+  const [tireVehicleId, setTireVehicleId] = useState<string>(vehicles[0]?.vehicleId || "");
+  const [tireWheelPosition, setTireWheelPosition] = useState<string>(WHEEL_POSITION_OPTIONS[4]);
+  const [tireOperatingHours, setTireOperatingHours] = useState<number>(0);
+  const [tireTechnicianName, setTireTechnicianName] = useState<string>("");
+  const [tireNotes, setTireNotes] = useState<string>("");
+  const [tireSearchQuery, setTireSearchQuery] = useState<string>("");
+
+  // Subscribe to mh_maintenance and mh_tire_stock ONLY while FixFlushManagement is mounted
+  useEffect(() => {
+    const unsubMode = subscribeForkliftCloudRealtimeMode((enabled) => {
+      setCloudRealtime(enabled);
+    });
+    return () => {
+      unsubMode();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubMaint = subscribeToMhMaintenance((cloudMaint) => {
+      setRecords(cloudMaint);
+    });
+    const unsubTires = subscribeToMhTireStock((cloudTires) => {
+      setTireRecords(cloudTires);
+    });
+    return () => {
+      unsubMaint();
+      unsubTires();
+    };
+  }, [cloudRealtime]);
+
+  const handleManualReload = async () => {
+    setIsRefreshing(true);
+    try {
+      const [latestMaint, latestTires] = await Promise.all([
+        fetchMhMaintenanceOnce(),
+        fetchMhTireStockOnce(),
+      ]);
+      setRecords(latestMaint);
+      setTireRecords(latestTires);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Compute Tire Stock balance per size
+  const tireStockBySize = useMemo(() => {
+    const map = new Map<string, { inbound: number; outbound: number; balance: number }>();
+    TIRE_SIZE_OPTIONS.forEach((size) => {
+      map.set(size, { inbound: 0, outbound: 0, balance: 0 });
+    });
+    tireRecords.forEach((tr) => {
+      const key = tr.tireSize || TIRE_SIZE_OPTIONS[1];
+      const current = map.get(key) || { inbound: 0, outbound: 0, balance: 0 };
+      if (tr.transactionType === "Inbound") {
+        current.inbound += Number(tr.qty) || 0;
+      } else {
+        current.outbound += Number(tr.qty) || 0;
+      }
+      current.balance = Math.max(0, current.inbound - current.outbound);
+      map.set(key, current);
+    });
+    return map;
+  }, [tireRecords]);
+
+  const totalTiresInStock = useMemo(() => {
+    let total = 0;
+    tireStockBySize.forEach((v) => {
+      total += v.balance;
+    });
+    return total;
+  }, [tireStockBySize]);
 
   // Feedback Modal State (for Manager query or Technician reply)
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
@@ -140,15 +254,20 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
 
   const calculatedEstimatedCost = spareParts.reduce((sum, p) => sum + (Number(p.qty) || 0) * (Number(p.unitCost) || 0), 0);
 
-  const handleCreateRecord = (e: React.FormEvent) => {
+  const handleCreateRecord = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetVehicle = vehicles.find((v) => v.vehicleId === vehicleId);
     const vehicleDescription = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "-"})` : (vehicleId || "-");
+    const recId = `FIX-${new Date().getFullYear()}-${String(records.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
 
     const newRecord: FixFlushRecord = {
-      id: `FIX-${new Date().getFullYear()}-${String(records.length + 1).padStart(3, "0")}`,
+      id: recId,
+      workOrderNo: recId,
       repairType,
       vehicleId: vehicleId || "-",
+      vehicleNumber: vehicleId || "-",
+      vehicleType: targetVehicle?.vehicleType || "Forklift",
       vehicleDescription,
       workshopBay,
       repairDescription: repairDescription.trim() || "-",
@@ -161,96 +280,179 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
       estimatedCost: calculatedEstimatedCost,
       feedbackThread: [],
       notes,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      createdAt: nowStr,
+      updatedAt: nowStr,
     };
 
-    setRecords([newRecord, ...records]);
+    setRecords((prev) => [newRecord, ...prev]);
     setIsModalOpen(false);
     setRepairDescription("");
     setNotes("");
+    await saveMhMaintenanceToCloud(newRecord);
+
+    // If repairType is Tire Replacement, also log an outbound tire movement to mh_tire_stock
+    if (repairType.includes("เปลี่ยนยาง") || repairType.includes("Tire")) {
+      const tireQtyFromParts = spareParts.reduce((s, p) => s + (Number(p.qty) || 0), 0) || 1;
+      const tireCostFromParts = calculatedEstimatedCost > 0 ? calculatedEstimatedCost : 3800 * tireQtyFromParts;
+      const tireTxId = `TIRE-WO-${Date.now()}`;
+      const tireTx: MhTireStockRecord = {
+        id: tireTxId,
+        transactionNo: tireTxId,
+        date: workingDate,
+        time: nowStr.slice(11, 16) || "09:00",
+        transactionType: "Outbound",
+        tireSize: TIRE_SIZE_OPTIONS[1],
+        brand: "KOMACHI / PIO",
+        qty: tireQtyFromParts,
+        unitCost: Math.round(tireCostFromParts / tireQtyFromParts),
+        totalCost: tireCostFromParts,
+        vehicleId: vehicleId || "-",
+        vehicleNumber: vehicleId || "-",
+        wheelPosition: "เปลี่ยนยางตามใบแจ้งซ่อม",
+        operatingHours: Number(operatingHours) || 0,
+        technicianOrReceiver: technicianName.trim() || "-",
+        workOrderRef: recId,
+        notes: repairDescription.trim() || notes || "เบิกเปลี่ยนยางจากใบแจ้งซ่อม",
+        updatedAt: nowStr,
+      };
+      setTireRecords((prev) => [tireTx, ...prev]);
+      await saveMhTireTransactionToCloud(tireTx);
+    }
+  };
+
+  const handleCreateTireTransaction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().slice(0, 5);
+    const txId = `TIRE-${now.getFullYear()}-${String(tireRecords.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
+    const safeQty = Math.max(1, Number(tireQty) || 1);
+    const safeUnit = Math.max(0, Number(tireUnitCost) || 0);
+
+    const newTireRecord: MhTireStockRecord = {
+      id: txId,
+      transactionNo: txId,
+      date: dateStr,
+      time: timeStr,
+      transactionType: tireTxType,
+      tireSize,
+      brand: tireBrand.trim() || "KOMACHI / PIO",
+      qty: safeQty,
+      unitCost: safeUnit,
+      totalCost: safeQty * safeUnit,
+      supplierOrInvoice: tireTxType === "Inbound" ? tireSupplierOrInvoice.trim() || "-" : undefined,
+      vehicleId: tireTxType === "Outbound" ? tireVehicleId || "-" : undefined,
+      vehicleNumber: tireTxType === "Outbound" ? tireVehicleId || "-" : undefined,
+      wheelPosition: tireTxType === "Outbound" ? tireWheelPosition : undefined,
+      operatingHours: tireTxType === "Outbound" ? Number(tireOperatingHours) || 0 : undefined,
+      technicianOrReceiver: tireTechnicianName.trim() || "-",
+      notes: tireNotes.trim() || undefined,
+      updatedAt: `${dateStr} ${timeStr}`,
+    };
+
+    setTireRecords((prev) => [newTireRecord, ...prev]);
+    setIsTireModalOpen(false);
+    setTireNotes("");
+    await saveMhTireTransactionToCloud(newTireRecord);
+  };
+
+  const handleDeleteTireRecord = async (id: string) => {
+    setTireRecords((prev) => prev.filter((item) => item.id !== id));
+    await deleteMhTireTransactionFromCloud(id);
   };
 
   // Manager Actions
-  const handleManagerApprove = (recordId: string) => {
-    setRecords(records.map(r => r.id === recordId ? { ...r, managerStatus: "Approved", status: "In Workshop" } : r));
+  const handleManagerApprove = async (recordId: string) => {
+    const target = records.find((r) => r.id === recordId);
+    if (!target) return;
+    const updated: FixFlushRecord = {
+      ...target,
+      managerStatus: "Approved",
+      status: "In Workshop",
+      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
     if (selectedRecord && selectedRecord.id === recordId) {
-      setSelectedRecord({ ...selectedRecord, managerStatus: "Approved", status: "In Workshop" });
+      setSelectedRecord(updated);
     }
+    await saveMhMaintenanceToCloud(updated);
   };
 
-  const handleManagerReject = (recordId: string) => {
-    setRecords(records.map(r => r.id === recordId ? { ...r, managerStatus: "Rejected" } : r));
+  const handleManagerReject = async (recordId: string) => {
+    const target = records.find((r) => r.id === recordId);
+    if (!target) return;
+    const updated: FixFlushRecord = {
+      ...target,
+      managerStatus: "Rejected",
+      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+    };
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
     if (selectedRecord && selectedRecord.id === recordId) {
-      setSelectedRecord({ ...selectedRecord, managerStatus: "Rejected" });
+      setSelectedRecord(updated);
     }
+    await saveMhMaintenanceToCloud(updated);
   };
 
-  const handleSendManagerQuery = (e: React.FormEvent) => {
+  const handleSendManagerQuery = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedbackRecord || !feedbackMessageText.trim()) return;
 
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
     const newMessage: FeedbackMessage = {
       id: `FB-${Date.now()}`,
       author: "Director Somchai (Manager)",
       role: "Manager",
       queryType,
       message: feedbackMessageText.trim(),
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+      timestamp: nowStr,
     };
 
-    setRecords(records.map(r => {
-      if (r.id === feedbackRecord.id) {
-        return {
-          ...r,
-          managerStatus: "More Info Requested",
-          feedbackThread: [...r.feedbackThread, newMessage],
-        };
-      }
-      return r;
-    }));
+    const updatedRecord: FixFlushRecord = {
+      ...feedbackRecord,
+      managerStatus: "More Info Requested",
+      feedbackThread: [...feedbackRecord.feedbackThread, newMessage],
+      updatedAt: nowStr,
+    };
+
+    setRecords((prev) => prev.map((r) => (r.id === feedbackRecord.id ? updatedRecord : r)));
 
     if (selectedRecord && selectedRecord.id === feedbackRecord.id) {
-      setSelectedRecord({
-        ...selectedRecord,
-        managerStatus: "More Info Requested",
-        feedbackThread: [...selectedRecord.feedbackThread, newMessage],
-      });
+      setSelectedRecord(updatedRecord);
     }
 
     setIsFeedbackModalOpen(false);
     setFeedbackRecord(null);
     setFeedbackMessageText("");
+    await saveMhMaintenanceToCloud(updatedRecord);
   };
 
-  const handleTechnicianReply = (recordId: string, replyText: string) => {
+  const handleTechnicianReply = async (recordId: string, replyText: string) => {
     if (!replyText.trim()) return;
+    const target = records.find((r) => r.id === recordId);
+    if (!target) return;
 
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
     const replyMsg: FeedbackMessage = {
       id: `FB-${Date.now()}`,
       author: "Technician / Requester",
       role: "Technician",
       message: replyText.trim(),
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+      timestamp: nowStr,
     };
 
-    setRecords(records.map(r => {
-      if (r.id === recordId) {
-        return {
-          ...r,
-          managerStatus: "Pending Manager Approval", // Resubmitted for approval after reply
-          feedbackThread: [...r.feedbackThread, replyMsg],
-        };
-      }
-      return r;
-    }));
+    const updatedRecord: FixFlushRecord = {
+      ...target,
+      managerStatus: "Pending Manager Approval",
+      feedbackThread: [...target.feedbackThread, replyMsg],
+      updatedAt: nowStr,
+    };
+
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updatedRecord : r)));
 
     if (selectedRecord && selectedRecord.id === recordId) {
-      setSelectedRecord({
-        ...selectedRecord,
-        managerStatus: "Pending Manager Approval",
-        feedbackThread: [...selectedRecord.feedbackThread, replyMsg],
-      });
+      setSelectedRecord(updatedRecord);
     }
+    await saveMhMaintenanceToCloud(updatedRecord);
   };
 
   const pendingManagerCount = records.filter((r) => r.managerStatus === "Pending Manager Approval").length;
@@ -271,11 +473,23 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
     return matchesSearch && matchesStatus && matchesManager;
   });
 
+  const filteredTireRecords = tireRecords.filter((tr) => {
+    if (!tireSearchQuery.trim()) return true;
+    const q = tireSearchQuery.toLowerCase();
+    return (
+      tr.transactionNo.toLowerCase().includes(q) ||
+      tr.tireSize.toLowerCase().includes(q) ||
+      tr.brand.toLowerCase().includes(q) ||
+      (tr.vehicleId || "").toLowerCase().includes(q) ||
+      tr.technicianOrReceiver.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="fix-flush-management">
       {/* Role / View Switcher Header Bar */}
-      <div className="fixflush-topbar bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg shadow-sm" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, padding: "12px 20px" }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      <div className="fixflush-topbar bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg shadow-sm" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, padding: "12px 20px", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button
             onClick={() => setActiveTab("technician")}
             className={`button ${activeTab === "technician" ? "primary" : "secondary"}`}
@@ -295,9 +509,53 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
               </span>
             )}
           </button>
+          <button
+            onClick={() => setActiveTab("tire_stock")}
+            className={`button ${activeTab === "tire_stock" ? "primary" : "secondary"}`}
+            style={{ fontSize: 12, padding: "8px 16px" }}
+          >
+            <Disc size={14} /> สต๊อกยางโฟล์คลิฟท์ (Tire Stock: {totalTiresInStock} เส้น)
+          </button>
         </div>
 
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
+            style={{
+              padding: "6px 10px",
+              fontSize: 11,
+              borderColor: cloudRealtime ? "#22c55e" : "#94a3b8",
+              color: cloudRealtime ? "#15803d" : "#475569",
+            }}
+            title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
+          >
+            {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
+            {cloudRealtime ? "Cloud Real-time: ON" : "Cloud Real-time: OFF"}
+          </button>
+          {!cloudRealtime && (
+            <button
+              type="button"
+              className="button secondary"
+              onClick={handleManualReload}
+              disabled={isRefreshing}
+              style={{ padding: "6px 10px", fontSize: 11 }}
+            >
+              <RefreshCw size={13} />
+              {isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}
+            </button>
+          )}
+          <button
+            className="button secondary"
+            onClick={() => {
+              setTireTxType("Inbound");
+              setIsTireModalOpen(true);
+            }}
+          >
+            <Disc size={14} />
+            + บันทึกสต๊อกยาง
+          </button>
           <button className="button primary" onClick={() => setIsModalOpen(true)}>
             <Plus size={14} />
             + New Maintenance Order
@@ -575,6 +833,415 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
           <span>WMS Warehouse 1 - Executive Manager Approval & Feedback Loop</span>
         </div>
       </section>
+
+      {/* Tire Stock Management Panel (mh_tire_stock) */}
+      <section className="panel" style={{ marginTop: 20 }}>
+        <div className="panel-header">
+          <div>
+            <div className="panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Disc size={16} color="#087eaf" />
+              สต๊อกยางโฟล์คลิฟท์และบันทึกการเบิกเปลี่ยนยาง (Tire Stock Management — mh_tire_stock)
+            </div>
+            <div className="panel-sub">
+              คงเหลือรวมทั้งสิ้น {totalTiresInStock.toLocaleString()} เส้น · แยกฐานข้อมูลอิสระสำหรับงานโฟล์คลิฟท์
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="button primary"
+              style={{ background: "#15803d", borderColor: "#15803d" }}
+              onClick={() => {
+                setTireTxType("Inbound");
+                setIsTireModalOpen(true);
+              }}
+            >
+              <ArrowDownLeft size={14} /> + รับเข้ายางใหม่ (Inbound)
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              style={{ background: "#0369a1", borderColor: "#0369a1" }}
+              onClick={() => {
+                setTireTxType("Outbound");
+                setIsTireModalOpen(true);
+              }}
+            >
+              <ArrowUpRight size={14} /> - เบิกเปลี่ยนยางโฟล์คลิฟท์ (Outbound)
+            </button>
+          </div>
+        </div>
+
+        {/* Tire Stock Balance by Size Grid */}
+        <div
+          style={{
+            padding: "14px 18px",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 10,
+            borderBottom: "1px solid #e2e8f0",
+          }}
+        >
+          {Array.from(tireStockBySize.entries()).map(([sizeLabel, stats]) => (
+            <div
+              key={sizeLabel}
+              style={{
+                padding: "10px 12px",
+                borderRadius: 8,
+                border: "1px solid #e2e8f0",
+                background: stats.balance > 0 ? "#f8fafc" : "#fff",
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#1e3648" }}>{sizeLabel}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
+                <span style={{ fontSize: 18, fontWeight: 800, color: stats.balance > 0 ? "#15803d" : "#64748b" }}>
+                  {stats.balance} <span style={{ fontSize: 11, fontWeight: 600 }}>เส้น</span>
+                </span>
+                <span style={{ fontSize: 10, color: "#64748b" }}>
+                  รับ +{stats.inbound} / เบิก -{stats.outbound}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tire Transaction Filter Bar */}
+        <div style={{ padding: "12px 18px", display: "flex", gap: 12, alignItems: "center", borderBottom: "1px solid #e2e8f0" }}>
+          <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+            <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: "#64748b" }} />
+            <input
+              type="text"
+              className="field"
+              placeholder="ค้นหาเลขที่รายการ, ขนาดยาง, ยี่ห้อ, รหัสรถโฟล์คลิฟท์, ช่างผู้เบิก..."
+              value={tireSearchQuery}
+              onChange={(e) => setTireSearchQuery(e.target.value)}
+              style={{ width: "100%", padding: "7px 10px 7px 32px", fontSize: 12 }}
+            />
+          </div>
+        </div>
+
+        {/* Tire Stock Transactions Table */}
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>เลขที่รายการ & วัน-เวลา</th>
+                <th>ประเภท</th>
+                <th>ขนาดยาง & ยี่ห้อ</th>
+                <th>จำนวน (เส้น)</th>
+                <th>ราคา/หน่วย & รวม</th>
+                <th>รถโฟล์คลิฟท์ / แหล่งที่มา</th>
+                <th>ผู้รับผิดชอบ / หมายเหตุ</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTireRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", padding: 28, color: "#647786" }}>
+                    ยังไม่มีประวัติรายการสต๊อกยางในฐานข้อมูล (mh_tire_stock)
+                  </td>
+                </tr>
+              ) : (
+                filteredTireRecords.map((tr) => (
+                  <tr key={tr.id}>
+                    <td>
+                      <span className="code" style={{ fontWeight: 700 }}>{tr.transactionNo}</span>
+                      <div style={{ fontSize: 10, color: "#647786", marginTop: 2 }}>
+                        {tr.date} · {tr.time}
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className="status"
+                        style={{
+                          background: tr.transactionType === "Inbound" ? "#dcfce7" : "#e0f2fe",
+                          color: tr.transactionType === "Inbound" ? "#15803d" : "#0369a1",
+                          border: `1px solid ${tr.transactionType === "Inbound" ? "#86efac" : "#bae6fd"}`,
+                        }}
+                      >
+                        {tr.transactionType === "Inbound" ? "+ รับเข้าสต๊อก" : "- เบิกเปลี่ยนยาง"}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: "#1e3648" }}>{tr.tireSize}</div>
+                      <div style={{ fontSize: 10, color: "#647786" }}>Brand: {tr.brand}</div>
+                    </td>
+                    <td>
+                      <span
+                        style={{
+                          fontWeight: 800,
+                          fontSize: 13,
+                          color: tr.transactionType === "Inbound" ? "#15803d" : "#0369a1",
+                        }}
+                      >
+                        {tr.transactionType === "Inbound" ? "+" : "-"}
+                        {tr.qty} เส้น
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 700, fontSize: 12 }}>{tr.totalCost.toLocaleString()} THB</div>
+                      <div style={{ fontSize: 10, color: "#647786" }}>@{tr.unitCost.toLocaleString()} THB</div>
+                    </td>
+                    <td>
+                      {tr.transactionType === "Inbound" ? (
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 11, color: "#15803d" }}>Supplier / PO</div>
+                          <div style={{ fontSize: 11, color: "#334155" }}>{tr.supplierOrInvoice || "-"}</div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{tr.vehicleId || "-"}</div>
+                          <div style={{ fontSize: 10, color: "#647786" }}>
+                            {tr.wheelPosition || "-"} {tr.operatingHours ? `· ${tr.operatingHours} HRS` : ""}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 11 }}>{tr.technicianOrReceiver}</div>
+                      {tr.notes && <div style={{ fontSize: 10, color: "#647786" }}>{tr.notes}</div>}
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="button secondary"
+                        style={{ padding: "4px 8px", fontSize: 11, color: "#b91c1c", borderColor: "#fca5a5" }}
+                        onClick={() => handleDeleteTireRecord(tr.id)}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Tire Stock Inbound/Outbound Modal */}
+      {isTireModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 620,
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15)",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 24px",
+                borderBottom: "1px solid #e2e8f0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: tireTxType === "Inbound" ? "#f0fdf4" : "#f0f9ff",
+                borderTopLeftRadius: 12,
+                borderTopRightRadius: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
+                  {tireTxType === "Inbound"
+                    ? "+ รับเข้ายางรถโฟล์คลิฟท์ (Tire Stock Inbound)"
+                    : "- เบิกเปลี่ยนยางรถโฟล์คลิฟท์ (Tire Stock Outbound)"}
+                </div>
+                <div style={{ fontSize: 11, color: "#647786", marginTop: 2 }}>
+                  บันทึกลงฐานข้อมูลแยกอิสระ (mh_tire_stock)
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTireModalOpen(false)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateTireTransaction} style={{ padding: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ gridColumn: "span 2", display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  className={`button ${tireTxType === "Inbound" ? "primary" : "secondary"}`}
+                  style={{ flex: 1, justifyContent: "center" }}
+                  onClick={() => setTireTxType("Inbound")}
+                >
+                  + รับเข้ายางใหม่ (Inbound)
+                </button>
+                <button
+                  type="button"
+                  className={`button ${tireTxType === "Outbound" ? "primary" : "secondary"}`}
+                  style={{ flex: 1, justifyContent: "center" }}
+                  onClick={() => setTireTxType("Outbound")}
+                >
+                  - เบิกเปลี่ยนยาง (Outbound)
+                </button>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  ขนาดยาง (Tire Size) *
+                </label>
+                <select
+                  value={tireSize}
+                  onChange={(e) => setTireSize(e.target.value)}
+                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                >
+                  {TIRE_SIZE_OPTIONS.map((sz) => (
+                    <option key={sz} value={sz}>{sz}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  ยี่ห้อ / รุ่นยาง (Brand) *
+                </label>
+                <input
+                  type="text"
+                  value={tireBrand}
+                  onChange={(e) => setTireBrand(e.target.value)}
+                  placeholder="เช่น KOMACHI, PIO, BRIDGESTONE, DUNLOP"
+                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  จำนวน (เส้น) *
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={tireQty}
+                  onChange={(e) => setTireQty(Number(e.target.value))}
+                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  ราคาต่อเส้น (THB) *
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={tireUnitCost}
+                  onChange={(e) => setTireUnitCost(Number(e.target.value))}
+                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                  required
+                />
+              </div>
+
+              {tireTxType === "Inbound" ? (
+                <div style={{ gridColumn: "span 2" }}>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                    ผู้จัดจำหน่าย / เลขที่ใบส่งของ (Supplier / Invoice No.) *
+                  </label>
+                  <input
+                    type="text"
+                    value={tireSupplierOrInvoice}
+                    onChange={(e) => setTireSupplierOrInvoice(e.target.value)}
+                    placeholder="เช่น บจก. สยามไทร์ / INV-2026-089"
+                    style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                    required
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                      รถโฟล์คลิฟท์ที่เปลี่ยนยาง (Vehicle) *
+                    </label>
+                    <select
+                      value={tireVehicleId}
+                      onChange={(e) => setTireVehicleId(e.target.value)}
+                      style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                    >
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.vehicleId}>
+                          {v.vehicleId} - {v.vehicleType} ({v.description})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                      ตำแหน่งล้อที่เปลี่ยน (Wheel Position) *
+                    </label>
+                    <select
+                      value={tireWheelPosition}
+                      onChange={(e) => setTireWheelPosition(e.target.value)}
+                      style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                    >
+                      {WHEEL_POSITION_OPTIONS.map((pos) => (
+                        <option key={pos} value={pos}>{pos}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  ผู้บันทึก / ช่างผู้เบิก (Technician / Receiver) *
+                </label>
+                <input
+                  type="text"
+                  value={tireTechnicianName}
+                  onChange={(e) => setTireTechnicianName(e.target.value)}
+                  placeholder="ระบุชื่อช่างหรือเจ้าหน้าที่คลังอะไหล่"
+                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  หมายเหตุ (Notes)
+                </label>
+                <input
+                  type="text"
+                  value={tireNotes}
+                  onChange={(e) => setTireNotes(e.target.value)}
+                  placeholder="รายละเอียดเพิ่มเติม..."
+                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                />
+              </div>
+
+              <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
+                <button type="button" className="button secondary" onClick={() => setIsTireModalOpen(false)}>
+                  ยกเลิก
+                </button>
+                <button type="submit" className="button primary">
+                  บันทึกรายการสต๊อกยาง
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* New Maintenance Order Modal */}
       {isModalOpen && (

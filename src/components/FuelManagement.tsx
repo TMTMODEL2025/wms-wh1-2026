@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Fuel,
   TrendingUp,
@@ -17,23 +17,25 @@ import {
   FileText,
   Truck,
   CheckCircle2,
-  Droplets
+  Droplets,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Trash2,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
+import {
+  MhFuelStockRecord,
+  subscribeToMhFuelStock,
+  fetchMhFuelStockOnce,
+  saveMhFuelTransactionToCloud,
+  deleteMhFuelTransactionFromCloud,
+  getForkliftCloudRealtimeEnabled,
+  setForkliftCloudRealtimeEnabled,
+  subscribeForkliftCloudRealtimeMode,
+} from "../services/forkliftDataService";
 
-interface FuelTransaction {
-  id: string;
-  type: "Inbound Receipt (รับเข้า)" | "Outbound Withdrawal (เบิกออก)";
-  fuelType: "Diesel (ดีเซล)" | "Gasoline (เบนซิน)";
-  qty: number;
-  meterStart: number;
-  meterEnd: number;
-  recorderName: string;
-  referenceSource: string; // Supplier for inbound, Vehicle ID for outbound
-  purposeOrNotes: string;
-  workingDate: string;
-  timestamp: string;
-}
+type FuelTransaction = MhFuelStockRecord;
 
 interface FuelManagementProps {
   vehicles: Vehicle[];
@@ -43,6 +45,10 @@ const INITIAL_FUEL_TRANSACTIONS: FuelTransaction[] = [];
 
 export function FuelManagement({ vehicles }: FuelManagementProps) {
   const [transactions, setTransactions] = useState<FuelTransaction[]>(INITIAL_FUEL_TRANSACTIONS);
+  const [cloudRealtime, setCloudRealtime] = useState<boolean>(() =>
+    getForkliftCloudRealtimeEnabled()
+  );
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [fuelTypeFilter, setFuelTypeFilter] = useState("All");
@@ -51,6 +57,35 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const [isInboundModalOpen, setIsInboundModalOpen] = useState(false);
   const [isOutboundModalOpen, setIsOutboundModalOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<FuelTransaction | null>(null);
+
+  // Subscribe to mh_fuel_stock ONLY when FuelManagement is mounted, and unsubscribe immediately on unmount
+  useEffect(() => {
+    const unsubMode = subscribeForkliftCloudRealtimeMode((enabled) => {
+      setCloudRealtime(enabled);
+    });
+    return () => {
+      unsubMode();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeToMhFuelStock((cloudRecords) => {
+      setTransactions(cloudRecords);
+    });
+    return () => {
+      unsub();
+    };
+  }, [cloudRealtime]);
+
+  const handleManualReload = async () => {
+    setIsRefreshing(true);
+    try {
+      const latest = await fetchMhFuelStockOnce();
+      setTransactions(latest);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Inbound Form State
   const [inFuelType, setInFuelType] = useState<"Diesel (ดีเซล)" | "Gasoline (เบนซิน)">("Diesel (ดีเซล)");
@@ -88,14 +123,17 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const DIESEL_LOW_THRESHOLD = 4000;
   const GASOLINE_LOW_THRESHOLD = 2000;
 
-  const handleInboundSubmit = (e: React.FormEvent) => {
+  const handleInboundSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = Number(inQty) || 0;
     const startNum = Number(inMeterStart) || 0;
     const endNum = startNum + qtyNum;
+    const txId = `FUEL-${new Date().getFullYear()}-${String(transactions.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
 
     const newTx: FuelTransaction = {
-      id: `FUEL-2026-${String(transactions.length + 1).padStart(3, "0")}`,
+      id: txId,
+      transactionNo: txId,
       type: "Inbound Receipt (รับเข้า)",
       fuelType: inFuelType,
       qty: qtyNum,
@@ -105,15 +143,17 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       referenceSource: inSupplier.trim() || "Direct Supplier",
       purposeOrNotes: inNotes.trim() || "Bulk fuel receipt into warehouse storage tank.",
       workingDate: inDate,
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+      timestamp: nowStr,
+      updatedAt: nowStr,
     };
 
-    setTransactions([newTx, ...transactions]);
+    setTransactions((prev) => [newTx, ...prev]);
     setIsInboundModalOpen(false);
     setInNotes("");
+    await saveMhFuelTransactionToCloud(newTx);
   };
 
-  const handleOutboundSubmit = (e: React.FormEvent) => {
+  const handleOutboundSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = Number(outQty) || 0;
     const startNum = Number(outMeterStart) || 0;
@@ -121,9 +161,12 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
 
     const targetVehicle = vehicles.find((v) => v.vehicleId === outVehicleId);
     const vehicleLabel = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})` : `${outVehicleId} - Warehouse Fleet`;
+    const txId = `FUEL-${new Date().getFullYear()}-${String(transactions.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
 
     const newTx: FuelTransaction = {
-      id: `FUEL-2026-${String(transactions.length + 1).padStart(3, "0")}`,
+      id: txId,
+      transactionNo: txId,
       type: "Outbound Withdrawal (เบิกออก)",
       fuelType: outFuelType,
       qty: qtyNum,
@@ -133,12 +176,22 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       referenceSource: vehicleLabel,
       purposeOrNotes: outPurpose.trim() || "Vehicle refueling dispatch.",
       workingDate: outDate,
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+      timestamp: nowStr,
+      updatedAt: nowStr,
     };
 
-    setTransactions([newTx, ...transactions]);
+    setTransactions((prev) => [newTx, ...prev]);
     setIsOutboundModalOpen(false);
     setOutPurpose("");
+    await saveMhFuelTransactionToCloud(newTx);
+  };
+
+  const handleDeleteFuelTx = async (id: string) => {
+    setTransactions((prev) => prev.filter((item) => item.id !== id));
+    if (selectedTx?.id === id) {
+      setSelectedTx(null);
+    }
+    await deleteMhFuelTransactionFromCloud(id);
   };
 
   const filteredTransactions = transactions.filter((t) => {
@@ -205,6 +258,33 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
+              style={{
+                padding: "6px 10px",
+                fontSize: 11,
+                borderColor: cloudRealtime ? "#22c55e" : "#94a3b8",
+                color: cloudRealtime ? "#15803d" : "#475569",
+              }}
+              title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
+            >
+              {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
+              {cloudRealtime ? "Cloud Real-time: ON" : "Cloud Real-time: OFF"}
+            </button>
+            {!cloudRealtime && (
+              <button
+                type="button"
+                className="button secondary"
+                onClick={handleManualReload}
+                disabled={isRefreshing}
+                style={{ padding: "6px 10px", fontSize: 11 }}
+              >
+                <RefreshCw size={13} />
+                {isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}
+              </button>
+            )}
             <button className="button primary" onClick={() => setIsInboundModalOpen(true)}>
               <Plus size={14} /> + Inbound Receipt (รับเข้าน้ำมัน)
             </button>
@@ -650,7 +730,15 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
               )}
             </div>
 
-            <div className="modal-footer-box fuel-modal-footer" style={{ padding: "14px 24px", display: "flex", justifyContent: "flex-end" }}>
+            <div className="modal-footer-box fuel-modal-footer" style={{ padding: "14px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <button
+                type="button"
+                className="button secondary"
+                style={{ padding: "6px 10px", fontSize: 11, color: "#b91c1c", borderColor: "#fca5a5" }}
+                onClick={() => handleDeleteFuelTx(selectedTx.id)}
+              >
+                <Trash2 size={12} /> Delete Record
+              </button>
               <button className="button primary" onClick={() => setSelectedTx(null)}>
                 Close
               </button>

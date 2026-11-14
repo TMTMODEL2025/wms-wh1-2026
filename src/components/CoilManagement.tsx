@@ -29,9 +29,11 @@ import {
   Scale,
   Factory,
   Database,
-  Pencil,
   Building2,
   Lock,
+  Info,
+  Loader2,
+  Clock,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
@@ -44,11 +46,14 @@ import {
   CoilStagingOrder,
   CoilStagingItem,
   CoilLayoutZone,
+  CoilSapMasterItem,
+  COIL_SAP_CHUNK_SIZE,
   DEFAULT_COIL_LAYOUT_ZONES,
   subscribeToCoilStock,
   subscribeToCoilTransactions,
   subscribeToCoilStaging,
   subscribeToCoilLayouts,
+  subscribeToCoilSapChunks,
   saveCoilInboundToCloud,
   batchSaveCoilInboundToCloud,
   saveCoilStagingOrderToCloud,
@@ -59,6 +64,9 @@ import {
   returnCoilToStockInCloud,
   deleteCoilStockFromCloud,
   clearAllCoilDataFromCloud,
+  saveCoilSapChunksToCloud,
+  clearCoilSapChunksFromCloud,
+  importCoilSapStockToCloud,
   getCoilCloudRealtimeEnabled,
   setCoilCloudRealtimeEnabled,
   subscribeCoilCloudRealtimeMode,
@@ -90,6 +98,300 @@ const COMMON_MANUFACTURERS = ["SSI", "GJ", "POSCO", "JFE", "NIPPON", "SYS", "CSC
 const INBOUND_BUILDINGS = ["E7", "E8", "H7", "H8", "05", "21"];
 const INBOUND_QUICK_ROWS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const STICKY_COIL_LOCATION_KEY = "tmt_wms_coil_sticky_location_v1";
+
+// ============================================================================
+// SAP Data Decoders & Parsers for Coil Stock Upload (UTF-8 / Windows-874 / Excel)
+// ============================================================================
+function decodeCoilSapBuffer(buffer: ArrayBuffer): string {
+  const uint8 = new Uint8Array(buffer);
+  if (uint8.length >= 3 && uint8[0] === 0xef && uint8[1] === 0xbb && uint8[2] === 0xbf) {
+    return new TextDecoder("utf-8").decode(uint8);
+  }
+  const utf8Text = new TextDecoder("utf-8").decode(uint8);
+  const replacementCount = (utf8Text.match(/\uFFFD/g) || []).length;
+  let thaiByteCount = 0;
+  for (let i = 0; i < Math.min(uint8.length, 5000); i++) {
+    if (uint8[i] >= 0xa1 && uint8[i] <= 0xfb) {
+      thaiByteCount++;
+    }
+  }
+  const hasUtf8Thai = /[\u0E00-\u0E7F]/.test(utf8Text);
+
+  if (replacementCount > 0 || (thaiByteCount > 5 && !hasUtf8Thai)) {
+    try {
+      const thaiText = new TextDecoder("windows-874").decode(uint8);
+      if (/[\u0E00-\u0E7F]/.test(thaiText)) return thaiText;
+    } catch {
+      try {
+        const tisText = new TextDecoder("tis-620").decode(uint8);
+        if (/[\u0E00-\u0E7F]/.test(tisText)) return tisText;
+      } catch {
+        // fallback to utf-8
+      }
+    }
+  }
+  return utf8Text;
+}
+
+function sanitizeCoilWeightKg(val: unknown, rawStr?: string): number {
+  if (val === null || val === undefined) return 0;
+  const str = String(rawStr !== undefined ? rawStr : val).trim();
+  if (
+    !str ||
+    str === "-" ||
+    str === "0" ||
+    str === "0.00" ||
+    /2e09/i.test(str) ||
+    str.includes("2.00E+09") ||
+    str.includes("2.00e+09") ||
+    str === "2000000000" ||
+    str === "2,000,000,000"
+  ) {
+    return 0;
+  }
+  const cleanStr = str.replace(/,/g, "").replace(/kg/gi, "").replace(/\s+/g, "").trim();
+  const num = typeof val === "number" && !isNaN(val) ? val : parseFloat(cleanStr);
+  if (isNaN(num) || num <= 0 || num >= 1000000) {
+    return 0;
+  }
+  return num;
+}
+
+function formatSapThickness(val: unknown): string {
+  if (val === null || val === undefined) return "-";
+  const raw = String(val).replace(/,/g, "").replace(/\s*mm$/i, "").trim();
+  if (!raw || raw === "-") return "-";
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num <= 0 || num >= 200) return "-";
+  return num.toFixed(2);
+}
+
+function formatSapWidth(val: unknown): string {
+  if (val === null || val === undefined) return "-";
+  const raw = String(val).replace(/,/g, "").replace(/\s*mm$/i, "").trim();
+  if (!raw || raw === "-") return "-";
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num <= 0 || num >= 10000) return "-";
+  return Number.isInteger(num) ? String(num) : String(Number(num.toFixed(2)));
+}
+
+function splitCsvLine(line: string, delimiter = ","): string[] {
+  const result: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === delimiter && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// Strict 15-column SAP format ([0] to [14]):
+// [0] Material No.
+// [1] Discription
+// [2] Batch
+// [3] หนา Certificated.
+// [4] ความหนาเป้าหมาย
+// [5] กว้าง
+// [6] Grade
+// [7] ผู้ผลิต
+// [8] Skinpass
+// [9] Storage Location
+// [10] Unrestr.
+// [11] หมายเลขคอยล์
+// [12] Text สภาพสินค้า
+// [13] HEAT NO.
+// [14] นน. ชั่งจริง
+function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
+  if (!rawRows || rawRows.length === 0) return [];
+  const items: CoilSapMasterItem[] = [];
+
+  for (let r = 0; r < rawRows.length; r++) {
+    const row = rawRows[r];
+    if (!Array.isArray(row) || row.length < 3) continue;
+
+    let cells = row.map((cell) =>
+      cell !== null && cell !== undefined ? String(cell).trim().replace(/^["']|["']$/g, "") : ""
+    );
+    if (cells.every((c) => c.length === 0)) continue;
+
+    // If Excel sheet has leading empty column(s) before Material No., shift left so [0] is Material No.
+    while (cells.length > 15 && cells[0] === "") {
+      cells = cells.slice(1);
+    }
+
+    // Skip header rows
+    const c0 = (cells[0] || "").toLowerCase();
+    const c1 = (cells[1] || "").toLowerCase();
+    const c2 = (cells[2] || "").toLowerCase();
+    const c3 = (cells[3] || "").toLowerCase();
+    const c6 = (cells[6] || "").toLowerCase();
+    const c10 = (cells[10] || "").toLowerCase();
+    if (
+      c2 === "batch" ||
+      c2.includes("batch") ||
+      c0.includes("material") ||
+      c1.includes("discription") ||
+      c1.includes("description") ||
+      c3.includes("certificated") ||
+      c6 === "grade" ||
+      c10.includes("unrestr")
+    ) {
+      continue;
+    }
+
+    // If an unquoted CSV line split [10] Unrestr. (e.g. "12,018" -> "12" and "018"), merge them back
+    if (
+      cells.length >= 16 &&
+      /^\d{1,3}$/.test(cells[10] || "") &&
+      /^\d{3}$/.test(cells[11] || "")
+    ) {
+      cells = [
+        ...cells.slice(0, 10),
+        `${cells[10]},${cells[11]}`,
+        ...cells.slice(12),
+      ];
+    }
+
+    // [2] Batch ONLY (never use [0] Material No. which contains '-' or >10 chars)
+    const rawCell2 = (cells[2] || "").trim().toUpperCase();
+    if (!rawCell2 || rawCell2.includes("-") || /[\u0E00-\u0E7F]/.test(rawCell2)) {
+      continue;
+    }
+    const rawBatchCode = rawCell2.replace(/[^A-Z0-9]/g, "");
+    if (!rawBatchCode || rawBatchCode.length < 3 || rawBatchCode.length > 10) continue;
+
+    // [0] Material No.
+    const materialNo = (cells[0] || "").trim();
+    // [1] Discription
+    const description = (cells[1] || "").trim();
+    // [3] หนา Certificated.
+    const certThickness = formatSapThickness(cells[3]);
+    // [4] ความหนาเป้าหมาย
+    const targetThickness =
+      formatSapThickness(cells[4]) !== "-" ? formatSapThickness(cells[4]) : certThickness;
+    // [5] กว้าง
+    const width = formatSapWidth(cells[5]);
+    // [6] Grade
+    const rawGrade = (cells[6] || "").trim().toUpperCase();
+    const grade = rawGrade || "-";
+    // [7] ผู้ผลิต (never [8] Skinpass)
+    const rawManufacturer = (cells[7] || "").trim().toUpperCase();
+    const manufacturer =
+      rawManufacturer && rawManufacturer !== "AUTOSK" && rawManufacturer !== "NONSK"
+        ? rawManufacturer
+        : "-";
+    // [8] Skinpass
+    const skinpass = (cells[8] || "").trim();
+    // [9] Storage Location
+    let storageLocation = (cells[9] || "").trim() || "-";
+    if (
+      storageLocation.includes("E+") ||
+      storageLocation.includes("e+") ||
+      storageLocation === "2000000000" ||
+      storageLocation === "2.00E+09"
+    ) {
+      storageLocation = "2E09";
+    }
+    // [10] Unrestr. (น้ำหนักคงเหลือ kg - strip commas, never [5] กว้าง)
+    const weightKg = sanitizeCoilWeightKg(cells[10]);
+    // [11] หมายเลขคอยล์ (Coil No.)
+    const coilNo = (cells[11] || "").trim().toUpperCase() || "-";
+    // [12] Text สภาพสินค้า
+    const conditionText = (cells[12] || "").trim();
+    // [13] HEAT NO.
+    const heatNo = (cells[13] || "").trim().toUpperCase();
+    // [14] นน. ชั่งจริง
+    const actualWeightKg = cells[14] !== undefined ? sanitizeCoilWeightKg(cells[14]) : 0;
+
+    items.push({
+      materialNo,
+      description,
+      batch: rawBatchCode,
+      certThickness,
+      targetThickness,
+      width,
+      grade,
+      manufacturer,
+      skinpass,
+      storageLocation,
+      weightKg,
+      unrestricted: `${weightKg.toLocaleString()} kg`,
+      coilNo,
+      conditionText,
+      heatNo,
+      actualWeightKg,
+      salesDoc: "",
+      qualityClass: "-",
+    });
+  }
+
+  return items;
+}
+
+function parseRawCoilSapText(rawText: string): CoilSapMasterItem[] {
+  if (!rawText || !rawText.trim()) return [];
+
+  // 1. Tab-Separated (TSV) from Excel/SAP copy-paste: preserve exact tab positions [0]..[14]
+  if (rawText.includes("\t")) {
+    const tsvLines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const tsvRows = tsvLines.map((line) =>
+      line.split("\t").map((c) => c.trim().replace(/^["']|["']$/g, ""))
+    );
+    const parsedTsv = parseCoilSapRows(tsvRows);
+    if (parsedTsv.length > 0) return parsedTsv;
+  }
+
+  // 2. CSV / Semicolon / Pipe lines (quote-aware so "8,280" in [10] Unrestr. stays a single column)
+  const lines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const rows: string[][] = [];
+  for (const line of lines) {
+    let cols: string[];
+    if (line.includes("\t")) {
+      cols = line.split("\t");
+    } else if (line.includes(";") && (line.match(/;/g) || []).length >= 5) {
+      cols = splitCsvLine(line, ";");
+    } else if (line.includes("|") && (line.match(/\|/g) || []).length >= 5) {
+      cols = line.split("|");
+    } else if (line.includes(",")) {
+      cols = splitCsvLine(line, ",");
+    } else {
+      cols = line.trim().split(/\s{2,}/);
+    }
+    rows.push(cols.map((c) => c.trim().replace(/^["']|["']$/g, "")));
+  }
+  const parsedFromLines = parseCoilSapRows(rows);
+  if (parsedFromLines.length > 0) return parsedFromLines;
+
+  // 3. Fallback via XLSX parser
+  try {
+    const workbook = XLSX.read(rawText, { type: "string", raw: true });
+    if (workbook.SheetNames.length > 0) {
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sheetRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+      if (sheetRows && sheetRows.length > 0) {
+        return parseCoilSapRows(sheetRows);
+      }
+    }
+  } catch {
+    // ignore fallback error
+  }
+
+  return [];
+}
 
 export const CoilManagement: React.FC<CoilManagementProps> = ({
   activeMode: controlledMode,
@@ -195,12 +497,24 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       }
     });
 
+    const unsubSap = subscribeToCoilSapChunks((items, chunkCount) => {
+      if (!isMounted) return;
+      const nextMap = new Map<string, CoilSapMasterItem>();
+      items.forEach((itm) => {
+        const key = String(itm.batch || "").trim().toUpperCase();
+        if (key) nextMap.set(key, itm);
+      });
+      setCoilSapMap(nextMap);
+      setCoilSapChunkCount(chunkCount);
+    });
+
     return () => {
       isMounted = false;
       unsubStock();
       unsubTx();
       unsubStaging();
       unsubLayouts();
+      unsubSap();
       // Strict Rule 3: Immediately clear all Coil Firestore listeners when leaving Coil Management
       unsubscribeAllCoilFirestoreListeners();
     };
@@ -351,18 +665,30 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   const [isAddZoneModalOpen, setIsAddZoneModalOpen] = useState<boolean>(false);
 
   // ============================================================================
-  // Tab 5 State: สต๊อก (Stock Balance)
+  // Tab 5 State: สต๊อก (Stock Balance & SAP Stock Upload)
   // ============================================================================
   const [stockSearch, setStockSearch] = useState<string>("");
   const [stockBayFilter, setStockBayFilter] = useState<string>("ALL");
   const [stockGradeFilter, setStockGradeFilter] = useState<string>("ALL");
   const [stockStatusFilter, setStockStatusFilter] = useState<"ACTIVE" | "available" | "staged" | "issued" | "ALL">("ACTIVE");
+  const [coilSapMap, setCoilSapMap] = useState<Map<string, CoilSapMasterItem>>(() => new Map());
+  const [coilSapChunkCount, setCoilSapChunkCount] = useState<number>(0);
+  const [isSapModalOpen, setIsSapModalOpen] = useState<boolean>(false);
+  const [sapRawText, setSapRawText] = useState<string>("");
+  const [isSapProcessing, setIsSapProcessing] = useState<boolean>(false);
+  const [sapProgress, setSapProgress] = useState<number>(0);
+  const [sapCurrentStep, setSapCurrentStep] = useState<number>(1);
+  const [sapTotalCount, setSapTotalCount] = useState<number>(0);
+  const [sapProcessedCount, setSapProcessedCount] = useState<number>(0);
+  const [createMissingStockOnSapImport, setCreateMissingStockOnSapImport] = useState<boolean>(true);
+  const sapFileInputRef = useRef<HTMLInputElement | null>(null);
+  const sapTextAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ============================================================================
   // Derived Metrics & Filtered Lists
   // ============================================================================
   const activeStockCoils = useMemo(
-    () => coilStock.filter((c) => (Number(c.weightKg) || 0) > 0 && c.status !== "issued"),
+    () => coilStock.filter((c) => c.status !== "issued"),
     [coilStock]
   );
 
@@ -450,7 +776,14 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     const rawCode = rawSubmitted;
     const finalLocation = inboundLocation.trim().toUpperCase() || `${inboundBuilding || "E7"}/${inboundRow || "1"}`;
     const existingRecord = coilStock.find((c) => c.batch.toUpperCase() === rawCode);
-    const defaultWeight = existingRecord?.weightKg && existingRecord.weightKg > 0 ? existingRecord.weightKg : 8500;
+    const sapMaster = coilSapMap.get(rawCode);
+    const hasExistingSap = Boolean(existingRecord?.hasSapData || sapMaster);
+    const preservedWeight =
+      sapMaster && sapMaster.weightKg > 0
+        ? sapMaster.weightKg
+        : hasExistingSap && existingRecord?.weightKg && existingRecord.weightKg > 0
+        ? existingRecord.weightKg
+        : 0;
 
     // Immediately clear input & keep focus for rapid continuous scanning
     setInboundScanInput("");
@@ -460,20 +793,73 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     const saved = await saveCoilInboundToCloud({
       id: `COIL-${rawCode}`,
       batch: rawCode,
-      coilNo: existingRecord?.coilNo || rawCode,
+      coilNo:
+        sapMaster?.coilNo && sapMaster.coilNo !== "-"
+          ? sapMaster.coilNo
+          : hasExistingSap && existingRecord?.coilNo
+          ? existingRecord.coilNo
+          : "-",
       location: finalLocation,
       status: "available",
-      weightKg: defaultWeight,
-      initialWeightKg: existingRecord?.initialWeightKg || defaultWeight,
-      certThickness: existingRecord?.certThickness || "2.00",
-      targetThickness: existingRecord?.targetThickness || "2.00",
-      width: existingRecord?.width || "1219",
-      grade: existingRecord?.grade || "SS400",
-      manufacturer: existingRecord?.manufacturer || "SSI",
-      supplier: existingRecord?.supplier || "SSI",
+      weightKg: preservedWeight,
+      initialWeightKg:
+        hasExistingSap && existingRecord?.initialWeightKg && existingRecord.initialWeightKg > 0
+          ? existingRecord.initialWeightKg
+          : preservedWeight,
+      certThickness:
+        sapMaster?.certThickness && sapMaster.certThickness !== "-"
+          ? sapMaster.certThickness
+          : hasExistingSap && existingRecord?.certThickness
+          ? formatSapThickness(existingRecord.certThickness)
+          : "-",
+      targetThickness:
+        sapMaster?.targetThickness && sapMaster.targetThickness !== "-"
+          ? sapMaster.targetThickness
+          : hasExistingSap && existingRecord?.targetThickness
+          ? formatSapThickness(existingRecord.targetThickness)
+          : "-",
+      width:
+        sapMaster?.width && sapMaster.width !== "-"
+          ? sapMaster.width
+          : hasExistingSap && existingRecord?.width
+          ? formatSapWidth(existingRecord.width)
+          : "-",
+      grade:
+        sapMaster?.grade && sapMaster.grade !== "-"
+          ? sapMaster.grade
+          : hasExistingSap && existingRecord?.grade
+          ? existingRecord.grade
+          : "-",
+      manufacturer:
+        sapMaster?.manufacturer && sapMaster.manufacturer !== "-"
+          ? sapMaster.manufacturer
+          : hasExistingSap && existingRecord?.manufacturer
+          ? existingRecord.manufacturer
+          : "-",
+      supplier:
+        sapMaster?.manufacturer && sapMaster.manufacturer !== "-"
+          ? sapMaster.manufacturer
+          : hasExistingSap && existingRecord?.supplier
+          ? existingRecord.supplier
+          : "-",
       machine: inboundSourceType === "internal" ? inboundMachine : "EXTERNAL",
       inboundType: inboundSourceType,
       orderNo: existingRecord?.orderNo || "",
+      materialNo: sapMaster?.materialNo || (hasExistingSap ? existingRecord?.materialNo || "" : ""),
+      salesDoc: sapMaster?.salesDoc || (hasExistingSap ? existingRecord?.salesDoc || "" : ""),
+      qualityClass:
+        sapMaster?.qualityClass || (hasExistingSap ? existingRecord?.qualityClass || "-" : "-"),
+      description:
+        sapMaster?.description || (hasExistingSap ? existingRecord?.description || "" : ""),
+      skinpass: sapMaster?.skinpass || (hasExistingSap ? existingRecord?.skinpass || "" : ""),
+      storageLocation:
+        sapMaster?.storageLocation || (hasExistingSap ? existingRecord?.storageLocation || "" : ""),
+      conditionText:
+        sapMaster?.conditionText || (hasExistingSap ? existingRecord?.conditionText || "" : ""),
+      heatNo: sapMaster?.heatNo || (hasExistingSap ? existingRecord?.heatNo || "" : ""),
+      actualWeightKg:
+        sapMaster?.actualWeightKg || (hasExistingSap ? existingRecord?.actualWeightKg || 0 : 0),
+      hasSapData: hasExistingSap,
       scanTimestamp: timestamp,
     });
 
@@ -492,136 +878,11 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     focusInboundBatchInput();
   };
 
-  const handleEditInboundCoil = async (coil: CoilStockRecord) => {
-    const { value: formValues, isConfirmed } = await Swal.fire({
-      title: isThai ? `แก้ไขรายการรับเข้า` : `Edit Inbound Coil`,
-      html: `
-        <div style="text-align:left; font-size:13px; display:flex; flex-direction:column; gap:10px;">
-          <div>
-            <label style="display:block; font-weight:700; margin-bottom:4px;">Batch:</label>
-            <input id="swal-coil-edit-batch" class="swal2-input" style="margin:0; width:100%; font-family:monospace; font-weight:700; font-size:14px;" value="${coil.batch}" />
-          </div>
-          <div>
-            <label style="display:block; font-weight:700; margin-bottom:4px;">Location (เช่น E7/1, H8/2):</label>
-            <input id="swal-coil-edit-location" class="swal2-input" style="margin:0; width:100%; font-family:monospace; font-weight:700; font-size:14px;" value="${coil.location}" />
-          </div>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonColor: "#059669",
-      confirmButtonText: isThai ? "บันทึกการแก้ไข" : "Save Changes",
-      cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
-      preConfirm: () => {
-        const batchEl = document.getElementById("swal-coil-edit-batch") as HTMLInputElement | null;
-        const locEl = document.getElementById("swal-coil-edit-location") as HTMLInputElement | null;
-        return {
-          batch: cleanBarcode(batchEl?.value || "").toUpperCase(),
-          location: (locEl?.value || "").trim().toUpperCase(),
-        };
-      },
-    });
-
-    if (!isConfirmed || !formValues) return;
-    if (!formValues.batch || !formValues.location) {
-      showToast(isThai ? "กรุณาระบุ Batch และ Location ให้ครบถ้วน" : "Batch and Location are required", "warning");
-      return;
-    }
-
-    if (formValues.batch !== coil.batch) {
-      await deleteCoilStockFromCloud(coil.id);
-    }
-
-    await saveCoilInboundToCloud({
-      ...coil,
-      id: `COIL-${formValues.batch}`,
-      batch: formValues.batch,
-      coilNo: formValues.batch,
-      location: formValues.location,
-      scanTimestamp: coil.scanTimestamp,
-    });
-
-    playBeep("success");
-    showToast(
-      isThai
-        ? `แก้ไขข้อมูล ${formValues.batch} (${formValues.location}) เรียบร้อย`
-        : `Updated ${formValues.batch} (${formValues.location})`,
-      "success"
-    );
-  };
-
   const handleExcelImportInbound = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-
-      if (rows.length === 0) {
-        showToast(isThai ? "ไม่พบข้อมูลในไฟล์ Excel" : "No rows found in Excel file", "warning");
-        return;
-      }
-
-      const { timestamp } = formatNowTimestamp();
-      const toImport: Array<Partial<CoilStockRecord> & { batch: string; location: string }> = [];
-
-      rows.forEach((r, idx) => {
-        const batchVal = String(
-          r["Batch"] || r["batch"] || r["รหัส Batch"] || r["Coil No"] || r["หมายเลขม้วน"] || `MC26${String(idx + 1).padStart(4, "0")}A`
-        )
-          .trim()
-          .toUpperCase();
-        if (!batchVal) return;
-
-        const coilNoVal = String(r["Coil No"] || r["coilNo"] || r["หมายเลขม้วน"] || batchVal)
-          .trim()
-          .toUpperCase();
-        const locVal = String(r["Location"] || r["location"] || r["Layout"] || inboundLocation || "E7/1")
-          .trim()
-          .toUpperCase();
-        const gradeVal = String(r["Grade"] || r["grade"] || r["เกรด"] || "SS400")
-          .trim()
-          .toUpperCase();
-        const thickVal = String(r["Thickness"] || r["หนา"] || r["certThickness"] || "2.00").trim();
-        const widthVal = String(r["Width"] || r["กว้าง"] || r["width"] || "1219").trim();
-        const rawWeight = String(r["Weight"] || r["weightKg"] || r["น้ำหนัก"] || r["Unrestricted"] || "8500").replace(/,/g, "");
-        const weightKg = parseFloat(rawWeight) || 8500;
-        const mfgVal = String(r["Manufacturer"] || r["ผู้ผลิต"] || "SSI")
-          .trim()
-          .toUpperCase();
-
-        toImport.push({
-          id: `COIL-${batchVal}`,
-          batch: batchVal,
-          coilNo: coilNoVal,
-          location: locVal,
-          weightKg,
-          initialWeightKg: weightKg,
-          certThickness: thickVal,
-          width: widthVal,
-          grade: gradeVal,
-          manufacturer: mfgVal,
-          hasSapData: true,
-          scanTimestamp: timestamp,
-        });
-      });
-
-      if (toImport.length > 0) {
-        await batchSaveCoilInboundToCloud(toImport);
-        playBeep("success");
-        showToast(
-          isThai
-            ? `นำเข้าเหล็กม้วนจากไฟล์ Excel สำเร็จ ${toImport.length} ม้วน`
-            : `Imported ${toImport.length} coils from Excel`,
-          "success"
-        );
-      }
-    } catch (err) {
-      console.error("Coil Excel Import Error:", err);
-      showToast(isThai ? "เกิดข้อผิดพลาดในการอ่านไฟล์ Excel" : "Failed to parse Excel file", "error");
+      await handleSapFileUpload(file);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -937,7 +1198,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   const filteredStockRows = useMemo(() => {
     return coilStock.filter((c) => {
       if (stockStatusFilter === "ACTIVE") {
-        if ((Number(c.weightKg) || 0) <= 0 || c.status === "issued") return false;
+        if (c.status === "issued") return false;
       } else if (stockStatusFilter !== "ALL") {
         if (c.status !== stockStatusFilter) return false;
       }
@@ -949,7 +1210,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       }
       if (stockSearch.trim()) {
         const q = stockSearch.trim().toLowerCase();
-        const hay = `${c.batch} ${c.coilNo} ${c.grade} ${c.certThickness} ${c.width} ${c.location} ${c.manufacturer} ${c.orderNo || ""}`.toLowerCase();
+        const hay = `${c.batch} ${c.coilNo} ${c.grade} ${c.certThickness} ${c.targetThickness || ""} ${c.width} ${c.location} ${c.manufacturer} ${c.materialNo || ""} ${c.description || ""} ${c.skinpass || ""} ${c.storageLocation || ""} ${c.conditionText || ""} ${c.heatNo || ""} ${c.orderNo || ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -959,19 +1220,26 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   const handleExportStockExcel = () => {
     const exportRows = filteredStockRows.map((c, i) => ({
       "ลำดับ (No.)": i + 1,
-      "รหัส Batch": c.batch,
-      "หมายเลขม้วน (Coil No.)": c.coilNo,
-      "เกรด (Grade)": c.grade,
-      "หนา (Thickness mm)": c.certThickness,
-      "กว้าง (Width mm)": c.width,
-      "น้ำหนักคงเหลือ (kg)": c.weightKg,
-      "น้ำหนักตั้งต้น (kg)": c.initialWeightKg,
-      "สถานที่จัดเก็บ (Layout)": c.location,
+      "Material No.": c.materialNo || "-",
+      "Discription": c.description || "-",
+      "Batch": c.batch,
+      "หนา Certificated.": c.certThickness,
+      "ความหนาเป้าหมาย": c.targetThickness || c.certThickness,
+      "กว้าง": c.width,
+      "Grade": c.grade,
+      "ผู้ผลิต": c.manufacturer,
+      "Skinpass": c.skinpass || "-",
+      "Storage Location (SAP)": c.storageLocation || "-",
+      "Unrestr. (น้ำหนักคงเหลือ kg)": c.weightKg,
+      "หมายเลขคอยล์ (Coil No.)": c.coilNo,
+      "Text สภาพสินค้า": c.conditionText || c.remark || "-",
+      "HEAT NO.": c.heatNo || "-",
+      "นน. ชั่งจริง (kg)": c.actualWeightKg || 0,
+      "สถานที่จัดเก็บ (Layout อาคาร/แถว)": c.location,
       "Layout เดิม": c.previousLocation || "-",
-      "ผู้ผลิต (Manufacturer)": c.manufacturer,
       "สถานะ (Status)":
         c.status === "available"
-          ? "พร้อมใช้งาน (Available)"
+          ? "พร้อมใช้ (Available)"
           : c.status === "staged"
           ? `เตรียมเบิก (${c.stagedMachineId || "STAGED"})`
           : "จ่ายออกแล้ว (Issued)",
@@ -982,6 +1250,137 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Coil_Stock");
     XLSX.writeFile(wb, `TMT_Coil_Stock_${formatNowTimestamp().dateYmd}.xlsx`);
+  };
+
+  // ============================================================================
+  // Handlers for SAP Stock Upload & Sync (coil_sap_chunks + coil_stock)
+  // ============================================================================
+  const parsedSapPreviewItems = useMemo(() => {
+    if (!sapRawText.trim()) return [];
+    return parseRawCoilSapText(sapRawText);
+  }, [sapRawText]);
+
+  const executeCoilSapImport = async (parsedItems: CoilSapMasterItem[], sourceLabel: string) => {
+    if (!parsedItems || parsedItems.length === 0) {
+      playBeep("warning");
+      Swal.fire({
+        icon: "warning",
+        title: isThai ? "ไม่พบข้อมูลที่ถูกต้องจากระบบ SAP" : "No valid SAP rows detected",
+        text: isThai
+          ? "กรุณาตรวจสอบว่าไฟล์หรือข้อมูลที่วางมีคอลัมน์ Batch / น้ำหนัก / สเปคเหล็กม้วนครบถ้วน"
+          : "Please check that your file or pasted data contains valid SAP columns (Batch, Weight, Spec).",
+      });
+      return;
+    }
+
+    setIsSapProcessing(true);
+    setSapTotalCount(parsedItems.length);
+    setSapProcessedCount(0);
+    setSapCurrentStep(1);
+    setSapProgress(15);
+
+    try {
+      await new Promise((r) => setTimeout(r, 150));
+      setSapCurrentStep(2);
+      setSapProgress(35);
+      setSapProcessedCount(Math.round(parsedItems.length * 0.35));
+
+      await new Promise((r) => setTimeout(r, 150));
+      setSapCurrentStep(3);
+      setSapProgress(60);
+      const chunksSaved = await saveCoilSapChunksToCloud(parsedItems);
+
+      setSapCurrentStep(4);
+      setSapProgress(82);
+      setSapProcessedCount(Math.round(parsedItems.length * 0.85));
+
+      const { updatedCount, insertedCount } = await importCoilSapStockToCloud({
+        sapItems: parsedItems,
+        existingStock: coilStock,
+        createMissingStock: createMissingStockOnSapImport,
+      });
+
+      const nextMap = new Map<string, CoilSapMasterItem>();
+      parsedItems.forEach((itm) => {
+        const key = String(itm.batch || "").trim().toUpperCase();
+        if (key) nextMap.set(key, itm);
+      });
+      setCoilSapMap(nextMap);
+      setCoilSapChunkCount(chunksSaved);
+      setSapProcessedCount(parsedItems.length);
+      setSapProgress(100);
+
+      if (!isCloudRealtime) {
+        setManualRefreshTick((t) => t + 1);
+      }
+
+      onLogTransaction?.(
+        `SAP Coil Stock Upload (${sourceLabel}): ${parsedItems.length} rows (New: ${insertedCount}, Updated: ${updatedCount})`,
+        `SAP-${parsedItems.length}`,
+        "Completed"
+      );
+
+      await new Promise((r) => setTimeout(r, 250));
+      setIsSapProcessing(false);
+      setIsSapModalOpen(false);
+      setSapRawText("");
+      playBeep("success");
+
+      Swal.fire({
+        icon: "success",
+        title: isThai ? "อัปโหลดและจับคู่สต็อก SAP สำเร็จ" : "SAP Stock Merge Completed",
+        html: isThai
+          ? `<div style="text-align:left;font-size:13px;line-height:1.7;">
+              <div>• ข้อมูลจากไฟล์ SAP ทั้งหมด: <b>${parsedItems.length.toLocaleString()}</b> รายการ</div>
+              <div>• จับคู่ Batch ตรงกับสต๊อกและเติมเต็มข้อมูลสำเร็จ: <b style="color:#0284c7;">${updatedCount.toLocaleString()}</b> ม้วน</div>
+              ${
+                insertedCount > 0
+                  ? `<div>• เพิ่มรายการใหม่เข้าสต๊อก: <b style="color:#10b981;">${insertedCount.toLocaleString()}</b> ม้วน</div>`
+                  : `<div style="color:#64748b;font-size:12px;">(คงค่า Location อาคาร/แถว และสถานะเดิมที่สแกนไว้ทั้งหมด)</div>`
+              }
+            </div>`
+          : `Parsed <b>${parsedItems.length.toLocaleString()}</b> SAP items.<br/>Matched & Updated: <b>${updatedCount}</b> | Inserted: <b>${insertedCount}</b>`,
+      });
+    } catch (err) {
+      console.error("Coil SAP Import Error:", err);
+      setIsSapProcessing(false);
+      playBeep("error");
+      Swal.fire({
+        icon: "error",
+        title: isThai ? "เกิดข้อผิดพลาดในการนำเข้า SAP" : "SAP Import Error",
+        text: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  const handleSapFileUpload = async (file: File) => {
+    try {
+      const lower = file.name.toLowerCase();
+      let parsed: CoilSapMasterItem[] = [];
+
+      if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array", raw: true });
+        if (workbook.SheetNames.length > 0) {
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
+          parsed = parseCoilSapRows(rows);
+        }
+      } else {
+        const buffer = await file.arrayBuffer();
+        const text = decodeCoilSapBuffer(buffer);
+        parsed = parseRawCoilSapText(text);
+      }
+
+      await executeCoilSapImport(parsed, file.name);
+    } catch (err) {
+      console.error("Failed to read SAP file:", err);
+      playBeep("error");
+      showToast(
+        isThai ? "ไม่สามารถอ่านไฟล์ SAP นี้ได้ กรุณาตรวจสอบรูปแบบไฟล์" : "Failed to parse SAP file",
+        "error"
+      );
+    }
   };
 
   const TABS: Array<{
@@ -1428,119 +1827,82 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
             </div>
           </div>
 
-          {/* Recent Inbound Coils Table (5 Columns: วัน-เวลารับเข้า, Batch, Location, สถานะ, จัดการ) */}
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-            <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Layers size={15} className="text-emerald-500" />
-                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                  {isThai
-                    ? `รายการรับเข้าล่าสุด (${coilStock.length} รายการ)`
-                    : `Recent Inbound Coils (${coilStock.length})`}
-                </span>
-              </div>
-              <div className="relative w-full sm:w-64">
-                <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
-                <input
-                  type="text"
-                  value={inboundSearch}
-                  onChange={(e) => setInboundSearch(e.target.value)}
-                  placeholder={isThai ? "ค้นหา Batch หรือ Location..." : "Search Batch or Location..."}
-                  className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
-                />
-              </div>
-            </div>
+          {/* Recent Inbound Coils Table (4 Columns: วัน-เวลารับเข้า, Batch, Location, สถานะ — Available & Scanned only) */}
+          {(() => {
+            const availableInboundCoils = coilStock.filter((c) => {
+              if (c.status !== "available") return false;
+              if (!c.location || c.location === "-") return false;
+              if (!inboundSearch.trim()) return true;
+              const q = inboundSearch.toLowerCase();
+              return `${c.batch} ${c.location}`.toLowerCase().includes(q);
+            });
+            return (
+              <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Layers size={15} className="text-emerald-500" />
+                    <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                      {isThai
+                        ? `รายการรับเข้าล่าสุด (${availableInboundCoils.length} รายการ)`
+                        : `Recent Inbound Coils (${availableInboundCoils.length})`}
+                    </span>
+                  </div>
+                  <div className="relative w-full sm:w-64">
+                    <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={inboundSearch}
+                      onChange={(e) => setInboundSearch(e.target.value)}
+                      placeholder={isThai ? "ค้นหา Batch หรือ Location..." : "Search Batch or Location..."}
+                      className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                    />
+                  </div>
+                </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>{isThai ? "วัน-เวลารับเข้า" : "Timestamp"}</th>
-                    <th>Batch</th>
-                    <th>Location</th>
-                    <th>{isThai ? "สถานะ" : "Status"}</th>
-                    <th>{isThai ? "จัดการ" : "Action"}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {coilStock
-                    .filter((c) => {
-                      if (!inboundSearch.trim()) return true;
-                      const q = inboundSearch.toLowerCase();
-                      return `${c.batch} ${c.location}`.toLowerCase().includes(q);
-                    })
-                    .slice(0, 50)
-                    .map((c) => (
-                      <tr key={c.id}>
-                        <td className="font-mono text-[11px]">{c.scanTimestamp}</td>
-                        <td>
-                          <span className="code font-mono font-bold">{c.batch}</span>
-                        </td>
-                        <td>
-                          <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-400 font-mono font-bold text-[11px]">
-                            {c.location}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
-                              c.status === "available"
-                                ? "bg-emerald-500/20 text-emerald-400"
-                                : c.status === "staged"
-                                ? "bg-amber-500/20 text-amber-400"
-                                : "bg-slate-500/20 text-slate-400"
-                            }`}
-                          >
-                            {c.status === "available"
-                              ? isThai
-                                ? "พร้อมใช้"
-                                : "Available"
-                              : c.status === "staged"
-                              ? isThai
-                                ? `เตรียมเบิก (${c.stagedMachineId || ""})`
-                                : "Staged"
-                              : isThai
-                              ? "จ่ายออกแล้ว"
-                              : "Issued"}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleEditInboundCoil(c)}
-                              className="px-2 py-1 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
-                              title={isThai ? "แก้ไขรายการ" : "Edit"}
-                            >
-                              <Pencil size={12} />
-                              <span>{isThai ? "แก้ไข" : "Edit"}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteCoilStockFromCloud(c.id)}
-                              className="px-2 py-1 rounded bg-red-500/15 hover:bg-red-500/25 text-red-400 font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
-                              title={isThai ? "ลบรายการ" : "Delete"}
-                            >
-                              <Trash2 size={12} />
-                              <span>{isThai ? "ลบ" : "Delete"}</span>
-                            </button>
-                          </div>
-                        </td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th>{isThai ? "วัน-เวลารับเข้า" : "Timestamp"}</th>
+                        <th>Batch</th>
+                        <th>Location</th>
+                        <th>{isThai ? "สถานะ" : "Status"}</th>
                       </tr>
-                    ))}
-                  {coilStock.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400">
-                        {isThai
-                          ? "ยังไม่มีข้อมูลเหล็กม้วนที่รับเข้า กรุณาเลือก Location และสแกนรหัส Batch เพื่อเริ่มรับเข้า"
-                          : "No inbound coil records yet. Select a Location and scan a Batch barcode."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody>
+                      {availableInboundCoils.slice(0, 50).map((c) => (
+                        <tr key={c.id}>
+                          <td className="font-mono text-[11px]">{c.scanTimestamp}</td>
+                          <td>
+                            <span className="code font-mono font-bold">{c.batch}</span>
+                          </td>
+                          <td>
+                            <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-400 font-mono font-bold text-[11px]">
+                              {c.location}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-emerald-500/20 text-emerald-400">
+                              {isThai ? "พร้อมใช้" : "Available"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {availableInboundCoils.length === 0 && (
+                        <tr>
+                          <td colSpan={4} className="text-center py-8 text-slate-400">
+                            {isThai
+                              ? "ยังไม่มีรายการเหล็กม้วนสถานะพร้อมใช้ กรุณาเลือก Location และสแกนรหัส Batch เพื่อเริ่มรับเข้า"
+                              : "No available inbound coil records yet."}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -2301,7 +2663,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 }
                 className="px-2.5 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
               >
-                <option value="ACTIVE">{isThai ? "มีสต๊อกคงเหลือ (>0 kg)" : "Active Stock (>0 kg)"}</option>
+                <option value="ACTIVE">{isThai ? "สต๊อกคงเหลือ (พร้อมใช้ + เตรียมเบิก)" : "Active Stock (Available + Staged)"}</option>
                 <option value="available">{isThai ? "เฉพาะพร้อมใช้ (Available)" : "Available Only"}</option>
                 <option value="staged">{isThai ? "เฉพาะเตรียมเบิก (Staged)" : "Staged Only"}</option>
                 <option value="issued">{isThai ? "จ่ายออกแล้ว (Issued)" : "Issued"}</option>
@@ -2336,6 +2698,28 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
 
               <button
                 type="button"
+                onClick={() => {
+                  setIsSapModalOpen(true);
+                  setTimeout(() => sapTextAreaRef.current?.focus(), 80);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title={
+                  isThai
+                    ? "อัปโหลดไฟล์สต็อก SAP (Excel/CSV/TSV) เพื่อจับคู่ Batch และเติมข้อมูลสต๊อกอัตโนมัติ"
+                    : "Upload SAP Stock (Excel/CSV/TSV) to match Batch and update stock fields"
+                }
+              >
+                <Upload size={13} />
+                <span>{isThai ? "อัปโหลดสต็อก SAP" : "Upload SAP Stock"}</span>
+                {coilSapMap.size > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/25 text-white font-mono">
+                    {coilSapMap.size.toLocaleString()}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
                 onClick={handleExportStockExcel}
                 className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white inline-flex items-center gap-1.5 cursor-pointer"
               >
@@ -2360,25 +2744,44 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStockRows.map((c) => (
-                    <tr key={c.id}>
-                      <td>
-                        <span className="code font-mono font-bold">{c.batch}</span>
-                      </td>
-                      <td className="font-mono">{c.coilNo}</td>
-                      <td className="font-bold">{c.grade}</td>
-                      <td className="font-mono">
-                        {c.certThickness} x {c.width}
-                      </td>
-                      <td>{c.manufacturer}</td>
-                      <td className="font-mono font-bold">
-                        {Number(c.weightKg || 0).toLocaleString()} kg
-                      </td>
-                      <td>
-                        <span className="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 font-mono font-bold">
-                          {c.location}
-                        </span>
-                      </td>
+                  {filteredStockRows.map((c) => {
+                    const formattedThick = formatSapThickness(c.certThickness);
+                    const formattedWidth = formatSapWidth(c.width);
+                    const hasThick = formattedThick !== "-";
+                    const hasWidth = formattedWidth !== "-";
+                    const specDisplay =
+                      hasThick && hasWidth
+                        ? `${formattedThick} x ${formattedWidth}`
+                        : hasThick
+                        ? formattedThick
+                        : hasWidth
+                        ? formattedWidth
+                        : "-";
+                    const weightNum = Number(c.weightKg) || 0;
+                    const layoutDisplay = c.location && c.location.trim() && c.location !== "-" ? c.location : "-";
+                    return (
+                      <tr key={c.id}>
+                        <td>
+                          <span className="code font-mono font-bold">{c.batch}</span>
+                        </td>
+                        <td className="font-mono">{c.coilNo || "-"}</td>
+                        <td className="font-bold">{c.grade || "-"}</td>
+                        <td className="font-mono">{specDisplay}</td>
+                        <td>{c.manufacturer || "-"}</td>
+                        <td className="font-mono font-bold">
+                          {weightNum > 0 ? `${weightNum.toLocaleString()} kg` : "0"}
+                        </td>
+                        <td>
+                          <span
+                            className={`px-2 py-0.5 rounded font-mono font-bold ${
+                              layoutDisplay !== "-"
+                                ? "bg-sky-500/20 text-sky-400"
+                                : "bg-slate-500/15 text-slate-400"
+                            }`}
+                          >
+                            {layoutDisplay}
+                          </span>
+                        </td>
                       <td>
                         <span
                           className={`px-2 py-0.5 rounded text-[10.5px] font-bold ${
@@ -2442,7 +2845,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {filteredStockRows.length === 0 && (
                     <tr>
                       <td colSpan={9} className="text-center py-8 text-slate-400">
@@ -2453,6 +2857,363 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SAP Stock Upload & Import Modal */}
+      {isSapModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm"
+          onMouseDown={() => {
+            if (!isSapProcessing) setIsSapModalOpen(false);
+          }}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 border-b flex items-center justify-between bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2.5 rounded-xl border ${
+                    isSapProcessing
+                      ? "bg-cyan-500/15 text-cyan-500 border-cyan-500/30"
+                      : "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20"
+                  }`}
+                >
+                  <Database size={20} className={isSapProcessing ? "animate-pulse" : ""} />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 m-0">
+                    {isThai
+                      ? "นำเข้าสต๊อกเหล็กม้วนจากระบบ SAP (Upload SAP Stock)"
+                      : "Import Coil Stock from SAP"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0 mt-0.5">
+                    {isThai
+                      ? "รองรับไฟล์ Excel (.xlsx, .xls), CSV/TSV จาก SAP หรือคลิกแล้วกด Ctrl+V เพื่อวางตารางข้อมูลทันที"
+                      : "Supports Excel (.xlsx, .xls), CSV/TSV from SAP, or paste table data (Ctrl+V)"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isSapProcessing}
+                onClick={() => {
+                  if (!isSapProcessing) setIsSapModalOpen(false);
+                }}
+                className={`p-1.5 rounded-lg transition-colors ${
+                  isSapProcessing
+                    ? "text-slate-300 dark:text-slate-700 cursor-not-allowed"
+                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                }`}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {isSapProcessing ? (
+              <div className="p-8 flex flex-col items-center justify-center text-center space-y-5">
+                <div className="w-16 h-16 rounded-2xl bg-cyan-500/15 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                  <Loader2 size={32} className="animate-spin" />
+                </div>
+                <div>
+                  <h4 className="text-base font-extrabold text-slate-900 dark:text-slate-100 m-0">
+                    {sapProgress >= 100
+                      ? isThai
+                        ? "นำเข้าและอัปเดตสต๊อก SAP สำเร็จ!"
+                        : "SAP Stock Import Completed!"
+                      : isThai
+                      ? "กำลังประมวลผลและนำเข้าสต๊อก SAP..."
+                      : "Processing & Syncing SAP Stock..."}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {sapCurrentStep === 1 && (isThai ? "ขั้นตอนที่ 1/4: ตรวจสอบโครงสร้างข้อมูล SAP..." : "Step 1/4: Validating SAP structure...")}
+                    {sapCurrentStep === 2 && (isThai ? "ขั้นตอนที่ 2/4: แยกคอลัมน์ Batch, Spec, น้ำหนัก, SLoc..." : "Step 2/4: Parsing Batch, Spec, Weight, SLoc...")}
+                    {sapCurrentStep === 3 && (isThai ? "ขั้นตอนที่ 3/4: บันทึกข้อมูล SAP Master ลง Cloud (coil_sap_chunks)..." : "Step 3/4: Saving SAP Master chunks...")}
+                    {sapCurrentStep === 4 && (isThai ? "ขั้นตอนที่ 4/4: อัปเดตสต๊อกเหล็กม้วนคงเหลือ (coil_stock)..." : "Step 4/4: Updating coil_stock records...")}
+                  </p>
+                </div>
+
+                <div className="w-full max-w-md space-y-1.5">
+                  <div className="flex justify-between text-xs font-mono font-bold">
+                    <span className="text-cyan-500">
+                      {sapProcessedCount.toLocaleString()} / {sapTotalCount.toLocaleString()} {isThai ? "รายการ" : "items"}
+                    </span>
+                    <span className="text-slate-700 dark:text-slate-200">{sapProgress}%</span>
+                  </div>
+                  <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-[#0c1930] overflow-hidden border border-slate-300 dark:border-[#1e3a5f]">
+                    <div
+                      className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 transition-all duration-300"
+                      style={{ width: `${sapProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                  <Clock size={13} className="text-cyan-400 animate-pulse" />
+                  <span>{isThai ? "กำลังบันทึกลงฐานข้อมูล dbCoil กรุณารอสักครู่..." : "Syncing to dbCoil..."}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
+                <input
+                  ref={sapFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv,.tsv,.txt,.tab"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleSapFileUpload(file);
+                    e.target.value = "";
+                  }}
+                />
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <FileSpreadsheet size={15} className="text-cyan-500" />
+                    <span>
+                      {isThai
+                        ? "เลือกไฟล์จาก SAP หรือวางข้อมูลตารางด้านล่าง (Ctrl+V):"
+                        : "Select SAP file or paste SAP table below (Ctrl+V):"}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => sapFileInputRef.current?.click()}
+                    className="px-3.5 py-2 rounded-xl text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Upload size={14} />
+                    <span>{isThai ? "อัปโหลดไฟล์ SAP (.xlsx / .xls / .csv)" : "Choose SAP File (.xlsx / .csv)"}</span>
+                  </button>
+                </div>
+
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      handleSapFileUpload(file);
+                      return;
+                    }
+                    let dropped = e.dataTransfer.getData("text/plain") || e.dataTransfer.getData("text");
+                    if (!dropped && e.dataTransfer.getData("text/html")) {
+                      const html = e.dataTransfer.getData("text/html");
+                      const docHtml = new DOMParser().parseFromString(html, "text/html");
+                      const rows = Array.from(docHtml.querySelectorAll("tr"));
+                      dropped =
+                        rows.length > 0
+                          ? rows
+                              .map((r) =>
+                                Array.from(r.querySelectorAll("td, th"))
+                                  .map((c) => c.textContent?.trim() || "")
+                                  .join("\t")
+                              )
+                              .join("\n")
+                          : docHtml.body.textContent || "";
+                    }
+                    if (dropped?.trim()) {
+                      setSapRawText(dropped);
+                    }
+                  }}
+                >
+                  <textarea
+                    ref={sapTextAreaRef}
+                    rows={9}
+                    value={sapRawText}
+                    onChange={(e) => setSapRawText(e.target.value)}
+                    onPaste={(e) => {
+                      let pasted =
+                        e.clipboardData?.getData("text/plain") ||
+                        e.clipboardData?.getData("text") ||
+                        "";
+                      if (!pasted && e.clipboardData?.getData("text/html")) {
+                        const html = e.clipboardData.getData("text/html");
+                        const docHtml = new DOMParser().parseFromString(html, "text/html");
+                        const rows = Array.from(docHtml.querySelectorAll("tr"));
+                        if (rows.length > 0) {
+                          pasted = rows
+                            .map((r) =>
+                              Array.from(r.querySelectorAll("td, th"))
+                                .map((c) => c.textContent?.trim() || "")
+                                .join("\t")
+                            )
+                            .join("\n");
+                        }
+                      }
+                      if (pasted?.trim()) {
+                        e.preventDefault();
+                        setSapRawText(pasted);
+                      }
+                    }}
+                    placeholder={
+                      isThai
+                        ? "คลิกแล้วกด Ctrl+V เพื่อวางตารางจาก SAP / Excel หรือลากไฟล์ SAP (.xlsx, .xls, .csv) มาวางในช่องนี้..."
+                        : "Click and press Ctrl+V to paste SAP table or drag & drop SAP file (.xlsx, .xls, .csv)..."
+                    }
+                    className="w-full p-3.5 font-mono text-xs rounded-xl bg-slate-50 dark:bg-[#0c1930] border-2 border-cyan-500/70 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+                    spellCheck={false}
+                  />
+                </div>
+
+                {sapRawText.trim() && (
+                  <div className="space-y-2">
+                    <div className="px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between text-xs">
+                      <span className="font-bold text-cyan-600 dark:text-cyan-400">
+                        {isThai
+                          ? `ตรวจพบข้อมูล SAP พร้อมนำเข้า: ${parsedSapPreviewItems.length.toLocaleString()} รายการ`
+                          : `Detected SAP items ready to import: ${parsedSapPreviewItems.length.toLocaleString()}`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setSapRawText("")}
+                        className="text-slate-400 hover:text-rose-400 text-[11px] font-bold cursor-pointer"
+                      >
+                        {isThai ? "ล้างข้อความ" : "Clear"}
+                      </button>
+                    </div>
+
+                    {parsedSapPreviewItems.length > 0 && (
+                      <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-[#1e3a5f]">
+                        <table className="w-full text-[11px]">
+                          <thead>
+                            <tr>
+                              <th>[2] Batch</th>
+                              <th>[11] Coil No.</th>
+                              <th>[6] เกรด</th>
+                              <th>[3]x[5] หนา x กว้าง (mm)</th>
+                              <th>[7] ผู้ผลิต</th>
+                              <th>[10] น้ำหนักคงเหลือ (kg)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {parsedSapPreviewItems.slice(0, 5).map((itm, idx) => (
+                              <tr key={`${itm.batch}-${idx}`}>
+                                <td className="font-mono font-bold text-cyan-400">{itm.batch}</td>
+                                <td className="font-mono">{itm.coilNo}</td>
+                                <td className="font-bold">{itm.grade}</td>
+                                <td className="font-mono">
+                                  {itm.certThickness !== "-" && itm.width !== "-"
+                                    ? `${itm.certThickness} x ${itm.width}`
+                                    : "-"}
+                                </td>
+                                <td>{itm.manufacturer}</td>
+                                <td className="font-mono font-bold">
+                                  {itm.weightKg > 0 ? `${itm.weightKg.toLocaleString()} kg` : "0"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createMissingStockOnSapImport}
+                    onChange={(e) => setCreateMissingStockOnSapImport(e.target.checked)}
+                    className="mt-0.5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+                  />
+                  <div className="text-xs">
+                    <div className="font-bold text-slate-800 dark:text-slate-100">
+                      {isThai
+                        ? "เพิ่มรายการเหล็กม้วนใหม่จาก SAP เข้าสต๊อกคงเหลือ (coil_stock) ทันที"
+                        : "Insert new SAP coils directly into Active Stock (coil_stock)"}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {isThai
+                        ? "หากเปิดไว้ ระบบจะทั้งอัปเดตม้วนที่สแกนรับเข้าแล้ว และเพิ่มม้วนจาก SAP ที่ยังไม่มีในสต๊อกให้แสดงในตารางสต๊อกทันที (ไม่ทับ Location ที่พนักงานสแกนหน้างานไว้)"
+                        : "Updates already-scanned coils and adds missing SAP coils to stock without overwriting shop-floor locations."}
+                    </div>
+                  </div>
+                </label>
+
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5 m-0">
+                  <Info size={13} className="text-cyan-500 flex-shrink-0" />
+                  <span>
+                    {isThai
+                      ? "รองรับไฟล์ Excel (.xlsx, .xls) และ CSV ภาษาไทย (Windows-874 / TIS-620 / UTF-8) จากระบบ SAP โดยไม่กระทบฐานข้อมูลส่วนงานสลิต"
+                      : "Supports SAP Excel (.xlsx, .xls) and Thai CSV (Windows-874 / UTF-8). Completely isolated inside dbCoil."}
+                  </span>
+                </p>
+
+                {/* Modal Footer */}
+                <div className="pt-3 border-t border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    {coilSapMap.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          Swal.fire({
+                            title: isThai ? "ล้างข้อมูล SAP Master เดิม?" : "Clear Cloud SAP Data?",
+                            text: isThai
+                              ? `ต้องการลบข้อมูล SAP Master ที่จัดเก็บไว้ (${coilSapMap.size.toLocaleString()} รายการ / ${coilSapChunkCount || Math.ceil(coilSapMap.size / COIL_SAP_CHUNK_SIZE)} chunks) ใช่หรือไม่? (ไม่ลบรายการในสต๊อกปัจจุบัน)`
+                              : `Clear ${coilSapMap.size.toLocaleString()} SAP master records from Cloud?`,
+                            icon: "warning",
+                            showCancelButton: true,
+                            confirmButtonColor: "#dc2626",
+                            confirmButtonText: isThai ? "ยืนยันล้างข้อมูล SAP" : "Clear SAP",
+                            cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
+                          }).then(async (res) => {
+                            if (res.isConfirmed) {
+                              await clearCoilSapChunksFromCloud();
+                              setCoilSapMap(new Map());
+                              setCoilSapChunkCount(0);
+                              showToast(isThai ? "ล้างข้อมูล SAP สำเร็จ" : "SAP data cleared", "success");
+                            }
+                          });
+                        }}
+                        className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Trash2 size={14} />
+                        <span>
+                          {isThai
+                            ? `ล้างข้อมูล SAP เดิม (${coilSapMap.size.toLocaleString()})`
+                            : `Clear SAP (${coilSapMap.size.toLocaleString()})`}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsSapModalOpen(false)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#152646] cursor-pointer"
+                    >
+                      {isThai ? "ปิด" : "Close"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={parsedSapPreviewItems.length === 0}
+                      onClick={() => executeCoilSapImport(parsedSapPreviewItems, "Paste/Table")}
+                      className={`px-4 py-2 rounded-xl text-xs font-extrabold inline-flex items-center gap-1.5 transition-all ${
+                        parsedSapPreviewItems.length > 0
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-xs"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                      }`}
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>
+                        {isThai
+                          ? `อัปโหลดและนำเข้าสต๊อก SAP (${parsedSapPreviewItems.length.toLocaleString()})`
+                          : `Upload & Import (${parsedSapPreviewItems.length.toLocaleString()})`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
