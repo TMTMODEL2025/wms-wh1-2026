@@ -149,6 +149,7 @@ export type MhWorkflowStage =
   | "Submitted"
   | "SupervisorChecked"
   | "ManagerApproved"
+  | "InRepair"
   | "Rejected"
   | "Completed";
 
@@ -748,6 +749,7 @@ export function inferMhWorkflowStage(r: MhMaintenanceRecord): MhWorkflowStage {
     r.workflowStage === "Submitted" ||
     r.workflowStage === "SupervisorChecked" ||
     r.workflowStage === "ManagerApproved" ||
+    r.workflowStage === "InRepair" ||
     r.workflowStage === "Rejected" ||
     r.workflowStage === "Completed"
   ) {

@@ -91,24 +91,7 @@ const WHEEL_POSITION_OPTIONS = [
   "ครบชุด 4 ล้อ (Full Set)",
 ];
 
-const WORKSHOP_BAYS = [
-  "ช่องซ่อม 1 - งานตรวจเช็ค & ไฮดรอลิค",
-  "ช่องซ่อม 2 - งานซ่อมเครื่องยนต์ & ระบบส่งกำลัง",
-  "ช่องซ่อม 3 - งานยาง & ช่วงล่าง",
-  "ช่องซ่อม 4 - งานระบบไฟฟ้า & ตู้ชาร์จ",
-  "ส่งซ่อมศูนย์บริการภายนอก (External Vendor)",
-];
-
 const SPARE_PART_UNITS = ["ชิ้น", "ชุด", "เส้น", "ลิตร", "อัน", "เมตร", "กล่อง"];
-
-const FEEDBACK_QUERY_TYPES = [
-  "สอบถามชื่อ Vendor / ร้านซ่อมที่เข้ามาซ่อม (Vendor Inquiry)",
-  "ตรวจสอบราคาอะไหล่และต้นทุนตลาด (Spare parts price verification)",
-  "รายละเอียดชั่วโมงแรงงานและระยะเวลาซ่อม (Labor cost & duration breakdown)",
-  "ขอใบเสนอราคาอะไหล่ทดแทน (Alternative parts quotation)",
-  "ความเร่งด่วนและความจำเป็นในการซ่อม (Priority & urgency justification)",
-  "ข้อมูลเพิ่มเติมอื่นๆ (Other clarification)",
-];
 
 const MAX_REPAIR_PHOTOS = 9;
 const MAX_TOTAL_PHOTO_BYTES = 660 * 1024; // Keep total photos safely under Firestore's 1MB doc limit
@@ -192,7 +175,13 @@ function getStageMeta(rec: FixFlushRecord): {
   badgeClass: string;
 } {
   const stage = inferMhWorkflowStage(rec);
-  if (rec.managerStatus === "More Info Requested" && stage !== "Rejected" && stage !== "Completed" && stage !== "ManagerApproved") {
+  if (
+    rec.managerStatus === "More Info Requested" &&
+    stage !== "Rejected" &&
+    stage !== "Completed" &&
+    stage !== "ManagerApproved" &&
+    stage !== "InRepair"
+  ) {
     return {
       stage,
       labelTh: "รอหัวหน้างานตอบข้อมูลเพิ่ม",
@@ -240,6 +229,15 @@ function getStageMeta(rec: FixFlushRecord): {
         badgeClass:
           "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800",
       };
+    case "InRepair":
+      return {
+        stage,
+        labelTh: "กำลังซ่อม",
+        shortLabel: "กำลังซ่อม",
+        stepNumber: 4,
+        badgeClass:
+          "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-800",
+      };
     case "Completed":
       return {
         stage,
@@ -281,7 +279,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
   const [searchQuery, setSearchQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("All");
   const [supervisorSubFilter, setSupervisorSubFilter] = useState<
-    "all_sup" | "Submitted" | "MoreInfo" | "ManagerApproved"
+    "all_sup" | "Submitted" | "MoreInfo" | "ManagerApproved" | "InRepair"
   >("all_sup");
   const [repairCategoryFilter, setRepairCategoryFilter] = useState<string>("All");
 
@@ -297,7 +295,6 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
   // Feedback / Manager Query Modal State
   const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
   const [feedbackRecord, setFeedbackRecord] = useState<FixFlushRecord | null>(null);
-  const [queryType, setQueryType] = useState(FEEDBACK_QUERY_TYPES[0]);
   const [feedbackMessageText, setFeedbackMessageText] = useState("");
 
   // Reject / Return Reason Inline State
@@ -332,12 +329,10 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
   const [supPartsCost, setSupPartsCost] = useState<number>(0);
   const [supLaborCost, setSupLaborCost] = useState<number>(0);
   const [supPartsCostManual, setSupPartsCostManual] = useState<boolean>(false);
-  const [supWorkshopBay, setSupWorkshopBay] = useState<string>(WORKSHOP_BAYS[0]);
   const [supTechnicianName, setSupTechnicianName] = useState<string>("");
   const [supVendorName, setSupVendorName] = useState<string>("");
   const [supOperatingHours, setSupOperatingHours] = useState<number>(0);
   const [supNotes, setSupNotes] = useState<string>("");
-  const [supReplyVendorName, setSupReplyVendorName] = useState<string>("");
   const [supReplyText, setSupReplyText] = useState<string>("");
   const [supLogTireOutbound, setSupLogTireOutbound] = useState<boolean>(false);
   const [supTireSize, setSupTireSize] = useState<string>(TIRE_SIZE_OPTIONS[1]);
@@ -407,16 +402,12 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     setSupPartsCost(initialPartsCost);
     setSupPartsCostManual(parts.length === 0 && initialPartsCost > 0);
     setSupLaborCost(typeof rec.laborCost === "number" ? rec.laborCost : 0);
-    setSupWorkshopBay(
-      rec.workshopBay && rec.workshopBay !== "-" ? rec.workshopBay : WORKSHOP_BAYS[0]
-    );
     setSupTechnicianName(
       rec.technicianName && rec.technicianName !== "-"
         ? rec.technicianName
         : rec.supervisorName || ""
     );
     setSupVendorName(rec.vendorName && rec.vendorName !== "-" ? rec.vendorName : "");
-    setSupReplyVendorName(rec.vendorName && rec.vendorName !== "-" ? rec.vendorName : "");
     setSupReplyText("");
     setSupOperatingHours(Number(rec.operatingHours) || 0);
     setSupNotes(rec.supervisorNotes || "");
@@ -635,8 +626,23 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       const finalLaborCost = Math.max(0, Number(supLaborCost) || 0);
       const finalTotal = finalPartsCost + finalLaborCost;
       const cleanVendor = supVendorName.trim() || undefined;
+      const currentStage = inferMhWorkflowStage(selectedRecord);
+      const isPostApprovalEdit =
+        currentStage === "ManagerApproved" || currentStage === "InRepair";
       const wasMoreInfo = selectedRecord.managerStatus === "More Info Requested";
-      const nextThread = wasMoreInfo
+      const nextThread = isPostApprovalEdit
+        ? [
+            ...selectedRecord.feedbackThread,
+            {
+              id: `FB-${Date.now()}`,
+              author: supervisorDisplay,
+              role: "Supervisor" as const,
+              queryType: "หัวหน้างานเพิ่มรายการอะไหล่ (หลังอนุมัติ)",
+              message: `อัปเดตรายการอะไหล่ ${cleanParts.length} รายการ (ค่าอะไหล่ ${finalPartsCost.toLocaleString()} บาท · ค่าแรง ${finalLaborCost.toLocaleString()} บาท · รวม ${finalTotal.toLocaleString()} บาท)`,
+              timestamp: nowStr,
+            },
+          ]
+        : wasMoreInfo
         ? [
             ...selectedRecord.feedbackThread,
             {
@@ -658,17 +664,30 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         partsCost: finalPartsCost,
         laborCost: finalLaborCost,
         estimatedCost: finalTotal,
-        workshopBay: supWorkshopBay,
-        technicianName: supTechnicianName.trim() || supervisorDisplay,
+        workshopBay: selectedRecord.workshopBay || "-",
+        technicianName: supTechnicianName.trim() || selectedRecord.technicianName || supervisorDisplay,
         vendorName: cleanVendor,
         operatingHours: Number(supOperatingHours) || selectedRecord.operatingHours || 0,
         supervisorStatus: "Checked",
-        supervisorName: supervisorDisplay,
-        supervisorCheckedAt: nowStr,
+        supervisorName: isPostApprovalEdit
+          ? selectedRecord.supervisorName || supervisorDisplay
+          : supervisorDisplay,
+        supervisorCheckedAt: isPostApprovalEdit
+          ? selectedRecord.supervisorCheckedAt || nowStr
+          : nowStr,
         supervisorNotes: supNotes.trim() || undefined,
-        workflowStage: "SupervisorChecked",
-        managerStatus: "Pending Manager Approval",
-        status: "Pending Inspection",
+        workflowStage: isPostApprovalEdit ? currentStage : "SupervisorChecked",
+        managerStatus: isPostApprovalEdit ? "Approved" : "Pending Manager Approval",
+        managerName: isPostApprovalEdit ? selectedRecord.managerName : selectedRecord.managerName,
+        managerApprovedAt: isPostApprovalEdit
+          ? selectedRecord.managerApprovedAt
+          : selectedRecord.managerApprovedAt,
+        status: isPostApprovalEdit
+          ? selectedRecord.status || "In Workshop"
+          : "Pending Inspection",
+        progressStatus: isPostApprovalEdit
+          ? selectedRecord.progressStatus || "In Progress"
+          : selectedRecord.progressStatus,
         feedbackThread: nextThread,
         updatedAt: nowStr,
       };
@@ -711,8 +730,10 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         module: "ระบบแจ้งซ่อม (MH)",
         sectionId: "fleet_ops",
         reference: updated.workOrderNo,
-        activity: `หัวหน้างานตรวจสอบใบซ่อม ${updated.workOrderNo} (${updated.vehicleId}) ยอดประเมิน ${finalTotal.toLocaleString()} บาท → ส่งผู้จัดการอนุมัติ`,
-        status: "Pending",
+        activity: isPostApprovalEdit
+          ? `หัวหน้างานเพิ่มรายการอะไหล่หลังอนุมัติ ${updated.workOrderNo} (${cleanParts.length} รายการ · ยอดรวม ${finalTotal.toLocaleString()} บาท)`
+          : `หัวหน้างานตรวจสอบใบซ่อม ${updated.workOrderNo} (${updated.vehicleId}) ยอดประเมิน ${finalTotal.toLocaleString()} บาท → ส่งผู้จัดการอนุมัติ`,
+        status: isPostApprovalEdit ? "Approved" : "Pending",
       });
     } finally {
       setIsSavingSupervisor(false);
@@ -842,6 +863,36 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     });
   };
 
+  const handleMarkInRepair = async (recordId: string) => {
+    const target = records.find((r) => r.id === recordId);
+    if (!target) return;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const supervisorDisplay =
+      currentUser?.employeeName || getActiveRecorderDisplay("หัวหน้างาน").employeeName;
+    const updated: FixFlushRecord = {
+      ...target,
+      workflowStage: "InRepair",
+      status: "In Workshop",
+      progressStatus: "In Progress",
+      supervisorNotes: target.supervisorNotes
+        ? target.supervisorNotes
+        : `เริ่มดำเนินการซ่อมโดย ${supervisorDisplay} (${nowStr})`,
+      updatedAt: nowStr,
+    };
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
+    if (selectedRecord && selectedRecord.id === recordId) {
+      setSelectedRecord(updated);
+    }
+    await saveMhMaintenanceToCloud(updated);
+    void appendWmsActivityLog({
+      module: "ระบบแจ้งซ่อม (MH)",
+      sectionId: "fleet_ops",
+      reference: target.workOrderNo,
+      activity: `หัวหน้างานอัปเดตสถานะ ${target.workOrderNo} (${target.vehicleId}) → กำลังซ่อม`,
+      status: "Pending",
+    });
+  };
+
   const handleMarkRepairCompleted = async (recordId: string) => {
     const target = records.find((r) => r.id === recordId);
     if (!target) return;
@@ -903,7 +954,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       id: `FB-${Date.now()}`,
       author: activeAuthor,
       role: "Manager" as const,
-      queryType,
+      queryType: "ขอรายละเอียดเพิ่มเติม",
       message: feedbackMessageText.trim(),
       timestamp: nowStr,
     };
@@ -929,7 +980,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       module: "ระบบแจ้งซ่อม (MH)",
       sectionId: "fleet_ops",
       reference: updatedRecord.workOrderNo,
-      activity: `ผู้จัดการขอข้อมูลเพิ่ม ${updatedRecord.workOrderNo} (${queryType}) → ส่งกลับหัวหน้างานตรวจสอบ`,
+      activity: `ผู้จัดการขอรายละเอียดเพิ่มเติม ${updatedRecord.workOrderNo} → ส่งกลับหัวหน้างานตรวจสอบ`,
       status: "Pending",
     });
   };
@@ -986,7 +1037,6 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       setSelectedRecord(updatedRecord);
     }
     setSupVendorName(updatedRecord.vendorName || "");
-    setSupReplyVendorName(updatedRecord.vendorName || "");
     setSupReplyText("");
 
     await saveMhMaintenanceToCloud(updatedRecord);
@@ -1029,6 +1079,10 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     () => records.filter((r) => inferMhWorkflowStage(r) === "ManagerApproved").length,
     [records]
   );
+  const inRepairCount = useMemo(
+    () => records.filter((r) => inferMhWorkflowStage(r) === "InRepair").length,
+    [records]
+  );
   const completedCount = useMemo(
     () => records.filter((r) => inferMhWorkflowStage(r) === "Completed").length,
     [records]
@@ -1038,7 +1092,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       records
         .filter((r) => {
           const s = inferMhWorkflowStage(r);
-          return s === "ManagerApproved" || s === "Completed";
+          return s === "ManagerApproved" || s === "InRepair" || s === "Completed";
         })
         .reduce((sum, r) => sum + (Number(r.estimatedCost) || 0), 0),
     [records]
@@ -1060,9 +1114,16 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
           if (!isMoreInfo) return false;
         } else if (supervisorSubFilter === "ManagerApproved") {
           if (stage !== "ManagerApproved") return false;
+        } else if (supervisorSubFilter === "InRepair") {
+          if (stage !== "InRepair") return false;
         } else {
-          // "all_sup": Supervisor handles new requests, Manager info-requests, and approved jobs in queue ("รอคิวซ่อม")
-          if (stage !== "Submitted" && !isMoreInfo && stage !== "ManagerApproved") {
+          // "all_sup": Supervisor handles new requests, Manager info-requests, queued ("รอคิวซ่อม"), and in-repair ("กำลังซ่อม") jobs
+          if (
+            stage !== "Submitted" &&
+            !isMoreInfo &&
+            stage !== "ManagerApproved" &&
+            stage !== "InRepair"
+          ) {
             return false;
           }
         }
@@ -1283,13 +1344,13 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
 
         <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg p-4">
           <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-            ตารางแจ้งซ่อม · รอคิวซ่อม (อนุมัติแล้ว)
+            ตารางแจ้งซ่อม · รอคิวซ่อม / กำลังซ่อม
           </div>
           <div className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1 tabular-nums">
-            {inWorkshopCount}
+            {inWorkshopCount + inRepairCount}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
-            ซ่อมเสร็จแล้ว {completedCount} รายการ
+            รอคิวซ่อม {inWorkshopCount} · กำลังซ่อม {inRepairCount} · ซ่อมเสร็จ {completedCount}
           </div>
         </div>
 
@@ -1322,7 +1383,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   ? "ตรวจสอบใบแจ้งซ่อมใหม่ ตอบข้อมูลเพิ่มเติมเมื่อผู้จัดการสอบถาม (เช่น ชื่อ Vendor) และอัปเดตสถานะรอคิวซ่อมเป็นซ่อมเสร็จ"
                   : activeTab === "manager"
                   ? "พิจารณาอนุมัติหรือส่งกลับให้หัวหน้างานตอบข้อมูลเพิ่มเติม (รายการที่ขอข้อมูลเพิ่มจะวิ่งกลับไปที่คิวหัวหน้างาน)"
-                  : "พนักงานแจ้งซ่อม → หัวหน้างานตรวจสอบ → ผู้จัดการอนุมัติ (วนสอบถามหัวหน้างานได้) → รอคิวซ่อม → หัวหน้างานอัปเดตซ่อมเสร็จ"}
+                  : "พนักงานแจ้งซ่อม → หัวหน้างานตรวจสอบ → ผู้จัดการอนุมัติ → รอคิวซ่อม → กำลังซ่อม → ซ่อมเสร็จ"}
               </p>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
@@ -1352,7 +1413,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
                 }`}
               >
-                ทั้งหมดในความดูแล ({pendingSupervisorCount + inWorkshopCount})
+                ทั้งหมดในความดูแล ({pendingSupervisorCount + inWorkshopCount + inRepairCount})
               </button>
               <button
                 type="button"
@@ -1394,7 +1455,21 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     : "bg-white dark:bg-[#111e38] text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
                 }`}
               >
-                รอคิวซ่อม → อัปเดตซ่อมเสร็จ ({inWorkshopCount})
+                รอคิวซ่อม ({inWorkshopCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStageFilter("All");
+                  setSupervisorSubFilter("InRepair");
+                }}
+                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                  supervisorSubFilter === "InRepair" && stageFilter === "All"
+                    ? "bg-orange-600 text-white border-orange-600"
+                    : "bg-white dark:bg-[#111e38] text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-800"
+                }`}
+              >
+                กำลังซ่อม → อัปเดตซ่อมเสร็จ ({inRepairCount})
               </button>
             </div>
           )}
@@ -1433,7 +1508,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                 <option value="MoreInfo">2. รอหัวหน้างานตอบข้อมูลเพิ่ม</option>
                 <option value="SupervisorChecked">3. รอผู้จัดการอนุมัติ</option>
                 <option value="ManagerApproved">4. รอคิวซ่อม (อนุมัติแล้ว)</option>
-                <option value="Completed">5. ซ่อมเสร็จ</option>
+                <option value="InRepair">5. กำลังซ่อม</option>
+                <option value="Completed">6. ซ่อมเสร็จ</option>
                 <option value="Rejected">ไม่อนุมัติ</option>
               </select>
             </div>
@@ -1585,6 +1661,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                           >
                             {meta.stage === "Completed" ? (
                               <CheckCircle2 size={12} />
+                            ) : meta.stage === "InRepair" ? (
+                              <Wrench size={12} />
                             ) : meta.stage === "Rejected" ? (
                               <Ban size={12} />
                             ) : (
@@ -1628,7 +1706,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                                 </button>
                               )}
 
-                            {meta.stage === "SupervisorChecked" &&
+                            {activeTab === "manager" &&
+                              meta.stage === "SupervisorChecked" &&
                               rec.managerStatus !== "More Info Requested" &&
                               rec.managerStatus !== "Rejected" && (
                                 <>
@@ -1654,7 +1733,28 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                                 </>
                               )}
 
-                            {meta.stage === "ManagerApproved" && (
+                            {activeTab !== "manager" && meta.stage === "ManagerApproved" && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkInRepair(rec.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-orange-600 hover:bg-orange-700 text-white whitespace-nowrap"
+                                >
+                                  <Wrench size={12} />
+                                  <span>อัปเดต: กำลังซ่อม</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkRepairCompleted(rec.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                                >
+                                  <CheckCircle2 size={12} />
+                                  <span>อัปเดต: ซ่อมเสร็จ</span>
+                                </button>
+                              </>
+                            )}
+
+                            {activeTab !== "manager" && meta.stage === "InRepair" && (
                               <button
                                 type="button"
                                 onClick={() => handleMarkRepairCompleted(rec.id)}
@@ -1980,9 +2080,14 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         const laborCostDisplay = Number(selectedRecord.laborCost) || 0;
         const totalCostDisplay =
           Number(selectedRecord.estimatedCost) || partsCostDisplay + laborCostDisplay;
+        const isPostApprovalStage =
+          meta.stage === "ManagerApproved" || meta.stage === "InRepair";
+        const canEditPostApproval =
+          activeTab === "supervisor" && isPostApprovalStage;
         const canSupervisorEdit =
           meta.stage === "Submitted" ||
-          (meta.stage === "SupervisorChecked" && isEditingSupervisorCost);
+          ((meta.stage === "SupervisorChecked" || canEditPostApproval) &&
+            isEditingSupervisorCost);
 
         return (
           <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
@@ -2064,7 +2169,9 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
 
                   <div
                     className={`p-3 rounded-lg border ${
-                      meta.stage === "ManagerApproved" || meta.stage === "Completed"
+                      meta.stage === "ManagerApproved" ||
+                      meta.stage === "InRepair" ||
+                      meta.stage === "Completed"
                         ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30"
                         : meta.stage === "Rejected"
                         ? "border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30"
@@ -2076,7 +2183,9 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   >
                     <div className="flex items-center justify-between font-bold text-slate-900 dark:text-slate-100">
                       <span>ช่วงที่ 3 · ผู้จัดการอนุมัติ</span>
-                      {meta.stage === "ManagerApproved" || meta.stage === "Completed" ? (
+                      {meta.stage === "ManagerApproved" ||
+                      meta.stage === "InRepair" ||
+                      meta.stage === "Completed" ? (
                         <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
                       ) : meta.stage === "Rejected" ? (
                         <Ban size={14} className="text-rose-600 dark:text-rose-400" />
@@ -2087,6 +2196,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
                       {meta.stage === "Completed"
                         ? `ซ่อมเสร็จสิ้น (${selectedRecord.completedAt || ""})`
+                        : meta.stage === "InRepair"
+                        ? `อนุมัติแล้ว · กำลังซ่อม (${selectedRecord.managerName || ""})`
                         : meta.stage === "ManagerApproved"
                         ? `อนุมัติแล้ว · รอคิวซ่อม (${selectedRecord.managerName || ""})`
                         : selectedRecord.managerStatus === "More Info Requested"
@@ -2110,11 +2221,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
-                          void handleThreadReply(
-                            selectedRecord.id,
-                            supReplyText,
-                            supReplyVendorName
-                          );
+                          void handleThreadReply(selectedRecord.id, supReplyText);
                         }}
                         className="p-4 rounded-lg border border-purple-300 dark:border-purple-700 bg-purple-50/70 dark:bg-purple-950/25 space-y-3"
                       >
@@ -2143,32 +2250,18 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                           </div>
                         )}
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          <div>
-                            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                              ชื่อ Vendor / ร้านซ่อมที่เข้ามาซ่อม
-                            </label>
-                            <input
-                              type="text"
-                              value={supReplyVendorName}
-                              onChange={(e) => setSupReplyVendorName(e.target.value)}
-                              placeholder="ระบุชื่อ Vendor หรือบริษัทที่เข้ามาซ่อม (ถ้ามี)"
-                              className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                            />
-                          </div>
-                          <div>
-                            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                              คำชี้แจง / ข้อมูลตอบกลับผู้จัดการ *
-                            </label>
-                            <input
-                              type="text"
-                              value={supReplyText}
-                              onChange={(e) => setSupReplyText(e.target.value)}
-                              required={!supReplyVendorName.trim()}
-                              placeholder="ระบุรายละเอียดตอบกลับ เช่น ชื่อ Vendor, ใบเสนอราคา, กำหนดเข้าซ่อม..."
-                              className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                            />
-                          </div>
+                        <div>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            คำชี้แจง / ข้อมูลตอบกลับผู้จัดการ *
+                          </label>
+                          <input
+                            type="text"
+                            value={supReplyText}
+                            onChange={(e) => setSupReplyText(e.target.value)}
+                            required
+                            placeholder="ระบุรายละเอียดตอบกลับ เช่น ชื่อ Vendor, ใบเสนอราคา, กำหนดเข้าซ่อม..."
+                            className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                          />
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2177,7 +2270,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                           </span>
                           <button
                             type="submit"
-                            disabled={!supReplyText.trim() && !supReplyVendorName.trim()}
+                            disabled={!supReplyText.trim()}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded bg-purple-700 hover:bg-purple-800 text-white font-bold whitespace-nowrap disabled:opacity-50"
                           >
                             <Send size={12} /> ส่งข้อมูลตอบกลับไปให้ผู้จัดการอนุมัติ
@@ -2282,10 +2375,12 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                           <span>ช่วงที่ 2 · หัวหน้างานตรวจสอบและประเมินค่าใช้จ่าย</span>
                         </h4>
                         <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                          กรอกรายการอะไหล่/ราคาต่อชิ้น ค่าอะไหล่ และค่าแรง จากนั้นยืนยันเพื่อส่งให้ผู้จัดการอนุมัติ
+                          {isPostApprovalStage
+                            ? `เพิ่มรายการอะไหล่/ราคาต่อชิ้นเพิ่มเติมหลังผู้จัดการอนุมัติ (คงสถานะ${meta.labelTh})`
+                            : "กรอกรายการอะไหล่/ราคาต่อชิ้น ค่าอะไหล่ และค่าแรง จากนั้นยืนยันเพื่อส่งให้ผู้จัดการอนุมัติ"}
                         </p>
                       </div>
-                      {meta.stage === "SupervisorChecked" && (
+                      {(meta.stage === "SupervisorChecked" || canEditPostApproval) && (
                         <button
                           type="button"
                           onClick={() => setIsEditingSupervisorCost(false)}
@@ -2296,25 +2391,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       )}
                     </div>
 
-                    {/* Workshop Bay, Technician, Vendor Name, Operating Hours */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                          ช่องซ่อม / ศูนย์ซ่อม
-                        </label>
-                        <select
-                          value={supWorkshopBay}
-                          onChange={(e) => setSupWorkshopBay(e.target.value)}
-                          className="w-full px-2.5 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                        >
-                          {WORKSHOP_BAYS.map((bay) => (
-                            <option key={bay} value={bay}>
-                              {bay}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
+                    {/* Technician, Vendor Name, Operating Hours */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                           ชื่อ Vendor / ร้านซ่อม (ถ้ามี)
@@ -2603,24 +2681,32 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     )}
 
                     <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowReturnBox((prev) => !prev)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-amber-300 dark:border-amber-800 bg-white dark:bg-[#0d1b33] text-amber-700 dark:text-amber-300 font-semibold hover:bg-amber-50"
-                      >
-                        <RotateCcw size={13} />
-                        <span>ส่งกลับผู้แจ้งแก้ไข</span>
-                      </button>
+                      {!isPostApprovalStage ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowReturnBox((prev) => !prev)}
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-amber-300 dark:border-amber-800 bg-white dark:bg-[#0d1b33] text-amber-700 dark:text-amber-300 font-semibold hover:bg-amber-50"
+                        >
+                          <RotateCcw size={13} />
+                          <span>ส่งกลับผู้แจ้งแก้ไข</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+                          ผู้จัดการอนุมัติแล้ว · บันทึกเพิ่มรายการอะไหล่โดยยังคงสถานะ{meta.labelTh}
+                        </span>
+                      )}
 
                       <button
                         type="submit"
                         disabled={isSavingSupervisor}
-                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white font-bold disabled:opacity-60"
+                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white font-bold disabled:opacity-60 ml-auto"
                       >
                         <ClipboardCheck size={14} />
                         <span>
                           {isSavingSupervisor
                             ? "กำลังบันทึก..."
+                            : isPostApprovalStage
+                            ? `บันทึกเพิ่มรายการอะไหล่ (คงสถานะ${meta.labelTh})`
                             : "ยืนยันตรวจสอบ & ส่งผู้จัดการอนุมัติ"}
                         </span>
                       </button>
@@ -2633,24 +2719,25 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       <div className="font-bold text-sm text-slate-900 dark:text-slate-100">
                         ผลการตรวจสอบและประเมินค่าใช้จ่าย (ช่วงที่ 2: หัวหน้างาน)
                       </div>
-                      {meta.stage === "SupervisorChecked" && (
+                      {(meta.stage === "SupervisorChecked" || canEditPostApproval) && (
                         <button
                           type="button"
-                          onClick={() => setIsEditingSupervisorCost(true)}
-                          className="text-xs font-semibold text-[#087eaf] hover:underline"
+                          onClick={() => openInspectModal(selectedRecord, true)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-[#087eaf] hover:underline"
                         >
-                          แก้ไขรายการอะไหล่ / ค่าใช้จ่าย
+                          {isPostApprovalStage ? (
+                            <>
+                              <Plus size={13} />
+                              <span>เพิ่มรายการอะไหล่ / แก้ไขค่าใช้จ่าย</span>
+                            </>
+                          ) : (
+                            <span>แก้ไขรายการอะไหล่ / ค่าใช้จ่าย</span>
+                          )}
                         </button>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                      <div>
-                        <div className="text-slate-500 dark:text-slate-400">ช่องซ่อมบำรุง</div>
-                        <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
-                          {selectedRecord.workshopBay || "-"}
-                        </div>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
                         <div className="text-slate-500 dark:text-slate-400">Vendor / ร้านซ่อม</div>
                         <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
@@ -2780,13 +2867,13 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
 
                   {selectedRecord.managerStatus === "More Info Requested" && (
                     <div className="text-[11px] text-purple-700 dark:text-purple-300 font-semibold">
-                      * กรุณากรอกชื่อ Vendor และคำชี้แจงในกล่องตอบข้อมูลเพิ่มเติมด้านบนของหน้าต่างนี้ เพื่อส่งกลับให้ผู้จัดการอนุมัติ
+                      * กรุณากรอกคำชี้แจง / ข้อมูลตอบกลับผู้จัดการในกล่องตอบข้อมูลเพิ่มเติมด้านบนของหน้าต่างนี้ เพื่อส่งกลับให้ผู้จัดการอนุมัติ
                     </div>
                   )}
                 </div>
 
                 {/* Inline Reject Box for Manager */}
-                {showRejectBox && (
+                {activeTab === "manager" && showRejectBox && (
                   <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 space-y-2">
                     <div className="font-bold text-rose-700 dark:text-rose-300">
                       ระบุเหตุผลการไม่อนุมัติใบแจ้งซ่อม:
@@ -2814,7 +2901,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
               {/* Modal Footer Actions */}
               <div className="px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  {meta.stage === "SupervisorChecked" &&
+                  {activeTab === "manager" &&
+                    meta.stage === "SupervisorChecked" &&
                     selectedRecord.managerStatus !== "More Info Requested" &&
                     selectedRecord.managerStatus !== "Rejected" && (
                       <>
@@ -2845,7 +2933,26 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       </>
                     )}
 
-                  {meta.stage === "ManagerApproved" && (
+                  {activeTab !== "manager" && meta.stage === "ManagerApproved" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkInRepair(selectedRecord.id)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white"
+                      >
+                        <Wrench size={14} /> หัวหน้างานอัปเดต: กำลังซ่อม
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMarkRepairCompleted(selectedRecord.id)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <CheckCircle2 size={14} /> หัวหน้างานอัปเดต: ซ่อมเสร็จ
+                      </button>
+                    </>
+                  )}
+
+                  {activeTab !== "manager" && meta.stage === "InRepair" && (
                     <button
                       type="button"
                       onClick={() => handleMarkRepairCompleted(selectedRecord.id)}
@@ -2885,13 +2992,15 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                 </div>
 
                 <div className="flex items-center gap-2 ml-auto">
-                  <button
-                    type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200"
-                  >
-                    <Printer size={13} /> พิมพ์ใบขอซ่อม
-                  </button>
+                  {activeTab !== "manager" && (
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200"
+                    >
+                      <Printer size={13} /> พิมพ์ใบขอซ่อม
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSelectedRecord(null)}
@@ -2915,10 +3024,10 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
             <div className="px-5 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                  สอบถามข้อมูลเพิ่มเติม: {feedbackRecord.workOrderNo}
+                  ขอรายละเอียดเพิ่มเติม: {feedbackRecord.workOrderNo}
                 </h3>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  ข้อมูลจะวิ่งกลับไปยังคิวหัวหน้างานตรวจสอบเพื่อตอบคำชี้แจงหรือระบุชื่อ Vendor ก่อนส่งกลับมาอนุมัติ
+                  ข้อมูลจะวิ่งกลับไปยังคิวหัวหน้างานตรวจสอบเพื่อตอบคำชี้แจงก่อนส่งกลับมาอนุมัติ
                 </p>
               </div>
               <button
@@ -2931,23 +3040,6 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
             </div>
 
             <form onSubmit={handleSendManagerQuery} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  หัวข้อคำถาม *
-                </label>
-                <select
-                  value={queryType}
-                  onChange={(e) => setQueryType(e.target.value)}
-                  className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                >
-                  {FEEDBACK_QUERY_TYPES.map((qt) => (
-                    <option key={qt} value={qt}>
-                      {qt}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                   รายละเอียดคำถามส่งกลับให้หัวหน้างาน *
