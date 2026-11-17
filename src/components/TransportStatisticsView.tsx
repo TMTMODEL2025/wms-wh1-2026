@@ -793,97 +793,97 @@ export function TransportStatisticsView({
       {headingActionsEl ? createPortal(refreshButtonNode, headingActionsEl) : null}
 
       {/* Header & Filter Bar */}
-      <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+      <div className="rounded-xl border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] px-3.5 py-3 sm:px-[18px] sm:py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5 text-slate-900 dark:text-slate-100">
-            <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-            <h2 className="text-lg font-semibold tracking-tight">
+          <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100">
+            <BarChart3 className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <h2 className="text-sm sm:text-base font-bold tracking-tight">
               สถิติการย้ายงาน (Transport Statistics)
             </h2>
           </div>
-          {!headingActionsEl && refreshButtonNode}
-        </div>
 
-        {/* Date Filter Primary Strip */}
-        <div className="mt-4 border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            {/* Quick Date Presets */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 mr-1">
-                <Calendar className="h-3.5 w-3.5" />
-                ตัวกรองวันที่:
-              </span>
-              <div className="inline-flex flex-wrap items-center rounded-lg bg-slate-100 dark:bg-slate-800/80 p-1 gap-1">
-                {[
-                  { id: "today" as DatePreset, label: "วันนี้" },
-                  { id: "yesterday" as DatePreset, label: "เมื่อวาน" },
-                  { id: "last7" as DatePreset, label: "7 วันล่าสุด" },
-                  { id: "thisMonth" as DatePreset, label: "เดือนนี้" },
-                  { id: "all" as DatePreset, label: "ทั้งหมด" },
-                ].map((preset) => {
-                  const isActive = datePreset === preset.id;
-                  return (
-                    <button
-                      key={preset.id}
-                      type="button"
-                      onClick={() => applyDatePreset(preset.id)}
-                      className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                        isActive
-                          ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm"
-                          : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Custom Start / End Date Pickers */}
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                <span className="whitespace-nowrap">ตั้งแต่วันที่</span>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => handleStartDateChange(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none"
-                />
-              </label>
-              <span className="text-slate-400 text-xs">ถึง</span>
-              <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                <span className="whitespace-nowrap">ถึงวันที่</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => handleEndDateChange(e.target.value)}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs font-mono text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none"
-                />
-              </label>
-            </div>
-          </div>
-
-          {/* Secondary Operational Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ค้นหารถ, คนขับ, สินค้า, เส้นทาง..."
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+                className="field w-full rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none"
+                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
+              />
+            </div>
+            {!headingActionsEl && refreshButtonNode}
+          </div>
+        </div>
+
+        {/* Unified Date & Option Filter Row */}
+        <div className="mt-2.5 border-t border-slate-200 dark:border-[#1e3a5f] pt-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Quick Date Presets */}
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 whitespace-nowrap shrink-0">
+              <Calendar className="h-3.5 w-3.5" />
+              ตัวกรองวันที่:
+            </span>
+            <div className="inline-flex min-h-[35px] flex-wrap items-center rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5 gap-0.5 shrink-0">
+              {[
+                { id: "today" as DatePreset, label: "วันนี้" },
+                { id: "yesterday" as DatePreset, label: "เมื่อวาน" },
+                { id: "last7" as DatePreset, label: "7 วันล่าสุด" },
+                { id: "thisMonth" as DatePreset, label: "เดือนนี้" },
+                { id: "all" as DatePreset, label: "ทั้งหมด" },
+              ].map((preset) => {
+                const isActive = datePreset === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applyDatePreset(preset.id)}
+                    className={`h-[29px] rounded px-2 text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isActive
+                        ? "bg-white dark:bg-[#162544] text-blue-600 dark:text-blue-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom Start / End Date Pickers */}
+            <div className="inline-flex items-center gap-1.5 shrink-0">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => handleStartDateChange(e.target.value)}
+                aria-label="ตั้งแต่วันที่"
+                title="ตั้งแต่วันที่"
+                className="field rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-mono font-normal text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:border-blue-500 focus:outline-none"
+                style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
+              />
+              <span className="text-slate-400 text-xs">–</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => handleEndDateChange(e.target.value)}
+                aria-label="ถึงวันที่"
+                title="ถึงวันที่"
+                className="field rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-mono font-normal text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:border-blue-500 focus:outline-none"
+                style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
               />
             </div>
 
-            <div className="flex items-center gap-1.5">
+            {/* Select Option Filters on the same row */}
+            <div className="inline-flex items-center gap-1.5 shrink-0">
               <Filter className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               <select
                 value={statusScope}
                 onChange={(e) => setStatusScope(e.target.value as StatusScope)}
                 aria-label="กรองสถานะงาน"
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none"
+                className="field rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-normal text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none max-w-[215px]"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="active">
                   งานปฏิบัติการจริง (ไม่รวมยกเลิก) · {statusSummary.activeCount} เที่ยว
@@ -901,7 +901,8 @@ export function TransportStatisticsView({
               value={selectedTeam}
               onChange={(e) => setSelectedTeam(e.target.value)}
               aria-label="กรองตามทีม"
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none"
+              className="field rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-normal text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none shrink-0"
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
             >
               <option value="all">ทีม: ทุกทีม</option>
               {availableTeams.map((tm) => (
@@ -915,7 +916,8 @@ export function TransportStatisticsView({
               value={selectedShift}
               onChange={(e) => setSelectedShift(e.target.value)}
               aria-label="กรองตามกะ"
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-xs text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none"
+              className="field rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-normal text-slate-900 dark:text-slate-100 focus:border-blue-500 focus:outline-none shrink-0"
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
             >
               <option value="all">กะทำงาน: ทุกกะ</option>
               {availableShifts.map((sh) => (

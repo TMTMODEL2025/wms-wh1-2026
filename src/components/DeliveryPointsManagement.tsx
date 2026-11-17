@@ -386,7 +386,7 @@ export function DeliveryPointsManagement({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ค้นหาจุดส่งสินค้า / ประตู..."
-                className="h-8 w-full rounded-lg border border-slate-300 bg-slate-50 pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-sky-500 focus:bg-white dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
+                className="h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-sky-500 focus:bg-white dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
               />
             </div>
           </div>

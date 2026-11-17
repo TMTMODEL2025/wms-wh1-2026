@@ -586,21 +586,21 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           {/* Search Box */}
           <div className="relative flex-1 min-w-0">
             <Search
-              size={13}
-              className="absolute left-2.5 sm:left-3 top-2 sm:top-2.5 text-slate-400 dark:text-slate-500 sm:w-4 sm:h-4"
+              size={14}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
             />
             <input
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="ค้นหาอุปกรณ์, รหัส, พื้นที่..."
-              className="w-full pl-7 sm:pl-9 pr-6 sm:pr-8 py-1 sm:py-2 text-[11px] sm:text-xs rounded-md sm:rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500"
+              className="h-[35px] w-full pl-8 pr-7 text-xs rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500"
             />
             {searchKeyword && (
               <button
                 type="button"
                 onClick={() => setSearchKeyword("")}
-                className="absolute right-2 sm:right-2.5 top-2 sm:top-2.5 text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
                 <X size={13} className="sm:w-3.5 sm:h-3.5" />
               </button>
@@ -619,7 +619,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
               <button
                 type="button"
                 onClick={() => setIsAreaDropdownOpen((prev) => !prev)}
-                className="py-1 px-2 text-[10.5px] rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-semibold flex items-center justify-between gap-1.5 max-w-[130px] focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                className="h-[35px] px-2.5 text-xs rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-semibold flex items-center justify-between gap-1.5 max-w-[140px] focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
               >
                 <span className="truncate">
                   {selectedAreaFilter === "all"
@@ -692,7 +692,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
             <select
               value={selectedAreaFilter}
               onChange={(e) => setSelectedAreaFilter(e.target.value)}
-              className="hidden sm:block py-1.5 px-3 text-xs rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="hidden sm:block h-[35px] px-2.5 text-xs rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
               <option value="all">ทุกพื้นที่ตรวจเช็ค ({equipmentList.length})</option>
               {areaOptions.map((area) => {
@@ -712,7 +712,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           <button
             type="button"
             onClick={() => setSelectedStatusFilter("all")}
-            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer text-center ${
+            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
               selectedStatusFilter === "all"
                 ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-xs"
                 : "bg-slate-100 dark:bg-[#0c1930] text-slate-600 dark:text-slate-400 hover:bg-slate-200"
@@ -724,7 +724,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           <button
             type="button"
             onClick={() => setSelectedStatusFilter("ready")}
-            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer text-center ${
+            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
               selectedStatusFilter === "ready"
                 ? "bg-emerald-600 text-white shadow-xs"
                 : "bg-slate-100 dark:bg-[#0c1930] text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50"
@@ -736,7 +736,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           <button
             type="button"
             onClick={() => setSelectedStatusFilter("repair_needed")}
-            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer text-center ${
+            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
               selectedStatusFilter === "repair_needed"
                 ? "bg-amber-600 text-white shadow-xs"
                 : "bg-slate-100 dark:bg-[#0c1930] text-amber-700 dark:text-amber-400 hover:bg-amber-50"
@@ -748,7 +748,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           <button
             type="button"
             onClick={() => setSelectedStatusFilter("in_maintenance")}
-            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer text-center ${
+            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
               selectedStatusFilter === "in_maintenance"
                 ? "bg-blue-600 text-white shadow-xs"
                 : "bg-slate-100 dark:bg-[#0c1930] text-blue-700 dark:text-blue-400 hover:bg-blue-50"
@@ -760,7 +760,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           <button
             type="button"
             onClick={() => setSelectedStatusFilter("out_of_service")}
-            className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer text-center ${
+            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
               selectedStatusFilter === "out_of_service"
                 ? "bg-rose-600 text-white shadow-xs"
                 : "bg-slate-100 dark:bg-[#0c1930] text-rose-700 dark:text-rose-400 hover:bg-rose-50"

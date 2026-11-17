@@ -1219,21 +1219,21 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       {headingPortalTarget ? createPortal(cloudSyncControls, headingPortalTarget) : null}
 
       {/* Top Stage Switcher & Action Bar */}
-      <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-[#091322] rounded-lg border border-slate-200 dark:border-[#1e3a5f]">
+      <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-1 p-0.5 bg-slate-100 dark:bg-[#091322] rounded-md border border-slate-200 dark:border-[#1e3a5f]">
           <button
             type="button"
             onClick={() => {
               setActiveTab("requester");
               setStageFilter("All");
             }}
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+            className={`inline-flex h-[31px] items-center gap-1.5 px-3 rounded text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
               activeTab === "requester"
                 ? "bg-[#087eaf] text-white"
                 : "text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-[#162744]"
             }`}
           >
-            <Wrench size={14} />
+            <Wrench size={13} />
             <span>1. ตารางแจ้งซ่อม / ทั้งหมด</span>
             <span className="tabular-nums opacity-85">({records.length})</span>
           </button>
@@ -1245,13 +1245,13 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
               setStageFilter("All");
               setSupervisorSubFilter("all_sup");
             }}
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+            className={`inline-flex h-[31px] items-center gap-1.5 px-3 rounded text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
               activeTab === "supervisor"
                 ? "bg-[#087eaf] text-white"
                 : "text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-[#162744]"
             }`}
           >
-            <ClipboardCheck size={14} />
+            <ClipboardCheck size={13} />
             <span>2. หัวหน้างานตรวจสอบ</span>
             {(pendingSupervisorCount > 0 || inWorkshopCount > 0) && (
               <span
@@ -1274,13 +1274,13 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
               setActiveTab("manager");
               setStageFilter("All");
             }}
-            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+            className={`inline-flex h-[31px] items-center gap-1.5 px-3 rounded text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
               activeTab === "manager"
                 ? "bg-[#087eaf] text-white"
                 : "text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-[#162744]"
             }`}
           >
-            <ShieldCheck size={14} />
+            <ShieldCheck size={13} />
             <span>3. ผู้จัดการอนุมัติ</span>
             {pendingManagerCount > 0 && (
               <span
@@ -1308,7 +1308,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
               setPhotoError(null);
               setIsRequestModalOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex h-[35px] items-center gap-1.5 px-3.5 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white transition-colors whitespace-nowrap shrink-0"
           >
             <Plus size={14} />
             <span>+ แจ้งซ่อมใหม่</span>
@@ -1400,14 +1400,14 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
 
           {/* Supervisor Stage Quick Sub-Filters */}
           {activeTab === "supervisor" && (
-            <div className="px-5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50/60 dark:bg-[#091322] flex flex-wrap items-center gap-2 text-xs">
+            <div className="px-4 py-2 sm:px-[18px] border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50/60 dark:bg-[#091322] flex flex-wrap items-center gap-1.5 text-xs">
               <button
                 type="button"
                 onClick={() => {
                   setStageFilter("All");
                   setSupervisorSubFilter("all_sup");
                 }}
-                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                className={`inline-flex h-[31px] items-center px-2.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
                   supervisorSubFilter === "all_sup" && stageFilter === "All"
                     ? "bg-[#087eaf] text-white border-[#087eaf]"
                     : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
@@ -1421,7 +1421,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   setStageFilter("All");
                   setSupervisorSubFilter("Submitted");
                 }}
-                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                className={`inline-flex h-[31px] items-center px-2.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
                   supervisorSubFilter === "Submitted" && stageFilter === "All"
                     ? "bg-amber-600 text-white border-amber-600"
                     : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
@@ -1435,7 +1435,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   setStageFilter("All");
                   setSupervisorSubFilter("MoreInfo");
                 }}
-                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                className={`inline-flex h-[31px] items-center px-2.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
                   supervisorSubFilter === "MoreInfo" && stageFilter === "All"
                     ? "bg-purple-700 text-white border-purple-700"
                     : "bg-white dark:bg-[#111e38] text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800"
@@ -1449,7 +1449,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   setStageFilter("All");
                   setSupervisorSubFilter("ManagerApproved");
                 }}
-                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                className={`inline-flex h-[31px] items-center px-2.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
                   supervisorSubFilter === "ManagerApproved" && stageFilter === "All"
                     ? "bg-indigo-600 text-white border-indigo-600"
                     : "bg-white dark:bg-[#111e38] text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
@@ -1463,7 +1463,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   setStageFilter("All");
                   setSupervisorSubFilter("InRepair");
                 }}
-                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                className={`inline-flex h-[31px] items-center px-2.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
                   supervisorSubFilter === "InRepair" && stageFilter === "All"
                     ? "bg-orange-600 text-white border-orange-600"
                     : "bg-white dark:bg-[#111e38] text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-800"
@@ -1475,27 +1475,29 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
           )}
 
           {/* Search & Filters */}
-          <div className="px-5 py-3 border-b border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] flex flex-wrap items-center gap-3">
+          <div className="fixflush-filterbar px-4 py-2.5 sm:px-[18px] sm:py-3 border-b border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[240px]">
               <Search
                 size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ค้นหาเลขที่ขอซ่อม (TMT-...), เบอร์รถ, ชื่อผู้แจ้ง, Vendor, อาการ..."
-                className="w-full pl-9 pr-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#087eaf]"
+                className="field w-full text-xs font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#087eaf]"
+                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
               />
             </div>
 
             <div className="flex items-center gap-2">
-              <Filter size={14} className="text-slate-400" />
+              <Filter size={14} className="text-slate-400 shrink-0" />
               <select
                 value={stageFilter}
                 onChange={(e) => setStageFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                className="field text-xs font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf] max-w-[230px]"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="All">
                   {activeTab === "supervisor"
@@ -1518,7 +1520,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
               <select
                 value={repairCategoryFilter}
                 onChange={(e) => setRepairCategoryFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                className="field text-xs font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf] max-w-[230px]"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="All">ทุกประเภทการซ่อม (24 หมวด)</option>
                 {MH_REPAIR_CATEGORIES.map((cat) => (

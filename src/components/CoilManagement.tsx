@@ -2642,7 +2642,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
           <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
             <div className="p-3 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center gap-2">
               <div className="relative flex-1 min-w-[200px]">
-                <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={stockSearch}
@@ -2652,7 +2652,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                       ? "ค้นหาด้วย Batch, Coil No., เกรด, ขนาด, ผู้ผลิต, Location..."
                       : "Search Batch, Coil No., Grade, Location..."
                   }
-                  className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                  className="h-[35px] w-full pl-8 pr-3 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
                 />
               </div>
 
@@ -2661,7 +2661,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 onChange={(e) =>
                   setStockStatusFilter(e.target.value as typeof stockStatusFilter)
                 }
-                className="px-2.5 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="h-[35px] px-2.5 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
               >
                 <option value="ACTIVE">{isThai ? "สต๊อกคงเหลือ (พร้อมใช้ + เตรียมเบิก)" : "Active Stock (Available + Staged)"}</option>
                 <option value="available">{isThai ? "เฉพาะพร้อมใช้ (Available)" : "Available Only"}</option>
@@ -2673,7 +2673,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               <select
                 value={stockBayFilter}
                 onChange={(e) => setStockBayFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="h-[35px] px-2.5 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
               >
                 <option value="ALL">{isThai ? "ทุก Layout Bay" : "All Layout Bays"}</option>
                 {layoutZones.map((z) => (
@@ -2686,7 +2686,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               <select
                 value={stockGradeFilter}
                 onChange={(e) => setStockGradeFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="h-[35px] px-2.5 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
               >
                 <option value="ALL">{isThai ? "ทุกเกรดเหล็ก" : "All Grades"}</option>
                 {COMMON_GRADES.map((g) => (
@@ -2702,7 +2702,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                   setIsSapModalOpen(true);
                   setTimeout(() => sapTextAreaRef.current?.focus(), 80);
                 }}
-                className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                className="h-[35px] px-3 rounded-md text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white inline-flex items-center gap-1.5 cursor-pointer shadow-xs whitespace-nowrap"
                 title={
                   isThai
                     ? "อัปโหลดไฟล์สต็อก SAP (Excel/CSV/TSV) เพื่อจับคู่ Batch และเติมข้อมูลสต๊อกอัตโนมัติ"

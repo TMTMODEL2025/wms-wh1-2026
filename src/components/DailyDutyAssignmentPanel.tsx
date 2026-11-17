@@ -1142,11 +1142,11 @@ export function DailyDutyAssignmentPanel({
 
           <div className="flex flex-wrap items-center gap-2">
             {/* Segmented Team Filter */}
-            <div className="inline-flex items-center rounded-lg bg-slate-100 p-0.5 dark:bg-[#0c162c]">
+            <div className="inline-flex h-[35px] items-center rounded-md bg-slate-100 p-0.5 dark:bg-[#0c162c]">
               <button
                 type="button"
                 onClick={() => setFilterTeam("All")}
-                className={`rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${
+                className={`h-[29px] rounded px-2.5 text-xs font-bold whitespace-nowrap transition ${
                   filterTeam === "All"
                     ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
                     : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -1159,7 +1159,7 @@ export function DailyDutyAssignmentPanel({
                   key={`flt-${tOpt}`}
                   type="button"
                   onClick={() => setFilterTeam(tOpt)}
-                  className={`rounded-md px-2.5 py-1.5 text-xs font-bold whitespace-nowrap transition ${
+                  className={`h-[29px] rounded px-2.5 text-xs font-bold whitespace-nowrap transition ${
                     filterTeam === tOpt
                       ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
                       : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -1174,7 +1174,7 @@ export function DailyDutyAssignmentPanel({
               value={filterShift}
               onChange={(e) => setFilterShift(e.target.value)}
               aria-label="กรองตามกะทำงาน"
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+              className="h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
             >
               <option value="All">ทุกกะทำงาน</option>
               {MH_SHIFTS.map((sOpt) => (
@@ -1187,14 +1187,14 @@ export function DailyDutyAssignmentPanel({
             <div className="relative">
               <Search
                 size={13}
-                className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
               />
               <input
                 type="text"
                 placeholder="ค้นหาชื่อ, รถ, พื้นที่..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-48 rounded-lg border border-slate-300 bg-slate-50 py-1.5 pr-3 pl-8 text-xs text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-white"
+                className="h-[35px] w-48 rounded-md border border-slate-300 bg-slate-50 pr-3 pl-8 text-xs text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-white"
               />
             </div>
           </div>

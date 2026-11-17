@@ -1155,7 +1155,7 @@ export function TransportOperations({
                     <User size={13} className="shrink-0 text-cyan-600 dark:text-cyan-400" />
                     <span className="truncate">1. พนักงานขับรถ</span>
                   </label>
-                  <div className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-100/80 px-2.5 py-1 text-xs font-bold text-slate-900 sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100">
+                  <div className="flex h-[35px] w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-100/80 px-2.5 text-xs font-semibold text-slate-900 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100">
                     <div className="flex min-w-0 items-center gap-2">
                       {currentUser?.employeeId && (
                         <span className="shrink-0 font-mono text-[11px] font-bold text-sky-700 dark:text-sky-400">
@@ -1204,7 +1204,8 @@ export function TransportOperations({
                         setTrailerNumber(val);
                       }
                     }}
-                    className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    className="field h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     <option value="">-- ไม่ใช้หางลาก --</option>
                     {trailerVehicles.map((tr) => (
@@ -1223,7 +1224,8 @@ export function TransportOperations({
                       placeholder="ระบุรหัสหางลาก เช่น TTL-01"
                       value={trailerNumber}
                       onChange={(e) => setTrailerNumber(e.target.value.toUpperCase())}
-                      className="mt-1.5 h-8 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 font-mono text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none sm:h-9 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      className="field mt-1.5 h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 font-mono text-xs font-normal text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     />
                   )}
                 </div>
@@ -1280,7 +1282,8 @@ export function TransportOperations({
                         id="mh-vehicle-select"
                         value={vehicleNumber}
                         onChange={(e) => setVehicleNumber(e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-cyan-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        className="field h-[35px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         <option value="">-- ทั่วไป --</option>
                         {vehicleNumber && !drivableVehicles.some((v) => v.vehicleId === vehicleNumber) && (
@@ -1316,7 +1319,8 @@ export function TransportOperations({
                             setWorkingDate(e.target.value);
                             setIsDateTimeEdited(true);
                           }}
-                          className="h-8 min-w-0 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          className="field h-[35px] min-w-0 w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs font-normal text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          style={{ height: 35, minHeight: 35, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
                           required
                         />
                         <input
@@ -1326,7 +1330,8 @@ export function TransportOperations({
                             setWorkingTime(e.target.value);
                             setIsDateTimeEdited(true);
                           }}
-                          className="h-8 min-w-0 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          className="field h-[35px] min-w-0 w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs font-normal text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          style={{ height: 35, minHeight: 35, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
                           required
                         />
                       </div>
@@ -1345,7 +1350,8 @@ export function TransportOperations({
                         id="mh-team-select"
                         value={team}
                         onChange={(e) => setTeam(e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-cyan-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        className="field h-[35px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         {team && !(MH_TEAMS as readonly string[]).includes(team) && (
                           <option value={team}>{team}</option>
@@ -1369,7 +1375,8 @@ export function TransportOperations({
                         id="mh-shift-select"
                         value={shift}
                         onChange={(e) => setShift(e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        className="field h-[35px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal text-slate-900 focus:border-indigo-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         {shift && !(MH_SHIFTS as readonly string[]).includes(shift) && (
                           <option value={shift}>{shift}</option>
@@ -1397,7 +1404,8 @@ export function TransportOperations({
                           setWorkArea(e.target.value);
                           setOriginFacility(e.target.value);
                         }}
-                        className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        className="field h-[35px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-normal text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         {workArea && !(MH_WORK_AREAS as readonly string[]).includes(workArea) && (
                           <option value={workArea}>{workArea}</option>
@@ -1435,7 +1443,8 @@ export function TransportOperations({
                         setItemName(e.target.value);
                       }
                     }}
-                    className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    className="field h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     {QUICK_PRODUCTS.map((prod) => (
                       <option key={prod} value={prod}>
@@ -1450,7 +1459,8 @@ export function TransportOperations({
                       placeholder="ระบุชื่อสินค้า..."
                       value={itemName}
                       onChange={(e) => setItemName(e.target.value)}
-                      className="mt-1.5 h-8 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none sm:h-9 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      className="field mt-1.5 h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     />
                   )}
                 </div>
@@ -1467,7 +1477,8 @@ export function TransportOperations({
                     id="mh-transfer-type-select"
                     value={transferType}
                     onChange={(e) => setTransferType(e.target.value)}
-                    className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    className="field h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     {transferType && !QUICK_TRANSFER_TYPES.includes(transferType) && (
                       <option value={transferType}>{transferType}</option>
@@ -1504,7 +1515,8 @@ export function TransportOperations({
                             setOriginFacility(e.target.value);
                           }
                         }}
-                        className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-sky-600 focus:bg-white focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        className="field h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-sky-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         {facilityOptions.map((b) => (
                           <option key={`orig-${b}`} value={b}>
@@ -1519,7 +1531,8 @@ export function TransportOperations({
                           placeholder="พิมพ์ต้นทาง..."
                           value={originFacility}
                           onChange={(e) => setOriginFacility(e.target.value)}
-                          className="mt-1.5 h-8 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-sky-600 focus:bg-white focus:outline-none sm:h-9 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          className="field mt-1.5 h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-sky-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                         />
                       )}
                     </div>
@@ -1528,7 +1541,7 @@ export function TransportOperations({
                       <button
                         type="button"
                         onClick={handleSwapFacilities}
-                        className="flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-bold whitespace-nowrap text-slate-700 transition hover:border-cyan-500 hover:bg-white hover:text-cyan-700 sm:h-10 sm:px-2.5 dark:border-[#2c4a75] dark:bg-[#162544] dark:text-slate-200 dark:hover:bg-[#1d3158]"
+                        className="flex h-[35px] w-full items-center justify-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 text-xs font-semibold whitespace-nowrap text-slate-700 transition hover:border-cyan-500 hover:bg-white hover:text-cyan-700 dark:border-[#2c4a75] dark:bg-[#162544] dark:text-slate-200 dark:hover:bg-[#1d3158]"
                         title="สลับต้นทางและปลายทาง"
                       >
                         <ArrowLeftRight size={13} className="shrink-0" />
@@ -1553,7 +1566,8 @@ export function TransportOperations({
                             setDestinationFacility(e.target.value);
                           }
                         }}
-                        className="h-9 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:bg-white focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        className="field h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-emerald-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         {facilityOptions.map((b) => (
                           <option key={`dest-${b}`} value={b}>
@@ -1568,7 +1582,8 @@ export function TransportOperations({
                           placeholder="พิมพ์ปลายทาง..."
                           value={destinationFacility}
                           onChange={(e) => setDestinationFacility(e.target.value)}
-                          className="mt-1.5 h-8 w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:bg-white focus:outline-none sm:h-9 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          className="field mt-1.5 h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 px-2.5 text-xs font-normal text-slate-900 focus:border-emerald-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                          style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                         />
                       )}
                     </div>
@@ -1596,7 +1611,8 @@ export function TransportOperations({
                       step={1}
                       value={fullBundlesInput}
                       onChange={(e) => setFullBundlesInput(e.target.value)}
-                      className="h-9 min-w-0 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      className="field h-[35px] min-w-0 w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs font-semibold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     />
                   </div>
 
@@ -1610,7 +1626,8 @@ export function TransportOperations({
                       step="any"
                       value={weightPerBundleInput}
                       onChange={(e) => setWeightPerBundleInput(e.target.value)}
-                      className="h-9 min-w-0 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      className="field h-[35px] min-w-0 w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs font-semibold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     />
                   </div>
 
@@ -1624,13 +1641,14 @@ export function TransportOperations({
                       step="any"
                       value={remainderWeightInput}
                       onChange={(e) => setRemainderWeightInput(e.target.value)}
-                      className="h-9 min-w-0 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1 font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none sm:h-10 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      className="field h-[35px] min-w-0 w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs font-semibold text-slate-900 tabular-nums focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     />
                   </div>
                 </div>
 
                 {/* Single-Line Live Weight Summary */}
-                <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 sm:px-3 sm:py-2 lg:col-span-5 dark:border-[#1e3a5f] dark:bg-[#111e38]">
+                <div className="flex h-[35px] items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 lg:col-span-5 dark:border-[#1e3a5f] dark:bg-[#111e38]">
                   <span className="truncate font-mono text-xs font-bold text-cyan-700 tabular-nums whitespace-nowrap dark:text-cyan-300">
                     รวม {totalBundles} มัด
                     {hasRemainderBundle ? " (+เศษ)" : ""}
@@ -1659,7 +1677,8 @@ export function TransportOperations({
                     id="mh-trip-count-select"
                     value={tripCount}
                     onChange={(e) => setTripCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                    className="h-9 w-28 rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1 font-mono text-xs font-bold text-slate-900 tabular-nums focus:border-cyan-600 focus:bg-white focus:outline-none sm:h-10 sm:w-32 sm:px-3 sm:text-sm dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    className="field h-[35px] w-28 rounded-md border border-slate-300 bg-slate-50 px-2.5 font-mono text-xs font-semibold text-slate-900 tabular-nums focus:border-cyan-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     {Array.from({ length: 50 }, (_, idx) => idx + 1).map((cnt) => (
                       <option key={cnt} value={cnt}>
@@ -1680,19 +1699,20 @@ export function TransportOperations({
 
               {/* Hidden Optional Controls: Notes & Add to Queue */}
               {showOptionalFields && (
-                <div className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-slate-50/70 p-2 sm:flex-row sm:items-center sm:p-2.5 dark:border-[#1e3a5f] dark:bg-[#0d1930]/80">
+                <div className="flex flex-col gap-2 rounded-md border border-slate-200 bg-slate-50/70 p-2 sm:flex-row sm:items-center sm:p-2.5 dark:border-[#1e3a5f] dark:bg-[#0d1930]/80">
                   <input
                     id="mh-notes-input"
                     type="text"
                     placeholder="หมายเหตุ (ถ้ามี)..."
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="h-8 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-900 placeholder:text-slate-400 focus:border-cyan-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    className="field h-[35px] min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   />
                   <button
                     type="button"
                     onClick={handleAddToQueue}
-                    className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold whitespace-nowrap text-slate-800 transition hover:border-cyan-500 hover:text-cyan-700 sm:h-9 sm:px-3 dark:border-[#2c4a75] dark:bg-[#162544] dark:text-slate-100 dark:hover:bg-[#1d3158]"
+                    className="inline-flex h-[35px] shrink-0 items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold whitespace-nowrap text-slate-800 transition hover:border-cyan-500 hover:text-cyan-700 dark:border-[#2c4a75] dark:bg-[#162544] dark:text-slate-100 dark:hover:bg-[#1d3158]"
                   >
                     <Plus size={13} className="shrink-0" />
                     <span>เพิ่มลงคิว</span>
@@ -1821,11 +1841,11 @@ export function TransportOperations({
           )}
         </div>
 
-        {/* Filter Toolbar: Search + Segmented Team Filter + Shift + Status */}
-        <div className="flex flex-col gap-1.5 border-b border-slate-200 bg-slate-50/60 px-2.5 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3 sm:px-5 sm:py-2.5 dark:border-[#1e3a5f] dark:bg-[#0d1930]">
-          <div className="relative min-w-0 w-full sm:min-w-[240px] sm:flex-1">
+        {/* Filter Toolbar: Search + Team + Shift + Status (Matched to FuelManagement) */}
+        <div className="filterbar transport-filterbar flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-[18px] sm:py-3 dark:border-[#1e3a5f] dark:bg-[#0d1b33]">
+          <div className="relative min-w-[220px] flex-1">
             <Search
-              size={13}
+              size={14}
               className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400"
             />
             <input
@@ -1833,17 +1853,17 @@ export function TransportOperations({
               placeholder="ค้นหารหัส, พนักงาน, รถ, สินค้า..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 w-full rounded-lg border border-slate-300 bg-white py-1 pr-2.5 pl-8 text-xs font-medium text-slate-900 focus:border-cyan-600 focus:outline-none sm:h-9 dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+              className="field transport-input w-full rounded-md border border-slate-300 bg-white pr-2.5 pl-8 text-xs font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+              style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
             />
           </div>
 
-          <div className="hidden sm:flex sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:gap-2">
-            {/* Segmented Team Filter */}
-            <div className="inline-flex w-auto items-center gap-0.5 rounded-lg bg-slate-200/70 p-0.5 dark:bg-[#0c162c]">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex h-[35px] w-auto items-center gap-0.5 rounded-md border border-slate-200 bg-slate-100 p-0.5 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
               <button
                 type="button"
                 onClick={() => setTeamFilter("All")}
-                className={`h-8 rounded-md px-2.5 py-1 text-xs font-bold whitespace-nowrap transition ${
+                className={`h-[29px] rounded px-2 text-xs font-medium whitespace-nowrap transition ${
                   teamFilter === "All"
                     ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
                     : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -1856,7 +1876,7 @@ export function TransportOperations({
                   key={`filter-team-${tOpt}`}
                   type="button"
                   onClick={() => setTeamFilter(tOpt)}
-                  className={`h-8 rounded-md px-2.5 py-1 text-xs font-bold whitespace-nowrap transition ${
+                  className={`h-[29px] rounded px-2 text-xs font-medium whitespace-nowrap transition ${
                     teamFilter === tOpt
                       ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
                       : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -1867,36 +1887,36 @@ export function TransportOperations({
               ))}
             </div>
 
-            <div className="flex items-center gap-2">
-              <select
-                value={shiftFilter}
-                onChange={(e) => setShiftFilter(e.target.value)}
-                aria-label="กรองตามกะทำงาน"
-                className="h-9 w-auto rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
-              >
-                <option value="All">ทุกกะทำงาน</option>
-                {MH_SHIFTS.map((sOpt) => (
-                  <option key={`filter-shift-${sOpt}`} value={sOpt}>
-                    {sOpt}
-                  </option>
-                ))}
-              </select>
+            <select
+              value={shiftFilter}
+              onChange={(e) => setShiftFilter(e.target.value)}
+              aria-label="กรองตามกะทำงาน"
+              className="field transport-select w-auto rounded-md border border-slate-300 bg-white text-xs font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+            >
+              <option value="All">ทุกกะทำงาน</option>
+              {MH_SHIFTS.map((sOpt) => (
+                <option key={`filter-shift-${sOpt}`} value={sOpt}>
+                  {sOpt}
+                </option>
+              ))}
+            </select>
 
-              <div className="flex min-w-0 items-center gap-1.5">
-                <Filter size={13} className="shrink-0 text-slate-400" />
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  aria-label="กรองตามสถานะ"
-                  className="h-9 w-auto rounded-lg border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
-                >
-                  <option value="All">ทุกสถานะ</option>
-                  <option value="In Transit">อยู่ระหว่างการส่ง</option>
-                  <option value="Completed">จบงานแล้ว</option>
-                  <option value="Overdue">เกิน SLA (&gt; 20 นาที)</option>
-                  <option value="Cancelled">ยกเลิก</option>
-                </select>
-              </div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Filter size={14} className="shrink-0 text-slate-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="กรองตามสถานะ"
+                className="field transport-select w-auto rounded-md border border-slate-300 bg-white text-xs font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+              >
+                <option value="All">ทุกสถานะ</option>
+                <option value="In Transit">อยู่ระหว่างการส่ง</option>
+                <option value="Completed">จบงานแล้ว</option>
+                <option value="Overdue">เกิน SLA (&gt; 20 นาที)</option>
+                <option value="Cancelled">ยกเลิก</option>
+              </select>
             </div>
           </div>
         </div>

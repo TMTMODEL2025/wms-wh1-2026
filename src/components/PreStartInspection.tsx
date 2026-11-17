@@ -16,7 +16,9 @@ import {
   Truck,
   Wrench,
   Clock,
-  Check
+  Check,
+  Trash2,
+  RotateCcw
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
 import {
@@ -30,6 +32,7 @@ interface ChecklistItem {
   categoryEnglish: string;
   status: "Pass" | "Fail" | "NA";
   remark?: string;
+  isCustom?: boolean;
 }
 
 interface InspectionRecord {
@@ -53,7 +56,16 @@ interface PreStartInspectionProps {
 
 const INITIAL_INSPECTIONS: InspectionRecord[] = [];
 
-const DEFAULT_CHECKLIST_TEMPLATE = [
+interface ChecklistTemplateItem {
+  id?: string;
+  categoryThai: string;
+  categoryEnglish: string;
+  isCustom?: boolean;
+}
+
+const CUSTOM_CHECKLIST_STORAGE_KEY = "tmt_prestart_custom_checklist_items_v1";
+
+const DEFAULT_CHECKLIST_TEMPLATE: ChecklistTemplateItem[] = [
   { categoryThai: "ระบบเบรกและเบรกมือ", categoryEnglish: "Braking System & Parking Brake" },
   { categoryThai: "ระบบบังคับเลี้ยว", categoryEnglish: "Steering Control" },
   { categoryThai: "คันโยกและกระบอกไฮดรอลิก", categoryEnglish: "Hydraulic Lift Levers & Cylinders" },
@@ -63,6 +75,56 @@ const DEFAULT_CHECKLIST_TEMPLATE = [
   { categoryThai: "ระดับน้ำมันเชื้อเพลิงและแบตเตอรี่", categoryEnglish: "Fuel & Battery Level" },
 ];
 
+function loadCustomChecklistTemplate(): ChecklistTemplateItem[] {
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_CHECKLIST_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (item): item is ChecklistTemplateItem =>
+          Boolean(item) &&
+          typeof item.categoryThai === "string" &&
+          item.categoryThai.trim().length > 0
+      )
+      .map((item, idx) => ({
+        id: typeof item.id === "string" && item.id ? item.id : `custom-saved-${idx}`,
+        categoryThai: item.categoryThai.trim(),
+        categoryEnglish: typeof item.categoryEnglish === "string" ? item.categoryEnglish.trim() : "",
+        isCustom: true,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomChecklistTemplate(items: ChecklistTemplateItem[]): void {
+  try {
+    window.localStorage.setItem(CUSTOM_CHECKLIST_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // Ignore storage quota or private browsing errors
+  }
+}
+
+function buildChecklistFormItems(customItems: ChecklistTemplateItem[]): ChecklistItem[] {
+  const defaults: ChecklistItem[] = DEFAULT_CHECKLIST_TEMPLATE.map((t, idx) => ({
+    id: `item-${idx}`,
+    categoryThai: t.categoryThai,
+    categoryEnglish: t.categoryEnglish,
+    status: "Pass",
+    isCustom: false,
+  }));
+  const customs: ChecklistItem[] = customItems.map((t, idx) => ({
+    id: t.id || `custom-${Date.now()}-${idx}`,
+    categoryThai: t.categoryThai,
+    categoryEnglish: t.categoryEnglish,
+    status: "Pass",
+    isCustom: true,
+  }));
+  return [...defaults, ...customs];
+}
+
 export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [inspections, setInspections] = useState<InspectionRecord[]>(INITIAL_INSPECTIONS);
   const [searchQuery, setSearchQuery] = useState("");
@@ -70,20 +132,40 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<InspectionRecord | null>(null);
 
+  // Saved Custom Template Items State
+  const [customTemplateItems, setCustomTemplateItems] = useState<ChecklistTemplateItem[]>(() =>
+    loadCustomChecklistTemplate()
+  );
+
   // Form State
   const [vehicleId, setVehicleId] = useState(vehicles[0]?.vehicleId || "");
   const [operatorName, setOperatorName] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [shift, setShift] = useState("Shift 1 (08:00 - 16:00)");
   const [operatingHours, setOperatingHours] = useState(0);
   const [inspectionDate, setInspectionDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [formItems, setFormItems] = useState<ChecklistItem[]>(
-    DEFAULT_CHECKLIST_TEMPLATE.map((t, idx) => ({
-      id: `item-${idx}`,
-      categoryThai: t.categoryThai,
-      categoryEnglish: t.categoryEnglish,
-      status: "Pass",
-    }))
+  const [formItems, setFormItems] = useState<ChecklistItem[]>(() =>
+    buildChecklistFormItems(loadCustomChecklistTemplate())
   );
+
+  // Add New Inspection Item UI State
+  const [showAddItemForm, setShowAddItemForm] = useState(false);
+  const [newItemThai, setNewItemThai] = useState("");
+  const [newItemEnglish, setNewItemEnglish] = useState("");
+  const [saveAsTemplateItem, setSaveAsTemplateItem] = useState(true);
+  const [addItemError, setAddItemError] = useState("");
+
+  const openNewChecklistModal = () => {
+    const savedCustoms = loadCustomChecklistTemplate();
+    setCustomTemplateItems(savedCustoms);
+    setFormItems(buildChecklistFormItems(savedCustoms));
+    setInspectionDate(new Date().toISOString().slice(0, 10));
+    setShowAddItemForm(false);
+    setNewItemThai("");
+    setNewItemEnglish("");
+    setSaveAsTemplateItem(true);
+    setAddItemError("");
+    setIsModalOpen(true);
+  };
 
   const updateItemStatus = (index: number, status: "Pass" | "Fail" | "NA") => {
     const updated = [...formItems];
@@ -95,6 +177,78 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
     const updated = [...formItems];
     updated[index].remark = remark;
     setFormItems(updated);
+  };
+
+  const handleAddChecklistItem = () => {
+    const thai = newItemThai.trim();
+    const eng = newItemEnglish.trim();
+    if (!thai) {
+      setAddItemError("กรุณาระบุชื่อรายการตรวจสอบ (ภาษาไทย)");
+      return;
+    }
+
+    const exists = formItems.some(
+      (item) => item.categoryThai.trim().toLowerCase() === thai.toLowerCase()
+    );
+    if (exists) {
+      setAddItemError("มีรายการตรวจสอบนี้อยู่ในแบบฟอร์มแล้ว");
+      return;
+    }
+
+    const newId = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newChecklistItem: ChecklistItem = {
+      id: newId,
+      categoryThai: thai,
+      categoryEnglish: eng || "Additional Safety Check",
+      status: "Pass",
+      isCustom: true,
+    };
+
+    setFormItems((prev) => [...prev, newChecklistItem]);
+
+    if (saveAsTemplateItem) {
+      const alreadyInTemplate = customTemplateItems.some(
+        (t) => t.categoryThai.trim().toLowerCase() === thai.toLowerCase()
+      );
+      if (!alreadyInTemplate) {
+        const nextTemplate = [
+          ...customTemplateItems,
+          {
+            id: newId,
+            categoryThai: thai,
+            categoryEnglish: eng || "Additional Safety Check",
+            isCustom: true,
+          },
+        ];
+        setCustomTemplateItems(nextTemplate);
+        saveCustomChecklistTemplate(nextTemplate);
+      }
+    }
+
+    setNewItemThai("");
+    setNewItemEnglish("");
+    setAddItemError("");
+    setShowAddItemForm(false);
+  };
+
+  const handleRemoveChecklistItem = (itemId: string) => {
+    if (formItems.length <= 1) {
+      setAddItemError("ต้องมีรายการตรวจสอบอย่างน้อย 1 รายการ");
+      return;
+    }
+    setAddItemError("");
+    setFormItems((prev) => prev.filter((item) => item.id !== itemId));
+
+    const nextTemplate = customTemplateItems.filter((item) => item.id !== itemId);
+    if (nextTemplate.length !== customTemplateItems.length) {
+      setCustomTemplateItems(nextTemplate);
+      saveCustomChecklistTemplate(nextTemplate);
+    }
+  };
+
+  const handleResetDefaultChecklist = () => {
+    setFormItems(buildChecklistFormItems(customTemplateItems));
+    setAddItemError("");
   };
 
   const hasAnyFail = formItems.some((item) => item.status === "Fail");
@@ -115,7 +269,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       operatorName: resolvedOperator,
       shift,
       operatingHours: Number(operatingHours) || 0,
-      items: formItems,
+      items: formItems.map((item) => ({ ...item })),
       overallResult,
       inspectorSignature: resolvedOperator,
       inspectionDate,
@@ -158,7 +312,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="button primary" onClick={() => setIsModalOpen(true)}>
+          <button className="button primary whitespace-nowrap shrink-0" onClick={openNewChecklistModal}>
             <Plus size={14} /> + New Safety Checklist (ตรวจสภาพรถ)
           </button>
         </div>
@@ -198,7 +352,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         {/* Toolbar & Filter */}
         <div className="prestart-filterbar" style={{ padding: "12px 18px", borderBottom: "1px solid #e7ecef", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", background: "#f8fafc" }}>
           <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
-            <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: "#647786" }} />
+            <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#647786" }} />
             <input
               type="text"
               placeholder="Search by ID, vehicle, operator name..."
@@ -207,6 +361,8 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               className="prestart-form-input"
               style={{
                 width: "100%",
+                height: 35,
+                minHeight: 35,
                 padding: "7px 10px 7px 32px",
                 borderRadius: 6,
                 border: "1px solid #cbd5e1",
@@ -223,7 +379,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               value={resultFilter}
               onChange={(e) => setResultFilter(e.target.value)}
               className="prestart-form-select"
-              style={{ padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
             >
               <option value="All">All Results</option>
               <option value="Passed">Passed (พร้อมใช้งาน)</option>
@@ -400,21 +556,172 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               </div>
 
               {/* Checklist Items Table */}
-              <div className="prestart-item-box" style={{ gridColumn: "span 2", background: "#f8fafc", padding: 14, borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <div className="prestart-modal-title" style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 10 }}>Pre-Start Inspection Items (รายการตรวจสอบความปลอดภัย)</div>
+              <div className="prestart-item-box col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
+                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                  <div className="prestart-modal-title text-[13px] font-bold text-slate-900">
+                    Pre-Start Inspection Items (รายการตรวจสอบความปลอดภัย)
+                    <span className="prestart-modal-sub ml-2 text-[11px] font-medium text-slate-500">
+                      ({formItems.length} รายการ)
+                    </span>
+                  </div>
 
-                <div style={{ display: "grid", gap: 10 }}>
-                  {formItems.map((item, idx) => (
-                    <div key={item.id} className="prestart-item-box" style={{ background: "#fff", padding: 10, borderRadius: 6, border: "1px solid #e2e8f0", display: "grid", gridTemplateColumns: "2fr 1fr 2fr", gap: 10, alignItems: "center" }}>
+                  <div className="flex items-center gap-2">
+                    {formItems.length < DEFAULT_CHECKLIST_TEMPLATE.length + customTemplateItems.length && (
+                      <button
+                        type="button"
+                        onClick={handleResetDefaultChecklist}
+                        className="button secondary whitespace-nowrap shrink-0 !px-2.5 !py-1 !text-[11px]"
+                        title="กู้คืนรายการตรวจสอบที่นำออก"
+                      >
+                        <RotateCcw size={12} /> กู้คืนรายการทั้งหมด
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddItemForm((prev) => !prev);
+                        setAddItemError("");
+                      }}
+                      className="button primary whitespace-nowrap shrink-0 !px-2.5 !py-1 !text-[11px]"
+                    >
+                      <Plus size={13} /> เพิ่มรายการตรวจสอบ
+                    </button>
+                  </div>
+                </div>
+
+                {showAddItemForm && (
+                  <div className="prestart-item-box mb-3 rounded-md border border-sky-200 bg-white p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="prestart-item-title text-xs font-bold text-slate-800">
+                        เพิ่มรายการตรวจสอบความปลอดภัยใหม่
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddItemForm(false);
+                          setAddItemError("");
+                        }}
+                        className="text-slate-400 hover:text-slate-600"
+                        aria-label="ปิดฟอร์มเพิ่มรายการ"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                       <div>
-                        <div className="prestart-item-title" style={{ fontSize: 12, fontWeight: 700, color: "#1e3648" }}>{item.categoryThai}</div>
-                        <div className="prestart-item-sub" style={{ fontSize: 10, color: "#647786" }}>{item.categoryEnglish}</div>
+                        <label className="prestart-modal-label mb-1 block text-[11px] font-semibold text-slate-700">
+                          ชื่อรายการตรวจสอบ (ภาษาไทย) *
+                        </label>
+                        <input
+                          type="text"
+                          value={newItemThai}
+                          onChange={(e) => {
+                            setNewItemThai(e.target.value);
+                            if (addItemError) setAddItemError("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddChecklistItem();
+                            }
+                          }}
+                          placeholder="เช่น ตรวจสอบสายชาร์จแบตเตอรี่ / เข็มขัดนิรภัย"
+                          className="prestart-form-input w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs outline-none"
+                          autoFocus
+                        />
                       </div>
 
-                      <div style={{ display: "flex", gap: 8 }}>
+                      <div>
+                        <label className="prestart-modal-label mb-1 block text-[11px] font-semibold text-slate-700">
+                          รายละเอียด / ชื่อภาษาอังกฤษ (ถ้ามี)
+                        </label>
+                        <input
+                          type="text"
+                          value={newItemEnglish}
+                          onChange={(e) => setNewItemEnglish(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddChecklistItem();
+                            }
+                          }}
+                          placeholder="เช่น Battery Cable & Seatbelt Check"
+                          className="prestart-form-input w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {addItemError && (
+                      <div className="mt-2 text-[11px] font-semibold text-red-600">
+                        {addItemError}
+                      </div>
+                    )}
+
+                    <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <label className="prestart-modal-sub flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-600 select-none">
+                        <input
+                          type="checkbox"
+                          checked={saveAsTemplateItem}
+                          onChange={(e) => setSaveAsTemplateItem(e.target.checked)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 accent-sky-600"
+                        />
+                        บันทึกเป็นรายการประจำสำหรับตรวจเช็คครั้งถัดไป
+                      </label>
+
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className={`button ${item.status === "Pass" ? "primary" : "secondary"}`}
+                          onClick={() => {
+                            setShowAddItemForm(false);
+                            setNewItemThai("");
+                            setNewItemEnglish("");
+                            setAddItemError("");
+                          }}
+                          className="button secondary whitespace-nowrap shrink-0 !px-2.5 !py-1 !text-[11px]"
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddChecklistItem}
+                          className="button primary whitespace-nowrap shrink-0 !px-3 !py-1 !text-[11px]"
+                        >
+                          <Check size={12} /> เพิ่มลงรายการ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!showAddItemForm && addItemError && (
+                  <div className="mb-2 text-[11px] font-semibold text-red-600">
+                    {addItemError}
+                  </div>
+                )}
+
+                <div className="grid gap-2.5">
+                  {formItems.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="prestart-item-box grid grid-cols-1 items-center gap-2.5 rounded-md border border-slate-200 bg-white p-2.5 md:grid-cols-[2fr_auto_2fr_auto]"
+                    >
+                      <div>
+                        <div className="prestart-item-title flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-800">
+                          <span>{item.categoryThai}</span>
+                          {item.isCustom && (
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                              เพิ่มเอง
+                            </span>
+                          )}
+                        </div>
+                        <div className="prestart-item-sub text-[10px] text-slate-500">{item.categoryEnglish}</div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className={`button whitespace-nowrap shrink-0 ${item.status === "Pass" ? "primary" : "secondary"}`}
                           style={{ padding: "4px 10px", fontSize: 11, background: item.status === "Pass" ? "#15803d" : "#fff", color: item.status === "Pass" ? "#fff" : "#15803d", borderColor: "#86efac" }}
                           onClick={() => updateItemStatus(idx, "Pass")}
                         >
@@ -422,7 +729,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                         </button>
                         <button
                           type="button"
-                          className={`button ${item.status === "Fail" ? "primary" : "secondary"}`}
+                          className={`button whitespace-nowrap shrink-0 ${item.status === "Fail" ? "primary" : "secondary"}`}
                           style={{ padding: "4px 10px", fontSize: 11, background: item.status === "Fail" ? "#b91c1c" : "#fff", color: item.status === "Fail" ? "#fff" : "#b91c1c", borderColor: "#fca5a5" }}
                           onClick={() => updateItemStatus(idx, "Fail")}
                         >
@@ -435,9 +742,19 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                         placeholder="Remark or defect description if failed..."
                         value={item.remark || ""}
                         onChange={(e) => updateItemRemark(idx, e.target.value)}
-                        className="prestart-form-input"
-                        style={{ padding: 6, borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 11 }}
+                        className="prestart-form-input w-full rounded border border-slate-300 px-2 py-1.5 text-[11px] outline-none"
                       />
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveChecklistItem(item.id)}
+                        disabled={formItems.length <= 1}
+                        title={formItems.length <= 1 ? "ต้องมีอย่างน้อย 1 รายการ" : "ลบรายการนี้"}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label={`ลบรายการ ${item.categoryThai}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   ))}
                 </div>

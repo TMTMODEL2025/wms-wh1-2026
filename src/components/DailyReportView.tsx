@@ -2220,10 +2220,10 @@ export function DailyReportView({
         {/* Right: Inline Compact Controls (Date, Shift, Excel, Print) */}
         <div className="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 flex-wrap w-full lg:w-auto max-w-full shrink-0">
           {/* 1. Compact Date Selector */}
-          <div className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-1.5 text-[11px] sm:text-xs flex-1 sm:flex-initial justify-between sm:justify-start shrink-0">
+          <div className="h-[35px] px-2.5 rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1.5 text-xs flex-1 sm:flex-initial justify-between sm:justify-start shrink-0">
             <div className="flex items-center gap-1 shrink-0">
               <Calendar size={13} className="text-cyan-500 shrink-0 sm:w-3.5 sm:h-3.5" />
-              <span className="font-bold text-slate-700 dark:text-slate-300 text-[10.5px] sm:text-[11px] shrink-0">
+              <span className="font-bold text-slate-700 dark:text-slate-300 text-xs shrink-0">
                 {isThai ? "วันที่:" : "Date:"}
               </span>
             </div>
@@ -2234,21 +2234,21 @@ export function DailyReportView({
                 setSelectedDate(e.target.value);
                 setHasUserChangedShift(false);
               }}
-              className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-mono font-bold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer shadow-xs"
+              className="h-[27px] px-2 rounded text-xs font-mono font-bold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer shadow-xs"
             />
           </div>
 
           {/* 2. Compact Shift Selector + Integrated Period Badge */}
-          <div className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs shrink-0">
+          <div className="h-[35px] px-2 rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1.5 text-xs shrink-0">
             <Clock size={13} className="text-amber-500 shrink-0 hidden sm:block sm:w-3.5 sm:h-3.5" />
-            <div className="inline-flex rounded-md sm:rounded-lg p-0.5 bg-slate-200/80 dark:bg-[#122342] border border-slate-300 dark:border-[#1e3a5f]">
+            <div className="inline-flex rounded p-0.5 bg-slate-200/80 dark:bg-[#122342] border border-slate-300 dark:border-[#1e3a5f]">
               <button
                 type="button"
                 onClick={() => {
                   setHasUserChangedShift(true);
                   setSelectedShift("day");
                 }}
-                className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10.5px] sm:text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`h-[25px] px-2.5 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                   selectedShift === "day"
                     ? "bg-amber-500 text-white shadow-xs font-extrabold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -2264,7 +2264,7 @@ export function DailyReportView({
                   setHasUserChangedShift(true);
                   setSelectedShift("night");
                 }}
-                className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[10.5px] sm:text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`h-[25px] px-2.5 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                   selectedShift === "night"
                     ? "bg-indigo-600 text-white shadow-xs font-extrabold"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -2276,7 +2276,7 @@ export function DailyReportView({
             </div>
 
             {/* Embedded Shift Period Badge */}
-            <span className="hidden 2xl:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 whitespace-nowrap">
+            <span className="hidden 2xl:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/10 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 whitespace-nowrap">
               {selectedShift === "day"
                 ? "08:00-20:00 น."
                 : "20:00-08:00 น."}
@@ -2287,7 +2287,7 @@ export function DailyReportView({
           <button
             type="button"
             onClick={exportToExcel}
-            className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            className="hidden sm:flex h-[35px] px-3 rounded-md text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
           >
             <FileSpreadsheet size={14} className="shrink-0" />
             <span>{isThai ? "ส่งออก Excel" : "Export"}</span>
@@ -2297,7 +2297,7 @@ export function DailyReportView({
           <button
             type="button"
             onClick={() => window.print()}
-            className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+            className="hidden sm:flex h-[35px] px-3 rounded-md text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
           >
             <Printer size={14} className="shrink-0" />
             <span>{isThai ? "พิมพ์" : "Print"}</span>

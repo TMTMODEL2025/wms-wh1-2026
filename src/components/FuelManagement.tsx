@@ -4,12 +4,12 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Fuel,
   TrendingUp,
   TrendingDown,
   AlertTriangle,
-  Printer,
   Search,
   Filter,
   Plus,
@@ -53,6 +53,9 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     getForkliftCloudRealtimeEnabled()
   );
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [headingPortalTarget, setHeadingPortalTarget] = useState<HTMLElement | null>(() =>
+    typeof document !== "undefined" ? document.getElementById("page-heading-actions") : null
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [fuelTypeFilter, setFuelTypeFilter] = useState("All");
@@ -61,6 +64,10 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const [isInboundModalOpen, setIsInboundModalOpen] = useState(false);
   const [isOutboundModalOpen, setIsOutboundModalOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<FuelTransaction | null>(null);
+
+  useEffect(() => {
+    setHeadingPortalTarget(document.getElementById("page-heading-actions"));
+  }, []);
 
   // Subscribe to mh_fuel_stock ONLY when FuelManagement is mounted, and unsubscribe immediately on unmount
   useEffect(() => {
@@ -94,9 +101,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   // Inbound Form State
   const [inFuelType, setInFuelType] = useState<"Diesel (ดีเซล)" | "Gasoline (เบนซิน)">("Diesel (ดีเซล)");
   const [inQty, setInQty] = useState<number>(0);
-  const [inMeterStart, setInMeterStart] = useState<number>(0);
   const [inRecorder, setInRecorder] = useState(() => getActiveRecorderDisplay("").employeeName);
-  const [inSupplier, setInSupplier] = useState("");
   const [inNotes, setInNotes] = useState("");
   const [inDate, setInDate] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -130,7 +135,8 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const handleInboundSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = Number(inQty) || 0;
-    const startNum = Number(inMeterStart) || 0;
+    const currentTankStock = inFuelType === "Diesel (ดีเซล)" ? dieselStock : gasolineStock;
+    const startNum = Math.max(0, currentTankStock);
     const endNum = startNum + qtyNum;
     const txId = `FUEL-${new Date().getFullYear()}-${String(transactions.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
@@ -144,7 +150,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       meterStart: startNum,
       meterEnd: endNum,
       recorderName: inRecorder.trim() || getActiveRecorderDisplay("WMS Storekeeper").label,
-      referenceSource: inSupplier.trim() || "Direct Supplier",
+      referenceSource: "-",
       purposeOrNotes: inNotes.trim() || "Bulk fuel receipt into warehouse storage tank.",
       workingDate: inDate,
       timestamp: nowStr,
@@ -153,6 +159,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
 
     setTransactions((prev) => [newTx, ...prev]);
     setIsInboundModalOpen(false);
+    setInQty(0);
     setInNotes("");
     await saveMhFuelTransactionToCloud(newTx);
     void appendWmsActivityLog({
@@ -232,8 +239,39 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     return matchesSearch && matchesType && matchesFuelType;
   });
 
+  const cloudSyncControls = (
+    <div className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold border transition-colors whitespace-nowrap shrink-0 ${
+          cloudRealtime
+            ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700"
+            : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-[#0d1b33] dark:text-slate-300 dark:border-[#1e3a5f]"
+        }`}
+        title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
+      >
+        {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
+        <span>{cloudRealtime ? "Cloud Real-time: ON" : "Cloud Real-time: OFF"}</span>
+      </button>
+
+      {!cloudRealtime && (
+        <button
+          type="button"
+          onClick={handleManualReload}
+          disabled={isRefreshing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap shrink-0 disabled:opacity-60"
+        >
+          <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} />
+          <span>{isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}</span>
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="fuel-management">
+      {headingPortalTarget ? createPortal(cloudSyncControls, headingPortalTarget) : null}
       {/* Tank Level KPI Cards */}
       <div className="kpi-grid" style={{ marginBottom: 16 }}>
         <div className="kpi" style={{ borderTopColor: dieselStock <= DIESEL_LOW_THRESHOLD ? "#ef4444" : "#087eaf" }}>
@@ -283,41 +321,12 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <button
-              type="button"
-              className="button secondary"
-              onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
-              style={{
-                padding: "6px 10px",
-                fontSize: 11,
-                borderColor: cloudRealtime ? "#22c55e" : "#94a3b8",
-                color: cloudRealtime ? "#15803d" : "#475569",
-              }}
-              title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
-            >
-              {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
-              {cloudRealtime ? "Cloud Real-time: ON" : "Cloud Real-time: OFF"}
-            </button>
-            {!cloudRealtime && (
-              <button
-                type="button"
-                className="button secondary"
-                onClick={handleManualReload}
-                disabled={isRefreshing}
-                style={{ padding: "6px 10px", fontSize: 11 }}
-              >
-                <RefreshCw size={13} />
-                {isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}
-              </button>
-            )}
-            <button className="button primary" onClick={() => setIsInboundModalOpen(true)}>
+            {!headingPortalTarget && cloudSyncControls}
+            <button className="button primary whitespace-nowrap shrink-0" onClick={() => setIsInboundModalOpen(true)}>
               <Plus size={14} /> + Inbound Receipt (รับเข้าน้ำมัน)
             </button>
-            <button className="button secondary" style={{ background: "#0284c7", color: "#ffffff", borderColor: "#0284c7" }} onClick={() => setIsOutboundModalOpen(true)}>
+            <button className="button secondary whitespace-nowrap shrink-0" style={{ background: "#0284c7", color: "#ffffff", borderColor: "#0284c7" }} onClick={() => setIsOutboundModalOpen(true)}>
               <Plus size={14} /> + Outbound Withdrawal (เบิกออก)
-            </button>
-            <button className="button secondary" onClick={() => window.print()}>
-              <Printer size={13} /> Print Log
             </button>
           </div>
         </div>
@@ -475,7 +484,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                 <div className="modal-title-text">Inbound Fuel Receipt (บันทึกรับเข้าน้ำมัน)</div>
                 <div className="modal-sub-text" style={{ marginTop: 2 }}>Record bulk fuel delivery from supplier into warehouse storage tank.</div>
               </div>
-              <button onClick={() => setIsInboundModalOpen(false)} className="modal-close-btn"><X size={20} /></button>
+              <button type="button" onClick={() => setIsInboundModalOpen(false)} className="modal-close-btn"><X size={20} /></button>
             </div>
 
             <form onSubmit={handleInboundSubmit} style={{ padding: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -506,37 +515,12 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
               </div>
 
               <div>
-                <label className="modal-label-text" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Tank Meter Reading Start (ลิตรก่อนรับเข้า) *</label>
-                <input
-                  type="number"
-                  value={inMeterStart}
-                  onChange={(e) => setInMeterStart(Number(e.target.value))}
-                  required
-                  className="field fuel-input"
-                  style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
-                />
-              </div>
-
-              <div>
                 <label className="modal-label-text" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Delivery Date *</label>
                 <input
                   type="date"
                   value={inDate}
                   onChange={(e) => setInDate(e.target.value)}
                   required
-                  className="field fuel-input"
-                  style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
-                />
-              </div>
-
-              <div style={{ gridColumn: "span 2" }}>
-                <label className="modal-label-text" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Supplier & PO Reference (บริษัทผู้ส่ง / ใบส่งสินค้า) *</label>
-                <input
-                  type="text"
-                  value={inSupplier}
-                  onChange={(e) => setInSupplier(e.target.value)}
-                  required
-                  placeholder="e.g., PTT Oil & Retail Public Co., Ltd. (PO-98215)"
                   className="field fuel-input"
                   style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
                 />

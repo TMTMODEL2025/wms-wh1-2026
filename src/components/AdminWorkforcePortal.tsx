@@ -203,7 +203,7 @@ export function AdminWorkforcePortal({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ค้นหารหัสพนักงาน, ชื่อผู้บันทึก, รหัสอ้างอิง หรือกิจกรรม..."
-                className="h-9 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
+                className="h-[35px] w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
               />
             </div>
 
@@ -212,7 +212,7 @@ export function AdminWorkforcePortal({
               onChange={(e) =>
                 setSectionFilter(e.target.value as WmsSectionId | "all")
               }
-              className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
+              className="h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
             >
               <option value="all">ทุกส่วนงาน (All Sections)</option>
               {WMS_SECTIONS.map((sec) => (
@@ -228,7 +228,7 @@ export function AdminWorkforcePortal({
                 type="date"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
+                className="h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
               />
             </div>
 

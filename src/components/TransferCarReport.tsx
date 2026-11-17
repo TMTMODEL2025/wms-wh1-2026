@@ -638,25 +638,25 @@ export function TransferCarReport({
           <div className="flex flex-wrap items-center justify-between gap-2 w-full">
             <div className="flex flex-wrap items-center gap-2 flex-1 sm:flex-initial">
               {/* Month Selector */}
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg sm:rounded-xl border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
+              <div className="flex h-[35px] items-center gap-1.5 px-2.5 rounded-md border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
                 <Calendar size={14} className="text-amber-500 shrink-0" />
-                <label className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
                   {isThai ? "เดือน/ปี:" : "Month:"}
                 </label>
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="px-2 py-0.5 rounded-md sm:rounded-lg bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-[11px] sm:text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-xs"
+                  className="h-[27px] px-2 rounded bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-xs"
                 />
               </div>
 
               {/* Machine Filter Toggle Buttons */}
-              <div className="inline-flex flex-1 sm:flex-initial rounded-lg sm:rounded-xl p-0.5 sm:p-1 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
+              <div className="inline-flex h-[35px] flex-1 sm:flex-initial items-center rounded-md p-0.5 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("ALL")}
-                  className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-[29px] flex-1 sm:flex-initial px-2.5 sm:px-3 rounded text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     selectedMachineFilter === "ALL"
                       ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -668,7 +668,7 @@ export function TransferCarReport({
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("TM06")}
-                  className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer ${
+                  className={`h-[29px] flex-1 sm:flex-initial px-2.5 sm:px-3 rounded text-xs font-bold transition-all cursor-pointer ${
                     selectedMachineFilter === "TM06"
                       ? "bg-amber-500 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -679,7 +679,7 @@ export function TransferCarReport({
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("TM07")}
-                  className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer ${
+                  className={`h-[29px] flex-1 sm:flex-initial px-2.5 sm:px-3 rounded text-xs font-bold transition-all cursor-pointer ${
                     selectedMachineFilter === "TM07"
                       ? "bg-blue-600 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"

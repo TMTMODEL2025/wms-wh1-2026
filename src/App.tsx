@@ -1463,7 +1463,7 @@ const CSS = `
     background: #fff;
     border: 1px solid #bccbd4;
     color: #314654;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 7px 11px;
     font-size: 12px;
     min-height: 35px;
@@ -6196,12 +6196,12 @@ function WmsApp({
                     )}
                 </div>
 
-                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && active !== "coil" && active !== "admin" && (
+                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "coil" && active !== "admin" && (
                   <div
                     id="page-heading-actions"
                     className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}
                   >
-                    {active !== "transport" && active !== "slit" && (
+                    {active !== "transport" && active !== "slit" && active !== "fuel" && (
                       <button className="button secondary print-export-btn hidden sm:inline-flex" onClick={() => window.print()}>
                         <Printer size={13} />
                         <span>{translations.printExport}</span>
