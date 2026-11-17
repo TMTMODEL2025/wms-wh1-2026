@@ -42,12 +42,14 @@ import {
   Sun,
   Moon,
   ArrowLeftRight,
+  BarChart3,
 } from "lucide-react";
 import { VehicleManagement } from "./components/VehicleManagement";
 import { EmployeeManagement } from "./components/EmployeeManagement";
 import { AdminWorkforcePortal } from "./components/AdminWorkforcePortal";
 import { LoginGateModal } from "./components/LoginGateModal";
 import { TransportOperations } from "./components/TransportOperations";
+import { TransportStatisticsView } from "./components/TransportStatisticsView";
 import { DeliveryPointsManagement } from "./components/DeliveryPointsManagement";
 import { FixFlushManagement } from "./components/FixFlushManagement";
 import { FuelManagement } from "./components/FuelManagement";
@@ -115,6 +117,7 @@ interface TransactionItem {
 
 const getMaterialHandlingSubmenu = (t: (key: keyof Translations) => string) => [
   { id: "transport", label: t("transportOperation"), icon: Activity },
+  { id: "transport-stats", label: t("transportStats"), icon: BarChart3 },
   { id: "delivery-points", label: t("deliveryPoints"), icon: MapPin },
   { id: "fix-flush", label: t("fixFlushStatus"), icon: Wrench },
   { id: "pre-start", label: t("preStartInspection"), icon: ShieldCheck },
@@ -158,6 +161,11 @@ function getModuleInfo(t: (key: keyof Translations) => string): Record<string, M
     transport: {
       title: t("transportOperation"),
       subtitle: "",
+      columns: [],
+    },
+    "transport-stats": {
+      title: t("transportStats"),
+      subtitle: t("transportStatsSubtitle"),
       columns: [],
     },
     "delivery-points": {
@@ -5146,7 +5154,18 @@ function WmsApp({
     if (active !== "coil") {
       unsubscribeAllCoilFirestoreListeners();
     }
-    if (!["transport", "fix-flush", "pre-start", "vehicles", "employees", "fuel"].includes(active)) {
+    if (
+      ![
+        "transport",
+        "transport-stats",
+        "delivery-points",
+        "fix-flush",
+        "pre-start",
+        "vehicles",
+        "employees",
+        "fuel",
+      ].includes(active)
+    ) {
       unsubscribeAllForkliftFirestoreListeners();
     }
   }, [active]);
@@ -5171,6 +5190,8 @@ function WmsApp({
 
   const isMaterialHandlingActive = [
     "transport",
+    "transport-stats",
+    "delivery-points",
     "fix-flush",
     "pre-start",
     "vehicles",
@@ -6275,6 +6296,15 @@ function WmsApp({
               <FuelManagement vehicles={vehicles} />
             ) : active === "delivery-points" ? (
               <DeliveryPointsManagement
+                onNavigateToTransport={() => {
+                  setActive("transport");
+                  setSelectedRecord(null);
+                }}
+              />
+            ) : active === "transport-stats" ? (
+              <TransportStatisticsView
+                vehicles={vehicles}
+                employees={employeeRoster}
                 onNavigateToTransport={() => {
                   setActive("transport");
                   setSelectedRecord(null);

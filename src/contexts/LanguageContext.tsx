@@ -26,6 +26,7 @@ export interface Translations {
 
   // Submenu
   transportOperation: string;
+  transportStats: string;
   deliveryPoints: string;
   fixFlushStatus: string;
   preStartInspection: string;
@@ -43,6 +44,7 @@ export interface Translations {
 
   // Subtitles
   transportSubtitle: string;
+  transportStatsSubtitle: string;
   deliveryPointsSubtitle: string;
   fixFlushSubtitle: string;
   preStartSubtitle: string;
@@ -207,6 +209,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Submenu
     transportOperation: "การปฏิบัติการขนย้าย",
+    transportStats: "สถิติการย้ายงาน",
     deliveryPoints: "จุดส่งสินค้า",
     fixFlushStatus: "ระบบแจ้งซ่อม",
     preStartInspection: "ตรวจเช็ครถประจำวัน",
@@ -224,6 +227,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Subtitles
     transportSubtitle: "การเคลื่อนย้ายวัสดุภายใน ใบกำกับการเดินทาง และจุดตรวจเส้นทาง",
+    transportStatsSubtitle: "สรุปจำนวนรถ สินค้า น้ำหนัก พนักงานขับรถ และเส้นทางขนย้ายตามช่วงวันที่",
     deliveryPointsSubtitle: "กำหนดอาคาร จุดส่งสินค้า และหมายเลขประตูสำหรับฟอร์มบันทึกงานย้ายสินค้า",
     fixFlushSubtitle: "ระบบแจ้งซ่อมบำรุง ติดตามสถานะงานซ่อม และประวัติการฟลัชชิ่งน้ำมัน",
     preStartSubtitle: "รายการตรวจเช็คสภาพรถยกและเครื่องจักรประจำวันก่อนเริ่มปฏิบัติงาน",
@@ -386,6 +390,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Submenu
     transportOperation: "Transport Operation",
+    transportStats: "Transport Statistics",
     deliveryPoints: "Delivery Points",
     fixFlushStatus: "Fix & Flush Status",
     preStartInspection: "Pre-Start Safety Inspection",
@@ -403,6 +408,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Subtitles
     transportSubtitle: "Internal material movements, trip manifests and route checkpoints",
+    transportStatsSubtitle: "Date-filtered statistics for active forklifts, cargo weights, drivers and routes",
     deliveryPointsSubtitle: "Configure warehouse buildings, delivery points and gates for transport routes",
     fixFlushSubtitle: "Fleet maintenance, hydraulic line flushing, overhaul schedules and inspection clearance",
     preStartSubtitle: "Daily forklift and heavy machinery safety checklists before operation",

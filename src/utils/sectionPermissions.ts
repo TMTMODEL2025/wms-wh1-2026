@@ -31,8 +31,8 @@ export const WMS_SECTIONS: WmsSectionMeta[] = [
     shortLabelTh: "ขนย้าย/รถยก",
     labelEn: "Material Handling & Fleet",
     defaultMenuId: "transport",
-    menuIds: ["transport", "delivery-points", "fix-flush", "pre-start", "vehicles", "employees", "fuel"],
-    descriptionTh: "ขนย้ายสินค้า, จุดส่งสินค้า, ซ่อมบำรุง, ตรวจเช็ครถ, น้ำมัน และตารางงาน",
+    menuIds: ["transport", "transport-stats", "delivery-points", "fix-flush", "pre-start", "vehicles", "employees", "fuel"],
+    descriptionTh: "ขนย้ายสินค้า, สถิติการย้ายงาน, จุดส่งสินค้า, ซ่อมบำรุง, ตรวจเช็ครถ, น้ำมัน และตารางงาน",
   },
   {
     id: "slit_ops",
@@ -77,6 +77,7 @@ export const ALL_WMS_SECTION_IDS: WmsSectionId[] = WMS_SECTIONS.map((s) => s.id)
 export const MENU_TO_SECTION_MAP: Record<string, WmsSectionId> = {
   dashboard: "overview",
   transport: "fleet_ops",
+  "transport-stats": "fleet_ops",
   "delivery-points": "fleet_ops",
   "fix-flush": "fleet_ops",
   "pre-start": "fleet_ops",
