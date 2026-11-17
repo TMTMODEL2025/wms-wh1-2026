@@ -95,6 +95,31 @@ service cloud.firestore {
         && data.team is string && data.team.size() <= 64;
     }
 
+    function isValidMhDeliveryPoint(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.deliveryPoint is string && data.deliveryPoint.size() > 0 && data.deliveryPoint.size() <= 128
+        && data.gate is string && data.gate.size() <= 64;
+    }
+
+    function isValidWmsEmployee(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.employeeId is string && data.employeeId.size() <= 64
+        && data.employeeName is string && data.employeeName.size() <= 128
+        && data.role is string && data.role.size() <= 32
+        && data.employmentStatus in ['Active', 'Inactive']
+        && (!('allowedSections' in data) || (data.allowedSections is list && data.allowedSections.size() <= 10));
+    }
+
+    function isValidWmsActivityLog(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.timestamp is string && data.timestamp.size() <= 64
+        && data.employeeId is string && data.employeeId.size() <= 64
+        && data.employeeName is string && data.employeeName.size() <= 128
+        && data.sectionId is string && data.sectionId.size() <= 32
+        && data.module is string && data.module.size() <= 128
+        && data.activity is string && data.activity.size() <= 500;
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -183,6 +208,24 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(dutyId) && isValidMhDailyDuty(request.resource.data);
       allow delete: if isValidId(dutyId);
+    }
+
+    match /mh_delivery_points/{pointId} {
+      allow read: if true;
+      allow create, update: if isValidId(pointId) && isValidMhDeliveryPoint(request.resource.data);
+      allow delete: if isValidId(pointId);
+    }
+
+    match /wms_employees/{employeeId} {
+      allow read: if true;
+      allow create, update: if isValidId(employeeId) && isValidWmsEmployee(request.resource.data);
+      allow delete: if isValidId(employeeId);
+    }
+
+    match /wms_activity_logs/{logId} {
+      allow read: if true;
+      allow create, update: if isValidId(logId) && isValidWmsActivityLog(request.resource.data);
+      allow delete: if isValidId(logId);
     }
 
     match /test/{docId} {

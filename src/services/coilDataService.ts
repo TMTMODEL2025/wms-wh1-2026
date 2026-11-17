@@ -10,6 +10,7 @@ import {
   where,
 } from "firebase/firestore";
 import { dbCoil, handleFirestoreError, OperationType } from "./firebase";
+import { getActiveRecorderDisplay } from "./authWorkforceService";
 
 // ============================================================================
 // Dedicated Firestore Collections for Steel Coil Management (100% Isolated)
@@ -488,7 +489,7 @@ function sanitizeCoilTransactionPayload(
     thickness: String(tx.thickness || "-").trim().slice(0, 32),
     width: String(tx.width || "-").trim().slice(0, 32),
     manufacturer: String(tx.manufacturer || "-").trim().slice(0, 64),
-    operator: String(tx.operator || "ADMIN").trim().slice(0, 64),
+    operator: String(tx.operator || getActiveRecorderDisplay("ADMIN").label).trim().slice(0, 64),
     remark: String(tx.remark || "").trim().slice(0, 256),
     timestamp: String(tx.timestamp || timestamp).trim().slice(0, 64),
     dateYmd: String(tx.dateYmd || (tx.timestamp ? tx.timestamp.slice(0, 10) : dateYmd)).trim().slice(0, 16),

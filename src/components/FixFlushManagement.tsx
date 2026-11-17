@@ -51,6 +51,10 @@ import {
   setForkliftCloudRealtimeEnabled,
   subscribeForkliftCloudRealtimeMode,
 } from "../services/forkliftDataService";
+import {
+  appendWmsActivityLog,
+  getActiveRecorderDisplay,
+} from "../services/authWorkforceService";
 
 interface SparePartItem {
   id?: string;
@@ -391,6 +395,13 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
       setSelectedRecord(updated);
     }
     await saveMhMaintenanceToCloud(updated);
+    void appendWmsActivityLog({
+      module: "Fix & Flush Maintenance",
+      sectionId: "fleet_ops",
+      reference: target.workOrderNo,
+      activity: `ไม่อนุมัติใบแจ้งซ่อม ${target.workOrderNo} (${target.vehicleNumber})`,
+      status: "Attention",
+    });
   };
 
   const handleSendManagerQuery = async (e: React.FormEvent) => {
@@ -398,9 +409,10 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
     if (!feedbackRecord || !feedbackMessageText.trim()) return;
 
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const activeAuthor = getActiveRecorderDisplay("Manager").label;
     const newMessage: FeedbackMessage = {
       id: `FB-${Date.now()}`,
-      author: "Director Somchai (Manager)",
+      author: activeAuthor,
       role: "Manager",
       queryType,
       message: feedbackMessageText.trim(),
@@ -424,6 +436,13 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
     setFeedbackRecord(null);
     setFeedbackMessageText("");
     await saveMhMaintenanceToCloud(updatedRecord);
+    void appendWmsActivityLog({
+      module: "Fix & Flush Maintenance",
+      sectionId: "fleet_ops",
+      reference: updatedRecord.workOrderNo,
+      activity: `ส่งข้อความสอบถามงานซ่อม ${updatedRecord.workOrderNo}: ${queryType}`,
+      status: "Pending",
+    });
   };
 
   const handleTechnicianReply = async (recordId: string, replyText: string) => {

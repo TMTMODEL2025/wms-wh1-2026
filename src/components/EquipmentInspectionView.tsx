@@ -29,6 +29,10 @@ import {
   ChevronDown,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import {
+  appendWmsActivityLog,
+  getActiveRecorderDisplay,
+} from "../services/authWorkforceService";
 
 export type EquipmentStatus =
   | "ready"
@@ -284,6 +288,13 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
         createdAt: new Date().toISOString(),
       };
       setEquipmentList((prev) => [newItem, ...prev]);
+      void appendWmsActivityLog({
+        module: "Equipment Inspection",
+        sectionId: "slit_ops",
+        reference: newItem.code,
+        activity: `เพิ่มอุปกรณ์ใหม่ ${newItem.name} (${newItem.area})`,
+        status: "Completed",
+      });
       Swal.fire({
         icon: "success",
         title: "เพิ่มรายการอุปกรณ์ใหม่เรียบร้อยแล้ว",
@@ -336,11 +347,12 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
     const hour = new Date().getHours();
     const currentShift = hour >= 8 && hour < 20 ? "day" : "night";
 
+    const activeInspector = getActiveRecorderDisplay("").employeeName;
     setCheckFormData({
       inspectionDate: new Date().toISOString().slice(0, 10),
       shift: currentShift,
       status: item.status,
-      inspector: item.lastInspector || "",
+      inspector: activeInspector || item.lastInspector || "",
       remarks: "",
     });
     setIsCheckModalOpen(true);
@@ -395,6 +407,13 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
     );
 
     setIsCheckModalOpen(false);
+    void appendWmsActivityLog({
+      module: "Equipment Inspection",
+      sectionId: "slit_ops",
+      reference: checkingEquipment.code,
+      activity: `ตรวจเช็คอุปกรณ์ ${checkingEquipment.name} (${checkingEquipment.code}) สถานะ: ${checkFormData.status}`,
+      status: checkFormData.status === "ready" ? "Completed" : "Attention",
+    });
 
     Swal.fire({
       icon: "success",

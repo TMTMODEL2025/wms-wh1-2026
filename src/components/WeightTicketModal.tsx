@@ -1,22 +1,19 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   Printer,
   X,
   Scale,
   Truck,
-  CheckSquare,
-  Square,
-  Eye,
-  Edit3,
-  Calendar,
-  Clock,
-  FileText,
   AlertCircle,
-  Copy,
-  CheckCircle2,
 } from "lucide-react";
 import { TmtRecheckVehicleGroup } from "./TmtRecheckView";
+import {
+  getLocalWeightTicketSequence,
+  getTodayDdMmKey,
+  loadWeightTicketSequence,
+  saveWeightTicketSequence,
+} from "../services/slitDataService";
 
 export interface DoWeightTicketData {
   doNo: string;
@@ -116,7 +113,6 @@ export function determineDoProductName(
       rawMaterialsSet.add(rawMat);
     }
 
-    // Check Slit: 2SLIT or 4SLIT or SLIT in material OR เหล็กม้วนสลิต/สลิต in description
     const isSlit =
       mat.includes("2SLIT") ||
       mat.includes("4SLIT") ||
@@ -127,7 +123,6 @@ export function determineDoProductName(
       desc.includes("สิลต") ||
       descUpper.includes("SLIT");
 
-    // Check Scrap: SCRAP-W, 2SCRAP-W, 4SCRAP-W, SCRAP in material OR เศษคืนลูกค้า/เศษ in description
     const isScrap =
       mat.includes("SCRAP-W") ||
       mat.includes("2SCRAP-W") ||
@@ -142,16 +137,11 @@ export function determineDoProductName(
   }
 
   let productName = "เหล็กม้วนสลิต";
-  // Condition 1: Both Slit and Scrap (e.g. 2SLIT/4SLIT and SCRAP-W)
   if (hasSlit && hasScrap) {
     productName = "เหล็กม้วนสลิต+เศษคืนลูกค้า";
-  }
-  // Condition 2: Only Slit (2SLIT หรือ 4SLIT)
-  else if (hasSlit) {
+  } else if (hasSlit) {
     productName = "เหล็กม้วนสลิต";
-  }
-  // Condition 3: Only Scrap (SCRAP-W หรือ เศษ)
-  else if (hasScrap) {
+  } else if (hasScrap) {
     productName = "เศษคืนลูกค้า";
   }
 
@@ -173,7 +163,6 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
   // Combine unique vehicles from active queue and completed reports
   const allVehicles = useMemo(() => {
     const map = new Map<string, TmtRecheckVehicleGroup>();
-    // Completed reports first, then active vehicles
     activeVehicles.forEach((v) => {
       if (v.vehicleId) map.set(v.vehicleId, v);
     });
@@ -183,33 +172,50 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
     return Array.from(map.values());
   }, [activeVehicles, completedReports]);
 
-  // Selected vehicle state
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("");
-
-  // DO ticket items for the selected vehicle
   const [tickets, setTickets] = useState<DoWeightTicketData[]>([]);
-
-  // View mode inside modal: "edit" or "preview"
-  const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
-
-  // Tickets queued for actual printing
   const [printQueue, setPrintQueue] = useState<DoWeightTicketData[]>([]);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Initialize selected vehicle when modal opens or initialVehicleId changes
+  // Track last printed ticket sequence in the current day so ticket numbers run continuously
+  const lastPrintedSeqRef = useRef<number>(getLocalWeightTicketSequence().lastSeq);
+
+  // Initialize selected vehicle and sync latest sequence when modal opens
   useEffect(() => {
-    if (isOpen) {
-      if (initialVehicleId && allVehicles.some((v) => v.vehicleId === initialVehicleId)) {
-        setSelectedVehicleId(initialVehicleId);
-      } else if (allVehicles.length > 0) {
-        setSelectedVehicleId(allVehicles[0].vehicleId);
-      } else {
-        setSelectedVehicleId("");
-      }
-      setViewMode("edit");
+    if (!isOpen) return;
+
+    setValidationError(null);
+    const localSeq = getLocalWeightTicketSequence().lastSeq;
+    lastPrintedSeqRef.current = Math.max(lastPrintedSeqRef.current, localSeq);
+
+    if (initialVehicleId && allVehicles.some((v) => v.vehicleId === initialVehicleId)) {
+      setSelectedVehicleId(initialVehicleId);
+    } else if (allVehicles.length > 0) {
+      setSelectedVehicleId(allVehicles[0].vehicleId);
+    } else {
+      setSelectedVehicleId("");
     }
+
+    let cancelled = false;
+    loadWeightTicketSequence().then((cloudState) => {
+      if (cancelled) return;
+      if (cloudState.lastSeq > lastPrintedSeqRef.current) {
+        lastPrintedSeqRef.current = cloudState.lastSeq;
+        setTickets((prev) =>
+          prev.map((t, idx) => ({
+            ...t,
+            ticketNo: generateDefaultTicketNo(cloudState.lastSeq + idx + 1),
+          }))
+        );
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, initialVehicleId, allVehicles]);
 
-  // When selected vehicle changes, generate DO ticket list
+  // When selected vehicle changes, generate DO ticket list with continuous running numbers
   useEffect(() => {
     if (!selectedVehicleId) {
       setTickets([]);
@@ -224,8 +230,9 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
 
     const defaultDate = getThaiBuddhistDateFormatted();
     const defaultTime = getCurrentTimeFormatted();
+    const baseSeq = Math.max(lastPrintedSeqRef.current, getLocalWeightTicketSequence().lastSeq);
+    lastPrintedSeqRef.current = baseSeq;
 
-    // Group items by DO number
     const doMap = new Map<
       string,
       {
@@ -253,7 +260,6 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
       doMap.set(doNo, existing);
     });
 
-    // If no items in vehicle.items but vehicle.doNumbers exists
     if (doMap.size === 0 && Array.isArray(vehicle.doNumbers) && vehicle.doNumbers.length > 0) {
       vehicle.doNumbers.forEach((doNo) => {
         doMap.set(doNo, {
@@ -269,11 +275,12 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
 
     const generatedTickets: DoWeightTicketData[] = Array.from(doMap.entries()).map(
       ([doNo, data], idx) => {
-        // When vehicle has 1 DO, all vehicle items belong to this vehicle/DO
         const itemsToEvaluate =
           isSingleDoVehicle && vehicle.items && vehicle.items.length > 0
             ? vehicle.items
-            : (data.items && data.items.length > 0 ? data.items : (vehicle.items || []));
+            : data.items && data.items.length > 0
+            ? data.items
+            : vehicle.items || [];
 
         const { productName, materialsList, hasSlit, hasScrap } = determineDoProductName(
           itemsToEvaluate,
@@ -283,7 +290,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
           doNo,
           customerName: data.customerName,
           vehicleId: vehicle.vehicleId,
-          ticketNo: generateDefaultTicketNo(idx + 1),
+          ticketNo: generateDefaultTicketNo(baseSeq + idx + 1),
           productName,
           netWeightKg: data.totalWeight,
           inDate: defaultDate,
@@ -307,6 +314,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
     field: keyof DoWeightTicketData,
     value: any
   ) => {
+    setValidationError(null);
     setTickets((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
@@ -314,71 +322,97 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
     });
   };
 
-  // Toggle selection for all DO tickets
-  const handleToggleSelectAll = () => {
-    const allSelected = tickets.every((t) => t.selectedForPrint);
-    setTickets((prev) => prev.map((t) => ({ ...t, selectedForPrint: !allSelected })));
-  };
-
-  // Execute print for specified tickets
+  // Execute print for specified tickets and advance continuous sequence
   const handleExecutePrint = (ticketsToPrint: DoWeightTicketData[]) => {
     if (ticketsToPrint.length === 0) {
-      alert("กรุณาเลือก DO ที่ต้องการพิมพ์อย่างน้อย 1 รายการ");
+      setValidationError("กรุณาเลือก DO ที่ต้องการพิมพ์อย่างน้อย 1 รายการ");
       return;
     }
 
-    setPrintQueue(ticketsToPrint);
+    setValidationError(null);
 
-    // Give React time to render portal before calling window.print()
+    const now = new Date();
+    const todayKey = getTodayDdMmKey(now);
+    const currentDateStr = getThaiBuddhistDateFormatted(now);
+    const currentTimeStr = getCurrentTimeFormatted(now);
+
+    let nextSeq = Math.max(
+      lastPrintedSeqRef.current,
+      getLocalWeightTicketSequence(todayKey).lastSeq
+    );
+
+    const assignedTicketsToPrint = ticketsToPrint.map((ticket) => {
+      nextSeq += 1;
+      return {
+        ...ticket,
+        ticketNo: generateDefaultTicketNo(nextSeq, now),
+        inDate: ticket.inDate || currentDateStr,
+        inTime: ticket.inTime || currentTimeStr,
+        outDate: currentDateStr,
+        outTime: currentTimeStr,
+      };
+    });
+
+    lastPrintedSeqRef.current = nextSeq;
+    const lastPrintedTicketNo =
+      assignedTicketsToPrint[assignedTicketsToPrint.length - 1]?.ticketNo ||
+      generateDefaultTicketNo(nextSeq, now);
+
+    void saveWeightTicketSequence(nextSeq, lastPrintedTicketNo, todayKey);
+
+    setPrintQueue(assignedTicketsToPrint);
+
     setTimeout(() => {
       document.body.classList.add("printing-weight-ticket");
       window.print();
 
+      let cleanedUp = false;
       const cleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
         document.body.classList.remove("printing-weight-ticket");
         window.removeEventListener("afterprint", cleanup);
+
+        // Advance DO ticket numbers in state so any subsequent print starts cleanly after the last printed number
+        setTickets((prev) =>
+          prev.map((t, idx) => ({
+            ...t,
+            ticketNo: generateDefaultTicketNo(nextSeq + idx + 1),
+          }))
+        );
       };
 
       window.addEventListener("afterprint", cleanup);
-
-      // Fallback timer if afterprint doesn't fire
-      setTimeout(() => {
-        document.body.classList.remove("printing-weight-ticket");
-      }, 2000);
+      setTimeout(cleanup, 2000);
     }, 150);
   };
 
   if (!isOpen) return null;
 
   const selectedCount = tickets.filter((t) => t.selectedForPrint).length;
-  const currentVehicle = allVehicles.find((v) => v.vehicleId === selectedVehicleId);
 
   return (
     <>
       {/* ========================================================================= */}
-      {/* On-Screen Modal Dialog */}
+      {/* On-Screen Modal Dialog (Minimal Field UI) */}
       {/* ========================================================================= */}
       <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-        <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-fade-in font-sans">
+        <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-fade-in font-sans">
           {/* Modal Header */}
           <div className="bg-slate-950 p-3.5 sm:px-5 border-b border-slate-800 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                <Scale size={20} />
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                <Scale size={18} />
               </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
-                  <span>พิมพ์บัตรชั่งน้ำหนัก (แยกตาม DO)</span>
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  แบบฟอร์มใบชั่งน้ำหนักมาตรฐาน บมจ. ทีเอ็มที สตีล สาขาวังน้อย
-                </p>
-              </div>
+              <h3 className="text-sm sm:text-base font-bold text-white">
+                พิมพ์บัตรชั่งน้ำหนัก (แยกตาม DO)
+              </h3>
             </div>
 
             <button
               type="button"
               onClick={onClose}
+              aria-label="ปิดหน้าต่าง"
               className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
             >
               <X size={18} />
@@ -386,381 +420,139 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
           </div>
 
           {/* Modal Body */}
-          <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 space-y-4">
-            {/* Step 1: Vehicle Selector */}
-            <div className="bg-slate-950/80 p-3 sm:p-4 rounded-xl border border-slate-800 space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                  <Truck size={14} className="text-cyan-400" />
-                  <span>1. เลือกทะเบียนรถ:</span>
-                </label>
-
-                {currentVehicle && (
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-300">
-                    <span className="bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-800/80">
-                      DO: {tickets.length} รายการ
-                    </span>
-                    <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded border border-slate-700">
-                      รวม: {tickets.reduce((s, t) => s + (Number(t.netWeightKg) || 0), 0).toLocaleString()} กก.
-                    </span>
-                  </div>
-                )}
+          <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 space-y-3.5">
+            {/* Vehicle Selector */}
+            {allVehicles.length === 0 ? (
+              <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs flex items-center gap-2">
+                <AlertCircle size={15} />
+                <span>ยังไม่มีข้อมูลทะเบียนรถในระบบ กรุณานำเข้าข้อมูล SAP ในหน้าออฟฟิศก่อน</span>
               </div>
-
-              {allVehicles.length === 0 ? (
-                <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs flex items-center gap-2">
-                  <AlertCircle size={15} />
-                  <span>ยังไม่มีข้อมูลทะเบียนรถในระบบ กรุณานำเข้าข้อมูล SAP ในหน้าออฟฟิศก่อน</span>
-                </div>
-              ) : (
+            ) : (
+              <div className="flex items-center gap-2.5 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
+                  <Truck size={14} className="text-cyan-400" />
+                  <span>ทะเบียนรถ</span>
+                </label>
                 <select
                   value={selectedVehicleId}
                   onChange={(e) => setSelectedVehicleId(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition-all"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition-all"
                 >
-                  {allVehicles.map((v) => {
-                    const custStr = v.customerNames.join(", ") || "ไม่ระบุชื่อลูกค้า";
-                    const doCount = (v.doNumbers && v.doNumbers.length) || (v.items ? new Set(v.items.map((i) => i.doNo)).size : 1);
-                    return (
-                      <option key={v.vehicleId} value={v.vehicleId}>
-                        {v.vehicleId} — ลูกค้า: {custStr} ({doCount} DO | {v.totalGrossWeight.toLocaleString()} kg)
-                      </option>
-                    );
-                  })}
+                  {allVehicles.map((v) => (
+                    <option key={v.vehicleId} value={v.vehicleId}>
+                      {v.vehicleId}
+                    </option>
+                  ))}
                 </select>
-              )}
-            </div>
+              </div>
+            )}
 
-            {/* Step 2: DO Tickets List or Preview */}
+            {validationError && (
+              <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-700/70 text-rose-200 text-xs flex items-center gap-2">
+                <AlertCircle size={14} className="shrink-0 text-rose-400" />
+                <span>{validationError}</span>
+              </div>
+            )}
+
+            {/* DO Ticket Cards (Minimal Fields Only) */}
             {selectedVehicleId && tickets.length > 0 && (
               <div className="space-y-3">
-                {/* Mode Selector & Bulk Select Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleToggleSelectAll}
-                      className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 bg-slate-800 hover:bg-slate-750 px-2.5 py-1.5 rounded-lg border border-slate-700 font-medium transition-all"
-                    >
-                      {tickets.every((t) => t.selectedForPrint) ? (
-                        <>
-                          <CheckSquare size={14} className="text-cyan-400" />
-                          <span>ไม่เลือกทั้งหมด</span>
-                        </>
-                      ) : (
-                        <>
-                          <Square size={14} className="text-slate-400" />
-                          <span>เลือกทั้งหมด ({tickets.length} DO)</span>
-                        </>
-                      )}
-                    </button>
-                    <span className="text-xs text-slate-400 font-mono">
-                      (เลือกแล้ว {selectedCount}/{tickets.length})
-                    </span>
-                  </div>
+                {tickets.map((ticket, idx) => (
+                  <div
+                    key={ticket.doNo}
+                    className={`p-3.5 rounded-xl border transition-all space-y-3 ${
+                      ticket.selectedForPrint
+                        ? "bg-slate-950/75 border-cyan-800/80 shadow-xs"
+                        : "bg-slate-950/35 border-slate-800 opacity-70"
+                    }`}
+                  >
+                    {/* Top Row: Selection Checkbox + ทะเบียนรถ + เลขที่ DO + ชื่อลูกค้า + ปุ่มพิมพ์ใบนี้ */}
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-800/80 pb-2.5">
+                      <label className="flex flex-wrap items-center gap-x-3 gap-y-1 cursor-pointer select-none flex-1 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={ticket.selectedForPrint}
+                          onChange={(e) =>
+                            handleUpdateTicketField(idx, "selectedForPrint", e.target.checked)
+                          }
+                          className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer shrink-0"
+                        />
+                        <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/70 border border-cyan-800/70 px-2 py-0.5 rounded">
+                          {ticket.vehicleId}
+                        </span>
+                        <span className="font-mono font-bold text-white text-xs sm:text-sm">
+                          DO NO. {ticket.doNo}
+                        </span>
+                        <span className="text-xs text-slate-300 font-medium truncate">
+                          {ticket.customerName}
+                        </span>
+                      </label>
 
-                  {/* Edit vs Preview Tabs */}
-                  <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("edit")}
-                      className={`px-3 py-1 rounded-md font-semibold flex items-center gap-1.5 transition-all ${
-                        viewMode === "edit"
-                          ? "bg-cyan-500 text-slate-950 font-bold"
-                          : "text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      <Edit3 size={13} />
-                      <span>กรอก/แก้ไขข้อมูล</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setViewMode("preview")}
-                      className={`px-3 py-1 rounded-md font-semibold flex items-center gap-1.5 transition-all ${
-                        viewMode === "preview"
-                          ? "bg-cyan-500 text-slate-950 font-bold"
-                          : "text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      <Eye size={13} />
-                      <span>ตัวอย่างก่อนพิมพ์ (Preview)</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* VIEW MODE: EDIT */}
-                {viewMode === "edit" && (
-                  <div className="space-y-3">
-                    {tickets.map((ticket, idx) => (
-                      <div
-                        key={ticket.doNo}
-                        className={`p-3.5 rounded-xl border transition-all space-y-3 ${
-                          ticket.selectedForPrint
-                            ? "bg-slate-950/70 border-cyan-800/80 shadow-xs"
-                            : "bg-slate-950/30 border-slate-800 opacity-70"
-                        }`}
+                      <button
+                        type="button"
+                        onClick={() => handleExecutePrint([ticket])}
+                        className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shrink-0 cursor-pointer"
                       >
-                        {/* DO Card Header */}
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                              <input
-                                type="checkbox"
-                                checked={ticket.selectedForPrint}
-                                onChange={(e) =>
-                                  handleUpdateTicketField(idx, "selectedForPrint", e.target.checked)
-                                }
-                                className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer"
-                              />
-                              <span className="font-mono font-bold text-white text-xs sm:text-sm">
-                                DO NO. {ticket.doNo}
-                              </span>
-                              <span className="text-[11px] text-cyan-300 font-medium">
-                                ({ticket.customerName})
-                              </span>
-                            </label>
+                        <Printer size={13} />
+                        <span>พิมพ์ใบนี้</span>
+                      </button>
+                    </div>
 
-                            {ticket.materialsSummary && (
-                              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded border border-slate-700 font-mono">
-                                Mat: {ticket.materialsSummary}
-                              </span>
-                            )}
-
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
-                                ticket.hasSlit && ticket.hasScrap
-                                  ? "bg-emerald-950 text-emerald-300 border-emerald-800"
-                                  : ticket.hasSlit
-                                  ? "bg-cyan-950 text-cyan-300 border-cyan-800"
-                                  : "bg-amber-950 text-amber-300 border-amber-800"
-                              }`}
-                            >
-                              {ticket.productName}
-                            </span>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleExecutePrint([ticket])}
-                            className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95"
-                          >
-                            <Printer size={12} />
-                            <span>พิมพ์ใบนี้</span>
-                          </button>
-                        </div>
-
-                        {/* Editable Form Inputs Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 text-xs">
-                          {/* 1. น้ำหนักสุทธิ */}
-                          <div className="space-y-1">
-                            <label className="text-slate-400 font-medium">
-                              น้ำหนักสุทธิ (กก.) *
-                            </label>
-                            <input
-                              type="number"
-                              value={ticket.netWeightKg}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "netWeightKg", Number(e.target.value) || 0)
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-
-                          {/* 2. เลขที่บัตร */}
-                          <div className="space-y-1">
-                            <label className="text-slate-400 font-medium">
-                              เลขที่บัตร *
-                            </label>
-                            <input
-                              type="text"
-                              value={ticket.ticketNo}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "ticketNo", e.target.value)
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-
-                          {/* 3. สินค้า */}
-                          <div className="space-y-1 md:col-span-2">
-                            <div className="flex items-center justify-between">
-                              <label className="text-slate-400 font-medium">
-                                สินค้า *
-                              </label>
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateTicketField(idx, "productName", "เหล็กม้วนสลิต")}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${
-                                    ticket.productName === "เหล็กม้วนสลิต"
-                                      ? "bg-cyan-500 text-slate-950 font-bold"
-                                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
-                                  }`}
-                                  title="เหล็กม้วนสลิต (2SLIT / 4SLIT)"
-                                >
-                                  สลิต
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateTicketField(idx, "productName", "เศษคืนลูกค้า")}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${
-                                    ticket.productName === "เศษคืนลูกค้า"
-                                      ? "bg-amber-500 text-slate-950 font-bold"
-                                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
-                                  }`}
-                                  title="เศษคืนลูกค้า (2SCRAP-W)"
-                                >
-                                  เศษ
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateTicketField(idx, "productName", "เหล็กม้วนสลิต+เศษคืนลูกค้า")}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${
-                                    ticket.productName === "เหล็กม้วนสลิต+เศษคืนลูกค้า"
-                                      ? "bg-emerald-500 text-slate-950 font-bold"
-                                      : "bg-slate-800 text-slate-400 hover:text-slate-200"
-                                  }`}
-                                  title="เหล็กม้วนสลิต+เศษคืนลูกค้า (มีทั้งสลิตและเศษ)"
-                                >
-                                  สลิต+เศษ
-                                </button>
-                              </div>
-                            </div>
-                            <input
-                              type="text"
-                              value={ticket.productName}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "productName", e.target.value)
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-
-                          {/* 4. วันที่ชั่งเข้า */}
-                          <div className="space-y-1">
-                            <label className="text-slate-400 font-medium">
-                              วันที่ชั่งเข้า
-                            </label>
-                            <input
-                              type="text"
-                              value={ticket.inDate}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "inDate", e.target.value)
-                              }
-                              placeholder="วว/ดด/ปปปป"
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-
-                          {/* 5. เวลาชั่งเข้า */}
-                          <div className="space-y-1">
-                            <label className="text-slate-400 font-medium">
-                              เวลาชั่งเข้า
-                            </label>
-                            <input
-                              type="text"
-                              value={ticket.inTime}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "inTime", e.target.value)
-                              }
-                              placeholder="HH:mm:ss"
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-
-                          {/* 6. วันที่ชั่งออก */}
-                          <div className="space-y-1">
-                            <label className="text-slate-400 font-medium">
-                              วันที่ชั่งออก
-                            </label>
-                            <input
-                              type="text"
-                              value={ticket.outDate}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "outDate", e.target.value)
-                              }
-                              placeholder="วว/ดด/ปปปป"
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-
-                          {/* 7. เวลาชั่งออก */}
-                          <div className="space-y-1">
-                            <label className="text-slate-400 font-medium">
-                              เวลาชั่งออก
-                            </label>
-                            <input
-                              type="text"
-                              value={ticket.outTime}
-                              onChange={(e) =>
-                                handleUpdateTicketField(idx, "outTime", e.target.value)
-                              }
-                              placeholder="HH:mm:ss"
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500"
-                            />
-                          </div>
-                        </div>
+                    {/* Editable Inputs: น้ำหนักสุทธิ (กก.) * และ สินค้า */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div className="space-y-1">
+                        <label className="block text-slate-300 font-medium">
+                          น้ำหนักสุทธิ (กก.) *
+                        </label>
+                        <input
+                          type="number"
+                          value={ticket.netWeightKg}
+                          onChange={(e) =>
+                            handleUpdateTicketField(idx, "netWeightKg", Number(e.target.value) || 0)
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500"
+                        />
                       </div>
-                    ))}
-                  </div>
-                )}
 
-                {/* VIEW MODE: PREVIEW */}
-                {viewMode === "preview" && (
-                  <div className="space-y-4">
-                    <p className="text-xs text-slate-400 text-center font-medium">
-                      แสดงตัวอย่างแบบฟอร์มใบชั่งน้ำหนัก ({tickets.filter((t) => t.selectedForPrint).length} ใบที่เลือก)
-                    </p>
-
-                    <div className="space-y-6 max-h-[60vh] overflow-y-auto p-2">
-                      {tickets
-                        .filter((t) => t.selectedForPrint)
-                        .map((ticket) => (
-                          <div
-                            key={ticket.doNo}
-                            className="bg-white rounded-lg shadow-xl p-4 max-w-2xl mx-auto border border-slate-300"
-                          >
-                            <WeightTicketSlipContent ticket={ticket} />
-                          </div>
-                        ))}
+                      <div className="space-y-1">
+                        <label className="block text-slate-300 font-medium">
+                          สินค้า
+                        </label>
+                        <input
+                          type="text"
+                          value={ticket.productName}
+                          onChange={(e) =>
+                            handleUpdateTicketField(idx, "productName", e.target.value)
+                          }
+                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                        />
+                      </div>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             )}
           </div>
 
           {/* Modal Footer Bar */}
-          <div className="bg-slate-950 p-3.5 sm:px-5 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-slate-400 font-mono">
-              {currentVehicle && (
-                <span>
-                  ทะเบียน: <strong className="text-cyan-300">{currentVehicle.vehicleId}</strong> | เลือกพิมพ์{" "}
-                  <strong className="text-amber-300">{selectedCount}</strong> จาก {tickets.length} DO
-                </span>
-              )}
-            </div>
+          <div className="bg-slate-950 p-3.5 sm:px-5 border-t border-slate-800 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+            >
+              ปิดหน้าต่าง
+            </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
-              >
-                ปิดหน้าต่าง
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleExecutePrint(tickets.filter((t) => t.selectedForPrint))}
-                disabled={selectedCount === 0}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-              >
-                <Printer size={15} />
-                <span>พิมพ์บัตรชั่งที่เลือก ({selectedCount} ใบ)</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleExecutePrint(tickets.filter((t) => t.selectedForPrint))}
+              disabled={selectedCount === 0}
+              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
+              <Printer size={15} />
+              <span>พิมพ์บัตรชั่งที่เลือก ({selectedCount} ใบ)</span>
+            </button>
           </div>
         </div>
       </div>
@@ -773,7 +565,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
           <div id="tmt-weight-ticket-print-portal" className="hidden print:block">
             {printQueue.map((ticket) => (
               <div
-                key={ticket.doNo}
+                key={`${ticket.doNo}-${ticket.ticketNo}`}
                 className="weight-ticket-print-sheet"
               >
                 <WeightTicketSlipContent ticket={ticket} />

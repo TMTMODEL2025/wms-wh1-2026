@@ -13,13 +13,52 @@ export type AssignmentStatus =
 export type EmployeeRole =
   | "Driver"
   | "Officer"
+  | "Sr.Warehouse Officer"
   | "Inspector"
+  | "Sr.Inspector"
   | "Operator"
   | "Supervisor"
   | "Manager"
   | "Other";
 
 export type EmploymentStatus = "Active" | "Inactive";
+
+export type WmsSectionId =
+  | "overview"
+  | "fleet_ops"
+  | "slit_ops"
+  | "coil_ops"
+  | "rm_ops"
+  | "admin_hr";
+
+export interface WmsSessionUser {
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  jobPosition: string;
+  role: EmployeeRole;
+  allowedSections: WmsSectionId[];
+  loginSection: WmsSectionId | "all";
+  loggedInAt: string;
+}
+
+export interface WmsActivityLogRecord {
+  id: string;
+  timestamp: string; // YYYY-MM-DD HH:mm:ss
+  dateYmd: string; // YYYY-MM-DD
+  timeHm: string; // HH:mm
+  employeeId: string;
+  employeeName: string;
+  department: string;
+  role: string;
+  sectionId: WmsSectionId;
+  sectionLabel: string;
+  module: string;
+  reference: string;
+  activity: string;
+  status: string;
+  updatedAt: string;
+}
 
 export interface Employee {
   id: string; // Stable internal identifier e.g. "EMP-001"
@@ -30,6 +69,7 @@ export interface Employee {
   role: EmployeeRole; // Driver, Officer, Inspector, Operator, Supervisor, Manager, Other
   phoneNumber: string; // e.g. "081-456-7890"
   employmentStatus: EmploymentStatus; // "Active" | "Inactive"
+  allowedSections?: WmsSectionId[]; // Sections this employee is permitted to access
   notes?: string;
   licenseType?: string; // Driver license class if role is Driver
   legacyDriverId?: string; // e.g. "DRV-001" for backwards compatibility with historical assignments

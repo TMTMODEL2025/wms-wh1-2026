@@ -22,8 +22,9 @@ import {
 } from "lucide-react";
 import { subscribeToTmtRecheck, syncTmtRecheckState } from "../services/slitDataService";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
-import { showSuccessAlert } from "../utils/swalUtils";
+import { showSuccessAlert, showWarningAlert, showErrorAlert } from "../utils/swalUtils";
 import { WeightTicketModal } from "./WeightTicketModal";
+import { appendWmsActivityLog } from "../services/authWorkforceService";
 
 // ============================================================================
 // Data Interfaces
@@ -538,7 +539,10 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
     if (files.length === 0) return;
 
     if (selectedVehicle.photos.length + files.length > 50) {
-      alert(`อัปโหลดรูปภาพได้สูงสุด 50 รูปต่อทะเบียนรถ (ปัจจุบันมีแล้ว ${selectedVehicle.photos.length} รูป)`);
+      void showWarningAlert(
+        "เกินจำนวนรูปภาพสูงสุด",
+        `อัปโหลดรูปภาพได้สูงสุด 50 รูปต่อทะเบียนรถ (ปัจจุบันมีแล้ว ${selectedVehicle.photos.length} รูป)`
+      );
       return;
     }
 
@@ -565,7 +569,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       );
       updateServerAndState(nextActive, completedReports);
     } catch {
-      alert("เกิดข้อผิดพลาดในการบีบอัดรูปภาพ กรุณาลองใหม่อีกครั้ง");
+      void showErrorAlert("อัปโหลดรูปภาพไม่สำเร็จ", "เกิดข้อผิดพลาดในการบีบอัดรูปภาพ กรุณาลองใหม่อีกครั้ง");
     } finally {
       setIsUploadingPhoto(false);
       e.target.value = "";
@@ -597,7 +601,17 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       v.vehicleId === selectedVehicle.vehicleId ? updatedVehicle : v
     );
     updateServerAndState(nextActive, completedReports);
-    alert(`บันทึกสถานะ [พร้อมตรวจสอบ] สำหรับทะเบียนรถ ${selectedVehicle.vehicleId} เรียบร้อยแล้ว`);
+    void appendWmsActivityLog({
+      module: "TMT Recheck",
+      sectionId: "slit_ops",
+      reference: selectedVehicle.vehicleId,
+      activity: `บันทึกสถานะ [พร้อมตรวจสอบ] รถ ${selectedVehicle.vehicleId}`,
+      status: "Pending",
+    });
+    void showSuccessAlert(
+      "บันทึกสถานะสำเร็จ",
+      `บันทึกสถานะ [พร้อมตรวจสอบ] สำหรับทะเบียนรถ ${selectedVehicle.vehicleId} เรียบร้อยแล้ว`
+    );
   };
 
   // Barcode Scanning Handler
@@ -645,7 +659,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
     setScanInputText("");
   };
 
-  // Confirm loading complete -> Show SweetAlert success and move to Daily Loading Inspection Report
+  // Confirm loading complete -> Enforce batch scan & mandatory photo attachment
   const handleConfirmFinishVehicleLoading = async () => {
     if (!selectedVehicle) return;
 
@@ -653,7 +667,18 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
     const scannedCount = selectedVehicle.items.filter((i) => i.requiresScan && i.scanned).length;
 
     if (scannedCount < reqScanCount) {
-      alert(`ยังสแกน Batch ไม่ครบ! (สแกนแล้ว ${scannedCount}/${reqScanCount} ม้วน)`);
+      await showWarningAlert(
+        "ยังสแกน Batch ไม่ครบ",
+        `กรุณาสแกนบาร์โค้ดให้ครบทุกรายการก่อนยืนยัน (สแกนแล้ว ${scannedCount}/${reqScanCount} ม้วน)`
+      );
+      return;
+    }
+
+    if (!selectedVehicle.photos || selectedVehicle.photos.length === 0) {
+      await showWarningAlert(
+        "บังคับแนบรูปภาพหลักฐาน",
+        `กรุณาแนบรูปภาพสำหรับทะเบียนรถ [${selectedVehicle.vehicleId}] อย่างน้อย 1 รูปก่อนกดยืนยันข้อมูล`
+      );
       return;
     }
 
@@ -672,6 +697,13 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
     const nextCompleted = [completedVehicle, ...completedReports];
 
     updateServerAndState(nextActive, nextCompleted);
+    void appendWmsActivityLog({
+      module: "TMT Recheck",
+      sectionId: "slit_ops",
+      reference: selectedVehicle.vehicleId,
+      activity: `ยืนยันขึ้นสินค้าครบถ้วน ทะเบียนรถ ${selectedVehicle.vehicleId} (${reqScanCount} ม้วน · รูป ${selectedVehicle.photos.length} รูป)`,
+      status: "Completed",
+    });
     setSelectedVehicleId(null);
     await showSuccessAlert(
       "ยืนยันข้อมูลสำเร็จ",
@@ -1025,6 +1057,9 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                           <span className="text-slate-400">
                             ม้วน: <strong className="text-slate-200">{scannedCount}/{reqCount}</strong>
                           </span>
+                          <span className={v.photos.length > 0 ? "text-emerald-400" : "text-amber-400"}>
+                            รูป: <strong>{v.photos.length}</strong>
+                          </span>
                           <span className="text-slate-400">
                             น้ำหนัก: <strong className="text-slate-200">{v.totalGrossWeight.toLocaleString()} kg</strong>
                           </span>
@@ -1089,9 +1124,19 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                     ← เลือกทะเบียนอื่น
                   </button>
 
-                  <label className="min-h-[36px] px-3 bg-slate-800 hover:bg-slate-750 text-cyan-400 border border-cyan-800/60 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98] shrink-0">
+                  <label
+                    className={`min-h-[36px] px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98] shrink-0 border ${
+                      selectedVehicle.photos.length === 0
+                        ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/60 shadow-xs"
+                        : "bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border-emerald-700/70"
+                    }`}
+                  >
                     <Camera size={15} />
-                    <span>{isUploadingPhoto ? "กำลังบีบอัด..." : `แนบรูปภาพ (${selectedVehicle.photos.length}/50)`}</span>
+                    <span>
+                      {isUploadingPhoto
+                        ? "กำลังบีบอัด..."
+                        : `แนบรูปภาพ * (${selectedVehicle.photos.length}/50)`}
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
@@ -1119,16 +1164,24 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                       สแกน: <strong className="text-cyan-400">{selectedVehicle.items.filter((i) => i.requiresScan && i.scanned).length}/{selectedVehicle.items.filter((i) => i.requiresScan).length}</strong>
                     </span>
                     <span>
+                      รูปภาพ: <strong className={selectedVehicle.photos.length > 0 ? "text-emerald-400" : "text-amber-400"}>{selectedVehicle.photos.length}</strong>
+                    </span>
+                    <span>
                       น้ำหนัก: <strong className="text-slate-100">{selectedVehicle.totalGrossWeight.toLocaleString()} kg</strong>
                     </span>
                   </div>
                 </div>
 
-                {/* Inline Thumbnail Previews */}
-                {selectedVehicle.photos.length > 0 && (
+                {/* Mandatory Photo Warning or Inline Thumbnail Previews */}
+                {selectedVehicle.photos.length === 0 ? (
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-950/40 border border-amber-700/60 text-amber-300 text-[11px] font-medium">
+                    <AlertTriangle size={14} className="shrink-0 text-amber-400" />
+                    <span>บังคับแนบรูปภาพหลักฐานอย่างน้อย 1 รูป ก่อนกดปุ่มยืนยันข้อมูล</span>
+                  </div>
+                ) : (
                   <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-800/60">
                     {selectedVehicle.photos.map((photo) => (
-                      <div key={photo.id} className="relative w-9 h-9 rounded border border-slate-700 overflow-hidden shrink-0">
+                      <div key={photo.id} className="relative w-10 h-10 rounded border border-slate-700 overflow-hidden shrink-0">
                         <img src={photo.url} alt="Thumbnail" className="w-full h-full object-cover" />
                         <button
                           type="button"
@@ -1206,7 +1259,11 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                 {(() => {
                   const reqScanCount = selectedVehicle.items.filter((i) => i.requiresScan).length;
                   const scannedCount = selectedVehicle.items.filter((i) => i.requiresScan && i.scanned).length;
-                  const is100Percent = reqScanCount > 0 && scannedCount === reqScanCount;
+                  const isScanComplete =
+                    selectedVehicle.items.length > 0 &&
+                    (reqScanCount === 0 || scannedCount === reqScanCount);
+                  const hasRequiredPhoto = (selectedVehicle.photos?.length || 0) > 0;
+                  const isReadyToConfirm = isScanComplete && hasRequiredPhoto;
 
                   return (
                     <div className="flex items-center gap-2 pt-1">
@@ -1222,18 +1279,20 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                       <button
                         type="button"
                         onClick={handleConfirmFinishVehicleLoading}
-                        disabled={!is100Percent}
+                        disabled={!isReadyToConfirm}
                         className={`flex-1 min-h-[44px] rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all ${
-                          is100Percent
+                          isReadyToConfirm
                             ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 active:scale-[0.98]"
-                            : "bg-slate-800 text-slate-500 border border-slate-700 opacity-60 cursor-not-allowed"
+                            : "bg-slate-800 text-slate-400 border border-slate-700 opacity-75 cursor-not-allowed"
                         }`}
                       >
                         <CheckCircle2 size={16} />
                         <span>
-                          {is100Percent
-                            ? "ยืนยันข้อมูล"
-                            : `ยังสแกน Batch ไม่ครบ (${scannedCount}/${reqScanCount} ม้วน)`}
+                          {!isScanComplete
+                            ? `ยังสแกน Batch ไม่ครบ (${scannedCount}/${reqScanCount} ม้วน)`
+                            : !hasRequiredPhoto
+                            ? "กรุณาแนบรูปภาพก่อนยืนยัน (อย่างน้อย 1 รูป)"
+                            : "ยืนยันข้อมูล"}
                         </span>
                       </button>
                     </div>

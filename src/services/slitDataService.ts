@@ -2195,3 +2195,134 @@ export async function syncTmtRecheckState(
     }
   }
 }
+
+// ============================================================================
+// Weight Ticket Running Sequence Persistence (LocalStorage + Firestore)
+// ============================================================================
+export const WEIGHT_TICKET_SEQ_DOC_ID = "weight_ticket_sequence";
+const WEIGHT_TICKET_SEQ_LOCAL_KEY = "tmt_weight_ticket_sequence_v1";
+
+export interface WeightTicketSequenceState {
+  id: string;
+  dateKey: string;
+  lastSeq: number;
+  lastTicketNo: string;
+  updatedAt: string;
+}
+
+export function getTodayDdMmKey(date = new Date()): string {
+  const d = String(date.getDate()).padStart(2, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  return `${d}${m}`;
+}
+
+export function parseTicketSequenceNumber(ticketNo: string, expectedDateKey = getTodayDdMmKey()): number {
+  const raw = String(ticketNo || "").trim();
+  if (!raw) return 0;
+  if (raw.startsWith(expectedDateKey)) {
+    const suffix = raw.slice(expectedDateKey.length);
+    const parsed = parseInt(suffix, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+  return 0;
+}
+
+export function getLocalWeightTicketSequence(dateKey = getTodayDdMmKey()): WeightTicketSequenceState {
+  const emptyState: WeightTicketSequenceState = {
+    id: WEIGHT_TICKET_SEQ_DOC_ID,
+    dateKey,
+    lastSeq: 0,
+    lastTicketNo: "",
+    updatedAt: "",
+  };
+  if (typeof window === "undefined") return emptyState;
+  try {
+    const raw = localStorage.getItem(WEIGHT_TICKET_SEQ_LOCAL_KEY);
+    if (!raw) return emptyState;
+    const parsed = JSON.parse(raw) as Partial<WeightTicketSequenceState>;
+    if (parsed.dateKey !== dateKey) {
+      return emptyState;
+    }
+    const seq = typeof parsed.lastSeq === "number" && Number.isFinite(parsed.lastSeq) && parsed.lastSeq > 0
+      ? Math.floor(parsed.lastSeq)
+      : 0;
+    return {
+      id: WEIGHT_TICKET_SEQ_DOC_ID,
+      dateKey,
+      lastSeq: seq,
+      lastTicketNo: String(parsed.lastTicketNo || ""),
+      updatedAt: String(parsed.updatedAt || ""),
+    };
+  } catch {
+    return emptyState;
+  }
+}
+
+function writeLocalWeightTicketSequence(state: WeightTicketSequenceState): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(WEIGHT_TICKET_SEQ_LOCAL_KEY, JSON.stringify(state));
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+export async function loadWeightTicketSequence(dateKey = getTodayDdMmKey()): Promise<WeightTicketSequenceState> {
+  const local = getLocalWeightTicketSequence(dateKey);
+  try {
+    const snap = await getDoc(doc(db, SPACE_CONFIG_COLLECTION, WEIGHT_TICKET_SEQ_DOC_ID));
+    if (snap.exists()) {
+      const data = snap.data() as Partial<WeightTicketSequenceState>;
+      if (data.dateKey === dateKey) {
+        const cloudSeq = typeof data.lastSeq === "number" && Number.isFinite(data.lastSeq) && data.lastSeq > 0
+          ? Math.floor(data.lastSeq)
+          : 0;
+        const mergedSeq = Math.max(local.lastSeq, cloudSeq);
+        const mergedState: WeightTicketSequenceState = {
+          id: WEIGHT_TICKET_SEQ_DOC_ID,
+          dateKey,
+          lastSeq: mergedSeq,
+          lastTicketNo: cloudSeq >= local.lastSeq ? String(data.lastTicketNo || local.lastTicketNo) : local.lastTicketNo,
+          updatedAt: String(data.updatedAt || local.updatedAt || ""),
+        };
+        writeLocalWeightTicketSequence(mergedState);
+        return mergedState;
+      }
+    }
+  } catch {
+    // fallback silently to local state if offline or quota-limited
+  }
+  return local;
+}
+
+export async function saveWeightTicketSequence(
+  lastSeq: number,
+  lastTicketNo: string,
+  dateKey = getTodayDdMmKey()
+): Promise<WeightTicketSequenceState> {
+  const local = getLocalWeightTicketSequence(dateKey);
+  const safeSeq = Math.max(local.lastSeq, Math.max(0, Math.floor(lastSeq)));
+  const nowIso = new Date().toISOString();
+  const state: WeightTicketSequenceState = {
+    id: WEIGHT_TICKET_SEQ_DOC_ID,
+    dateKey,
+    lastSeq: safeSeq,
+    lastTicketNo: safeSeq > local.lastSeq || !local.lastTicketNo ? lastTicketNo : local.lastTicketNo,
+    updatedAt: nowIso,
+  };
+
+  writeLocalWeightTicketSequence(state);
+
+  if (!isFirestoreWritePaused()) {
+    await runFirestoreWriteWithQuotaGuard(
+      () =>
+        setDoc(doc(db, SPACE_CONFIG_COLLECTION, WEIGHT_TICKET_SEQ_DOC_ID), state, {
+          merge: true,
+        }),
+      OperationType.WRITE,
+      `${SPACE_CONFIG_COLLECTION}/${WEIGHT_TICKET_SEQ_DOC_ID}`
+    );
+  }
+
+  return state;
+}

@@ -19,6 +19,10 @@ import {
   Check
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
+import {
+  appendWmsActivityLog,
+  getActiveRecorderDisplay,
+} from "../services/authWorkforceService";
 
 interface ChecklistItem {
   id: string;
@@ -68,7 +72,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
 
   // Form State
   const [vehicleId, setVehicleId] = useState(vehicles[0]?.vehicleId || "");
-  const [operatorName, setOperatorName] = useState("");
+  const [operatorName, setOperatorName] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [shift, setShift] = useState("Shift 1 (08:00 - 16:00)");
   const [operatingHours, setOperatingHours] = useState(0);
   const [inspectionDate, setInspectionDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -103,21 +107,29 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
     const targetVehicle = vehicles.find((v) => v.vehicleId === vehicleId);
     const vehicleDescription = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})` : `${vehicleId} - Warehouse Fleet Unit`;
 
+    const resolvedOperator = operatorName.trim() || getActiveRecorderDisplay("WMS Operator").label;
     const newRecord: InspectionRecord = {
       id: `INS-2026-${String(inspections.length + 1).padStart(3, "0")}`,
       vehicleId,
       vehicleDescription,
-      operatorName: operatorName.trim() || "WMS Operator",
+      operatorName: resolvedOperator,
       shift,
       operatingHours: Number(operatingHours) || 0,
       items: formItems,
       overallResult,
-      inspectorSignature: operatorName,
+      inspectorSignature: resolvedOperator,
       inspectionDate,
       createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
     };
 
     setInspections([newRecord, ...inspections]);
+    void appendWmsActivityLog({
+      module: "Pre-Start Inspection",
+      sectionId: "fleet_ops",
+      reference: newRecord.id,
+      activity: `ตรวจเช็คก่อนเริ่มงานรถ ${vehicleId} (${overallResult})`,
+      status: hasAnyFail ? "Attention" : "Completed",
+    });
     setIsModalOpen(false);
   };
 

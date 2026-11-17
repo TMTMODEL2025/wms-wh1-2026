@@ -36,9 +36,16 @@ import {
   EmploymentStatus,
   VehicleAssignment,
   Vehicle,
-  AssignmentStatus
+  AssignmentStatus,
+  WmsSectionId,
 } from "../types/officer";
 import { EMPLOYEE_ROLES, MASTER_DEPARTMENTS } from "../data/officerData";
+import {
+  getDefaultSectionsForRoleAndDept,
+  getSectionMeta,
+  resolveEmployeeAllowedSections,
+  WMS_SECTIONS,
+} from "../utils/sectionPermissions";
 import {
   MhDailyDutyRecord,
   loadCachedMhDailyDuties,
@@ -114,7 +121,10 @@ export function EmployeeManagement({
     }, 4000);
   };
 
-  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayDate = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
 
   // Today's Daily Duty lookup by employeeId / employeeName
   const todayDailyDutyMap = useMemo(() => {
@@ -171,6 +181,16 @@ export function EmployeeManagement({
     return Array.from(depts).sort();
   }, [employees]);
 
+  const hasActiveAdmin = useMemo(
+    () =>
+      employees.some(
+        (e) =>
+          e.employmentStatus === "Active" &&
+          resolveEmployeeAllowedSections(e).includes("admin_hr")
+      ),
+    [employees]
+  );
+
   // Workforce KPI Metrics
   const metrics = useMemo(() => {
     const total = employees.length;
@@ -179,7 +199,12 @@ export function EmployeeManagement({
     const activeDrivers = employees.filter((e) => e.role === "Driver" && e.employmentStatus === "Active").length;
     const onDutyDriversToday = Array.from(activeDriverAssignmentMap.keys()).length;
     const officersAndSupervisors = employees.filter(
-      (e) => (e.role === "Officer" || e.role === "Supervisor" || e.role === "Manager") && e.employmentStatus === "Active"
+      (e) =>
+        (e.role === "Officer" ||
+          e.role === "Sr.Warehouse Officer" ||
+          e.role === "Supervisor" ||
+          e.role === "Manager") &&
+        e.employmentStatus === "Active"
     ).length;
 
     return {
@@ -265,6 +290,7 @@ export function EmployeeManagement({
     role: EmployeeRole;
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
+    allowedSections: WmsSectionId[];
     licenseType?: string;
     notes?: string;
   }) => {
@@ -278,6 +304,13 @@ export function EmployeeManagement({
       return {
         success: false,
         error: `Employee ID "${trimmedId}" is already registered. Employee ID must be unique across the organization.`,
+      };
+    }
+
+    if (!form.allowedSections || form.allowedSections.length === 0) {
+      return {
+        success: false,
+        error: "กรุณาเลือกส่วนงานที่อนุญาตให้พนักงานเข้าใช้งานอย่างน้อย 1 ส่วนงาน",
       };
     }
 
@@ -303,10 +336,11 @@ export function EmployeeManagement({
       employeeId: trimmedId,
       employeeName: form.employeeName.trim(),
       department: form.department.trim(),
-      jobPosition: form.jobPosition.trim() || `${form.role} Staff`,
+      jobPosition: form.jobPosition.trim(),
       role: form.role,
       phoneNumber: cleanPhone,
       employmentStatus: form.employmentStatus,
+      allowedSections: form.allowedSections,
       licenseType: form.role === "Driver" ? form.licenseType?.trim() || "Class 2 Industrial Heavy Equipment" : undefined,
       notes: form.notes?.trim() || undefined,
       legacyDriverId: form.role === "Driver" ? trimmedId : undefined,
@@ -328,6 +362,15 @@ export function EmployeeManagement({
     return { success: true };
   };
 
+  // Count active users with admin_hr access so we never lock out Admin & Workforce
+  const countOtherActiveAdmins = (excludeEmployeeId: string) =>
+    employees.filter(
+      (e) =>
+        e.employeeId !== excludeEmployeeId &&
+        e.employmentStatus === "Active" &&
+        resolveEmployeeAllowedSections(e).includes("admin_hr")
+    ).length;
+
   // HANDLER: EDIT EMPLOYEE
   const handleEditEmployee = (form: {
     employeeName: string;
@@ -336,10 +379,31 @@ export function EmployeeManagement({
     role: EmployeeRole;
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
+    allowedSections: WmsSectionId[];
     licenseType?: string;
     notes?: string;
   }) => {
     if (!editingEmployee) return { success: false, error: "No employee selected for editing." };
+
+    if (!form.allowedSections || form.allowedSections.length === 0) {
+      return {
+        success: false,
+        error: "กรุณาเลือกส่วนงานที่อนุญาตให้พนักงานเข้าใช้งานอย่างน้อย 1 ส่วนงาน",
+      };
+    }
+
+    const wasActiveAdmin =
+      editingEmployee.employmentStatus === "Active" &&
+      resolveEmployeeAllowedSections(editingEmployee).includes("admin_hr");
+    const willBeActiveAdmin =
+      form.employmentStatus === "Active" && form.allowedSections.includes("admin_hr");
+
+    if (wasActiveAdmin && !willBeActiveAdmin && countOtherActiveAdmins(editingEmployee.employeeId) === 0) {
+      return {
+        success: false,
+        error: "ไม่สามารถปิดใช้งานหรือถอดสิทธิ์งานบริหารและกำลังพลจากผู้ดูแลระบบคนสุดท้ายได้",
+      };
+    }
 
     const cleanPhone = form.phoneNumber.trim();
     if (cleanPhone) {
@@ -368,6 +432,7 @@ export function EmployeeManagement({
           role: form.role,
           phoneNumber: cleanPhone,
           employmentStatus: form.employmentStatus,
+          allowedSections: form.allowedSections,
           licenseType: form.role === "Driver" ? form.licenseType?.trim() || emp.licenseType : undefined,
           notes: form.notes?.trim() || undefined,
           updatedAt: timestampStr,
@@ -393,6 +458,19 @@ export function EmployeeManagement({
   const handleDirectToggleStatus = (targetEmployee: Employee) => {
     const targetStatus: EmploymentStatus =
       targetEmployee.employmentStatus === "Active" ? "Inactive" : "Active";
+
+    if (
+      targetStatus === "Inactive" &&
+      resolveEmployeeAllowedSections(targetEmployee).includes("admin_hr") &&
+      countOtherActiveAdmins(targetEmployee.employeeId) === 0
+    ) {
+      setConfirmingDeactivateId(null);
+      showToast(
+        "ไม่สามารถระงับผู้ดูแลงานบริหารและกำลังพลคนสุดท้ายได้ กรุณาแต่งตั้งผู้ดูแลเพิ่มก่อน",
+        "error"
+      );
+      return;
+    }
 
     const now = new Date();
     const timestampStr =
@@ -456,53 +534,55 @@ export function EmployeeManagement({
       )}
 
       {/* Sub-Navigation Tabs: Registry vs Daily Duty Assignment */}
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xs dark:border-[#1e3a5f] dark:bg-[#111e38]">
-        <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-[#1e3a5f]">
+        <div
+          role="tablist"
+          aria-label="Employee Management Views"
+          className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-[#0c162c]"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={activeSubTab === "registry"}
             onClick={() => setActiveSubTab("registry")}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition ${
+            className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold whitespace-nowrap shrink-0 transition ${
               activeSubTab === "registry"
-                ? "bg-cyan-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#162544]"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             }`}
           >
-            <Users size={14} />
-            ทำเนียบพนักงาน (Employee Registry)
+            <Users size={14} className={activeSubTab === "registry" ? "text-cyan-600 dark:text-cyan-400" : ""} />
+            <span>ทำเนียบพนักงาน (Employee Registry)</span>
+            <span className="font-mono text-[11px] font-semibold opacity-70 tabular-nums">
+              · {employees.length}
+            </span>
           </button>
 
           <button
             type="button"
+            role="tab"
+            aria-selected={activeSubTab === "daily_duty"}
             onClick={() => setActiveSubTab("daily_duty")}
-            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold transition ${
+            className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold whitespace-nowrap shrink-0 transition ${
               activeSubTab === "daily_duty"
-                ? "bg-indigo-600 text-white shadow-xs"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-[#162544]"
+                ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             }`}
           >
-            <ClipboardList size={14} />
-            มอบหมายงานประจำวัน (หัวหน้างาน)
-            <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
-                activeSubTab === "daily_duty"
-                  ? "bg-white/20 text-white"
-                  : "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200"
-              }`}
-            >
-              วันนี้ {dailyDuties.filter((d) => d.workingDate === todayDate).length} คน
+            <ClipboardList size={14} className={activeSubTab === "daily_duty" ? "text-indigo-600 dark:text-indigo-400" : ""} />
+            <span>มอบหมายงานประจำวัน (หัวหน้างาน)</span>
+            <span className="font-mono text-[11px] font-semibold opacity-75 tabular-nums">
+              · วันนี้ {dailyDuties.filter((d) => d.workingDate === todayDate).length} คน
             </span>
           </button>
         </div>
 
-        {activeSubTab === "registry" && (
-          <button
-            type="button"
-            onClick={() => setActiveSubTab("daily_duty")}
-            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200"
-          >
-            จัดตารางงานวันนี้ ➔
-          </button>
-        )}
+        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <span>วันที่ปัจจุบัน:</span>
+          <span className="font-mono font-semibold text-slate-700 tabular-nums dark:text-slate-200">
+            {todayDate}
+          </span>
+        </div>
       </div>
 
       {activeSubTab === "daily_duty" ? (
@@ -515,6 +595,26 @@ export function EmployeeManagement({
         />
       ) : (
         <>
+      {!hasActiveAdmin && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-950 dark:border-amber-800/70 dark:bg-amber-950/30 dark:text-amber-100">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <ShieldCheck size={16} className="shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              <strong>ยังไม่มีพนักงานที่มีสิทธิ์เข้าเมนู งานบริหารและกำลังพล (Admin & HR):</strong>{" "}
+              ทะเบียนพนักงานนี้ใช้ฐานข้อมูลเดียวกับหน้างานบริหารและกำลังพล คุณสามารถกดแก้ไขพนักงานหรือเพิ่มพนักงานใหม่แล้วเลือกสิทธิ์ <strong>บริหาร/กำลังพล</strong> (หรือตำแหน่ง Manager / Supervisor) เพื่อปลดล็อกได้ทันที
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-700"
+          >
+            <Plus size={14} />
+            <span>เพิ่มพนักงาน / ผู้ดูแล</span>
+          </button>
+        </div>
+      )}
+
       {/* Workforce Summary KPI Cards */}
       <div className="kpi-grid">
         <div className="kpi">
@@ -802,11 +902,19 @@ export function EmployeeManagement({
                     </td>
 
                     <td>
-                      <span className="emp-dept">{emp.department}</span>
+                      <div className="emp-dept">{emp.department}</div>
+                      <div style={{ fontSize: 10, color: "#0284c7", marginTop: 2, fontWeight: 600 }}>
+                        สิทธิ์:{" "}
+                        {resolveEmployeeAllowedSections(emp)
+                          .map((sid) => getSectionMeta(sid).shortLabelTh)
+                          .join(" · ")}
+                      </div>
                     </td>
 
                     <td>
-                      <div className="emp-pos">{emp.jobPosition}</div>
+                      <div className="emp-pos">
+                        {emp.jobPosition || <span style={{ color: "#94a3b8", fontSize: 11 }}>—</span>}
+                      </div>
                       {emp.licenseType && (
                         <div style={{ fontSize: 10, color: "#8a9ba8" }}>
                           {emp.licenseType}
@@ -1065,9 +1173,11 @@ function RoleBadge({ role }: { role: EmployeeRole }) {
     case "Driver":
       return <span className="status status-inuse">Driver</span>;
     case "Officer":
-      return <span className="status status-officer">Officer</span>;
+    case "Sr.Warehouse Officer":
+      return <span className="status status-officer">{role}</span>;
     case "Inspector":
-      return <span className="status status-maintenance">Inspector</span>;
+    case "Sr.Inspector":
+      return <span className="status status-maintenance">{role}</span>;
     case "Supervisor":
     case "Manager":
       return <span className="status status-manager">{role}</span>;
@@ -1113,20 +1223,33 @@ function AddEmployeeModal({
     role: EmployeeRole;
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
+    allowedSections: WmsSectionId[];
     licenseType?: string;
     notes?: string;
   }) => { success: boolean; error?: string };
 }) {
+  const defaultDept = departments[0] || "Material Handling - Fleet";
   const [employeeId, setEmployeeId] = useState<string>("");
   const [employeeName, setEmployeeName] = useState<string>("");
-  const [department, setDepartment] = useState<string>(departments[0] || "Material Handling - Fleet");
+  const [department, setDepartment] = useState<string>(defaultDept);
   const [jobPosition, setJobPosition] = useState<string>("");
   const [role, setRole] = useState<EmployeeRole>("Driver");
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>("Active");
+  const [allowedSections, setAllowedSections] = useState<WmsSectionId[]>(() =>
+    getDefaultSectionsForRoleAndDept("Driver", defaultDept)
+  );
+  const [hasCustomizedSections, setHasCustomizedSections] = useState<boolean>(false);
   const [licenseType, setLicenseType] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleToggleSection = (secId: WmsSectionId) => {
+    setHasCustomizedSections(true);
+    setAllowedSections((prev) =>
+      prev.includes(secId) ? prev.filter((id) => id !== secId) : [...prev, secId]
+    );
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1140,15 +1263,20 @@ function AddEmployeeModal({
       setErrorMessage("Employee Name is required.");
       return;
     }
+    if (allowedSections.length === 0) {
+      setErrorMessage("กรุณาเลือกส่วนงานที่อนุญาตให้เข้าใช้งานอย่างน้อย 1 ส่วนงาน");
+      return;
+    }
 
     const res = onSave({
       employeeId: employeeId.trim().toUpperCase(),
       employeeName: employeeName.trim(),
       department: department.trim(),
-      jobPosition: jobPosition.trim() || `${role} Staff`,
+      jobPosition: jobPosition.trim(),
       role,
       phoneNumber: phoneNumber.trim(),
       employmentStatus,
+      allowedSections,
       licenseType: role === "Driver" ? licenseType : undefined,
       notes: notes.trim() || undefined,
     });
@@ -1164,7 +1292,7 @@ function AddEmployeeModal({
         className="modal vehicle-modal-card"
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ width: "min(580px, 100%)" }}
+        style={{ width: "min(620px, 100%)", maxHeight: "90vh", overflowY: "auto" }}
       >
         <div className="panel-header vehicle-modal-header" style={{ padding: "14px 20px" }}>
           <div>
@@ -1220,49 +1348,94 @@ function AddEmployeeModal({
             </label>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <label className="form-field">
-              Department / Section *
-              <select
-                className="field"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                required
-              >
-                {departments.map((dept) => (
-                  <option value={dept} key={dept}>
-                    {dept}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {/* Department / Section */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                Department / Section *
+              </span>
+              <span className="truncate text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                {department}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {departments.map((dept) => {
+                const checked = department === dept;
+                return (
+                  <label
+                    key={dept}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition ${
+                      checked
+                        ? "border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-100"
+                        : "border-slate-200 bg-white text-slate-600 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setDepartment(dept);
+                        if (!hasCustomizedSections) {
+                          setAllowedSections(getDefaultSectionsForRoleAndDept(role, dept));
+                        }
+                      }}
+                      className="h-3.5 w-3.5 shrink-0 accent-sky-600"
+                    />
+                    <span className="truncate font-semibold">{dept}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
-            <label className="form-field">
-              Operational Role *
-              <select
-                className="field"
-                value={role}
-                onChange={(e) => setRole(e.target.value as EmployeeRole)}
-                required
-              >
-                {EMPLOYEE_ROLES.map((r) => (
-                  <option value={r} key={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {/* Operational Role */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                Operational Role *
+              </span>
+              <span className="truncate text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                {role}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              {EMPLOYEE_ROLES.map((r) => {
+                const checked = role === r;
+                return (
+                  <label
+                    key={r}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition ${
+                      checked
+                        ? "border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-100"
+                        : "border-slate-200 bg-white text-slate-600 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setRole(r);
+                        if (!hasCustomizedSections) {
+                          setAllowedSections(getDefaultSectionsForRoleAndDept(r, department));
+                        }
+                      }}
+                      className="h-3.5 w-3.5 shrink-0 accent-sky-600"
+                    />
+                    <span className="truncate font-semibold">{r}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label className="form-field">
-              Job Position *
+              Job Position
               <input
                 className="field"
                 value={jobPosition}
                 onChange={(e) => setJobPosition(e.target.value)}
-                placeholder="e.g. Forklift Operator, Logistics Officer"
-                required
+                placeholder="e.g. Forklift Operator, Logistics Officer (ไม่บังคับ)"
               />
             </label>
 
@@ -1275,6 +1448,48 @@ function AddEmployeeModal({
                 placeholder="e.g. 081-234-5678"
               />
             </label>
+          </div>
+
+          {/* Section Access Permissions */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                สิทธิ์การเข้าใช้งานส่วนงาน (Login & Menu Permissions) *
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setHasCustomizedSections(false);
+                  setAllowedSections(getDefaultSectionsForRoleAndDept(role, department));
+                }}
+                className="text-[11px] font-semibold text-sky-600 hover:underline dark:text-sky-400"
+              >
+                รีเซ็ตตามแผนก/ตำแหน่ง
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {WMS_SECTIONS.map((sec) => {
+                const checked = allowedSections.includes(sec.id);
+                return (
+                  <label
+                    key={sec.id}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition ${
+                      checked
+                        ? "border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-100"
+                        : "border-slate-200 bg-white text-slate-600 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleToggleSection(sec.id)}
+                      className="h-3.5 w-3.5 accent-sky-600"
+                    />
+                    <span className="truncate font-semibold">{sec.shortLabelTh}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
 
           {role === "Driver" && (
@@ -1344,6 +1559,7 @@ function EditEmployeeModal({
     role: EmployeeRole;
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
+    allowedSections: WmsSectionId[];
     licenseType?: string;
     notes?: string;
   }) => { success: boolean; error?: string };
@@ -1354,9 +1570,18 @@ function EditEmployeeModal({
   const [role, setRole] = useState<EmployeeRole>(employee.role);
   const [phoneNumber, setPhoneNumber] = useState<string>(employee.phoneNumber || "");
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>(employee.employmentStatus);
+  const [allowedSections, setAllowedSections] = useState<WmsSectionId[]>(() =>
+    resolveEmployeeAllowedSections(employee)
+  );
   const [licenseType, setLicenseType] = useState<string>(employee.licenseType || "Class 2 Industrial Heavy Equipment");
   const [notes, setNotes] = useState<string>(employee.notes || "");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleToggleSection = (secId: WmsSectionId) => {
+    setAllowedSections((prev) =>
+      prev.includes(secId) ? prev.filter((id) => id !== secId) : [...prev, secId]
+    );
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1364,6 +1589,10 @@ function EditEmployeeModal({
 
     if (!employeeName.trim()) {
       setErrorMessage("Employee Name is required.");
+      return;
+    }
+    if (allowedSections.length === 0) {
+      setErrorMessage("กรุณาเลือกส่วนงานที่อนุญาตให้เข้าใช้งานอย่างน้อย 1 ส่วนงาน");
       return;
     }
 
@@ -1374,6 +1603,7 @@ function EditEmployeeModal({
       role,
       phoneNumber: phoneNumber.trim(),
       employmentStatus,
+      allowedSections,
       licenseType: role === "Driver" ? licenseType : undefined,
       notes: notes.trim() || undefined,
     });
@@ -1389,7 +1619,7 @@ function EditEmployeeModal({
         className="modal vehicle-modal-card"
         onSubmit={handleSubmit}
         onMouseDown={(e) => e.stopPropagation()}
-        style={{ width: "min(580px, 100%)" }}
+        style={{ width: "min(620px, 100%)", maxHeight: "90vh", overflowY: "auto" }}
       >
         <div className="panel-header vehicle-modal-header" style={{ padding: "14px 20px" }}>
           <div>
@@ -1485,12 +1715,12 @@ function EditEmployeeModal({
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label className="form-field">
-              Job Position *
+              Job Position
               <input
                 className="field"
                 value={jobPosition}
                 onChange={(e) => setJobPosition(e.target.value)}
-                required
+                placeholder="ไม่บังคับ"
               />
             </label>
 
@@ -1527,6 +1757,47 @@ function EditEmployeeModal({
               <option value="Inactive">Inactive (Restricted from assignment)</option>
             </select>
           </label>
+
+          {/* Section Access Permissions */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                สิทธิ์การเข้าใช้งานส่วนงาน (Login & Menu Permissions) *
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setAllowedSections(getDefaultSectionsForRoleAndDept(role, department))
+                }
+                className="text-[11px] font-semibold text-sky-600 hover:underline dark:text-sky-400"
+              >
+                ตั้งค่าตามแผนก/ตำแหน่ง
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {WMS_SECTIONS.map((sec) => {
+                const checked = allowedSections.includes(sec.id);
+                return (
+                  <label
+                    key={sec.id}
+                    className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition ${
+                      checked
+                        ? "border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-100"
+                        : "border-slate-200 bg-white text-slate-600 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleToggleSection(sec.id)}
+                      className="h-3.5 w-3.5 accent-sky-600"
+                    />
+                    <span className="truncate font-semibold">{sec.shortLabelTh}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
           <label className="form-field">
             Notes
@@ -1627,7 +1898,7 @@ function ViewEmployeeDetailsModal({
                   {employee.employeeName}
                 </div>
                 <div style={{ fontSize: 11, marginTop: 2 }}>
-                  {employee.jobPosition} · ID: {employee.employeeId}
+                  {employee.jobPosition ? `${employee.jobPosition} · ` : ""}ID: {employee.employeeId}
                 </div>
               </div>
             </div>
@@ -1685,6 +1956,15 @@ function ViewEmployeeDetailsModal({
               <span>Last Profile Update:</span>
               <div style={{ marginTop: 2 }}>
                 {employee.updatedAt || "N/A"}
+              </div>
+            </div>
+
+            <div style={{ gridColumn: "span 2" }}>
+              <span>ส่วนงานที่อนุญาตให้เข้าใช้งาน:</span>
+              <div style={{ fontWeight: 600, marginTop: 2, color: "#0284c7" }}>
+                {resolveEmployeeAllowedSections(employee)
+                  .map((sid) => getSectionMeta(sid).shortLabelTh)
+                  .join(" · ")}
               </div>
             </div>
           </div>

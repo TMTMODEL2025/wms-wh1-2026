@@ -18,6 +18,7 @@ export const MH_MAINTENANCE_COLLECTION = "mh_maintenance";
 export const MH_FUEL_STOCK_COLLECTION = "mh_fuel_stock";
 export const MH_TIRE_STOCK_COLLECTION = "mh_tire_stock";
 export const MH_DAILY_DUTY_COLLECTION = "mh_daily_duty";
+export const MH_DELIVERY_POINTS_COLLECTION = "mh_delivery_points";
 
 // ============================================================================
 // 1. Transport Operation (mh_transfers) Types
@@ -64,7 +65,7 @@ export interface MhTransferRecord {
   vehicleNumber: string;
   driverName: string;
   workArea?: string; // พื้นที่การทำงานหลัก เช่น อาคาร A, อาคาร B, ลานพักสินค้า
-  shift?: string; // กะทำงาน เช่น กะเช้า, กะบ่าย, กะดึก, กะปกติ
+  shift?: string; // กะทำงาน เช่น กะเช้า, กะดึก
   team?: string; // ทีม A | ทีม B | ทีม C
   transportCost?: number;
   notes?: string;
@@ -76,7 +77,7 @@ export interface MhTransferRecord {
 // 1B. Daily Duty Assignment (mh_daily_duty) Types & Constants
 // ============================================================================
 export const MH_TEAMS = ["ทีม A", "ทีม B", "ทีม C"] as const;
-export const MH_SHIFTS = ["กะเช้า", "กะบ่าย", "กะดึก", "กะปกติ"] as const;
+export const MH_SHIFTS = ["กะเช้า", "กะดึก"] as const;
 export const MH_WORK_AREAS = [
   "อาคาร A",
   "อาคาร B",
@@ -96,6 +97,17 @@ export interface MhDailyDutyRecord {
   team: string;
   supervisorName?: string;
   notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
+// 1C. Delivery Points & Gates (mh_delivery_points) Types
+// ============================================================================
+export interface MhDeliveryPointRecord {
+  id: string;
+  deliveryPoint: string; // จุดส่งสินค้า เช่น "อาคาร A"
+  gate: string; // ประตู เช่น "ประตู A2"
   createdAt: string;
   updatedAt: string;
 }
@@ -1237,5 +1249,203 @@ export async function deleteMhDailyDutyFromCloud(id: string): Promise<boolean> {
     () => deleteDoc(docRef),
     OperationType.DELETE,
     `${MH_DAILY_DUTY_COLLECTION}/${cleanId}`
+  );
+}
+
+// ============================================================================
+// 6. Delivery Points & Gates (mh_delivery_points) Cloud & Local Cache
+// ============================================================================
+const MH_DELIVERY_POINTS_CACHE_KEY = "tmt_mh_delivery_points_cache_v1";
+
+function buildMhDeliveryPointDocId(deliveryPoint: string, gate: string): string {
+  const raw = `${deliveryPoint.trim()}__${gate.trim()}`.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash * 31 + raw.charCodeAt(i)) >>> 0;
+  }
+  const asciiPart = raw.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 48);
+  return sanitizeDocId(`DP_${asciiPart || "point"}_${hash.toString(36)}`);
+}
+
+function sanitizeMhDeliveryPointPayload(
+  r: Partial<MhDeliveryPointRecord> & { deliveryPoint: string }
+): MhDeliveryPointRecord {
+  const { timestamp } = formatForkliftNowTimestamp();
+  const cleanPoint = String(r.deliveryPoint || "").trim().slice(0, 128);
+  const cleanGate = String(r.gate ?? "-").trim().slice(0, 64) || "-";
+  const docId = sanitizeDocId(r.id || buildMhDeliveryPointDocId(cleanPoint, cleanGate));
+
+  return stripUndefinedDeep({
+    id: docId,
+    deliveryPoint: cleanPoint,
+    gate: cleanGate,
+    createdAt: String(r.createdAt || timestamp).slice(0, 64),
+    updatedAt: String(r.updatedAt || timestamp).slice(0, 64),
+  });
+}
+
+function sortMhDeliveryPoints(items: MhDeliveryPointRecord[]): MhDeliveryPointRecord[] {
+  return [...items].sort((a, b) => {
+    const pCmp = a.deliveryPoint.localeCompare(b.deliveryPoint, "th", { numeric: true });
+    if (pCmp !== 0) return pCmp;
+    return a.gate.localeCompare(b.gate, "th", { numeric: true });
+  });
+}
+
+export function extractUniqueDeliveryPointNames(items: MhDeliveryPointRecord[]): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const item of items) {
+    const name = String(item.deliveryPoint || "").trim();
+    if (name && !seen.has(name)) {
+      seen.add(name);
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+export function loadCachedMhDeliveryPoints(): MhDeliveryPointRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MH_DELIVERY_POINTS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sortMhDeliveryPoints(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedMhDeliveryPoints(records: MhDeliveryPointRecord[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      MH_DELIVERY_POINTS_CACHE_KEY,
+      JSON.stringify(sortMhDeliveryPoints(records))
+    );
+  } catch {
+    // ignore storage quota error
+  }
+}
+
+export async function fetchMhDeliveryPointsOnce(): Promise<MhDeliveryPointRecord[]> {
+  try {
+    const snap = await getDocs(collection(dbForklift, MH_DELIVERY_POINTS_COLLECTION));
+    const records: MhDeliveryPointRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as MhDeliveryPointRecord;
+      if (data && data.id && data.deliveryPoint) {
+        records.push(data);
+      }
+    });
+    const sorted = sortMhDeliveryPoints(records);
+    if (sorted.length > 0) {
+      saveCachedMhDeliveryPoints(sorted);
+      return sorted;
+    }
+    return loadCachedMhDeliveryPoints();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, MH_DELIVERY_POINTS_COLLECTION);
+    return loadCachedMhDeliveryPoints();
+  }
+}
+
+export function subscribeToMhDeliveryPoints(
+  onData: (records: MhDeliveryPointRecord[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const channelKey = "mh_delivery_points_listener";
+  if (!forkliftCloudRealtimeEnabled) {
+    fetchMhDeliveryPointsOnce().then(onData).catch((err) => onError?.(err));
+    return () => {};
+  }
+
+  const colRef = collection(dbForklift, MH_DELIVERY_POINTS_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: MhDeliveryPointRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as MhDeliveryPointRecord;
+        if (data && data.id && data.deliveryPoint) {
+          records.push(data);
+        }
+      });
+      const sorted = sortMhDeliveryPoints(records);
+      if (sorted.length > 0 || !snapshot.metadata.fromCache) {
+        saveCachedMhDeliveryPoints(sorted);
+      }
+      onData(sorted);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, MH_DELIVERY_POINTS_COLLECTION);
+      onError?.(error);
+    }
+  );
+
+  return registerForkliftFirestoreListener(channelKey, unsub);
+}
+
+export async function saveMhDeliveryPointToCloud(
+  record: Partial<MhDeliveryPointRecord> & { deliveryPoint: string }
+): Promise<boolean> {
+  const payload = sanitizeMhDeliveryPointPayload(record);
+  const cached = loadCachedMhDeliveryPoints();
+  const nextCache = [payload, ...cached.filter((item) => item.id !== payload.id)];
+  saveCachedMhDeliveryPoints(nextCache);
+
+  const docRef = doc(dbForklift, MH_DELIVERY_POINTS_COLLECTION, payload.id);
+  return runForkliftFirestoreWriteWithGuard(
+    () => setDoc(docRef, payload, { merge: true }),
+    OperationType.WRITE,
+    `${MH_DELIVERY_POINTS_COLLECTION}/${payload.id}`
+  );
+}
+
+export async function saveMhDeliveryPointsBatchToCloud(
+  records: Array<Partial<MhDeliveryPointRecord> & { deliveryPoint: string }>
+): Promise<boolean> {
+  if (records.length === 0) return true;
+  const payloads = records.map(sanitizeMhDeliveryPointPayload);
+  const payloadIds = new Set(payloads.map((p) => p.id));
+  const cached = loadCachedMhDeliveryPoints();
+  const nextCache = [...payloads, ...cached.filter((item) => !payloadIds.has(item.id))];
+  saveCachedMhDeliveryPoints(nextCache);
+
+  if (payloads.length === 1) {
+    const docRef = doc(dbForklift, MH_DELIVERY_POINTS_COLLECTION, payloads[0].id);
+    return runForkliftFirestoreWriteWithGuard(
+      () => setDoc(docRef, payloads[0], { merge: true }),
+      OperationType.WRITE,
+      `${MH_DELIVERY_POINTS_COLLECTION}/${payloads[0].id}`
+    );
+  }
+
+  return runForkliftFirestoreWriteWithGuard(
+    async () => {
+      const batch = writeBatch(dbForklift);
+      payloads.forEach((payload) => {
+        const docRef = doc(dbForklift, MH_DELIVERY_POINTS_COLLECTION, payload.id);
+        batch.set(docRef, payload, { merge: true });
+      });
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    MH_DELIVERY_POINTS_COLLECTION
+  );
+}
+
+export async function deleteMhDeliveryPointFromCloud(id: string): Promise<boolean> {
+  const cleanId = sanitizeDocId(id);
+  if (!cleanId) return false;
+  const cached = loadCachedMhDeliveryPoints();
+  saveCachedMhDeliveryPoints(cached.filter((item) => item.id !== cleanId));
+
+  const docRef = doc(dbForklift, MH_DELIVERY_POINTS_COLLECTION, cleanId);
+  return runForkliftFirestoreWriteWithGuard(
+    () => deleteDoc(docRef),
+    OperationType.DELETE,
+    `${MH_DELIVERY_POINTS_COLLECTION}/${cleanId}`
   );
 }

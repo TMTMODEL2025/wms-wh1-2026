@@ -8,7 +8,9 @@ import { Driver, Employee, EmployeeRole, Vehicle, VehicleAssignment } from "../t
 export const EMPLOYEE_ROLES: EmployeeRole[] = [
   "Driver",
   "Officer",
+  "Sr.Warehouse Officer",
   "Inspector",
+  "Sr.Inspector",
   "Operator",
   "Supervisor",
   "Manager",

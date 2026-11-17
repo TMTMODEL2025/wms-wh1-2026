@@ -41,10 +41,14 @@ import {
   Cpu,
   Sun,
   Moon,
+  ArrowLeftRight,
 } from "lucide-react";
 import { VehicleManagement } from "./components/VehicleManagement";
 import { EmployeeManagement } from "./components/EmployeeManagement";
+import { AdminWorkforcePortal } from "./components/AdminWorkforcePortal";
+import { LoginGateModal } from "./components/LoginGateModal";
 import { TransportOperations } from "./components/TransportOperations";
+import { DeliveryPointsManagement } from "./components/DeliveryPointsManagement";
 import { FixFlushManagement } from "./components/FixFlushManagement";
 import { FuelManagement } from "./components/FuelManagement";
 import { PreStartInspection } from "./components/PreStartInspection";
@@ -57,6 +61,13 @@ import {
 } from "./services/coilDataService";
 import { unsubscribeAllForkliftFirestoreListeners } from "./services/forkliftDataService";
 import {
+  subscribeToWmsEmployees,
+  syncEmployeeRosterDiffToCloud,
+  subscribeToWmsActivityLogs,
+} from "./services/authWorkforceService";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { getSectionMeta } from "./utils/sectionPermissions";
+import {
   loadStoredAssignments,
   saveStoredAssignments,
   loadStoredVehicles,
@@ -64,7 +75,7 @@ import {
   loadStoredEmployees,
   saveStoredEmployees,
 } from "./data/officerData";
-import { Employee, Vehicle, VehicleAssignment } from "./types/officer";
+import { Employee, Vehicle, VehicleAssignment, WmsActivityLogRecord } from "./types/officer";
 import { LanguageProvider, useLanguage, Translations } from "./contexts/LanguageContext";
 import { APP_VERSION, APP_BUILD_LABEL, APP_UPDATED_DATE } from "./config/version";
 
@@ -99,10 +110,12 @@ interface TransactionItem {
   module: string;
   activity: string;
   status: "Completed" | "Pending" | "Attention" | "Available" | string;
+  recordedBy?: string;
 }
 
 const getMaterialHandlingSubmenu = (t: (key: keyof Translations) => string) => [
   { id: "transport", label: t("transportOperation"), icon: Activity },
+  { id: "delivery-points", label: t("deliveryPoints"), icon: MapPin },
   { id: "fix-flush", label: t("fixFlushStatus"), icon: Wrench },
   { id: "pre-start", label: t("preStartInspection"), icon: ShieldCheck },
   { id: "vehicles", label: t("vehicleManagement"), icon: Truck },
@@ -145,6 +158,11 @@ function getModuleInfo(t: (key: keyof Translations) => string): Record<string, M
     transport: {
       title: t("transportOperation"),
       subtitle: "",
+      columns: [],
+    },
+    "delivery-points": {
+      title: t("deliveryPoints"),
+      subtitle: t("deliveryPointsSubtitle"),
       columns: [],
     },
     "fix-flush": {
@@ -3850,8 +3868,9 @@ function TransactionsList({ items }: { items: TransactionItem[] }) {
 
           <div className="w-full min-w-0">
             <div className="transaction-name text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{item.activity}</div>
-            <div className="transaction-ref text-[11px] text-slate-500 font-mono mt-0.5">
+            <div className="transaction-ref text-[11px] text-slate-500 font-mono mt-0.5 truncate">
               {item.reference} · {item.module}
+              {item.recordedBy ? ` · โดย ${item.recordedBy}` : ""}
             </div>
           </div>
 
@@ -3874,6 +3893,7 @@ function DashboardView({
   vehicles = [],
   employeeRoster = [],
   officerAssignments: _officerAssignments = [],
+  canNavigate,
   onNavigate,
   onSelectRecord,
 }: {
@@ -3882,6 +3902,7 @@ function DashboardView({
   vehicles?: Vehicle[];
   employeeRoster?: Employee[];
   officerAssignments?: VehicleAssignment[];
+  canNavigate?: (menuId: string) => boolean;
   onNavigate: (module: string) => void;
   onSelectRecord: (item: RecordItem) => void;
 }) {
@@ -4095,7 +4116,13 @@ function DashboardView({
       if (e.role === "Driver") {
         driversAll.push(e);
         if (isActive) driversActive.push(e);
-      } else if (e.role === "Operator" || e.role === "Inspector" || e.role === "Officer") {
+      } else if (
+        e.role === "Operator" ||
+        e.role === "Inspector" ||
+        e.role === "Sr.Inspector" ||
+        e.role === "Officer" ||
+        e.role === "Sr.Warehouse Officer"
+      ) {
         whAll.push(e);
         if (isActive) whActive.push(e);
       } else if (e.role === "Supervisor" || e.role === "Manager") {
@@ -4208,12 +4235,14 @@ function DashboardView({
             )}
           </div>
 
-          <div className="overview-card-footer">
-            <button className="overview-jump-btn" onClick={() => onNavigate("coil")}>
-              <span>{translations.viewModuleDetail}</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
+          {(!canNavigate || canNavigate("coil")) && (
+            <div className="overview-card-footer">
+              <button className="overview-jump-btn" onClick={() => onNavigate("coil")}>
+                <span>{translations.viewModuleDetail}</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Card 2: Slit / Film (เหล็กสลิต/ฟิล์ม) */}
@@ -4282,12 +4311,14 @@ function DashboardView({
             )}
           </div>
 
-          <div className="overview-card-footer">
-            <button className="overview-jump-btn" onClick={() => onNavigate("slit")}>
-              <span>{translations.viewModuleDetail}</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
+          {(!canNavigate || canNavigate("slit")) && (
+            <div className="overview-card-footer">
+              <button className="overview-jump-btn" onClick={() => onNavigate("slit")}>
+                <span>{translations.viewModuleDetail}</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Card 3: RM - Steel Sheet (เหล็กแผ่น RM) */}
@@ -4356,12 +4387,14 @@ function DashboardView({
             )}
           </div>
 
-          <div className="overview-card-footer">
-            <button className="overview-jump-btn" onClick={() => onNavigate("rm")}>
-              <span>{translations.viewModuleDetail}</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
+          {(!canNavigate || canNavigate("rm")) && (
+            <div className="overview-card-footer">
+              <button className="overview-jump-btn" onClick={() => onNavigate("rm")}>
+                <span>{translations.viewModuleDetail}</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -4463,12 +4496,14 @@ function DashboardView({
             )}
           </div>
 
-          <div className="overview-card-footer">
-            <button className="overview-jump-btn" onClick={() => onNavigate("vehicles")}>
-              <span>{translations.viewModuleDetail}</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
+          {(!canNavigate || canNavigate("vehicles")) && (
+            <div className="overview-card-footer">
+              <button className="overview-jump-btn" onClick={() => onNavigate("vehicles")}>
+                <span>{translations.viewModuleDetail}</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Card 5: Admin & Workforce (สถิติการมาทำงาน) */}
@@ -4543,12 +4578,17 @@ function DashboardView({
             )}
           </div>
 
-          <div className="overview-card-footer">
-            <button className="overview-jump-btn" onClick={() => onNavigate("employees")}>
-              <span>{translations.viewModuleDetail}</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
+          {(!canNavigate || canNavigate("employees") || canNavigate("admin")) && (
+            <div className="overview-card-footer">
+              <button
+                className="overview-jump-btn"
+                onClick={() => onNavigate(canNavigate?.("admin") ? "admin" : "employees")}
+              >
+                <span>{translations.viewModuleDetail}</span>
+                <ArrowRight size={13} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -5031,9 +5071,24 @@ function LiveClock() {
   );
 }
 
-function WmsApp() {
+function WmsApp({
+  employeeRoster,
+  onUpdateEmployeeRoster,
+  activityLogs,
+}: {
+  employeeRoster: Employee[];
+  onUpdateEmployeeRoster: (updated: Employee[]) => void;
+  activityLogs: WmsActivityLogRecord[];
+}) {
   const { language, setLanguage, t, translations } = useLanguage();
-  const [active, setActive] = useState("dashboard");
+  const {
+    currentUser,
+    openSwitchUserModal,
+    canAccessMenu,
+    getDefaultMenu,
+    recordActivity,
+  } = useAuth();
+  const [active, setActive] = useState<string>(() => getDefaultMenu());
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     try {
       const saved = localStorage.getItem("tmt_wms_theme");
@@ -5077,6 +5132,15 @@ function WmsApp() {
   const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
   const [coilMode, setCoilMode] = useState<CoilModeTab>("inbound");
 
+  // Guard active route against logged-in user's permitted sections
+  useEffect(() => {
+    if (!currentUser) return;
+    if (!canAccessMenu(active)) {
+      setActive(getDefaultMenu());
+      setSelectedRecord(null);
+    }
+  }, [currentUser, active, canAccessMenu, getDefaultMenu]);
+
   // Strict Read-Quota Guard: immediately unsubscribe all Coil & Forklift Firestore listeners when leaving their respective pages
   useEffect(() => {
     if (active !== "coil") {
@@ -5101,7 +5165,6 @@ function WmsApp() {
     }
   }, []);
   const [vehicles, setVehicles] = useState<Vehicle[]>(() => loadStoredVehicles());
-  const [employeeRoster, setEmployeeRoster] = useState<Employee[]>(() => loadStoredEmployees());
   const [officerAssignments, setOfficerAssignments] = useState<VehicleAssignment[]>(() =>
     loadStoredAssignments()
   );
@@ -5129,11 +5192,6 @@ function WmsApp() {
     saveStoredVehicles(updated);
   };
 
-  const handleUpdateEmployeeRoster = (updated: Employee[]) => {
-    setEmployeeRoster(updated);
-    saveStoredEmployees(updated);
-  };
-
   const handleUpdateOfficerAssignments = (updated: VehicleAssignment[]) => {
     setOfficerAssignments(updated);
     saveStoredAssignments(updated);
@@ -5144,6 +5202,57 @@ function WmsApp() {
     setTimeout(() => {
       setToast(null);
     }, 3500);
+  };
+
+  const mergedTransactions = useMemo<TransactionItem[]>(() => {
+    const cloudMapped: TransactionItem[] = activityLogs.slice(0, 30).map((log) => ({
+      id: log.id,
+      time: log.timeHm || log.timestamp.slice(11, 16),
+      reference: log.reference,
+      module: log.module,
+      activity: log.activity,
+      status: log.status,
+      recordedBy: `${log.employeeName} (${log.employeeId})`,
+    }));
+    const seenIds = new Set(cloudMapped.map((item) => item.id).filter(Boolean));
+    const localOnly = transactions.filter((tItem) => !tItem.id || !seenIds.has(tItem.id));
+    return [...cloudMapped, ...localOnly].slice(0, 35);
+  }, [activityLogs, transactions]);
+
+  const logModuleActivity = (
+    moduleName: string,
+    activity: string,
+    reference: string,
+    status: string,
+    menuId?: string
+  ) => {
+    const actorLabel = currentUser
+      ? `${currentUser.employeeName} (${currentUser.employeeId})`
+      : "WMS Operator";
+    const timeStr = new Date().toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    setTransactions((current) => [
+      {
+        time: timeStr,
+        reference,
+        module: moduleName,
+        activity,
+        status,
+        recordedBy: actorLabel,
+      },
+      ...current,
+    ]);
+
+    void recordActivity({
+      module: moduleName,
+      menuId,
+      reference,
+      activity,
+      status,
+    });
   };
 
   const allRecords = useMemo(
@@ -5164,9 +5273,19 @@ function WmsApp() {
 
   const moduleInfoMap = useMemo(() => getModuleInfo(t), [t]);
   const activeInfo = moduleInfoMap[active];
-  const materialHandlingSubmenu = useMemo(() => getMaterialHandlingSubmenu(t), [t]);
-  const warehouseInventoryItems = useMemo(() => getWarehouseInventoryItems(t), [t]);
-  const administrationItems = useMemo(() => getAdministrationItems(t), [t]);
+  const materialHandlingSubmenu = useMemo(
+    () => getMaterialHandlingSubmenu(t).filter((item) => canAccessMenu(item.id)),
+    [t, canAccessMenu]
+  );
+  const warehouseInventoryItems = useMemo(
+    () => getWarehouseInventoryItems(t).filter((item) => canAccessMenu(item.id)),
+    [t, canAccessMenu]
+  );
+  const administrationItems = useMemo(
+    () => getAdministrationItems(t).filter((item) => canAccessMenu(item.id)),
+    [t, canAccessMenu]
+  );
+  const canViewDashboard = canAccessMenu("dashboard");
 
   const pageTitle =
     active === "dashboard"
@@ -5200,16 +5319,13 @@ function WmsApp() {
       setInventory((current) => [entry, ...current]);
     }
 
-    setTransactions((current) => [
-      {
-        time: timeStr,
-        reference: form.code,
-        module: activeInfo?.title || form.module,
-        activity: `New record created: ${form.name}`,
-        status: "Completed",
-      },
-      ...current,
-    ]);
+    logModuleActivity(
+      activeInfo?.title || form.module,
+      `New record created: ${form.name}`,
+      form.code,
+      "Completed",
+      form.module
+    );
 
     setShowModal(false);
     showNotification(`${translations.recordCreatedToast} ${form.code} (${form.name})`);
@@ -5224,16 +5340,13 @@ function WmsApp() {
       setInventory((cur) => cur.filter((item) => item.id !== recordToDelete.id));
     }
 
-    setTransactions((current) => [
-      {
-        time: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-        reference: recordToDelete.code,
-        module: recordToDelete.module.toUpperCase(),
-        activity: `Item removed from registry: ${recordToDelete.code}`,
-        status: "Completed",
-      },
-      ...current,
-    ]);
+    logModuleActivity(
+      recordToDelete.module.toUpperCase(),
+      `Item removed from registry: ${recordToDelete.code}`,
+      recordToDelete.code,
+      "Completed",
+      recordToDelete.module
+    );
 
     setSelectedRecord(null);
     showNotification(`${translations.recordRemovedToast} ${recordToDelete.code}`);
@@ -5260,7 +5373,7 @@ function WmsApp() {
 
             <div
               className="brand"
-              onClick={() => setActive("dashboard")}
+              onClick={() => setActive(getDefaultMenu())}
               role="button"
               tabIndex={0}
               title="WMS Warehouse 1"
@@ -5318,10 +5431,31 @@ function WmsApp() {
             </div>
 
             <div className="topbar-sub-right">
-              <span className="topbar-utility-user-text">
-                <span className="user-dot" />
-                USER: ADMIN (สมชาย)
-              </span>
+              <button
+                type="button"
+                onClick={openSwitchUserModal}
+                title={
+                  currentUser
+                    ? `${currentUser.employeeId} · ${currentUser.employeeName} (${currentUser.department}) — คลิกเพื่อสลับผู้ใช้`
+                    : "เข้าสู่ระบบด้วยรหัสพนักงาน"
+                }
+                className="topbar-utility-user-text inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 transition hover:bg-sky-500/20 cursor-pointer"
+              >
+                <span className="user-dot shrink-0" />
+                <span className="font-mono font-bold">
+                  {currentUser ? currentUser.employeeId : "LOGIN"}
+                </span>
+                <span className="hidden sm:inline truncate max-w-[140px]">
+                  {currentUser ? currentUser.employeeName : "เข้าสู่ระบบ"}
+                </span>
+                {currentUser && currentUser.loginSection !== "all" && (
+                  <span className="hidden lg:inline text-[10px] opacity-80">
+                    ({getSectionMeta(currentUser.loginSection).shortLabelTh})
+                  </span>
+                )}
+                <ArrowLeftRight size={12} className="shrink-0 opacity-85" />
+                <span className="hidden md:inline text-[10px] font-bold">สลับผู้ใช้</span>
+              </button>
 
               <button
                 type="button"
@@ -5398,22 +5532,26 @@ function WmsApp() {
                      ========================================================= */
                   <div className="sidebar-collapsed-icons">
                     {/* 1. Executive Overview Icon */}
-                    <button
-                      type="button"
-                      className={`nav-card-btn nav-overview-hero ${active === "dashboard" ? "active" : ""}`}
-                      style={{ backgroundImage: `url(${SIDEBAR_IMAGES.dashboard})` }}
-                      onClick={() => {
-                        setActive("dashboard");
-                        setSelectedRecord(null);
-                      }}
-                      title={translations.executiveOverview}
-                    >
-                      <span className="nav-icon">
-                        <LayoutDashboard size={18} />
-                      </span>
-                    </button>
+                    {canViewDashboard && (
+                      <>
+                        <button
+                          type="button"
+                          className={`nav-card-btn nav-overview-hero ${active === "dashboard" ? "active" : ""}`}
+                          style={{ backgroundImage: `url(${SIDEBAR_IMAGES.dashboard})` }}
+                          onClick={() => {
+                            setActive("dashboard");
+                            setSelectedRecord(null);
+                          }}
+                          title={translations.executiveOverview}
+                        >
+                          <span className="nav-icon">
+                            <LayoutDashboard size={18} />
+                          </span>
+                        </button>
 
-                    <div className="sidebar-divider" />
+                        <div className="sidebar-divider" />
+                      </>
+                    )}
 
                     {/* 2. Material Handling Items (Icons only) */}
                     {materialHandlingSubmenu.map((item) => {
@@ -5437,7 +5575,9 @@ function WmsApp() {
                       );
                     })}
 
-                    <div className="sidebar-divider" />
+                    {materialHandlingSubmenu.length > 0 && warehouseInventoryItems.length > 0 && (
+                      <div className="sidebar-divider" />
+                    )}
 
                     {/* 3. Warehouse Inventory Items (Icons only) */}
                     {warehouseInventoryItems.map((item) => {
@@ -5464,7 +5604,8 @@ function WmsApp() {
                       );
                     })}
 
-                    <div className="sidebar-divider" />
+                    {(warehouseInventoryItems.length > 0 || materialHandlingSubmenu.length > 0) &&
+                      administrationItems.length > 0 && <div className="sidebar-divider" />}
 
                     {/* 4. Administration Items (Icons only) */}
                     {administrationItems.map((item) => {
@@ -5494,26 +5635,29 @@ function WmsApp() {
                      ========================================================= */
                   <div className="sidebar-expanded-menu">
                     {/* 1. Executive Overview */}
-                    <button
-                      type="button"
-                      className={`nav-card-btn nav-overview-hero ${active === "dashboard" ? "active" : ""}`}
-                      style={{ backgroundImage: `url(${SIDEBAR_IMAGES.dashboard})` }}
-                      onClick={() => {
-                        setActive("dashboard");
-                        setSelectedRecord(null);
-                        if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                          setSidebarCollapsed(true);
-                        }
-                      }}
-                      title={translations.executiveOverview}
-                    >
-                      <span className="nav-icon">
-                        <LayoutDashboard size={16} />
-                      </span>
-                      <span>{translations.executiveOverview}</span>
-                    </button>
+                    {canViewDashboard && (
+                      <button
+                        type="button"
+                        className={`nav-card-btn nav-overview-hero ${active === "dashboard" ? "active" : ""}`}
+                        style={{ backgroundImage: `url(${SIDEBAR_IMAGES.dashboard})` }}
+                        onClick={() => {
+                          setActive("dashboard");
+                          setSelectedRecord(null);
+                          if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                            setSidebarCollapsed(true);
+                          }
+                        }}
+                        title={translations.executiveOverview}
+                      >
+                        <span className="nav-icon">
+                          <LayoutDashboard size={16} />
+                        </span>
+                        <span>{translations.executiveOverview}</span>
+                      </button>
+                    )}
 
                     {/* 2. Material Handling Parent Menu */}
+                    {materialHandlingSubmenu.length > 0 && (
                     <div style={{ marginTop: 8, marginBottom: 4 }}>
                       <button
                         type="button"
@@ -5522,8 +5666,8 @@ function WmsApp() {
                         }`}
                         onClick={() => {
                           setMaterialHandlingExpanded(!materialHandlingExpanded);
-                          if (!isMaterialHandlingActive && !materialHandlingExpanded) {
-                            setActive("transport");
+                          if (!isMaterialHandlingActive && !materialHandlingExpanded && materialHandlingSubmenu[0]) {
+                            setActive(materialHandlingSubmenu[0].id);
                             setSelectedRecord(null);
                           }
                         }}
@@ -5576,8 +5720,10 @@ function WmsApp() {
                         </div>
                       )}
                     </div>
+                    )}
 
                     {/* 3. Warehouse Inventory items promoted directly to top-level menu buttons */}
+                    {warehouseInventoryItems.length > 0 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, marginBottom: 4 }}>
                       {warehouseInventoryItems.map((item) => {
                         const Icon = item.icon;
@@ -5935,8 +6081,10 @@ function WmsApp() {
                             );
                           })}
                     </div>
+                    )}
 
                     {/* 4. Administration section */}
+                    {administrationItems.length > 0 && (
                     <div style={{ marginTop: 8, marginBottom: 4 }}>
                       <button
                         type="button"
@@ -5992,6 +6140,7 @@ function WmsApp() {
                         </div>
                       )}
                     </div>
+                    )}
                   </div>
                 )}
               </nav>
@@ -6017,7 +6166,7 @@ function WmsApp() {
                     )}
                 </div>
 
-                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && active !== "coil" && (
+                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "fuel" && active !== "coil" && active !== "admin" && (
                   <div
                     id="page-heading-actions"
                     className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}
@@ -6029,7 +6178,7 @@ function WmsApp() {
                       </button>
                     )}
 
-                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "fuel" && active !== "slit" ? (
+                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "fuel" && active !== "slit" && active !== "admin" ? (
                       <button className="button" onClick={() => setShowModal(true)}>
                         <Plus size={14} />
                         {translations.newEntry}
@@ -6043,15 +6192,42 @@ function WmsApp() {
             {active === "dashboard" ? (
               <DashboardView
                 inventory={inventory}
-                transactions={transactions}
+                transactions={mergedTransactions}
                 vehicles={vehicles}
                 employeeRoster={employeeRoster}
                 officerAssignments={officerAssignments}
+                canNavigate={canAccessMenu}
                 onNavigate={(moduleKey) => {
-                  setActive(moduleKey);
-                  setSelectedRecord(null);
+                  if (canAccessMenu(moduleKey)) {
+                    setActive(moduleKey);
+                    setSelectedRecord(null);
+                  }
                 }}
                 onSelectRecord={setSelectedRecord}
+              />
+            ) : active === "admin" ? (
+              <AdminWorkforcePortal
+                employees={employeeRoster}
+                vehicles={vehicles}
+                assignments={officerAssignments}
+                activityLogs={activityLogs}
+                onUpdateEmployees={onUpdateEmployeeRoster}
+                onUpdateAssignments={handleUpdateOfficerAssignments}
+                onNavigateToAssignment={() => {
+                  if (canAccessMenu("vehicles")) {
+                    setActive("vehicles");
+                    setSelectedRecord(null);
+                  }
+                }}
+                onNavigateToVehicles={() => {
+                  if (canAccessMenu("vehicles")) {
+                    setActive("vehicles");
+                    setSelectedRecord(null);
+                  }
+                }}
+                onLogTransaction={(activity, reference, status) => {
+                  logModuleActivity("Admin & Workforce", activity, reference, status, "admin");
+                }}
               />
             ) : active === "vehicles" ? (
               <VehicleManagement
@@ -6063,19 +6239,7 @@ function WmsApp() {
                   setSelectedRecord(null);
                 }}
                 onLogTransaction={(activity, reference, status) => {
-                  setTransactions((current) => [
-                    {
-                      time: new Date().toLocaleTimeString("en-GB", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                      reference,
-                      module: "Vehicle Management",
-                      activity,
-                      status,
-                    },
-                    ...current,
-                  ]);
+                  logModuleActivity("Vehicle Management", activity, reference, status, "vehicles");
                 }}
               />
             ) : active === "employees" ? (
@@ -6083,7 +6247,7 @@ function WmsApp() {
                 employees={employeeRoster}
                 vehicles={vehicles}
                 assignments={officerAssignments}
-                onUpdateEmployees={handleUpdateEmployeeRoster}
+                onUpdateEmployees={onUpdateEmployeeRoster}
                 onUpdateAssignments={handleUpdateOfficerAssignments}
                 onNavigateToAssignment={() => {
                   setActive("vehicles");
@@ -6094,19 +6258,7 @@ function WmsApp() {
                   setSelectedRecord(null);
                 }}
                 onLogTransaction={(activity, reference, status) => {
-                  setTransactions((current) => [
-                    {
-                      time: new Date().toLocaleTimeString("en-GB", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                      reference,
-                      module: "Employee Management",
-                      activity,
-                      status,
-                    },
-                    ...current,
-                  ]);
+                  logModuleActivity("Employee Management", activity, reference, status, "employees");
                 }}
               />
             ) : active === "fix-flush" ? (
@@ -6121,6 +6273,13 @@ function WmsApp() {
               />
             ) : active === "fuel" ? (
               <FuelManagement vehicles={vehicles} />
+            ) : active === "delivery-points" ? (
+              <DeliveryPointsManagement
+                onNavigateToTransport={() => {
+                  setActive("transport");
+                  setSelectedRecord(null);
+                }}
+              />
             ) : active === "transport" ? (
               <TransportOperations
                 vehicles={vehicles}
@@ -6140,19 +6299,7 @@ function WmsApp() {
                 activeMode={slitMode}
                 onModeChange={setSlitMode}
                 onLogTransaction={(activity, reference, status) => {
-                  setTransactions((current) => [
-                    {
-                      time: new Date().toLocaleTimeString("en-GB", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                      reference,
-                      module: "Slit / Film",
-                      activity,
-                      status,
-                    },
-                    ...current,
-                  ]);
+                  logModuleActivity("Slit / Film", activity, reference, status, "slit");
                 }}
               />
             ) : active === "coil" ? (
@@ -6179,19 +6326,7 @@ function WmsApp() {
                   });
                 }}
                 onLogTransaction={(activity, reference, status) => {
-                  setTransactions((current) => [
-                    {
-                      time: new Date().toLocaleTimeString("en-GB", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }),
-                      reference,
-                      module: "Coil Management",
-                      activity,
-                      status,
-                    },
-                    ...current,
-                  ]);
+                  logModuleActivity("Coil Management", activity, reference, status, "coil");
                 }}
               />
             ) : (
@@ -6202,8 +6337,10 @@ function WmsApp() {
                 onAdd={() => setShowModal(true)}
                 onSelect={setSelectedRecord}
                 onNavigate={(mod) => {
-                  setActive(mod);
-                  setSelectedRecord(null);
+                  if (canAccessMenu(mod)) {
+                    setActive(mod);
+                    setSelectedRecord(null);
+                  }
                 }}
               />
             )}
@@ -6281,9 +6418,14 @@ function WmsApp() {
         </div>
 
         {/* Bottom Navigation Bar (5 Tabs: +รับเข้า, จ่ายออก, -เตรียมเบิก, ย้าย Layout, สต๊อก) */}
+        {(canAccessMenu("coil") || canAccessMenu("slit")) && (
         <nav
           className={`mobile-bottom-nav ${
-            active === "coil" ? "flex" : "sm:hidden flex"
+            active === "coil"
+              ? "flex"
+              : canAccessMenu("slit")
+              ? "sm:hidden flex"
+              : "hidden"
           } fixed bottom-0 left-0 right-0 h-14 z-40 bg-white/95 dark:bg-[#091322]/95 backdrop-blur-md border-t border-slate-200 dark:border-[#1e3a5f] shadow-[0_-4px_16px_rgba(0,0,0,0.12)] px-0.5 items-center justify-around`}
         >
           {[
@@ -6373,6 +6515,7 @@ function WmsApp() {
             );
           })}
         </nav>
+        )}
       </div>
 
       {showModal && (
@@ -6382,6 +6525,14 @@ function WmsApp() {
           onSave={saveEntry}
         />
       )}
+
+      <LoginGateModal
+        employees={employeeRoster}
+        onLoginSuccess={(landingMenu) => {
+          setActive(landingMenu);
+          setSelectedRecord(null);
+        }}
+      />
 
       {toast && (
         <div className="toast">
@@ -6394,9 +6545,50 @@ function WmsApp() {
 }
 
 export default function App() {
+  const [employeeRoster, setEmployeeRoster] = useState<Employee[]>(() => loadStoredEmployees());
+  const [activityLogs, setActivityLogs] = useState<WmsActivityLogRecord[]>([]);
+
+  useEffect(() => {
+    const unsubEmployees = subscribeToWmsEmployees((cloudRoster) => {
+      setEmployeeRoster(cloudRoster);
+    });
+    const unsubLogs = subscribeToWmsActivityLogs((logs) => {
+      setActivityLogs(logs);
+    });
+    return () => {
+      unsubEmployees();
+      unsubLogs();
+    };
+  }, []);
+
+  const handleUpdateEmployeeRoster = (updated: Employee[]) => {
+    setEmployeeRoster((prev) => {
+      saveStoredEmployees(updated);
+      void syncEmployeeRosterDiffToCloud(prev, updated);
+      return updated;
+    });
+  };
+
+  const handleRegisterBootstrapEmployee = (emp: Employee) => {
+    setEmployeeRoster((prev) => {
+      const next = [emp, ...prev.filter((e) => e.employeeId !== emp.employeeId)];
+      saveStoredEmployees(next);
+      return next;
+    });
+  };
+
   return (
     <LanguageProvider>
-      <WmsApp />
+      <AuthProvider
+        employees={employeeRoster}
+        onRegisterBootstrapEmployee={handleRegisterBootstrapEmployee}
+      >
+        <WmsApp
+          employeeRoster={employeeRoster}
+          onUpdateEmployeeRoster={handleUpdateEmployeeRoster}
+          activityLogs={activityLogs}
+        />
+      </AuthProvider>
     </LanguageProvider>
   );
 }

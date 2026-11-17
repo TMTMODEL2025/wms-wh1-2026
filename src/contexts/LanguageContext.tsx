@@ -26,6 +26,7 @@ export interface Translations {
 
   // Submenu
   transportOperation: string;
+  deliveryPoints: string;
   fixFlushStatus: string;
   preStartInspection: string;
   vehicleManagement: string;
@@ -42,6 +43,7 @@ export interface Translations {
 
   // Subtitles
   transportSubtitle: string;
+  deliveryPointsSubtitle: string;
   fixFlushSubtitle: string;
   preStartSubtitle: string;
   vehiclesSubtitle: string;
@@ -205,6 +207,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Submenu
     transportOperation: "การปฏิบัติการขนย้าย",
+    deliveryPoints: "จุดส่งสินค้า",
     fixFlushStatus: "ระบบแจ้งซ่อม",
     preStartInspection: "ตรวจเช็ครถประจำวัน",
     vehicleManagement: "การจัดการยานพาหนะ",
@@ -221,6 +224,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Subtitles
     transportSubtitle: "การเคลื่อนย้ายวัสดุภายใน ใบกำกับการเดินทาง และจุดตรวจเส้นทาง",
+    deliveryPointsSubtitle: "กำหนดอาคาร จุดส่งสินค้า และหมายเลขประตูสำหรับฟอร์มบันทึกงานย้ายสินค้า",
     fixFlushSubtitle: "ระบบแจ้งซ่อมบำรุง ติดตามสถานะงานซ่อม และประวัติการฟลัชชิ่งน้ำมัน",
     preStartSubtitle: "รายการตรวจเช็คสภาพรถยกและเครื่องจักรประจำวันก่อนเริ่มปฏิบัติงาน",
     vehiclesSubtitle: "ข้อมูลทะเบียนยานพาหนะ สถานะการทำงาน และการจัดสรรคนขับ",
@@ -382,6 +386,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Submenu
     transportOperation: "Transport Operation",
+    deliveryPoints: "Delivery Points",
     fixFlushStatus: "Fix & Flush Status",
     preStartInspection: "Pre-Start Safety Inspection",
     vehicleManagement: "Vehicle Management",
@@ -398,6 +403,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
 
     // Subtitles
     transportSubtitle: "Internal material movements, trip manifests and route checkpoints",
+    deliveryPointsSubtitle: "Configure warehouse buildings, delivery points and gates for transport routes",
     fixFlushSubtitle: "Fleet maintenance, hydraulic line flushing, overhaul schedules and inspection clearance",
     preStartSubtitle: "Daily forklift and heavy machinery safety checklists before operation",
     vehiclesSubtitle: "Fleet asset configuration, operational status and driver allocation",

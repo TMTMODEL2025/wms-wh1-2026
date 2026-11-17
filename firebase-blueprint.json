@@ -330,6 +330,63 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "transactionNo"]
+    },
+    "MhDeliveryPointRecord": {
+      "title": "Material Handling Delivery Point",
+      "description": "Configured buildings, delivery points, and gate numbers for Material Handling transport origin/destination selection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "deliveryPoint": { "type": "string", "maxLength": 128 },
+        "gate": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "deliveryPoint", "gate"]
+    },
+    "WmsEmployee": {
+      "title": "WMS Centralized Employee Record",
+      "description": "Centralized employee directory for Admin & Workforce, section-based Employee ID login, and menu permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "employeeName": { "type": "string", "maxLength": 128 },
+        "department": { "type": "string", "maxLength": 128 },
+        "jobPosition": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 32 },
+        "phoneNumber": { "type": "string", "maxLength": 32 },
+        "employmentStatus": { "type": "string", "maxLength": 32 },
+        "allowedSections": { "type": "array", "items": { "type": "string" } },
+        "licenseType": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "employeeId", "employeeName", "role", "employmentStatus"]
+    },
+    "WmsActivityLog": {
+      "title": "WMS Activity Audit Log",
+      "description": "Cross-module activity audit log stamped with logged-in employee ID, name, and section",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "dateYmd": { "type": "string", "maxLength": 16 },
+        "timeHm": { "type": "string", "maxLength": 16 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "employeeName": { "type": "string", "maxLength": 128 },
+        "department": { "type": "string", "maxLength": 128 },
+        "role": { "type": "string", "maxLength": 32 },
+        "sectionId": { "type": "string", "maxLength": 32 },
+        "sectionLabel": { "type": "string", "maxLength": 64 },
+        "module": { "type": "string", "maxLength": 128 },
+        "reference": { "type": "string", "maxLength": 128 },
+        "activity": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "timestamp", "employeeId", "employeeName", "sectionId", "module", "activity"]
     }
   },
   "firestore": {
@@ -392,6 +449,18 @@
     "/mh_daily_duty/{dutyId}": {
       "schema": "MhDailyDutyRecord",
       "description": "Dedicated collection for supervisor daily duty assignments (workArea, vehicle, shift, team)"
+    },
+    "/mh_delivery_points/{pointId}": {
+      "schema": "MhDeliveryPointRecord",
+      "description": "Dedicated collection for Material Handling delivery points and gate mappings"
+    },
+    "/wms_employees/{employeeId}": {
+      "schema": "WmsEmployee",
+      "description": "Centralized employee directory and section access permissions managed from Admin & Workforce"
+    },
+    "/wms_activity_logs/{logId}": {
+      "schema": "WmsActivityLog",
+      "description": "Cross-module operational audit log referencing logged-in employee and section"
     }
   }
 }

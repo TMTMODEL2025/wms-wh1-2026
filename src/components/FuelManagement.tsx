@@ -34,6 +34,10 @@ import {
   setForkliftCloudRealtimeEnabled,
   subscribeForkliftCloudRealtimeMode,
 } from "../services/forkliftDataService";
+import {
+  appendWmsActivityLog,
+  getActiveRecorderDisplay,
+} from "../services/authWorkforceService";
 
 type FuelTransaction = MhFuelStockRecord;
 
@@ -91,7 +95,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const [inFuelType, setInFuelType] = useState<"Diesel (ดีเซล)" | "Gasoline (เบนซิน)">("Diesel (ดีเซล)");
   const [inQty, setInQty] = useState<number>(0);
   const [inMeterStart, setInMeterStart] = useState<number>(0);
-  const [inRecorder, setInRecorder] = useState("");
+  const [inRecorder, setInRecorder] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [inSupplier, setInSupplier] = useState("");
   const [inNotes, setInNotes] = useState("");
   const [inDate, setInDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -101,7 +105,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const [outVehicleId, setOutVehicleId] = useState(vehicles[0]?.vehicleId || "");
   const [outQty, setOutQty] = useState<number>(0);
   const [outMeterStart, setOutMeterStart] = useState<number>(0);
-  const [outRecorder, setOutRecorder] = useState("");
+  const [outRecorder, setOutRecorder] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [outPurpose, setOutPurpose] = useState("");
   const [outDate, setOutDate] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -139,7 +143,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       qty: qtyNum,
       meterStart: startNum,
       meterEnd: endNum,
-      recorderName: inRecorder.trim() || "WMS Storekeeper",
+      recorderName: inRecorder.trim() || getActiveRecorderDisplay("WMS Storekeeper").label,
       referenceSource: inSupplier.trim() || "Direct Supplier",
       purposeOrNotes: inNotes.trim() || "Bulk fuel receipt into warehouse storage tank.",
       workingDate: inDate,
@@ -151,6 +155,13 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     setIsInboundModalOpen(false);
     setInNotes("");
     await saveMhFuelTransactionToCloud(newTx);
+    void appendWmsActivityLog({
+      module: "Fuel Management",
+      sectionId: "fleet_ops",
+      reference: txId,
+      activity: `รับเข้าน้ำมัน ${inFuelType} ปริมาณ ${qtyNum} ลิตร`,
+      status: "Completed",
+    });
   };
 
   const handleOutboundSubmit = async (e: React.FormEvent) => {
@@ -172,7 +183,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       qty: qtyNum,
       meterStart: startNum,
       meterEnd: endNum,
-      recorderName: outRecorder.trim() || "WMS Operator",
+      recorderName: outRecorder.trim() || getActiveRecorderDisplay("WMS Operator").label,
       referenceSource: vehicleLabel,
       purposeOrNotes: outPurpose.trim() || "Vehicle refueling dispatch.",
       workingDate: outDate,
@@ -184,6 +195,13 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     setIsOutboundModalOpen(false);
     setOutPurpose("");
     await saveMhFuelTransactionToCloud(newTx);
+    void appendWmsActivityLog({
+      module: "Fuel Management",
+      sectionId: "fleet_ops",
+      reference: txId,
+      activity: `เบิกจ่ายน้ำมัน ${outFuelType} ปริมาณ ${qtyNum} ลิตร (${vehicleLabel})`,
+      status: "Completed",
+    });
   };
 
   const handleDeleteFuelTx = async (id: string) => {
@@ -192,6 +210,13 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       setSelectedTx(null);
     }
     await deleteMhFuelTransactionFromCloud(id);
+    void appendWmsActivityLog({
+      module: "Fuel Management",
+      sectionId: "fleet_ops",
+      reference: id,
+      activity: `ลบรายการน้ำมัน ${id}`,
+      status: "Completed",
+    });
   };
 
   const filteredTransactions = transactions.filter((t) => {
