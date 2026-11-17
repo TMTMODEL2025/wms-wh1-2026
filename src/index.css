@@ -36,6 +36,37 @@ svg text,
   font-variant-numeric: tabular-nums;
 }
 
+/* Transport Statistics tables: ensure header/cell alignment and padding match identically */
+table.ts-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.ts-stats-table thead th,
+table.ts-stats-table tbody td {
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+table.ts-stats-table thead th.ts-left,
+table.ts-stats-table tbody td.ts-left {
+  text-align: left !important;
+}
+
+table.ts-stats-table thead th.ts-center,
+table.ts-stats-table tbody td.ts-center {
+  text-align: center !important;
+}
+
+table.ts-stats-table thead th.ts-right,
+table.ts-stats-table tbody td.ts-right {
+  text-align: right !important;
+}
+
+table.ts-stats-table tbody td.ts-wrap {
+  white-space: normal;
+}
+
 /* TMT Weight Ticket Printing Rules */
 @media print {
   body.printing-weight-ticket > *:not(#tmt-weight-ticket-print-portal) {

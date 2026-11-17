@@ -1125,19 +1125,19 @@ export function TransportStatisticsView({
                 </span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="ts-stats-table w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">รหัสรถ / ประเภท</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">ทะเบียน</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">พนักงานขับรถที่ใช้รถคันนี้</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เที่ยว</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">มัดรวม</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (กก.)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (ตัน)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เวลาเฉลี่ย</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เกิน SLA</th>
+                      <th className="ts-center w-12 px-4 py-3 font-semibold whitespace-nowrap">#</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">รหัสรถ / ประเภท</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">ทะเบียน</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">พนักงานขับรถที่ใช้รถคันนี้</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เที่ยว</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">มัดรวม</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (กก.)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (ตัน)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เวลาเฉลี่ย</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เกิน SLA</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1149,10 +1149,10 @@ export function TransportStatisticsView({
                           key={v.vehicleNumber}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <td className="px-4 py-3 font-mono tabular-nums text-slate-400">
+                          <td className="ts-center w-12 px-4 py-3 font-mono tabular-nums text-slate-400 whitespace-nowrap">
                             {idx + 1}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap">
                             <div className="font-semibold text-slate-900 dark:text-slate-100">
                               {v.vehicleNumber}
                             </div>
@@ -1160,22 +1160,22 @@ export function TransportStatisticsView({
                               {v.vehicleType !== "-" ? v.vehicleType : "ไม่ระบุประเภท"}
                             </div>
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap font-mono text-slate-600 dark:text-slate-300">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap font-mono text-slate-600 dark:text-slate-300">
                             {v.registrationNumber}
                           </td>
-                          <td className="px-4 py-3 text-slate-700 dark:text-slate-200 max-w-xs">
+                          <td className="ts-left ts-wrap px-4 py-3 text-slate-700 dark:text-slate-200 min-w-[180px] max-w-[260px]">
                             {v.drivers.size > 0 ? Array.from(v.drivers).join(", ") : "-"}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             {formatNumber(v.trips)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(v.bundles)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(v.weightKg)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums whitespace-nowrap">
                             <span className="font-semibold text-slate-900 dark:text-slate-100">
                               {formatNumber(v.weightKg / 1000, 2)}
                             </span>
@@ -1183,12 +1183,12 @@ export function TransportStatisticsView({
                               ({formatNumber(sharePct, 0)}%)
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {v.durationCount > 0
                               ? formatDurationMinutesText(v.durationSumSec / v.durationCount)
                               : "-"}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums whitespace-nowrap">
                             <span
                               className={
                                 v.overdueCount > 0
@@ -1225,19 +1225,19 @@ export function TransportStatisticsView({
                 </span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="ts-stats-table w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">ชื่อพนักงานขับรถ</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">รถที่ใช้งาน</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">ทีม / กะ</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เที่ยว</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">มัดรวม</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (กก.)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (ตัน)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เวลาเฉลี่ย</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">SLA ตรงเวลา</th>
+                      <th className="ts-center w-12 px-4 py-3 font-semibold whitespace-nowrap">#</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">ชื่อพนักงานขับรถ</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">รถที่ใช้งาน</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">ทีม / กะ</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เที่ยว</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">มัดรวม</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (กก.)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (ตัน)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เวลาเฉลี่ย</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">SLA ตรงเวลา</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1254,10 +1254,10 @@ export function TransportStatisticsView({
                           key={d.driverName}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <td className="px-4 py-3 font-mono tabular-nums text-slate-400">
+                          <td className="ts-center w-12 px-4 py-3 font-mono tabular-nums text-slate-400 whitespace-nowrap">
                             {idx + 1}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap">
                             <div className="font-semibold text-slate-900 dark:text-slate-100">
                               {d.driverName}
                             </div>
@@ -1267,33 +1267,33 @@ export function TransportStatisticsView({
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-slate-700 dark:text-slate-200 whitespace-nowrap font-mono">
+                          <td className="ts-left ts-wrap px-4 py-3 text-slate-700 dark:text-slate-200 font-mono min-w-[120px] max-w-[220px]">
                             {d.vehicles.size > 0 ? Array.from(d.vehicles).join(", ") : "-"}
                           </td>
-                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {[
                               d.teams.size > 0 ? Array.from(d.teams).join(", ") : "-",
                               d.shifts.size > 0 ? Array.from(d.shifts).join(", ") : "-",
                             ].join(" · ")}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             {formatNumber(d.trips)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(d.bundles)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(d.weightKg)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             {formatNumber(d.weightKg / 1000, 2)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {d.durationCount > 0
                               ? formatDurationMinutesText(d.durationSumSec / d.durationCount)
                               : "-"}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums whitespace-nowrap">
                             {onTimePct !== null ? (
                               <span
                                 className={
@@ -1337,16 +1337,16 @@ export function TransportStatisticsView({
                     <Layers className="h-4 w-4 text-slate-400" />
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                    <table className="ts-stats-table w-full text-left text-xs">
                       <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                         <tr>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap">สินค้า</th>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap">ประเภทงาน</th>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เที่ยว</th>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">มัด</th>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (กก.)</th>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">ตัน</th>
-                          <th className="px-4 py-3 font-semibold whitespace-nowrap w-36">สัดส่วนน้ำหนัก</th>
+                          <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">สินค้า</th>
+                          <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">ประเภทงาน</th>
+                          <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เที่ยว</th>
+                          <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">มัด</th>
+                          <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (กก.)</th>
+                          <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">ตัน</th>
+                          <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap w-36 min-w-[144px]">สัดส่วนน้ำหนัก</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1360,25 +1360,25 @@ export function TransportStatisticsView({
                               key={p.itemName}
                               className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                             >
-                              <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                              <td className="ts-left px-4 py-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                                 {p.itemName}
                               </td>
-                              <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                              <td className="ts-left px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                 {Array.from(p.transferTypes).join(", ")}
                               </td>
-                              <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                              <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
                                 {formatNumber(p.trips)}
                               </td>
-                              <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                              <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                 {formatNumber(p.bundles)}
                               </td>
-                              <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                              <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                 {formatNumber(p.weightKg)}
                               </td>
-                              <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                              <td className="ts-right px-4 py-3 font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                                 {formatNumber(p.weightKg / 1000, 2)}
                               </td>
-                              <td className="px-4 py-3 whitespace-nowrap">
+                              <td className="ts-left px-4 py-3 whitespace-nowrap w-36 min-w-[144px]">
                                 <div className="flex items-center gap-2">
                                   <div className="h-1.5 flex-1 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                                     <div
@@ -1483,17 +1483,17 @@ export function TransportStatisticsView({
                   <Route className="h-4 w-4 text-slate-400" />
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="ts-stats-table w-full text-left text-xs">
                     <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">#</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">จุดส่งต้นทาง</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap">จุดส่งปลายทาง</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เที่ยว</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">มัดรวม</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (กก.)</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (ตัน)</th>
-                        <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เวลาเฉลี่ย</th>
+                        <th className="ts-center w-12 px-4 py-3 font-semibold whitespace-nowrap">#</th>
+                        <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">จุดส่งต้นทาง</th>
+                        <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">จุดส่งปลายทาง</th>
+                        <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เที่ยว</th>
+                        <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">มัดรวม</th>
+                        <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (กก.)</th>
+                        <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (ตัน)</th>
+                        <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เวลาเฉลี่ย</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1502,28 +1502,28 @@ export function TransportStatisticsView({
                           key={`${rt.origin}-${rt.destination}`}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <td className="px-4 py-3 font-mono tabular-nums text-slate-400">
+                          <td className="ts-center w-12 px-4 py-3 font-mono tabular-nums text-slate-400 whitespace-nowrap">
                             {idx + 1}
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 font-medium text-slate-800 dark:text-slate-200 whitespace-nowrap">
                             {rt.origin}
                           </td>
-                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             → {rt.destination}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             {formatNumber(rt.trips)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(rt.bundles)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(rt.weightKg)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             {formatNumber(rt.weightKg / 1000, 2)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-600 dark:text-slate-300 whitespace-nowrap">
                             {rt.durationCount > 0
                               ? formatDurationMinutesText(rt.durationSumSec / rt.durationCount)
                               : "-"}
@@ -1549,17 +1549,17 @@ export function TransportStatisticsView({
                 </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="ts-stats-table w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">วันที่</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">รถ (คัน)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">คนขับ (คน)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เที่ยวงาน</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">มัดรวม</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (กก.)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (ตัน)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">เกิน SLA</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">วันที่</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">รถ (คัน)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">คนขับ (คน)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เที่ยวงาน</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">มัดรวม</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (กก.)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (ตัน)</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">เกิน SLA</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1568,28 +1568,28 @@ export function TransportStatisticsView({
                         key={dy.dateYmd}
                         className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                       >
-                        <td className="px-4 py-3 font-mono font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        <td className="ts-left px-4 py-3 font-mono font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {formatThaiDateLabel(dy.dateYmd)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           {formatNumber(dy.vehicles.size)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           {formatNumber(dy.drivers.size)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {formatNumber(dy.trips)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           {formatNumber(dy.bundles)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                           {formatNumber(dy.weightKg)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {formatNumber(dy.weightKg / 1000, 2)}
                         </td>
-                        <td className="px-4 py-3 text-right font-mono tabular-nums whitespace-nowrap">
+                        <td className="ts-right px-4 py-3 font-mono tabular-nums whitespace-nowrap">
                           <span
                             className={
                               dy.overdueCount > 0
@@ -1622,18 +1622,18 @@ export function TransportStatisticsView({
                 </div>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="ts-stats-table w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">วันที่ / เวลา</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">เลขที่ใบงาน</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">รถโฟล์คลิฟท์</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">พนักงานขับรถ</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">สินค้า / ประเภท</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">เส้นทาง</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">มัด</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap text-right">น้ำหนัก (กก.)</th>
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">สถานะ</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">วันที่ / เวลา</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">เลขที่ใบงาน</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">รถโฟล์คลิฟท์</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">พนักงานขับรถ</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">สินค้า / ประเภท</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">เส้นทาง</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">มัด</th>
+                      <th className="ts-right px-4 py-3 font-semibold whitespace-nowrap">น้ำหนัก (กก.)</th>
+                      <th className="ts-left px-4 py-3 font-semibold whitespace-nowrap">สถานะ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
@@ -1646,17 +1646,17 @@ export function TransportStatisticsView({
                           key={r.id}
                           className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                         >
-                          <td className="px-4 py-3 whitespace-nowrap font-mono text-slate-600 dark:text-slate-300">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap font-mono text-slate-600 dark:text-slate-300">
                             <div>{formatThaiDateLabel(ymd)}</div>
                             <div className="text-[11px] text-slate-400">
                               {r.startTime || "-"}
                               {r.endTime ? ` – ${r.endTime}` : ""}
                             </div>
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap font-mono font-medium text-slate-900 dark:text-slate-100">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap font-mono font-medium text-slate-900 dark:text-slate-100">
                             {r.transferCode}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
                             <div>{r.vehicleNumber || "-"}</div>
                             {r.trailerNumber && (
                               <div className="text-[11px] text-indigo-600 dark:text-indigo-400">
@@ -1664,7 +1664,7 @@ export function TransportStatisticsView({
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-slate-800 dark:text-slate-200">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap text-slate-800 dark:text-slate-200">
                             <div>{r.driverName || "-"}</div>
                             {(r.team || r.shift) && (
                               <div className="text-[11px] text-slate-400">
@@ -1672,7 +1672,7 @@ export function TransportStatisticsView({
                               </div>
                             )}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap">
                             <div className="font-medium text-slate-900 dark:text-slate-100">
                               {r.itemName}
                             </div>
@@ -1680,16 +1680,16 @@ export function TransportStatisticsView({
                               {r.transferType || "-"}
                             </div>
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
                             {r.originFacility} → {r.destinationFacility}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                             {formatNumber(bundles)}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <td className="ts-right px-4 py-3 font-mono tabular-nums font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                             {formatNumber(weightKg)}
                           </td>
-                          <td className="px-4 py-3 whitespace-nowrap">
+                          <td className="ts-left px-4 py-3 whitespace-nowrap">
                             {r.status === "Completed" ? (
                               <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
                                 <CheckCircle2 className="h-3.5 w-3.5" />
