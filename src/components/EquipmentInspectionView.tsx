@@ -581,20 +581,21 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="p-2 sm:p-3 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-xs space-y-1.5 sm:space-y-2.5">
-        <div className="flex flex-row items-center justify-between gap-1.5 sm:gap-2.5">
+      <div className="filterbar px-3.5 py-2.5 sm:px-[18px] sm:py-3 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-xs space-y-2">
+        <div className="flex flex-row items-center justify-between gap-2 sm:gap-2.5">
           {/* Search Box */}
           <div className="relative flex-1 min-w-0">
             <Search
               size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
             />
             <input
               type="text"
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
               placeholder="ค้นหาอุปกรณ์, รหัส, พื้นที่..."
-              className="h-[35px] w-full pl-8 pr-7 text-xs rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 sm:focus:ring-2 focus:ring-emerald-500"
+              className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+              style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
             />
             {searchKeyword && (
               <button
@@ -608,9 +609,9 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           </div>
 
           {/* Area Dropdown Filter */}
-          <div className="relative flex items-center gap-1 sm:gap-2 shrink-0">
-            <span className="text-[10.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0">
-              <MapPin size={12} className="text-emerald-500 sm:w-3.5 sm:h-3.5" />
+          <div className="relative flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1 shrink-0">
+              <MapPin size={13} className="text-emerald-500" />
               <span className="hidden sm:inline">พื้นที่:</span>
             </span>
 
@@ -619,7 +620,8 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
               <button
                 type="button"
                 onClick={() => setIsAreaDropdownOpen((prev) => !prev)}
-                className="h-[35px] px-2.5 text-xs rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-semibold flex items-center justify-between gap-1.5 max-w-[140px] focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                className="rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-normal flex items-center justify-between gap-1.5 max-w-[140px] focus:outline-none focus:border-emerald-500 cursor-pointer"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <span className="truncate">
                   {selectedAreaFilter === "all"
@@ -649,7 +651,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
                         setSelectedAreaFilter("all");
                         setIsAreaDropdownOpen(false);
                       }}
-                      className={`w-full px-2.5 py-1.5 text-left text-[11px] font-semibold flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
+                      className={`w-full px-2.5 py-1.5 text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
                         selectedAreaFilter === "all"
                           ? "bg-emerald-600 text-white"
                           : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#152646]"
@@ -670,7 +672,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
                             setSelectedAreaFilter(area);
                             setIsAreaDropdownOpen(false);
                           }}
-                          className={`w-full px-2.5 py-1.5 text-left text-[11px] font-semibold flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
+                          className={`w-full px-2.5 py-1.5 text-left text-xs font-medium flex items-center justify-between gap-1.5 transition-colors cursor-pointer ${
                             isSelected
                               ? "bg-emerald-600 text-white"
                               : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#152646]"
@@ -688,11 +690,12 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
               )}
             </div>
 
-            {/* Desktop Native Select (100% preserved) */}
+            {/* Desktop Native Select */}
             <select
               value={selectedAreaFilter}
               onChange={(e) => setSelectedAreaFilter(e.target.value)}
-              className="hidden sm:block h-[35px] px-2.5 text-xs rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="field hidden sm:block rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 font-normal focus:outline-none focus:border-emerald-500"
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
             >
               <option value="all">ทุกพื้นที่ตรวจเช็ค ({equipmentList.length})</option>
               {areaOptions.map((area) => {
@@ -708,66 +711,68 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
         </div>
 
         {/* Status Filter Segmented Tab Buttons */}
-        <div className="flex items-center justify-between sm:justify-start gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar pt-1.5 sm:pt-1 border-t border-slate-100 dark:border-[#1e3a5f]">
-          <button
-            type="button"
-            onClick={() => setSelectedStatusFilter("all")}
-            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
-              selectedStatusFilter === "all"
-                ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-xs"
-                : "bg-slate-100 dark:bg-[#0c1930] text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-            }`}
-          >
-            ทั้งหมด ({equipmentList.length})
-          </button>
+        <div className="pt-2 border-t border-slate-100 dark:border-[#1e3a5f]">
+          <div className="inline-flex min-h-[35px] w-full sm:w-auto flex-wrap items-center gap-0.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5">
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("all")}
+              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+                selectedStatusFilter === "all"
+                  ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-xs"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              ทั้งหมด ({equipmentList.length})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedStatusFilter("ready")}
-            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
-              selectedStatusFilter === "ready"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-slate-100 dark:bg-[#0c1930] text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50"
-            }`}
-          >
-            พร้อมใช้งาน ({metrics.ready})
-          </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("ready")}
+              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+                selectedStatusFilter === "ready"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
+              }`}
+            >
+              พร้อมใช้งาน ({metrics.ready})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedStatusFilter("repair_needed")}
-            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
-              selectedStatusFilter === "repair_needed"
-                ? "bg-amber-600 text-white shadow-xs"
-                : "bg-slate-100 dark:bg-[#0c1930] text-amber-700 dark:text-amber-400 hover:bg-amber-50"
-            }`}
-          >
-            ชำรุด/รอซ่อม ({metrics.repair})
-          </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("repair_needed")}
+              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+                selectedStatusFilter === "repair_needed"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+              }`}
+            >
+              ชำรุด/รอซ่อม ({metrics.repair})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedStatusFilter("in_maintenance")}
-            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
-              selectedStatusFilter === "in_maintenance"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-slate-100 dark:bg-[#0c1930] text-blue-700 dark:text-blue-400 hover:bg-blue-50"
-            }`}
-          >
-            ส่งซ่อมบำรุง ({metrics.maintenance})
-          </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("in_maintenance")}
+              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+                selectedStatusFilter === "in_maintenance"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
+              }`}
+            >
+              ส่งซ่อมบำรุง ({metrics.maintenance})
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setSelectedStatusFilter("out_of_service")}
-            className={`flex-1 sm:flex-initial min-w-0 h-[35px] px-1.5 sm:px-3 rounded-md text-[10px] sm:text-xs font-bold tracking-tighter sm:tracking-normal whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
-              selectedStatusFilter === "out_of_service"
-                ? "bg-rose-600 text-white shadow-xs"
-                : "bg-slate-100 dark:bg-[#0c1930] text-rose-700 dark:text-rose-400 hover:bg-rose-50"
-            }`}
-          >
-            งดใช้งาน ({metrics.outOfService})
-          </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter("out_of_service")}
+              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+                selectedStatusFilter === "out_of_service"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "text-rose-700 dark:text-rose-400 hover:bg-rose-500/10"
+              }`}
+            >
+              งดใช้งาน ({metrics.outOfService})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -997,7 +1002,8 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
                     onChange={(e) =>
                       setFormData({ ...formData, status: e.target.value as EquipmentStatus })
                     }
-                    className="w-full p-2.5 text-xs rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-normal focus:outline-none focus:border-emerald-500"
+                    style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     <option value="ready">พร้อมใช้งาน</option>
                     <option value="repair_needed">ชำรุด/รอซ่อม</option>
@@ -1089,7 +1095,8 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
                     onChange={(e) =>
                       setCheckFormData({ ...checkFormData, inspectionDate: e.target.value })
                     }
-                    className="w-full p-2.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="field w-full font-mono rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] font-normal focus:outline-none focus:border-emerald-500"
+                    style={{ width: "100%", height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
                   />
                 </div>
 
@@ -1105,7 +1112,8 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
                         shift: e.target.value as "day" | "night",
                       })
                     }
-                    className="w-full p-2.5 text-xs rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-normal focus:outline-none focus:border-emerald-500"
+                    style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     <option value="day">กะเช้า (08:00 - 20:00)</option>
                     <option value="night">กะดึก (20:00 - 08:00)</option>

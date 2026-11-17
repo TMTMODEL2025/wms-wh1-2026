@@ -8590,16 +8590,17 @@ export function SlitFilmManagement({
         {!isTableCollapsed && (
           <div>
             {/* Table Toolbar & Search & Page Size */}
-            <div className="py-1 px-2 border-b flex flex-wrap items-center justify-between gap-2 bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
+            <div className="filterbar px-3 py-2 sm:px-[18px] sm:py-2.5 border-b flex flex-wrap items-center justify-between gap-2 bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
               <div className="flex items-center gap-2 flex-1 min-w-[220px]">
                 <div className="relative flex-1">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={searchKeyword}
                     onChange={(e) => setSearchKeyword(e.target.value)}
                     placeholder={isThai ? "ค้นหาตาม Batch, Grade, ผู้ผลิต, เครื่อง, Location..." : "Filter by Batch, Grade, Machine, Location..."}
-                    className="h-[35px] w-full pl-8 pr-7 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
+                    className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50"
+                    style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
                   />
                   {searchKeyword && (
                     <button
@@ -8628,7 +8629,8 @@ export function SlitFilmManagement({
                         setHistoryDateFilter(e.target.value);
                         setCurrentPage(1);
                       }}
-                      className="h-[35px] px-2.5 text-xs font-mono font-bold rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                      className="field font-mono font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                      style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
                     />
                     {historyDateFilter && (
                       <button
@@ -8656,7 +8658,8 @@ export function SlitFilmManagement({
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="h-[35px] px-2.5 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
+                    className="field font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     <option value={5}>5 {isThai ? "แถว/หน้า" : "/ page"}</option>
                     <option value={10}>10 {isThai ? "แถว/หน้า" : "/ page"}</option>
@@ -9219,10 +9222,10 @@ export function SlitFilmManagement({
             </div>
 
           {/* SAP Fiori Style Top Toolbar: Quick Search & Status Filter */}
-          <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
+          <div className="filterbar flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-[18px] sm:py-2.5 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
             {/* Search Input */}
             <div className="relative flex-1 min-w-[200px]">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 value={stockSearchKeyword}
@@ -9235,7 +9238,8 @@ export function SlitFilmManagement({
                     ? "ค้นหาด่วนตาม Batch, Location, Grade, Material No..."
                     : "Search by Batch, Location, Grade..."
                 }
-                className="h-[35px] w-full pl-8 pr-8 text-xs rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                className="field w-full rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
               />
               {stockSearchKeyword && (
                 <button
@@ -9261,7 +9265,8 @@ export function SlitFilmManagement({
                       setStockDateFilter(e.target.value);
                       setStockCurrentPage(1);
                     }}
-                    className="h-[35px] px-2.5 text-xs font-mono font-bold rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="field font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 dark:[color-scheme:dark] focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
                   />
                   {stockDateFilter && (
                     <button
@@ -9287,7 +9292,8 @@ export function SlitFilmManagement({
                     setStockStatusFilter(e.target.value as "all" | "ready" | "preparing" | "pending_location");
                     setStockCurrentPage(1);
                   }}
-                  className="h-[35px] px-2.5 text-xs font-bold rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="field font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                  style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                 >
                   <option value="all">{isThai ? "ทั้งหมด (All)" : "All Status"}</option>
                   <option value="ready">{isThai ? "🟢 พร้อมใช้ (Unrestricted)" : "🟢 Ready"}</option>
@@ -9303,7 +9309,8 @@ export function SlitFilmManagement({
                     setStockPageSize(Number(e.target.value));
                     setStockCurrentPage(1);
                   }}
-                  className="h-[35px] px-2.5 text-xs font-bold rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="field font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
+                  style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                 >
                   <option value={10}>10 {isThai ? "แถว" : "rows"}</option>
                   <option value={20}>20 {isThai ? "แถว" : "rows"}</option>
@@ -9699,7 +9706,8 @@ export function SlitFilmManagement({
                     setReturnMachineFilter(e.target.value);
                     setReturnCurrentPage(1);
                   }}
-                  className="h-[35px] w-full px-2.5 text-xs font-bold rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  className="field w-full font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                 >
                   <option value="all">{isThai ? "ทุกเครื่อง" : "All"}</option>
                   {returnableMachineIds.map((mId) => (
@@ -9721,7 +9729,8 @@ export function SlitFilmManagement({
                     setReturnOrderFilter(e.target.value);
                     setReturnCurrentPage(1);
                   }}
-                  className="h-[35px] w-full px-2.5 text-xs font-bold rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-orange-500 font-mono"
+                  className="field w-full font-normal font-mono rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                  style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                 >
                   <option value="all">{isThai ? "ทุกใบสั่ง" : "All"}</option>
                   {returnableOrderNos.map((ordNo) => (
@@ -9738,7 +9747,7 @@ export function SlitFilmManagement({
                   {isThai ? "ค้นหาคำค้น:" : "Search:"}
                 </label>
                 <div className="relative">
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={returnSearchKeyword}
@@ -9747,7 +9756,8 @@ export function SlitFilmManagement({
                       setReturnCurrentPage(1);
                     }}
                     placeholder={isThai ? "Batch, เกรด..." : "Batch, grade..."}
-                    className="h-[35px] w-full pl-8 pr-2.5 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                    className="field w-full font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-orange-500"
+                    style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
                   />
                 </div>
               </div>

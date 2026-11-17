@@ -1148,9 +1148,9 @@ export function TransferCarReport({
       </div>
 
       {/* 3. Search and Quick Filter Bar */}
-      <div className="flex flex-row items-center justify-between gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
+      <div className="filterbar flex flex-row items-center justify-between gap-2 sm:gap-3 px-3 py-2.5 sm:px-[18px] sm:py-3 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
         <div className="relative flex-1 min-w-0">
-          <Search size={13} className="absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 text-slate-400 sm:w-3.5 sm:h-3.5" />
+          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 sm:w-3.5 sm:h-3.5" />
           <input
             type="text"
             value={searchTerm}
@@ -1160,7 +1160,8 @@ export function TransferCarReport({
                 ? "ค้นหาใบสั่งเบิก, Batch, วันที่..."
                 : "Search Order, Batch, Date..."
             }
-            className="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 rounded-lg text-[11px] sm:text-xs bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            className="field w-full rounded-md font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-amber-500"
+            style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
           />
         </div>
 

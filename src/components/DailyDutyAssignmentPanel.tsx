@@ -1174,7 +1174,8 @@ export function DailyDutyAssignmentPanel({
               value={filterShift}
               onChange={(e) => setFilterShift(e.target.value)}
               aria-label="กรองตามกะทำงาน"
-              className="h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+              className="field rounded-md border border-slate-300 bg-white font-normal text-slate-800 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-slate-100"
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
             >
               <option value="All">ทุกกะทำงาน</option>
               {MH_SHIFTS.map((sOpt) => (
@@ -1194,7 +1195,8 @@ export function DailyDutyAssignmentPanel({
                 placeholder="ค้นหาชื่อ, รถ, พื้นที่..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-[35px] w-48 rounded-md border border-slate-300 bg-slate-50 pr-3 pl-8 text-xs text-slate-900 focus:border-cyan-600 focus:bg-white focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-white"
+                className="field w-48 rounded-md border border-slate-300 bg-white font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#2c4a75] dark:bg-[#0c162c] dark:text-white"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
               />
             </div>
           </div>

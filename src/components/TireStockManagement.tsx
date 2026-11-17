@@ -460,18 +460,19 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
           )}
         </div>
 
-        <div className="px-5 py-3 border-b border-slate-200 dark:border-[#1e3a5f]">
-          <div className="relative max-w-md">
+        <div className="filterbar px-3 py-2.5 sm:px-[18px] sm:py-3 border-b border-slate-200 dark:border-[#1e3a5f]">
+          <div className="relative max-w-md w-full">
             <Search
               size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
             />
             <input
               type="text"
               placeholder="ค้นหาเลขที่รายการ, ขนาดยาง, ยี่ห้อ, เบอร์รถ, ช่างผู้เบิก..."
               value={tireSearchQuery}
               onChange={(e) => setTireSearchQuery(e.target.value)}
-              className="h-[35px] w-full pl-9 pr-3 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+              className="field w-full font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+              style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
             />
           </div>
         </div>

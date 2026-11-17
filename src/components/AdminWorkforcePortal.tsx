@@ -192,18 +192,19 @@ export function AdminWorkforcePortal({
           </div>
 
           {/* Filter Toolbar */}
-          <div className="flex flex-wrap items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3.5 dark:border-[#1e3a5f] dark:bg-[#111e38]">
+          <div className="filterbar flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 sm:px-[18px] sm:py-3 dark:border-[#1e3a5f] dark:bg-[#111e38]">
             <div className="relative min-w-[220px] flex-1">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
               />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ค้นหารหัสพนักงาน, ชื่อผู้บันทึก, รหัสอ้างอิง หรือกิจกรรม..."
-                className="h-[35px] w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
+                className="field w-full rounded-md border border-slate-300 bg-white font-normal text-slate-900 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
+                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
               />
             </div>
 
@@ -212,7 +213,8 @@ export function AdminWorkforcePortal({
               onChange={(e) =>
                 setSectionFilter(e.target.value as WmsSectionId | "all")
               }
-              className="h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
+              className="field rounded-md border border-slate-300 bg-white font-normal text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
+              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
             >
               <option value="all">ทุกส่วนงาน (All Sections)</option>
               {WMS_SECTIONS.map((sec) => (
@@ -228,7 +230,8 @@ export function AdminWorkforcePortal({
                 type="date"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200"
+                className="field rounded-md border border-slate-300 bg-white font-normal text-slate-700 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-200 dark:[color-scheme:dark]"
+                style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
               />
             </div>
 

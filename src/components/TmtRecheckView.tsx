@@ -1310,16 +1310,17 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       {activeTab === "report" && (
         <div className="space-y-3">
           {/* Filter Bar */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 sm:px-[18px] sm:py-3 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-2 flex-1">
               <div className="relative flex-1">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
                 <input
                   type="text"
                   value={reportSearchQuery}
                   onChange={(e) => setReportSearchQuery(e.target.value)}
                   placeholder="ค้นหาทะเบียนรถ, ชื่อลูกค้า, DO, SO หรือ Batch..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-md font-normal text-slate-200 focus:outline-none focus:border-cyan-500"
+                  style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
                 />
               </div>
 
@@ -1327,7 +1328,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                 type="date"
                 value={reportDateFilter}
                 onChange={(e) => setReportDateFilter(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+                className="bg-slate-950 border border-slate-800 rounded-md font-normal text-slate-200 [color-scheme:dark] focus:outline-none focus:border-cyan-500"
+                style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
               />
               {reportDateFilter && (
                 <button

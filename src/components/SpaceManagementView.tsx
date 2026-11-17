@@ -1922,13 +1922,14 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
             </div>
 
             <div className="relative w-32 sm:w-48 shrink-0">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="ค้นหา..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-[35px] w-full pl-8 pr-7 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] font-normal focus:outline-none focus:border-cyan-500"
+                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
               />
               {searchQuery && (
                 <button

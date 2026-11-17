@@ -3054,7 +3054,8 @@ export function DailyReportView({
                           setSmInboundPageSize(Number(e.target.value));
                           setSmInboundPage(1);
                         }}
-                        className="px-2 py-0.5 sm:py-1 text-[11px] sm:text-xs font-bold rounded-lg bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                        className="field font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         <option value={10}>10</option>
                         <option value={20}>20</option>
@@ -3929,7 +3930,7 @@ export function DailyReportView({
               </div>
 
               <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <div className="flex items-center gap-1 sm:gap-1.5 text-[10.5px] sm:text-xs bg-white dark:bg-[#111e38] px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-300 dark:border-[#1e3a5f]">
+                <div className="flex items-center gap-1.5 text-xs">
                   <span className="text-slate-500 dark:text-slate-400 font-semibold">
                     {isThai ? "แสดงหน้าละ:" : "Rows:"}
                   </span>
@@ -3939,7 +3940,8 @@ export function DailyReportView({
                       setMonthlyLedgerPageSize(Number(e.target.value));
                       setMonthlyLedgerPage(1);
                     }}
-                    className="bg-transparent font-mono font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+                    className="field font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     <option value={7} className="bg-white dark:bg-[#111e38]">
                       7 {isThai ? "วัน" : "days"}
@@ -4537,15 +4539,16 @@ export function DailyReportView({
                 </div>
 
                 {/* Machine Category & Activity Filter */}
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10.5px] sm:text-xs">
-                  <div className="flex items-center gap-1 sm:gap-1.5 bg-white dark:bg-[#111e38] px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-300 dark:border-[#1e3a5f]">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
+                  <div className="flex items-center gap-1.5">
                     <span className="text-slate-500 font-semibold">{isThai ? "กลุ่มเครื่อง:" : "Category:"}</span>
                     <select
                       value={spaceMachineCategoryFilter}
                       onChange={(e) =>
                         setSpaceMachineCategoryFilter(e.target.value as "all" | "pipe" | "c_channel")
                       }
-                      className="bg-transparent font-bold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
+                      className="field font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     >
                       <option value="all" className="bg-white dark:bg-[#111e38]">
                         {isThai ? "ทุกกลุ่มเครื่องจักร (18 เครื่อง)" : "All Machines (18)"}

@@ -358,7 +358,7 @@ export function DeliveryPointsManagement({
 
       {/* Delivery Points Table Panel */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#1e3a5f] dark:bg-[#111e38]">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-[#1e3a5f]">
+        <div className="filterbar flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5 sm:px-[18px] sm:py-3 dark:border-[#1e3a5f]">
           <div className="text-xs font-bold text-slate-800 dark:text-slate-100 sm:text-sm">
             ตารางกำหนดจุดส่งสินค้าและประตู ({filteredPoints.length})
           </div>
@@ -369,7 +369,7 @@ export function DeliveryPointsManagement({
                 type="button"
                 disabled={isSaving}
                 onClick={handleSeedStarterPoints}
-                className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
+                className="inline-flex h-[35px] items-center gap-1.5 whitespace-nowrap rounded-md border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
               >
                 <Sparkles size={13} />
                 <span>เพิ่มจุดตัวอย่างเริ่มต้น</span>
@@ -386,7 +386,8 @@ export function DeliveryPointsManagement({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ค้นหาจุดส่งสินค้า / ประตู..."
-                className="h-[35px] w-full rounded-md border border-slate-300 bg-slate-50 pl-8 pr-3 text-xs text-slate-900 outline-none focus:border-sky-500 focus:bg-white dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
+                className="field w-full rounded-md border border-slate-300 bg-white font-normal text-slate-900 outline-none focus:border-sky-500 dark:border-[#1e3a5f] dark:bg-[#0b1329] dark:text-slate-100"
+                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
               />
             </div>
           </div>

@@ -1848,13 +1848,14 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     </span>
                   </div>
                   <div className="relative w-full sm:w-64">
-                    <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       value={inboundSearch}
                       onChange={(e) => setInboundSearch(e.target.value)}
                       placeholder={isThai ? "ค้นหา Batch หรือ Location..." : "Search Batch or Location..."}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                      className="field w-full rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                      style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
                     />
                   </div>
                 </div>
@@ -1994,7 +1995,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               <select
                 value={issueOrderFilter}
                 onChange={(e) => setIssueOrderFilter(e.target.value)}
-                className="px-2.5 py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="field rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="ALL">{isThai ? "ทุกเครื่องจักร (All Machines)" : "All Machines"}</option>
                 {SLITTING_MACHINES.map((m) => (
@@ -2640,9 +2642,9 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
 
           {/* Filter & Search Bar */}
           <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-            <div className="p-3 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center gap-2">
+            <div className="filterbar px-3 py-2.5 sm:px-[18px] sm:py-3 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[200px]">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={stockSearch}
@@ -2652,7 +2654,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                       ? "ค้นหาด้วย Batch, Coil No., เกรด, ขนาด, ผู้ผลิต, Location..."
                       : "Search Batch, Coil No., Grade, Location..."
                   }
-                  className="h-[35px] w-full pl-8 pr-3 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                  className="field w-full rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-cyan-500"
+                  style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
                 />
               </div>
 
@@ -2661,7 +2664,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 onChange={(e) =>
                   setStockStatusFilter(e.target.value as typeof stockStatusFilter)
                 }
-                className="h-[35px] px-2.5 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="field rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500 max-w-[230px]"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="ACTIVE">{isThai ? "สต๊อกคงเหลือ (พร้อมใช้ + เตรียมเบิก)" : "Active Stock (Available + Staged)"}</option>
                 <option value="available">{isThai ? "เฉพาะพร้อมใช้ (Available)" : "Available Only"}</option>
@@ -2673,7 +2677,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               <select
                 value={stockBayFilter}
                 onChange={(e) => setStockBayFilter(e.target.value)}
-                className="h-[35px] px-2.5 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="field rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="ALL">{isThai ? "ทุก Layout Bay" : "All Layout Bays"}</option>
                 {layoutZones.map((z) => (
@@ -2686,7 +2691,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               <select
                 value={stockGradeFilter}
                 onChange={(e) => setStockGradeFilter(e.target.value)}
-                className="h-[35px] px-2.5 rounded-md text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                className="field rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500"
+                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
               >
                 <option value="ALL">{isThai ? "ทุกเกรดเหล็ก" : "All Grades"}</option>
                 {COMMON_GRADES.map((g) => (
