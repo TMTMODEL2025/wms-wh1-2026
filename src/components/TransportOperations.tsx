@@ -63,6 +63,12 @@ import {
 } from "../services/authWorkforceService";
 import { useAuth } from "../contexts/AuthContext";
 import { DailyDutyAssignmentPanel } from "./DailyDutyAssignmentPanel";
+import {
+  showConfirmDialog,
+  showErrorAlert,
+  showSuccessAlert,
+  showWarningAlert,
+} from "../utils/swalUtils";
 
 type TransportTransferRecord = MhTransferRecord;
 
@@ -104,6 +110,15 @@ const QUICK_PRODUCTS = ["เหล็กฟิล์ม", "เหล็กม้
 const QUICK_TRANSFER_TYPES = ["งาน Stock", "ทั่วไป", "งานฝาก", "อื่นๆ"];
 const QUICK_BUILDINGS = ["อาคาร A", "อาคาร B", "อาคาร C", "ลานพักสินค้า"];
 const QUICK_TRIP_COUNTS = [1, 2, 3, 4, 5];
+
+function escapeHtmlText(text: string): string {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function getLocalDateStr(date = new Date()): string {
   const y = date.getFullYear();
@@ -668,6 +683,11 @@ export function TransportOperations({
       const err = validateCurrentForm();
       if (err) {
         setFeedbackBanner({ type: "error", text: err });
+        await showWarningAlert({
+          title: "กรุณาตรวจสอบข้อมูล",
+          text: err,
+          confirmButtonText: "ตกลง",
+        });
         return;
       }
       draftsToCreate.push(makeCurrentDraft("CURRENT"));
@@ -675,6 +695,44 @@ export function TransportOperations({
 
     const allNewRecords = draftsToCreate.flatMap(buildRecordsFromDraft);
     if (allNewRecords.length === 0) return;
+
+    const totalBatchWeightKg = allNewRecords.reduce(
+      (sum, rec) => sum + (rec.totalWeightKg || 0),
+      0
+    );
+    const totalBatchBundles = allNewRecords.reduce(
+      (sum, rec) => sum + (rec.totalBundles || 0),
+      0
+    );
+    const primary = allNewRecords[0];
+    const summaryRowsHtml =
+      draftsToCreate.length === 1
+        ? `
+          <div style="text-align:left; font-size:13px; line-height:1.65;">
+            <div><strong>พนักงานขับรถ:</strong> ${escapeHtmlText(primary.driverName)}</div>
+            <div><strong>สินค้า:</strong> ${escapeHtmlText(primary.itemName)} (${escapeHtmlText(primary.transferType || "งาน Stock")})</div>
+            <div><strong>เส้นทาง:</strong> ${escapeHtmlText(primary.originFacility)} &rarr; ${escapeHtmlText(primary.destinationFacility)}</div>
+            <div><strong>จำนวนรอบ:</strong> ${allNewRecords.length} รอบ · <strong>รวม:</strong> ${totalBatchBundles.toLocaleString()} มัด / ${totalBatchWeightKg.toLocaleString()} กก.</div>
+          </div>
+        `
+        : `
+          <div style="text-align:left; font-size:13px; line-height:1.65;">
+            <div><strong>พนักงานขับรถ:</strong> ${escapeHtmlText(primary.driverName)}</div>
+            <div><strong>รายการทั้งหมด:</strong> ${draftsToCreate.length} รายการ (${allNewRecords.length} รอบ)</div>
+            <div><strong>น้ำหนักรวมทุกเที่ยว:</strong> ${totalBatchBundles.toLocaleString()} มัด / ${totalBatchWeightKg.toLocaleString()} กก.</div>
+          </div>
+        `;
+
+    const confirmed = await showConfirmDialog({
+      title: "ยืนยันการส่งงานย้ายสินค้า?",
+      html: summaryRowsHtml,
+      icon: "question",
+      confirmButtonText: `ยืนยันการส่ง (${allNewRecords.length} รอบ)`,
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#059669",
+    });
+
+    if (!confirmed) return;
 
     setIsSubmitting(true);
     try {
@@ -699,9 +757,18 @@ export function TransportOperations({
         type: "success",
         text: `เริ่มส่งงานสำเร็จ ${allNewRecords.length} รายการ (เริ่มนับเวลา SLA 20 นาทีแล้ว)`,
       });
+      void showSuccessAlert({
+        title: "เริ่มส่งงานสำเร็จ",
+        text: `บันทึกงานย้ายสินค้า ${allNewRecords.length} รายการเรียบร้อยแล้ว (เริ่มนับเวลา SLA 20 นาที)`,
+        timer: 2200,
+      });
     } catch {
       setFeedbackBanner({
         type: "error",
+        text: "เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์ กรุณาลองใหม่อีกครั้ง",
+      });
+      void showErrorAlert({
+        title: "บันทึกข้อมูลไม่สำเร็จ",
         text: "เกิดข้อผิดพลาดในการบันทึกข้อมูลลงคลาวด์ กรุณาลองใหม่อีกครั้ง",
       });
     } finally {
