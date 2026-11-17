@@ -28,6 +28,12 @@ import {
   VehicleAssignment
 } from "../types/officer";
 import { MASTER_DEPARTMENTS } from "../data/officerData";
+import {
+  getVehicleTypeDisplayLabel,
+  isForkliftVehicle,
+  isTractorVehicle,
+  isTrailerVehicle,
+} from "../utils/vehicleHelpers";
 
 interface VehicleManagementProps {
   vehicles: Vehicle[];
@@ -44,7 +50,8 @@ export function VehicleManagement({
   onNavigateToAssignment,
   onLogTransaction,
 }: VehicleManagementProps) {
-  // Search & Filter state
+  // Category Tab & Search & Filter state
+  const [activeTab, setActiveTab] = useState<"all" | "tractor" | "forklift" | "trailer">("all");
   const [searchKeyword, setSearchKeyword] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("All");
   const [filterActiveStatus, setFilterActiveStatus] = useState<string>("All");
@@ -113,8 +120,15 @@ export function VehicleManagement({
     let maintenance = 0;
     let outOfService = 0;
     let available = 0;
+    let tractorCount = 0;
+    let forkliftCount = 0;
+    let trailerCount = 0;
 
     vehicles.forEach((v) => {
+      if (isTrailerVehicle(v)) trailerCount++;
+      else if (isForkliftVehicle(v)) forkliftCount++;
+      else if (isTractorVehicle(v)) tractorCount++;
+
       const status = getResolvedOperationalStatus(v);
       if (status === "In Use") inUse++;
       else if (status === "Maintenance") maintenance++;
@@ -122,12 +136,27 @@ export function VehicleManagement({
       else if (v.activeStatus === "Active") available++;
     });
 
-    return { total, active, inactive, inUse, maintenance, outOfService, available };
+    return {
+      total,
+      active,
+      inactive,
+      inUse,
+      maintenance,
+      outOfService,
+      available,
+      tractorCount,
+      forkliftCount,
+      trailerCount,
+    };
   }, [vehicles, vehicleAssignmentMap]);
 
   // Filtered vehicles
   const filteredVehicles = useMemo(() => {
     return vehicles.filter((vehicle) => {
+      if (activeTab === "tractor" && !isTractorVehicle(vehicle)) return false;
+      if (activeTab === "forklift" && !isForkliftVehicle(vehicle)) return false;
+      if (activeTab === "trailer" && !isTrailerVehicle(vehicle)) return false;
+
       if (searchKeyword.trim()) {
         const query = searchKeyword.toLowerCase();
         const searchable = [
@@ -161,7 +190,7 @@ export function VehicleManagement({
 
       return true;
     });
-  }, [vehicles, searchKeyword, filterType, filterActiveStatus, filterOperationalStatus, vehicleAssignmentMap]);
+  }, [vehicles, activeTab, searchKeyword, filterType, filterActiveStatus, filterOperationalStatus, vehicleAssignmentMap]);
 
   // HANDLER: ADD VEHICLE
   const handleAddVehicle = (form: {
@@ -338,6 +367,9 @@ export function VehicleManagement({
         <div className="kpi">
           <div className="kpi-label">Total Fleet Size</div>
           <div className="kpi-value">{metrics.total}</div>
+          <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+            หัวลาก {metrics.tractorCount} · โฟล์คลิฟท์ {metrics.forkliftCount} · หางลาก {metrics.trailerCount}
+          </div>
         </div>
 
         <div className="kpi" style={{ borderTopColor: "#15803d" }}>
@@ -375,9 +407,41 @@ export function VehicleManagement({
               onClick={() => setShowAddModal(true)}
             >
               <Plus size={14} />
-              + Add Vehicle
+              {activeTab === "trailer"
+                ? "+ เพิ่มหางลาก (TTL-)"
+                : activeTab === "tractor"
+                ? "+ เพิ่มรถหัวลาก (TT-)"
+                : activeTab === "forklift"
+                ? "+ เพิ่มรถโฟล์คลิฟท์ (FL-)"
+                : "+ Add Vehicle"}
             </button>
           </div>
+        </div>
+
+        {/* Category Tabs: All | รถหัวลาก (TT-) | รถโฟล์คลิฟท์ (FL-) | หางลาก (TTL-) */}
+        <div className="px-4 pt-3 pb-1 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
+          {[
+            { id: "all" as const, label: `ทั้งหมด (${metrics.total})` },
+            { id: "tractor" as const, label: `รถหัวลาก TT- (${metrics.tractorCount})` },
+            { id: "forklift" as const, label: `รถโฟล์คลิฟท์ FL- (${metrics.forkliftCount})` },
+            { id: "trailer" as const, label: `หางลาก TTL- (${metrics.trailerCount})` },
+          ].map((tab) => {
+            const isTabActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap border ${
+                  isTabActive
+                    ? "bg-slate-900 text-white border-slate-900 dark:bg-blue-600 dark:border-blue-600 dark:text-white"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700 dark:hover:bg-slate-800"
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Filter bar */}
@@ -389,7 +453,7 @@ export function VehicleManagement({
               style={{ paddingLeft: 30 }}
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Search Vehicle ID (e.g. TT-01), Registration, description..."
+              placeholder="Search Vehicle ID (e.g. TT-01, FL-01, TTL-01), Registration, description..."
               aria-label="Search vehicles"
             />
           </div>
@@ -403,9 +467,10 @@ export function VehicleManagement({
             title="Filter by Vehicle Type"
           >
             <option value="All">All Vehicle Types</option>
-            <option value="Tugger">Tugger</option>
-            <option value="Forklift">Forklift</option>
-            <option value="Tractor">Tractor</option>
+            <option value="Tractor">Tractor (รถหัวลาก · TT-)</option>
+            <option value="Tugger">Tugger (รถลากจูง · TT-)</option>
+            <option value="Forklift">Forklift (รถโฟล์คลิฟท์ · FL-)</option>
+            <option value="Trailer">Trailer (หางลาก · TTL-)</option>
             <option value="Other">Other</option>
           </select>
 
@@ -501,7 +566,7 @@ export function VehicleManagement({
                         }}
                       >
                         <Truck size={13} color="#087eaf" />
-                        {vehicle.vehicleType}
+                        {getVehicleTypeDisplayLabel(vehicle.vehicleType)}
                       </span>
                       {vehicle.capacityTon && (
                         <div className="table-sub-text" style={{ fontSize: 10, color: "#8a9ba8" }}>
@@ -685,6 +750,15 @@ export function VehicleManagement({
       {showAddModal && (
         <AddVehicleModal
           departments={MASTER_DEPARTMENTS}
+          defaultVehicleType={
+            activeTab === "trailer"
+              ? "Trailer"
+              : activeTab === "tractor"
+              ? "Tractor"
+              : activeTab === "forklift"
+              ? "Forklift"
+              : "Tugger"
+          }
           onClose={() => setShowAddModal(false)}
           onSave={handleAddVehicle}
         />
@@ -780,10 +854,12 @@ function VehicleOperationalStatusBadge({ status }: { status: VehicleOperationalS
 // MODAL: ADD VEHICLE
 function AddVehicleModal({
   departments,
+  defaultVehicleType = "Tugger",
   onClose,
   onSave,
 }: {
   departments: string[];
+  defaultVehicleType?: VehicleType;
   onClose: () => void;
   onSave: (form: {
     vehicleId: string;
@@ -796,8 +872,16 @@ function AddVehicleModal({
     activeStatus: VehicleActiveStatus;
   }) => { success: boolean; error?: string };
 }) {
-  const [vehicleId, setVehicleId] = useState<string>("");
-  const [vehicleType, setVehicleType] = useState<VehicleType>("Tugger");
+  const initialPrefix =
+    defaultVehicleType === "Trailer"
+      ? "TTL-"
+      : defaultVehicleType === "Tractor"
+      ? "TT-"
+      : defaultVehicleType === "Forklift"
+      ? "FL-"
+      : "";
+  const [vehicleId, setVehicleId] = useState<string>(initialPrefix);
+  const [vehicleType, setVehicleType] = useState<VehicleType>(defaultVehicleType);
   const [description, setDescription] = useState<string>("");
   const [registrationNumber, setRegistrationNumber] = useState<string>("");
   const [department, setDepartment] = useState<string>(departments[0] || "Material Handling - Fleet");
@@ -806,12 +890,32 @@ function AddVehicleModal({
   const [activeStatus, setActiveStatus] = useState<VehicleActiveStatus>("Active");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const handleVehicleTypeChange = (nextType: VehicleType) => {
+    setVehicleType(nextType);
+    const trimmed = vehicleId.trim().toUpperCase();
+    if (!trimmed || trimmed === "TT-" || trimmed === "FL-" || trimmed === "TTL-") {
+      if (nextType === "Trailer") setVehicleId("TTL-");
+      else if (nextType === "Tractor" || nextType === "Tugger") setVehicleId("TT-");
+      else if (nextType === "Forklift") setVehicleId("FL-");
+      else setVehicleId("");
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!vehicleId.trim()) {
-      setErrorMessage("Please specify a unique Vehicle ID (e.g. TT-06, FL-003).");
+    const trimmedId = vehicleId.trim().toUpperCase();
+    if (!trimmedId || trimmedId === "TTL-" || trimmedId === "TT-" || trimmedId === "FL-") {
+      setErrorMessage(
+        vehicleType === "Trailer"
+          ? "กรุณาระบุรหัสหางลากให้ครบถ้วน (เช่น TTL-01)"
+          : "Please specify a unique Vehicle ID (e.g. TT-06, FL-003, TTL-01)."
+      );
+      return;
+    }
+    if (vehicleType === "Trailer" && !trimmedId.startsWith("TTL-")) {
+      setErrorMessage("รหัสหางลากต้องขึ้นต้นด้วย TTL- เท่านั้น (เช่น TTL-01)");
       return;
     }
     if (!description.trim()) {
@@ -820,7 +924,7 @@ function AddVehicleModal({
     }
 
     const res = onSave({
-      vehicleId: vehicleId.trim(),
+      vehicleId: trimmedId,
       vehicleType,
       description: description.trim(),
       registrationNumber: registrationNumber.trim(),
@@ -845,7 +949,11 @@ function AddVehicleModal({
       >
         <div className="panel-header vehicle-modal-header" style={{ padding: "14px 20px" }}>
           <div>
-            <div className="panel-title">Register New Fleet Vehicle</div>
+            <div className="panel-title">
+              {vehicleType === "Trailer"
+                ? "เพิ่มข้อมูลหางลากใหม่ (Register Trailer)"
+                : "Register New Fleet Vehicle"}
+            </div>
           </div>
           <button
             type="button"
@@ -868,12 +976,12 @@ function AddVehicleModal({
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label className="form-field">
-              Vehicle ID *
+              {vehicleType === "Trailer" ? "รหัสหางลาก (ขึ้นต้นด้วย TTL-) *" : "Vehicle ID *"}
               <input
                 className="field"
                 value={vehicleId}
                 onChange={(e) => setVehicleId(e.target.value)}
-                placeholder="e.g. TT-06, FL-003, TR-003"
+                placeholder={vehicleType === "Trailer" ? "e.g. TTL-01, TTL-02" : "e.g. TT-06, FL-003, TTL-01"}
                 required
                 autoFocus
               />
@@ -884,12 +992,13 @@ function AddVehicleModal({
               <select
                 className="field"
                 value={vehicleType}
-                onChange={(e) => setVehicleType(e.target.value as VehicleType)}
+                onChange={(e) => handleVehicleTypeChange(e.target.value as VehicleType)}
                 required
               >
-                <option value="Tugger">Tugger</option>
-                <option value="Forklift">Forklift</option>
-                <option value="Tractor">Tractor</option>
+                <option value="Tractor">Tractor (รถหัวลาก · TT-)</option>
+                <option value="Tugger">Tugger (รถลากจูง · TT-)</option>
+                <option value="Forklift">Forklift (รถโฟล์คลิฟท์ · FL-)</option>
+                <option value="Trailer">Trailer (หางลาก · TTL-)</option>
                 <option value="Other">Other</option>
               </select>
             </label>
@@ -901,7 +1010,11 @@ function AddVehicleModal({
               className="field"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g. Electric Tow Tugger 5.0T - Heavy Duty Battery"
+              placeholder={
+                vehicleType === "Trailer"
+                  ? "เช่น หางลากพื้นเรียบ 5 ตัน / รถพ่วงลากจูง"
+                  : "e.g. Electric Tow Tugger 5.0T - Heavy Duty Battery"
+              }
               required
             />
           </label>
@@ -1099,9 +1212,10 @@ function EditVehicleModal({
                 onChange={(e) => setVehicleType(e.target.value as VehicleType)}
                 required
               >
-                <option value="Tugger">Tugger</option>
-                <option value="Forklift">Forklift</option>
-                <option value="Tractor">Tractor</option>
+                <option value="Tractor">Tractor (รถหัวลาก · TT-)</option>
+                <option value="Tugger">Tugger (รถลากจูง · TT-)</option>
+                <option value="Forklift">Forklift (รถโฟล์คลิฟท์ · FL-)</option>
+                <option value="Trailer">Trailer (หางลาก · TTL-)</option>
                 <option value="Other">Other</option>
               </select>
             </label>

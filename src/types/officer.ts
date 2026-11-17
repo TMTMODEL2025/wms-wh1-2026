@@ -87,7 +87,7 @@ export interface Driver {
   status: "Active" | "On Leave" | "Inactive";
 }
 
-export type VehicleType = "Tractor" | "Forklift" | "Tugger" | "Other";
+export type VehicleType = "Tractor" | "Forklift" | "Tugger" | "Trailer" | "Other";
 export type VehicleActiveStatus = "Active" | "Inactive";
 export type VehicleOperationalStatus = "Available" | "In Use" | "Maintenance" | "Out of Service";
 

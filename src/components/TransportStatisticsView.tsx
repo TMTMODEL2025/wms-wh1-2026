@@ -4,11 +4,10 @@
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+import { createPortal } from "react-dom";
 import {
   BarChart3,
   Calendar,
-  Download,
   RefreshCw,
   Search,
   Truck,
@@ -16,7 +15,6 @@ import {
   Package,
   Scale,
   Clock,
-  ArrowRight,
   Route,
   Layers,
   CheckCircle2,
@@ -37,7 +35,6 @@ import { TransportStatisticsCharts } from "./TransportStatisticsCharts";
 interface TransportStatisticsViewProps {
   vehicles: Vehicle[];
   employees?: Employee[];
-  onNavigateToTransport?: () => void;
 }
 
 type DatePreset = "today" | "yesterday" | "last7" | "thisMonth" | "all" | "custom";
@@ -149,13 +146,17 @@ function formatThaiDateLabel(ymd: string): string {
 export function TransportStatisticsView({
   vehicles,
   employees = [],
-  onNavigateToTransport,
 }: TransportStatisticsViewProps) {
   const todayYmd = useMemo(() => getLocalDateYmd(), []);
 
   const [transfers, setTransfers] = useState<MhTransferRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [headingActionsEl, setHeadingActionsEl] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setHeadingActionsEl(document.getElementById("page-heading-actions"));
+  }, []);
 
   // Filters (Date-first)
   const [datePreset, setDatePreset] = useState<DatePreset>("today");
@@ -319,6 +320,7 @@ export function TransportStatisticsView({
         const haystack = [
           r.transferCode,
           r.vehicleNumber,
+          r.trailerNumber,
           r.driverName,
           r.itemName,
           r.transferType,
@@ -764,129 +766,6 @@ export function TransportStatisticsView({
     };
   }, [scopedTransfers, vehicleMetaMap, employeeMetaMap]);
 
-  const dateRangeLabel = useMemo(() => {
-    if (datePreset === "all" || (!startDate && !endDate)) return "ข้อมูลทั้งหมดในระบบ";
-    if (startDate && endDate && startDate === endDate) {
-      return `วันที่ ${formatThaiDateLabel(startDate)}`;
-    }
-    if (startDate && endDate) {
-      return `${formatThaiDateLabel(startDate)} – ${formatThaiDateLabel(endDate)}`;
-    }
-    if (startDate) return `ตั้งแต่ ${formatThaiDateLabel(startDate)}`;
-    return `ถึง ${formatThaiDateLabel(endDate)}`;
-  }, [datePreset, startDate, endDate]);
-
-  const handleExportExcel = () => {
-    const wb = XLSX.utils.book_new();
-
-    // Sheet 1: Summary
-    const summaryData = [
-      ["รายงานสถิติการย้ายงาน (Transport Statistics)", ""],
-      ["ช่วงวันที่", dateRangeLabel],
-      ["ตัวกรองสถานะ", statusScope === "active" ? "งานปกติ (ไม่รวมยกเลิก)" : statusScope === "completed" ? "เสร็จสิ้นแล้วเท่านั้น" : "ทั้งหมด"],
-      ["ทีม / กะ", `${selectedTeam === "all" ? "ทุกทีม" : selectedTeam} / ${selectedShift === "all" ? "ทุกกะ" : selectedShift}`],
-      ["จำนวนรถที่ปฏิบัติงาน (คัน)", stats.activeVehicleCount],
-      ["จำนวนพนักงานขับรถ (คน)", stats.activeDriverCount],
-      ["จำนวนเที่ยวขนย้ายรวม (เที่ยว)", stats.totalTrips],
-      ["จำนวนมัดรวม (มัด)", stats.totalBundles],
-      ["น้ำหนักรวม (กิโลกรัม)", stats.totalWeightKg],
-      ["น้ำหนักรวม (ตัน)", Number(stats.totalWeightTon.toFixed(3))],
-      ["เวลาเฉลี่ยต่อเที่ยว", formatDurationMinutesText(stats.avgDurationSec)],
-      ["อัตราตรงเวลา SLA <= 20 นาที (%)", stats.slaOnTimeRate ?? "-"],
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryData), "สรุปภาพรวม");
-
-    // Sheet 2: Vehicles
-    const vehicleSheetData = stats.vehicleRows.map((v, idx) => ({
-      "ลำดับ": idx + 1,
-      "รหัสรถ": v.vehicleNumber,
-      "ประเภทรถ": v.vehicleType,
-      "ทะเบียน": v.registrationNumber,
-      "พนักงานขับรถ": Array.from(v.drivers).join(", ") || "-",
-      "จำนวนเที่ยว": v.trips,
-      "มัดรวม": v.bundles,
-      "น้ำหนัก (กก.)": v.weightKg,
-      "น้ำหนัก (ตัน)": Number((v.weightKg / 1000).toFixed(3)),
-      "เวลาเฉลี่ย": v.durationCount > 0 ? formatDurationMinutesText(v.durationSumSec / v.durationCount) : "-",
-      "เกิน SLA": v.overdueCount,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vehicleSheetData), "รายรถโฟล์คลิฟท์");
-
-    // Sheet 3: Drivers
-    const driverSheetData = stats.driverRows.map((d, idx) => ({
-      "ลำดับ": idx + 1,
-      "รหัสพนักงาน": d.employeeId || "-",
-      "ชื่อพนักงานขับรถ": d.driverName,
-      "รถที่ขับ": Array.from(d.vehicles).join(", ") || "-",
-      "ทีม": Array.from(d.teams).join(", ") || "-",
-      "กะ": Array.from(d.shifts).join(", ") || "-",
-      "จำนวนเที่ยว": d.trips,
-      "มัดรวม": d.bundles,
-      "น้ำหนัก (กก.)": d.weightKg,
-      "น้ำหนัก (ตัน)": Number((d.weightKg / 1000).toFixed(3)),
-      "เวลาเฉลี่ย": d.durationCount > 0 ? formatDurationMinutesText(d.durationSumSec / d.durationCount) : "-",
-      "เกิน SLA": d.overdueCount,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(driverSheetData), "รายพนักงานขับรถ");
-
-    // Sheet 4: Products
-    const productSheetData = stats.productRows.map((p, idx) => ({
-      "ลำดับ": idx + 1,
-      "สินค้า": p.itemName,
-      "ประเภทงาน": Array.from(p.transferTypes).join(", "),
-      "จำนวนเที่ยว": p.trips,
-      "มัดรวม": p.bundles,
-      "น้ำหนัก (กก.)": p.weightKg,
-      "น้ำหนัก (ตัน)": Number((p.weightKg / 1000).toFixed(3)),
-      "สัดส่วนน้ำหนัก (%)": stats.totalWeightKg > 0 ? Number(((p.weightKg / stats.totalWeightKg) * 100).toFixed(1)) : 0,
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(productSheetData), "รายสินค้า");
-
-    // Sheet 5: Routes
-    const routeSheetData = stats.routeRows.map((rt, idx) => ({
-      "ลำดับ": idx + 1,
-      "ต้นทาง": rt.origin,
-      "ปลายทาง": rt.destination,
-      "จำนวนเที่ยว": rt.trips,
-      "มัดรวม": rt.bundles,
-      "น้ำหนัก (กก.)": rt.weightKg,
-      "น้ำหนัก (ตัน)": Number((rt.weightKg / 1000).toFixed(3)),
-      "เวลาเฉลี่ย": rt.durationCount > 0 ? formatDurationMinutesText(rt.durationSumSec / rt.durationCount) : "-",
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(routeSheetData), "รายเส้นทาง");
-
-    // Sheet 6: Raw Trips
-    const rawSheetData = scopedTransfers.map((r, idx) => ({
-      "ลำดับ": idx + 1,
-      "วันที่": normalizeDateYmd(r),
-      "เลขที่ใบงาน": r.transferCode,
-      "สถานะ": r.status,
-      "รถโฟล์คลิฟท์": r.vehicleNumber,
-      "พนักงานขับรถ": r.driverName,
-      "ทีม": r.team || "-",
-      "กะ": r.shift || "-",
-      "สินค้า": r.itemName,
-      "ประเภทงาน": r.transferType || "-",
-      "ต้นทาง": r.originFacility,
-      "ปลายทาง": r.destinationFacility,
-      "มัดรวม": getRecordBundles(r),
-      "น้ำหนัก (กก.)": getRecordWeightKg(r),
-      "น้ำหนัก (ตัน)": Number((getRecordWeightKg(r) / 1000).toFixed(3)),
-      "เริ่ม": r.startTime || "-",
-      "จบ": r.endTime || "-",
-      "เวลาใช้จริง (นาที)": r.durationMinutes ?? "-",
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rawSheetData), "รายการงานทั้งหมด");
-
-    const fileSuffix =
-      datePreset === "all"
-        ? "all"
-        : startDate === endDate
-        ? startDate
-        : `${startDate}_to_${endDate}`;
-    XLSX.writeFile(wb, `transport-statistics-${fileSuffix}.xlsx`);
-  };
-
   const activeVehicleNamesList = useMemo(
     () => stats.vehicleRows.filter((v) => v.isAssigned).map((v) => v.vehicleNumber),
     [stats.vehicleRows]
@@ -897,62 +776,36 @@ export function TransportStatisticsView({
     [stats.driverRows]
   );
 
+  const refreshButtonNode = (
+    <button
+      type="button"
+      onClick={handleManualRefresh}
+      disabled={isRefreshing}
+      className="button secondary inline-flex items-center gap-1.5 disabled:opacity-50"
+    >
+      <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} />
+      <span>รีเฟรชข้อมูล</span>
+    </button>
+  );
+
   return (
     <div className="space-y-6">
-      {/* Header & Action Bar */}
+      {headingActionsEl ? createPortal(refreshButtonNode, headingActionsEl) : null}
+
+      {/* Header & Filter Bar */}
       <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center gap-2.5 text-slate-900 dark:text-slate-100">
-              <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
-              <h2 className="text-lg font-semibold tracking-tight">
-                สถิติการย้ายงาน (Transport Statistics)
-              </h2>
-            </div>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              สรุปจำนวนรถที่ใช้ขนย้าย รายการสินค้า น้ำหนักรวม พนักงานขับรถ เส้นทาง และประสิทธิภาพเวลา ตามช่วงวันที่เลือก ·{" "}
-              <span className="font-medium text-slate-800 dark:text-slate-200">
-                {dateRangeLabel}
-              </span>
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 text-slate-900 dark:text-slate-100">
+            <BarChart3 className="h-5 w-5 text-blue-600 dark:text-blue-400 shrink-0" />
+            <h2 className="text-lg font-semibold tracking-tight">
+              สถิติการย้ายงาน (Transport Statistics)
+            </h2>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={handleManualRefresh}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/70 transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-              <span>รีเฟรชข้อมูล</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleExportExcel}
-              disabled={scopedTransfers.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 dark:border-emerald-500 bg-emerald-600 dark:bg-emerald-600 px-3.5 py-2 text-xs font-medium text-white hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>ส่งออก Excel</span>
-            </button>
-
-            {onNavigateToTransport && (
-              <button
-                type="button"
-                onClick={onNavigateToTransport}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 dark:bg-blue-600 px-3.5 py-2 text-xs font-medium text-white hover:bg-slate-800 dark:hover:bg-blue-500 transition-colors cursor-pointer"
-              >
-                <span>ไปหน้าบันทึกงานย้ายสินค้า</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          {!headingActionsEl && refreshButtonNode}
         </div>
 
         {/* Date Filter Primary Strip */}
-        <div className="mt-5 border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
+        <div className="mt-4 border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             {/* Quick Date Presets */}
             <div className="flex flex-wrap items-center gap-2">
@@ -1804,7 +1657,12 @@ export function TransportStatisticsView({
                             {r.transferCode}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
-                            {r.vehicleNumber || "-"}
+                            <div>{r.vehicleNumber || "-"}</div>
+                            {r.trailerNumber && (
+                              <div className="text-[11px] text-indigo-600 dark:text-indigo-400">
+                                หาง {r.trailerNumber}
+                              </div>
+                            )}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-slate-800 dark:text-slate-200">
                             <div>{r.driverName || "-"}</div>

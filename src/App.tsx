@@ -6199,7 +6199,7 @@ function WmsApp({
                       </button>
                     )}
 
-                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "fuel" && active !== "slit" && active !== "admin" ? (
+                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "transport-stats" && active !== "fuel" && active !== "slit" && active !== "admin" ? (
                       <button className="button" onClick={() => setShowModal(true)}>
                         <Plus size={14} />
                         {translations.newEntry}
@@ -6305,10 +6305,6 @@ function WmsApp({
               <TransportStatisticsView
                 vehicles={vehicles}
                 employees={employeeRoster}
-                onNavigateToTransport={() => {
-                  setActive("transport");
-                  setSelectedRecord(null);
-                }}
               />
             ) : active === "transport" ? (
               <TransportOperations

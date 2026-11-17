@@ -63,6 +63,7 @@ export interface MhTransferRecord {
   status: MhTransferStatus;
   priority: MhPriorityLevel;
   vehicleNumber: string;
+  trailerNumber?: string;
   driverName: string;
   workArea?: string; // พื้นที่การทำงานหลัก เช่น อาคาร A, อาคาร B, ลานพักสินค้า
   shift?: string; // กะทำงาน เช่น กะเช้า, กะดึก
@@ -540,6 +541,7 @@ function sanitizeMhTransferPayload(
     priority:
       r.priority === "Urgent" || r.priority === "Express" ? r.priority : "Normal",
     vehicleNumber: String(r.vehicleNumber || "-").trim().slice(0, 64),
+    trailerNumber: r.trailerNumber ? String(r.trailerNumber).trim().slice(0, 64) : undefined,
     driverName: String(r.driverName || "-").trim().slice(0, 128),
     workArea: r.workArea ? String(r.workArea).trim().slice(0, 128) : undefined,
     shift: r.shift ? String(r.shift).trim().slice(0, 64) : undefined,
