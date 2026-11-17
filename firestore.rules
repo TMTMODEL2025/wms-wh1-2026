@@ -72,7 +72,22 @@ service cloud.firestore {
 
     function isValidMhMaintenance(data) {
       return data.id is string && data.id.size() <= 128
-        && data.workOrderNo is string && data.workOrderNo.size() <= 64;
+        && data.workOrderNo is string && data.workOrderNo.size() <= 64
+        && (!('requesterName' in data) || (data.requesterName is string && data.requesterName.size() <= 128))
+        && (!('vendorName' in data) || (data.vendorName is string && data.vendorName.size() <= 128))
+        && (!('vehicleId' in data) || (data.vehicleId is string && data.vehicleId.size() <= 64))
+        && (!('repairType' in data) || (data.repairType is string && data.repairType.size() <= 128))
+        && (!('repairDescription' in data) || (data.repairDescription is string && data.repairDescription.size() <= 1000))
+        && (!('workflowStage' in data) || (data.workflowStage is string && data.workflowStage.size() <= 64))
+        && (!('supervisorStatus' in data) || (data.supervisorStatus is string && data.supervisorStatus.size() <= 64))
+        && (!('managerStatus' in data) || (data.managerStatus is string && data.managerStatus.size() <= 64))
+        && (!('partsCost' in data) || (data.partsCost is number && data.partsCost >= 0))
+        && (!('laborCost' in data) || (data.laborCost is number && data.laborCost >= 0))
+        && (!('estimatedCost' in data) || (data.estimatedCost is number && data.estimatedCost >= 0))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && (!('supervisorNotes' in data) || (data.supervisorNotes is string && data.supervisorNotes.size() <= 1000))
+        && (!('spareParts' in data) || (data.spareParts is list && data.spareParts.size() <= 100))
+        && (!('photos' in data) || (data.photos is list && data.photos.size() <= 9 && (data.photos.size() == 0 || (data.photos[0] is map && data.photos[0].dataUrl is string && data.photos[0].dataUrl.size() <= 350000))));
     }
 
     function isValidMhFuelStock(data) {

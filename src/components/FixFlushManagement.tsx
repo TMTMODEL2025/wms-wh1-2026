@@ -3,26 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Wrench,
   Clock,
   CheckCircle2,
-  AlertTriangle,
   Printer,
   Search,
   Filter,
   Plus,
   X,
   FileText,
-  Truck,
-  DollarSign,
   Package,
   ShieldCheck,
-  Activity,
   MessageSquare,
   Send,
-  UserCheck,
   HelpCircle,
   Check,
   Ban,
@@ -30,23 +26,32 @@ import {
   Wifi,
   WifiOff,
   Trash2,
-  Disc,
-  ArrowDownLeft,
-  ArrowUpRight,
+  Camera,
+  ImagePlus,
+  ZoomIn,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCheck,
+  RotateCcw,
+  Calculator,
+  User,
 } from "lucide-react";
-import { Vehicle } from "../types/officer";
+import { Employee, Vehicle } from "../types/officer";
 import {
+  MH_REPAIR_CATEGORIES,
   MhMaintenanceRecord,
+  MhRepairPhotoItem,
+  MhSparePartItem,
   MhTireStockRecord,
   MhTireSize,
+  MhWorkflowStage,
+  generateNextRepairRequestNo,
+  inferMhWorkflowStage,
   subscribeToMhMaintenance,
   fetchMhMaintenanceOnce,
   saveMhMaintenanceToCloud,
   deleteMhMaintenanceFromCloud,
-  subscribeToMhTireStock,
-  fetchMhTireStockOnce,
   saveMhTireTransactionToCloud,
-  deleteMhTireTransactionFromCloud,
   getForkliftCloudRealtimeEnabled,
   setForkliftCloudRealtimeEnabled,
   subscribeForkliftCloudRealtimeMode,
@@ -55,40 +60,16 @@ import {
   appendWmsActivityLog,
   getActiveRecorderDisplay,
 } from "../services/authWorkforceService";
-
-interface SparePartItem {
-  id?: string;
-  partCode: string;
-  partName: string;
-  qty: number;
-  unit?: string;
-  unitCost: number;
-}
-
-interface FeedbackMessage {
-  id: string;
-  author: string;
-  role: "Manager" | "Technician";
-  queryType?: string;
-  message: string;
-  timestamp: string;
-}
+import { useAuth } from "../contexts/AuthContext";
 
 type FixFlushRecord = MhMaintenanceRecord;
 
 interface FixFlushManagementProps {
   vehicles: Vehicle[];
+  employees?: Employee[];
 }
 
-const REPAIR_TYPES = [
-  "ถ่ายน้ำมันเครื่อง (Engine Oil Change)",
-  "เปลี่ยนยาง (Tire Replacement)",
-  "ซ่อมช่วงล่าง (Undercarriage Service)",
-  "ฟลัชชิ่งระบบไฮดรอลิก (Hydraulic System Flush)",
-  "ซ่อมระบบไฟฟ้า & แบตเตอรี่ (Electrical & Battery Repair)",
-  "ตรวจเช็คตามรอบ 500 ชม. (500h Routine Maintenance)",
-  "ซ่อมฉุกเฉิน / เบรก (Emergency Brake Repair)",
-];
+type RepairHubTab = "requester" | "supervisor" | "manager";
 
 const TIRE_SIZE_OPTIONS: MhTireSize[] = [
   "6.00-9 (ยางตันหน้า/หลัง 2.5T)",
@@ -111,284 +92,693 @@ const WHEEL_POSITION_OPTIONS = [
 ];
 
 const WORKSHOP_BAYS = [
-  "Workshop Bay 1 - Hydraulic & Service",
-  "Workshop Bay 2 - Heavy Overhaul",
-  "Workshop Bay 3 - Tire & Undercarriage",
-  "Workshop Bay 4 - Electrical & Battery",
-  "External Specialist Service Center",
+  "ช่องซ่อม 1 - งานตรวจเช็ค & ไฮดรอลิค",
+  "ช่องซ่อม 2 - งานซ่อมเครื่องยนต์ & ระบบส่งกำลัง",
+  "ช่องซ่อม 3 - งานยาง & ช่วงล่าง",
+  "ช่องซ่อม 4 - งานระบบไฟฟ้า & ตู้ชาร์จ",
+  "ส่งซ่อมศูนย์บริการภายนอก (External Vendor)",
 ];
+
+const SPARE_PART_UNITS = ["ชิ้น", "ชุด", "เส้น", "ลิตร", "อัน", "เมตร", "กล่อง"];
 
 const FEEDBACK_QUERY_TYPES = [
-  "Spare parts price check and current market cost (ตรวจสอบราคาอะไหล่และต้นทุนตลาดปัจจุบัน)",
-  "Labor hours and repair duration breakdown (รายละเอียดชั่วโมงแรงงานและระยะเวลาซ่อม)",
-  "Alternative parts or vendor quotation (เสนอราคาอะไหล่ทดแทนหรือผู้ขายทางเลือก)",
-  "Priority and urgency justification (เหตุผลความจำเป็นเร่งด่วนในการซ่อม)",
-  "Other clarification / Custom question (คำถามหรือข้อมูลเพิ่มเติมอื่นๆ)",
+  "สอบถามชื่อ Vendor / ร้านซ่อมที่เข้ามาซ่อม (Vendor Inquiry)",
+  "ตรวจสอบราคาอะไหล่และต้นทุนตลาด (Spare parts price verification)",
+  "รายละเอียดชั่วโมงแรงงานและระยะเวลาซ่อม (Labor cost & duration breakdown)",
+  "ขอใบเสนอราคาอะไหล่ทดแทน (Alternative parts quotation)",
+  "ความเร่งด่วนและความจำเป็นในการซ่อม (Priority & urgency justification)",
+  "ข้อมูลเพิ่มเติมอื่นๆ (Other clarification)",
 ];
 
-const INITIAL_FIX_RECORDS: FixFlushRecord[] = [];
+const MAX_REPAIR_PHOTOS = 9;
+const MAX_TOTAL_PHOTO_BYTES = 660 * 1024; // Keep total photos safely under Firestore's 1MB doc limit
 
-export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
-  const [records, setRecords] = useState<FixFlushRecord[]>(INITIAL_FIX_RECORDS);
-  const [tireRecords, setTireRecords] = useState<MhTireStockRecord[]>([]);
+async function compressRepairImageFile(
+  file: File,
+  indexOffset: number
+): Promise<MhRepairPhotoItem> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`ไม่สามารถอ่านไฟล์ ${file.name} ได้`));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error(`ไฟล์ ${file.name} ไม่ใช่รูปภาพที่รองรับ`));
+      img.onload = () => {
+        const maxEdge = 760;
+        let targetW = img.width;
+        let targetH = img.height;
+        if (targetW > maxEdge || targetH > maxEdge) {
+          if (targetW >= targetH) {
+            targetH = Math.round((targetH * maxEdge) / targetW);
+            targetW = maxEdge;
+          } else {
+            targetW = Math.round((targetW * maxEdge) / targetH);
+            targetH = maxEdge;
+          }
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, targetW);
+        canvas.height = Math.max(1, targetH);
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("เบราว์เซอร์ไม่รองรับการบีบอัดรูปภาพ"));
+          return;
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        let quality = 0.62;
+        let dataUrl = canvas.toDataURL("image/jpeg", quality);
+        while (dataUrl.length > 95000 && quality > 0.32) {
+          quality -= 0.1;
+          dataUrl = canvas.toDataURL("image/jpeg", quality);
+        }
+
+        // If still large on very dense textures, scale down slightly more
+        if (dataUrl.length > 110000) {
+          const smallCanvas = document.createElement("canvas");
+          smallCanvas.width = Math.max(1, Math.round(canvas.width * 0.72));
+          smallCanvas.height = Math.max(1, Math.round(canvas.height * 0.72));
+          const sCtx = smallCanvas.getContext("2d");
+          if (sCtx) {
+            sCtx.fillStyle = "#ffffff";
+            sCtx.fillRect(0, 0, smallCanvas.width, smallCanvas.height);
+            sCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+            dataUrl = smallCanvas.toDataURL("image/jpeg", 0.52);
+          }
+        }
+
+        resolve({
+          id: `PH-${Date.now()}-${indexOffset}`,
+          name: file.name || `repair_photo_${indexOffset + 1}.jpg`,
+          dataUrl,
+          sizeBytes: dataUrl.length,
+          uploadedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+        });
+      };
+      img.src = String(reader.result || "");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function getStageMeta(rec: FixFlushRecord): {
+  stage: MhWorkflowStage;
+  labelTh: string;
+  shortLabel: string;
+  stepNumber: number;
+  badgeClass: string;
+} {
+  const stage = inferMhWorkflowStage(rec);
+  if (rec.managerStatus === "More Info Requested" && stage !== "Rejected" && stage !== "Completed" && stage !== "ManagerApproved") {
+    return {
+      stage,
+      labelTh: "รอหัวหน้างานตอบข้อมูลเพิ่ม",
+      shortLabel: "รอตอบข้อมูลเพิ่ม",
+      stepNumber: 2,
+      badgeClass:
+        "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800",
+    };
+  }
+  switch (stage) {
+    case "Submitted":
+      if (rec.supervisorStatus === "Returned") {
+        return {
+          stage,
+          labelTh: "ส่งกลับแก้ไขข้อมูล",
+          shortLabel: "ส่งกลับแก้ไข",
+          stepNumber: 1,
+          badgeClass:
+            "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
+        };
+      }
+      return {
+        stage,
+        labelTh: "รอหัวหน้างานตรวจสอบ",
+        shortLabel: "รอหัวหน้าตรวจสอบ",
+        stepNumber: 2,
+        badgeClass:
+          "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
+      };
+    case "SupervisorChecked":
+      return {
+        stage,
+        labelTh: "รอผู้จัดการอนุมัติ",
+        shortLabel: "รออนุมัติ",
+        stepNumber: 3,
+        badgeClass:
+          "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800",
+      };
+    case "ManagerApproved":
+      return {
+        stage,
+        labelTh: "รอคิวซ่อม",
+        shortLabel: "รอคิวซ่อม",
+        stepNumber: 4,
+        badgeClass:
+          "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800",
+      };
+    case "Completed":
+      return {
+        stage,
+        labelTh: "ซ่อมเสร็จ",
+        shortLabel: "ซ่อมเสร็จ",
+        stepNumber: 4,
+        badgeClass:
+          "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/50 dark:text-emerald-200 dark:border-emerald-700",
+      };
+    case "Rejected":
+      return {
+        stage,
+        labelTh: "ไม่อนุมัติ",
+        shortLabel: "ไม่อนุมัติ",
+        stepNumber: 3,
+        badgeClass:
+          "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800",
+      };
+  }
+}
+
+export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagementProps) {
+  const { currentUser } = useAuth();
+  const [records, setRecords] = useState<FixFlushRecord[]>([]);
   const [cloudRealtime, setCloudRealtime] = useState<boolean>(() =>
     getForkliftCloudRealtimeEnabled()
   );
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [headingPortalTarget, setHeadingPortalTarget] = useState<HTMLElement | null>(() =>
+    typeof document !== "undefined" ? document.getElementById("page-heading-actions") : null
+  );
 
-  const [activeTab, setActiveTab] = useState<"technician" | "manager" | "tire_stock">("technician");
+  const [activeTab, setActiveTab] = useState<RepairHubTab>(() => {
+    if (currentUser?.role === "Manager") return "manager";
+    if (currentUser?.role === "Supervisor") return "supervisor";
+    return "requester";
+  });
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [managerFilter, setManagerFilter] = useState("All");
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [stageFilter, setStageFilter] = useState<string>("All");
+  const [supervisorSubFilter, setSupervisorSubFilter] = useState<
+    "all_sup" | "Submitted" | "MoreInfo" | "ManagerApproved"
+  >("all_sup");
+  const [repairCategoryFilter, setRepairCategoryFilter] = useState<string>("All");
+
+  // Modals & Inspection Drawer State
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FixFlushRecord | null>(null);
+  const [isEditingSupervisorCost, setIsEditingSupervisorCost] = useState(false);
 
-  // Tire Stock Modal State
-  const [isTireModalOpen, setIsTireModalOpen] = useState<boolean>(false);
-  const [tireTxType, setTireTxType] = useState<"Inbound" | "Outbound">("Inbound");
-  const [tireSize, setTireSize] = useState<string>(TIRE_SIZE_OPTIONS[1]);
-  const [tireBrand, setTireBrand] = useState<string>("KOMACHI / PIO");
-  const [tireQty, setTireQty] = useState<number>(2);
-  const [tireUnitCost, setTireUnitCost] = useState<number>(3800);
-  const [tireSupplierOrInvoice, setTireSupplierOrInvoice] = useState<string>("");
-  const [tireVehicleId, setTireVehicleId] = useState<string>(vehicles[0]?.vehicleId || "");
-  const [tireWheelPosition, setTireWheelPosition] = useState<string>(WHEEL_POSITION_OPTIONS[4]);
-  const [tireOperatingHours, setTireOperatingHours] = useState<number>(0);
-  const [tireTechnicianName, setTireTechnicianName] = useState<string>("");
-  const [tireNotes, setTireNotes] = useState<string>("");
-  const [tireSearchQuery, setTireSearchQuery] = useState<string>("");
+  // Lightbox State for viewing attached photos
+  const [lightboxPhotos, setLightboxPhotos] = useState<MhRepairPhotoItem[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number>(0);
 
-  // Subscribe to mh_maintenance and mh_tire_stock ONLY while FixFlushManagement is mounted
+  // Feedback / Manager Query Modal State
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
+  const [feedbackRecord, setFeedbackRecord] = useState<FixFlushRecord | null>(null);
+  const [queryType, setQueryType] = useState(FEEDBACK_QUERY_TYPES[0]);
+  const [feedbackMessageText, setFeedbackMessageText] = useState("");
+
+  // Reject / Return Reason Inline State
+  const [rejectReasonText, setRejectReasonText] = useState("");
+  const [showRejectBox, setShowRejectBox] = useState(false);
+  const [returnReasonText, setReturnReasonText] = useState("");
+  const [showReturnBox, setShowReturnBox] = useState(false);
+
+  // Delete confirmation state (no window.confirm)
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // Stage 1: New Repair Request Form State
+  const photoInputRef = useRef<HTMLInputElement | null>(null);
+  const [reqWorkingDate, setReqWorkingDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [reqRequesterName, setReqRequesterName] = useState(() => {
+    return currentUser?.employeeName || getActiveRecorderDisplay("").employeeName || "";
+  });
+  const [reqVehicleId, setReqVehicleId] = useState(vehicles[0]?.vehicleId || "");
+  const [reqRepairType, setReqRepairType] = useState<string>(MH_REPAIR_CATEGORIES[0]);
+  const [reqRepairDescription, setReqRepairDescription] = useState("");
+  const [reqOperatingHours, setReqOperatingHours] = useState<number>(0);
+  const [reqNotes, setReqNotes] = useState("");
+  const [reqPhotos, setReqPhotos] = useState<MhRepairPhotoItem[]>([]);
+  const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+
+  // Stage 2: Supervisor Inspection & Costing Form State (inside selectedRecord modal)
+  const [supSpareParts, setSupSpareParts] = useState<MhSparePartItem[]>([]);
+  const [supPartsCost, setSupPartsCost] = useState<number>(0);
+  const [supLaborCost, setSupLaborCost] = useState<number>(0);
+  const [supPartsCostManual, setSupPartsCostManual] = useState<boolean>(false);
+  const [supWorkshopBay, setSupWorkshopBay] = useState<string>(WORKSHOP_BAYS[0]);
+  const [supTechnicianName, setSupTechnicianName] = useState<string>("");
+  const [supVendorName, setSupVendorName] = useState<string>("");
+  const [supOperatingHours, setSupOperatingHours] = useState<number>(0);
+  const [supNotes, setSupNotes] = useState<string>("");
+  const [supReplyVendorName, setSupReplyVendorName] = useState<string>("");
+  const [supReplyText, setSupReplyText] = useState<string>("");
+  const [supLogTireOutbound, setSupLogTireOutbound] = useState<boolean>(false);
+  const [supTireSize, setSupTireSize] = useState<string>(TIRE_SIZE_OPTIONS[1]);
+  const [supTireQty, setSupTireQty] = useState<number>(2);
+  const [supTirePosition, setSupTirePosition] = useState<string>(WHEEL_POSITION_OPTIONS[4]);
+  const [isSavingSupervisor, setIsSavingSupervisor] = useState(false);
+
+  // Portal target for Cloud Sync button beside Print / Export
+  useEffect(() => {
+    setHeadingPortalTarget(document.getElementById("page-heading-actions"));
+  }, []);
+
+  // Subscriptions
   useEffect(() => {
     const unsubMode = subscribeForkliftCloudRealtimeMode((enabled) => {
       setCloudRealtime(enabled);
     });
-    return () => {
-      unsubMode();
-    };
+    return () => unsubMode();
   }, []);
 
   useEffect(() => {
     const unsubMaint = subscribeToMhMaintenance((cloudMaint) => {
       setRecords(cloudMaint);
     });
-    const unsubTires = subscribeToMhTireStock((cloudTires) => {
-      setTireRecords(cloudTires);
-    });
     return () => {
       unsubMaint();
-      unsubTires();
     };
   }, [cloudRealtime]);
+
+  // Keep selectedVehicle default populated when vehicles prop loads
+  useEffect(() => {
+    if (!reqVehicleId && vehicles.length > 0) {
+      setReqVehicleId(vehicles[0].vehicleId);
+    }
+  }, [vehicles, reqVehicleId]);
 
   const handleManualReload = async () => {
     setIsRefreshing(true);
     try {
-      const [latestMaint, latestTires] = await Promise.all([
-        fetchMhMaintenanceOnce(),
-        fetchMhTireStockOnce(),
-      ]);
+      const latestMaint = await fetchMhMaintenanceOnce();
       setRecords(latestMaint);
-      setTireRecords(latestTires);
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  // Compute Tire Stock balance per size
-  const tireStockBySize = useMemo(() => {
-    const map = new Map<string, { inbound: number; outbound: number; balance: number }>();
-    TIRE_SIZE_OPTIONS.forEach((size) => {
-      map.set(size, { inbound: 0, outbound: 0, balance: 0 });
-    });
-    tireRecords.forEach((tr) => {
-      const key = tr.tireSize || TIRE_SIZE_OPTIONS[1];
-      const current = map.get(key) || { inbound: 0, outbound: 0, balance: 0 };
-      if (tr.transactionType === "Inbound") {
-        current.inbound += Number(tr.qty) || 0;
-      } else {
-        current.outbound += Number(tr.qty) || 0;
+  // Auto-generated TMT-YYYY-MM-NNN preview for new repair request
+  const previewRequestNo = useMemo(() => {
+    const parsedDate = reqWorkingDate ? new Date(`${reqWorkingDate}T00:00:00`) : new Date();
+    const safeDate = isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+    return generateNextRepairRequestNo(records, safeDate);
+  }, [records, reqWorkingDate]);
+
+  // Open Inspect Drawer and initialize Stage 2 form state
+  const openInspectModal = (rec: FixFlushRecord, startEditing = false) => {
+    const stage = inferMhWorkflowStage(rec);
+    const parts = Array.isArray(rec.spareParts) ? rec.spareParts.map((p) => ({ ...p })) : [];
+    const sumFromParts = parts.reduce(
+      (s, p) => s + (Number(p.qty) || 0) * (Number(p.unitCost) || 0),
+      0
+    );
+    const initialPartsCost =
+      typeof rec.partsCost === "number" ? rec.partsCost : sumFromParts;
+
+    setSelectedRecord(rec);
+    setSupSpareParts(parts);
+    setSupPartsCost(initialPartsCost);
+    setSupPartsCostManual(parts.length === 0 && initialPartsCost > 0);
+    setSupLaborCost(typeof rec.laborCost === "number" ? rec.laborCost : 0);
+    setSupWorkshopBay(
+      rec.workshopBay && rec.workshopBay !== "-" ? rec.workshopBay : WORKSHOP_BAYS[0]
+    );
+    setSupTechnicianName(
+      rec.technicianName && rec.technicianName !== "-"
+        ? rec.technicianName
+        : rec.supervisorName || ""
+    );
+    setSupVendorName(rec.vendorName && rec.vendorName !== "-" ? rec.vendorName : "");
+    setSupReplyVendorName(rec.vendorName && rec.vendorName !== "-" ? rec.vendorName : "");
+    setSupReplyText("");
+    setSupOperatingHours(Number(rec.operatingHours) || 0);
+    setSupNotes(rec.supervisorNotes || "");
+    setSupLogTireOutbound(false);
+    setSupTireSize(TIRE_SIZE_OPTIONS[1]);
+    setSupTireQty(2);
+    setSupTirePosition(WHEEL_POSITION_OPTIONS[4]);
+    setShowRejectBox(false);
+    setRejectReasonText("");
+    setShowReturnBox(false);
+    setReturnReasonText("");
+    setConfirmDeleteId(null);
+    setIsEditingSupervisorCost(startEditing || stage === "Submitted");
+  };
+
+  // Sync parts cost from spare parts table unless manually overridden
+  const computedPartsSubtotal = useMemo(() => {
+    return supSpareParts.reduce(
+      (sum, p) => sum + (Number(p.qty) || 0) * (Number(p.unitCost) || 0),
+      0
+    );
+  }, [supSpareParts]);
+
+  useEffect(() => {
+    if (!supPartsCostManual) {
+      setSupPartsCost(computedPartsSubtotal);
+    }
+  }, [computedPartsSubtotal, supPartsCostManual]);
+
+  const supTotalEstimatedCost = Math.max(0, Number(supPartsCost) || 0) + Math.max(0, Number(supLaborCost) || 0);
+
+  // Photo handlers (max 9 photos, client-side compressed)
+  const handlePhotoFilesSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setPhotoError(null);
+
+    const remainingSlots = MAX_REPAIR_PHOTOS - reqPhotos.length;
+    if (remainingSlots <= 0) {
+      setPhotoError(`แนบรูปถ่ายได้สูงสุด ${MAX_REPAIR_PHOTOS} รูปต่อ 1 ใบแจ้งซ่อม`);
+      return;
+    }
+
+    const selectedFiles = Array.from(files).slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      setPhotoError(
+        `เลือกได้เพิ่มอีก ${remainingSlots} รูปเท่านั้น (สูงสุด ${MAX_REPAIR_PHOTOS} รูป)`
+      );
+    }
+
+    setIsCompressingPhotos(true);
+    try {
+      let currentBytes = reqPhotos.reduce((s, p) => s + p.dataUrl.length, 0);
+      const nextPhotos: MhRepairPhotoItem[] = [];
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const compressed = await compressRepairImageFile(selectedFiles[i], reqPhotos.length + i);
+        if (currentBytes + compressed.dataUrl.length > MAX_TOTAL_PHOTO_BYTES) {
+          setPhotoError(
+            "ขนาดรูปภาพรวมใกล้ขีดจำกัดฐานข้อมูล (660 KB) จึงหยุดรับรูปเพิ่มเติม"
+          );
+          break;
+        }
+        currentBytes += compressed.dataUrl.length;
+        nextPhotos.push(compressed);
       }
-      current.balance = Math.max(0, current.inbound - current.outbound);
-      map.set(key, current);
-    });
-    return map;
-  }, [tireRecords]);
-
-  const totalTiresInStock = useMemo(() => {
-    let total = 0;
-    tireStockBySize.forEach((v) => {
-      total += v.balance;
-    });
-    return total;
-  }, [tireStockBySize]);
-
-  // Feedback Modal State (for Manager query or Technician reply)
-  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState(false);
-  const [feedbackRecord, setFeedbackRecord] = useState<FixFlushRecord | null>(null);
-  const [queryType, setQueryType] = useState(FEEDBACK_QUERY_TYPES[0]);
-  const [feedbackMessageText, setFeedbackMessageText] = useState("");
-
-  // Form State for New Work Order
-  const [repairType, setRepairType] = useState(REPAIR_TYPES[0]);
-  const [vehicleId, setVehicleId] = useState(vehicles[0]?.vehicleId || "");
-  const [workshopBay, setWorkshopBay] = useState(WORKSHOP_BAYS[0]);
-  const [repairDescription, setRepairDescription] = useState("");
-  const [status, setStatus] = useState<"Pending Inspection" | "In Workshop" | "Testing" | "Approved" | "Completed">("Pending Inspection");
-  const [operatingHours, setOperatingHours] = useState<number>(0);
-  const [technicianName, setTechnicianName] = useState("");
-  const [workingDate, setWorkingDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState("");
-
-  const [spareParts, setSpareParts] = useState<SparePartItem[]>([]);
-
-  const addSparePartRow = () => {
-    setSpareParts([...spareParts, { partCode: "", partName: "", qty: 1, unitCost: 0 }]);
+      if (nextPhotos.length > 0) {
+        setReqPhotos((prev) => [...prev, ...nextPhotos].slice(0, MAX_REPAIR_PHOTOS));
+      }
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : "เกิดข้อผิดพลาดในการประมวลผลรูปภาพ");
+    } finally {
+      setIsCompressingPhotos(false);
+      if (photoInputRef.current) {
+        photoInputRef.current.value = "";
+      }
+    }
   };
 
-  const updateSparePart = (index: number, field: keyof SparePartItem, value: any) => {
-    const updated = [...spareParts];
-    updated[index] = { ...updated[index], [field]: value };
-    setSpareParts(updated);
+  const handleRemoveReqPhoto = (photoId: string) => {
+    setReqPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    setPhotoError(null);
   };
 
-  const removeSparePart = (index: number) => {
-    setSpareParts(spareParts.filter((_, idx) => idx !== index));
+  const openLightbox = (photos: MhRepairPhotoItem[], startIndex = 0) => {
+    if (!photos || photos.length === 0) return;
+    setLightboxPhotos(photos);
+    setLightboxIndex(Math.max(0, Math.min(startIndex, photos.length - 1)));
   };
 
-  const calculatedEstimatedCost = spareParts.reduce((sum, p) => sum + (Number(p.qty) || 0) * (Number(p.unitCost) || 0), 0);
-
-  const handleCreateRecord = async (e: React.FormEvent) => {
+  // Stage 1 Submit: Employee submits repair request
+  const handleCreateRepairRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetVehicle = vehicles.find((v) => v.vehicleId === vehicleId);
-    const vehicleDescription = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "-"})` : (vehicleId || "-");
-    const recId = `FIX-${new Date().getFullYear()}-${String(records.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
-    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    if (isSubmittingRequest) return;
 
-    const newRecord: FixFlushRecord = {
-      id: recId,
-      workOrderNo: recId,
-      repairType,
-      vehicleId: vehicleId || "-",
-      vehicleNumber: vehicleId || "-",
-      vehicleType: targetVehicle?.vehicleType || "Forklift",
-      vehicleDescription,
-      workshopBay,
-      repairDescription: repairDescription.trim() || "-",
-      status,
-      managerStatus: "Pending Manager Approval",
-      operatingHours: Number(operatingHours) || 0,
-      technicianName: technicianName.trim() || "-",
-      workingDate,
-      spareParts,
-      estimatedCost: calculatedEstimatedCost,
-      feedbackThread: [],
-      notes,
-      createdAt: nowStr,
+    const cleanRequester =
+      reqRequesterName.trim() ||
+      currentUser?.employeeName ||
+      getActiveRecorderDisplay("พนักงานแจ้งซ่อม").employeeName;
+    const cleanVehicleId = reqVehicleId.trim();
+    const cleanDesc = reqRepairDescription.trim();
+
+    if (!cleanVehicleId || !cleanDesc) return;
+
+    setIsSubmittingRequest(true);
+    try {
+      const targetVehicle = vehicles.find((v) => v.vehicleId === cleanVehicleId);
+      const vehicleDescription = targetVehicle
+        ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "-"})`
+        : cleanVehicleId;
+
+      const parsedDate = reqWorkingDate ? new Date(`${reqWorkingDate}T00:00:00`) : new Date();
+      const safeDate = isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+      const requestNo = generateNextRepairRequestNo(records, safeDate);
+      const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+
+      const newRecord: FixFlushRecord = {
+        id: requestNo,
+        workOrderNo: requestNo,
+        requesterName: cleanRequester,
+        vehicleId: cleanVehicleId,
+        vehicleNumber: cleanVehicleId,
+        vehicleType: targetVehicle?.vehicleType || "Forklift",
+        vehicleDescription,
+        repairType: reqRepairType,
+        repairDescription: cleanDesc,
+        workflowStage: "Submitted",
+        status: "Pending Inspection",
+        supervisorStatus: "Pending",
+        managerStatus: "Pending Manager Approval",
+        progressStatus: "Awaiting Approval",
+        workingDate: reqWorkingDate,
+        operatingHours: Number(reqOperatingHours) || 0,
+        technicianName: "-",
+        workshopBay: "-",
+        spareParts: [],
+        partsCost: 0,
+        laborCost: 0,
+        estimatedCost: 0,
+        photos: reqPhotos,
+        feedbackThread: [],
+        notes: reqNotes.trim() || undefined,
+        createdAt: nowStr,
+        updatedAt: nowStr,
+      };
+
+      setRecords((prev) => [newRecord, ...prev]);
+      setIsRequestModalOpen(false);
+      setReqRepairDescription("");
+      setReqNotes("");
+      setReqPhotos([]);
+      setReqOperatingHours(0);
+      setPhotoError(null);
+
+      await saveMhMaintenanceToCloud(newRecord);
+      void appendWmsActivityLog({
+        module: "ระบบแจ้งซ่อม (MH)",
+        sectionId: "fleet_ops",
+        reference: requestNo,
+        activity: `แจ้งซ่อม ${requestNo} รถ ${cleanVehicleId} · ${reqRepairType} (ผู้แจ้ง: ${cleanRequester})`,
+        status: "Pending",
+      });
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
+
+  // Stage 2 Spare parts helpers
+  const addSupSparePartRow = () => {
+    setSupPartsCostManual(false);
+    setSupSpareParts((prev) => [
+      ...prev,
+      {
+        id: `SP-${Date.now()}-${prev.length + 1}`,
+        partCode: "",
+        partName: "",
+        qty: 1,
+        unit: "ชิ้น",
+        unitCost: 0,
+      },
+    ]);
+  };
+
+  const updateSupSparePart = (
+    index: number,
+    field: keyof MhSparePartItem,
+    value: string | number
+  ) => {
+    setSupSpareParts((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const removeSupSparePart = (index: number) => {
+    setSupPartsCostManual(false);
+    setSupSpareParts((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  // Stage 2 Action: Supervisor confirms inspection & sends to Manager
+  const handleSupervisorConfirmInspection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRecord || isSavingSupervisor) return;
+    setIsSavingSupervisor(true);
+
+    try {
+      const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+      const supervisorDisplay =
+        currentUser?.employeeName ||
+        getActiveRecorderDisplay("หัวหน้างาน").employeeName ||
+        "หัวหน้างาน Material Handling";
+
+      const cleanParts = supSpareParts.filter(
+        (sp) => sp.partName.trim() !== "" || sp.partCode.trim() !== "" || sp.unitCost > 0
+      );
+      const finalPartsCost = Math.max(0, Number(supPartsCost) || 0);
+      const finalLaborCost = Math.max(0, Number(supLaborCost) || 0);
+      const finalTotal = finalPartsCost + finalLaborCost;
+      const cleanVendor = supVendorName.trim() || undefined;
+      const wasMoreInfo = selectedRecord.managerStatus === "More Info Requested";
+      const nextThread = wasMoreInfo
+        ? [
+            ...selectedRecord.feedbackThread,
+            {
+              id: `FB-${Date.now()}`,
+              author: supervisorDisplay,
+              role: "Supervisor" as const,
+              queryType: "หัวหน้างานอัปเดตข้อมูลและส่งกลับพิจารณา",
+              message: `${cleanVendor ? `Vendor/ร้านซ่อม: ${cleanVendor} · ` : ""}${
+                supNotes.trim() || "อัปเดตรายการประเมินและส่งกลับผู้จัดการพิจารณาอนุมัติ"
+              }`,
+              timestamp: nowStr,
+            },
+          ]
+        : selectedRecord.feedbackThread;
+
+      const updated: FixFlushRecord = {
+        ...selectedRecord,
+        spareParts: cleanParts,
+        partsCost: finalPartsCost,
+        laborCost: finalLaborCost,
+        estimatedCost: finalTotal,
+        workshopBay: supWorkshopBay,
+        technicianName: supTechnicianName.trim() || supervisorDisplay,
+        vendorName: cleanVendor,
+        operatingHours: Number(supOperatingHours) || selectedRecord.operatingHours || 0,
+        supervisorStatus: "Checked",
+        supervisorName: supervisorDisplay,
+        supervisorCheckedAt: nowStr,
+        supervisorNotes: supNotes.trim() || undefined,
+        workflowStage: "SupervisorChecked",
+        managerStatus: "Pending Manager Approval",
+        status: "Pending Inspection",
+        feedbackThread: nextThread,
+        updatedAt: nowStr,
+      };
+
+      setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+      setSelectedRecord(updated);
+      setIsEditingSupervisorCost(false);
+
+      await saveMhMaintenanceToCloud(updated);
+
+      // Optional automatic outbound tire deduction if supervisor ticked it
+      if (supLogTireOutbound && supTireQty > 0) {
+        const tireTxId = `TIRE-WO-${updated.workOrderNo}-${Date.now().toString().slice(-4)}`;
+        const unitCostVal =
+          finalPartsCost > 0 ? Math.round(finalPartsCost / Math.max(1, supTireQty)) : 3800;
+        const tireTx: MhTireStockRecord = {
+          id: tireTxId,
+          transactionNo: tireTxId,
+          date: nowStr.slice(0, 10),
+          time: nowStr.slice(11, 16) || "09:00",
+          transactionType: "Outbound",
+          tireSize: supTireSize,
+          brand: "KOMACHI / PIO",
+          qty: supTireQty,
+          unitCost: unitCostVal,
+          totalCost: unitCostVal * supTireQty,
+          vehicleId: updated.vehicleId,
+          vehicleNumber: updated.vehicleNumber || updated.vehicleId,
+          wheelPosition: supTirePosition,
+          operatingHours: updated.operatingHours,
+          technicianOrReceiver: updated.technicianName || supervisorDisplay,
+          workOrderRef: updated.workOrderNo,
+          notes: `เบิกเปลี่ยนยางตามใบขอซ่อม ${updated.workOrderNo}`,
+          updatedAt: nowStr,
+        };
+        await saveMhTireTransactionToCloud(tireTx);
+      }
+
+      void appendWmsActivityLog({
+        module: "ระบบแจ้งซ่อม (MH)",
+        sectionId: "fleet_ops",
+        reference: updated.workOrderNo,
+        activity: `หัวหน้างานตรวจสอบใบซ่อม ${updated.workOrderNo} (${updated.vehicleId}) ยอดประเมิน ${finalTotal.toLocaleString()} บาท → ส่งผู้จัดการอนุมัติ`,
+        status: "Pending",
+      });
+    } finally {
+      setIsSavingSupervisor(false);
+    }
+  };
+
+  // Stage 2 Action: Supervisor returns request to requester
+  const handleSupervisorReturnToRequester = async () => {
+    if (!selectedRecord || !returnReasonText.trim()) return;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const supervisorDisplay =
+      currentUser?.employeeName || getActiveRecorderDisplay("หัวหน้างาน").employeeName;
+
+    const msg = {
+      id: `FB-${Date.now()}`,
+      author: supervisorDisplay,
+      role: "Supervisor" as const,
+      queryType: "ส่งกลับแก้ไขรายละเอียดแจ้งซ่อม",
+      message: returnReasonText.trim(),
+      timestamp: nowStr,
+    };
+
+    const updated: FixFlushRecord = {
+      ...selectedRecord,
+      workflowStage: "Submitted",
+      supervisorStatus: "Returned",
+      supervisorName: supervisorDisplay,
+      supervisorCheckedAt: nowStr,
+      supervisorNotes: returnReasonText.trim(),
+      feedbackThread: [...selectedRecord.feedbackThread, msg],
       updatedAt: nowStr,
     };
 
-    setRecords((prev) => [newRecord, ...prev]);
-    setIsModalOpen(false);
-    setRepairDescription("");
-    setNotes("");
-    await saveMhMaintenanceToCloud(newRecord);
+    setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+    setSelectedRecord(updated);
+    setShowReturnBox(false);
+    setReturnReasonText("");
+    setIsEditingSupervisorCost(false);
 
-    // If repairType is Tire Replacement, also log an outbound tire movement to mh_tire_stock
-    if (repairType.includes("เปลี่ยนยาง") || repairType.includes("Tire")) {
-      const tireQtyFromParts = spareParts.reduce((s, p) => s + (Number(p.qty) || 0), 0) || 1;
-      const tireCostFromParts = calculatedEstimatedCost > 0 ? calculatedEstimatedCost : 3800 * tireQtyFromParts;
-      const tireTxId = `TIRE-WO-${Date.now()}`;
-      const tireTx: MhTireStockRecord = {
-        id: tireTxId,
-        transactionNo: tireTxId,
-        date: workingDate,
-        time: nowStr.slice(11, 16) || "09:00",
-        transactionType: "Outbound",
-        tireSize: TIRE_SIZE_OPTIONS[1],
-        brand: "KOMACHI / PIO",
-        qty: tireQtyFromParts,
-        unitCost: Math.round(tireCostFromParts / tireQtyFromParts),
-        totalCost: tireCostFromParts,
-        vehicleId: vehicleId || "-",
-        vehicleNumber: vehicleId || "-",
-        wheelPosition: "เปลี่ยนยางตามใบแจ้งซ่อม",
-        operatingHours: Number(operatingHours) || 0,
-        technicianOrReceiver: technicianName.trim() || "-",
-        workOrderRef: recId,
-        notes: repairDescription.trim() || notes || "เบิกเปลี่ยนยางจากใบแจ้งซ่อม",
-        updatedAt: nowStr,
-      };
-      setTireRecords((prev) => [tireTx, ...prev]);
-      await saveMhTireTransactionToCloud(tireTx);
-    }
+    await saveMhMaintenanceToCloud(updated);
+    void appendWmsActivityLog({
+      module: "ระบบแจ้งซ่อม (MH)",
+      sectionId: "fleet_ops",
+      reference: updated.workOrderNo,
+      activity: `หัวหน้างานส่งกลับใบซ่อม ${updated.workOrderNo}: ${msg.message}`,
+      status: "Attention",
+    });
   };
 
-  const handleCreateTireTransaction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 5);
-    const txId = `TIRE-${now.getFullYear()}-${String(tireRecords.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
-    const safeQty = Math.max(1, Number(tireQty) || 1);
-    const safeUnit = Math.max(0, Number(tireUnitCost) || 0);
-
-    const newTireRecord: MhTireStockRecord = {
-      id: txId,
-      transactionNo: txId,
-      date: dateStr,
-      time: timeStr,
-      transactionType: tireTxType,
-      tireSize,
-      brand: tireBrand.trim() || "KOMACHI / PIO",
-      qty: safeQty,
-      unitCost: safeUnit,
-      totalCost: safeQty * safeUnit,
-      supplierOrInvoice: tireTxType === "Inbound" ? tireSupplierOrInvoice.trim() || "-" : undefined,
-      vehicleId: tireTxType === "Outbound" ? tireVehicleId || "-" : undefined,
-      vehicleNumber: tireTxType === "Outbound" ? tireVehicleId || "-" : undefined,
-      wheelPosition: tireTxType === "Outbound" ? tireWheelPosition : undefined,
-      operatingHours: tireTxType === "Outbound" ? Number(tireOperatingHours) || 0 : undefined,
-      technicianOrReceiver: tireTechnicianName.trim() || "-",
-      notes: tireNotes.trim() || undefined,
-      updatedAt: `${dateStr} ${timeStr}`,
-    };
-
-    setTireRecords((prev) => [newTireRecord, ...prev]);
-    setIsTireModalOpen(false);
-    setTireNotes("");
-    await saveMhTireTransactionToCloud(newTireRecord);
-  };
-
-  const handleDeleteTireRecord = async (id: string) => {
-    setTireRecords((prev) => prev.filter((item) => item.id !== id));
-    await deleteMhTireTransactionFromCloud(id);
-  };
-
-  // Manager Actions
+  // Stage 3 Actions: Manager Approve / Reject / Query / Complete
   const handleManagerApprove = async (recordId: string) => {
     const target = records.find((r) => r.id === recordId);
     if (!target) return;
-    const updated: FixFlushRecord = {
-      ...target,
-      managerStatus: "Approved",
-      status: "In Workshop",
-      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-    };
-    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
-    if (selectedRecord && selectedRecord.id === recordId) {
-      setSelectedRecord(updated);
-    }
-    await saveMhMaintenanceToCloud(updated);
-  };
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const managerDisplay =
+      currentUser?.employeeName || getActiveRecorderDisplay("Manager").employeeName;
 
-  const handleManagerReject = async (recordId: string) => {
-    const target = records.find((r) => r.id === recordId);
-    if (!target) return;
     const updated: FixFlushRecord = {
       ...target,
-      managerStatus: "Rejected",
-      updatedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      workflowStage: "ManagerApproved",
+      managerStatus: "Approved",
+      managerName: managerDisplay,
+      managerApprovedAt: nowStr,
+      status: "In Workshop",
+      progressStatus: "In Progress",
+      updatedAt: nowStr,
     };
     setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
     if (selectedRecord && selectedRecord.id === recordId) {
@@ -396,12 +786,110 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
     }
     await saveMhMaintenanceToCloud(updated);
     void appendWmsActivityLog({
-      module: "Fix & Flush Maintenance",
+      module: "ระบบแจ้งซ่อม (MH)",
       sectionId: "fleet_ops",
       reference: target.workOrderNo,
-      activity: `ไม่อนุมัติใบแจ้งซ่อม ${target.workOrderNo} (${target.vehicleNumber})`,
+      activity: `ผู้จัดการอนุมัติซ่อม ${target.workOrderNo} (${target.vehicleId}) ยอด ${target.estimatedCost.toLocaleString()} บาท → ตารางแจ้งซ่อม (รอคิวซ่อม)`,
+      status: "Approved",
+    });
+  };
+
+  const handleManagerReject = async (recordId: string, reason?: string) => {
+    const target = records.find((r) => r.id === recordId);
+    if (!target) return;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const managerDisplay =
+      currentUser?.employeeName || getActiveRecorderDisplay("Manager").employeeName;
+
+    const cleanReason = reason?.trim();
+    const updatedThread = cleanReason
+      ? [
+          ...target.feedbackThread,
+          {
+            id: `FB-${Date.now()}`,
+            author: managerDisplay,
+            role: "Manager" as const,
+            queryType: "เหตุผลการไม่อนุมัติ",
+            message: cleanReason,
+            timestamp: nowStr,
+          },
+        ]
+      : target.feedbackThread;
+
+    const updated: FixFlushRecord = {
+      ...target,
+      workflowStage: "Rejected",
+      managerStatus: "Rejected",
+      managerName: managerDisplay,
+      managerApprovedAt: nowStr,
+      managerDecisionNote: cleanReason || undefined,
+      feedbackThread: updatedThread,
+      updatedAt: nowStr,
+    };
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
+    if (selectedRecord && selectedRecord.id === recordId) {
+      setSelectedRecord(updated);
+    }
+    setShowRejectBox(false);
+    setRejectReasonText("");
+    await saveMhMaintenanceToCloud(updated);
+    void appendWmsActivityLog({
+      module: "ระบบแจ้งซ่อม (MH)",
+      sectionId: "fleet_ops",
+      reference: target.workOrderNo,
+      activity: `ไม่อนุมัติใบแจ้งซ่อม ${target.workOrderNo} (${target.vehicleId})${cleanReason ? ` · ${cleanReason}` : ""}`,
       status: "Attention",
     });
+  };
+
+  const handleMarkRepairCompleted = async (recordId: string) => {
+    const target = records.find((r) => r.id === recordId);
+    if (!target) return;
+    const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const supervisorDisplay =
+      currentUser?.employeeName || getActiveRecorderDisplay("หัวหน้างาน").employeeName;
+    const updated: FixFlushRecord = {
+      ...target,
+      workflowStage: "Completed",
+      status: "Completed",
+      progressStatus: "Completed",
+      completedAt: nowStr,
+      supervisorNotes: target.supervisorNotes
+        ? target.supervisorNotes
+        : `อัปเดตสถานะซ่อมเสร็จโดย ${supervisorDisplay} (${nowStr})`,
+      updatedAt: nowStr,
+    };
+    setRecords((prev) => prev.map((r) => (r.id === recordId ? updated : r)));
+    if (selectedRecord && selectedRecord.id === recordId) {
+      setSelectedRecord(updated);
+    }
+    await saveMhMaintenanceToCloud(updated);
+    void appendWmsActivityLog({
+      module: "ระบบแจ้งซ่อม (MH)",
+      sectionId: "fleet_ops",
+      reference: target.workOrderNo,
+      activity: `หัวหน้างานอัปเดตสถานะ ${target.workOrderNo} (${target.vehicleId}) → ซ่อมเสร็จ`,
+      status: "Completed",
+    });
+  };
+
+  const handleDeleteMaintenanceOrder = async (recordId: string) => {
+    const target = records.find((r) => r.id === recordId);
+    setRecords((prev) => prev.filter((r) => r.id !== recordId));
+    if (selectedRecord && selectedRecord.id === recordId) {
+      setSelectedRecord(null);
+    }
+    setConfirmDeleteId(null);
+    await deleteMhMaintenanceFromCloud(recordId);
+    if (target) {
+      void appendWmsActivityLog({
+        module: "ระบบแจ้งซ่อม (MH)",
+        sectionId: "fleet_ops",
+        reference: target.workOrderNo,
+        activity: `ลบใบแจ้งซ่อม ${target.workOrderNo} (${target.vehicleId})`,
+        status: "Attention",
+      });
+    }
   };
 
   const handleSendManagerQuery = async (e: React.FormEvent) => {
@@ -409,11 +897,12 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
     if (!feedbackRecord || !feedbackMessageText.trim()) return;
 
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
-    const activeAuthor = getActiveRecorderDisplay("Manager").label;
-    const newMessage: FeedbackMessage = {
+    const activeAuthor =
+      currentUser?.employeeName || getActiveRecorderDisplay("Manager").label;
+    const newMessage = {
       id: `FB-${Date.now()}`,
       author: activeAuthor,
-      role: "Manager",
+      role: "Manager" as const,
       queryType,
       message: feedbackMessageText.trim(),
       timestamp: nowStr,
@@ -421,13 +910,13 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
 
     const updatedRecord: FixFlushRecord = {
       ...feedbackRecord,
+      workflowStage: "SupervisorChecked",
       managerStatus: "More Info Requested",
       feedbackThread: [...feedbackRecord.feedbackThread, newMessage],
       updatedAt: nowStr,
     };
 
     setRecords((prev) => prev.map((r) => (r.id === feedbackRecord.id ? updatedRecord : r)));
-
     if (selectedRecord && selectedRecord.id === feedbackRecord.id) {
       setSelectedRecord(updatedRecord);
     }
@@ -437,824 +926,1043 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
     setFeedbackMessageText("");
     await saveMhMaintenanceToCloud(updatedRecord);
     void appendWmsActivityLog({
-      module: "Fix & Flush Maintenance",
+      module: "ระบบแจ้งซ่อม (MH)",
       sectionId: "fleet_ops",
       reference: updatedRecord.workOrderNo,
-      activity: `ส่งข้อความสอบถามงานซ่อม ${updatedRecord.workOrderNo}: ${queryType}`,
+      activity: `ผู้จัดการขอข้อมูลเพิ่ม ${updatedRecord.workOrderNo} (${queryType}) → ส่งกลับหัวหน้างานตรวจสอบ`,
       status: "Pending",
     });
   };
 
-  const handleTechnicianReply = async (recordId: string, replyText: string) => {
-    if (!replyText.trim()) return;
+  const handleThreadReply = async (
+    recordId: string,
+    replyText: string,
+    updatedVendorName?: string
+  ) => {
+    const cleanReply = replyText.trim();
+    const cleanVendor = updatedVendorName?.trim();
+    if (!cleanReply && !cleanVendor) return;
+
     const target = records.find((r) => r.id === recordId);
     if (!target) return;
 
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
-    const replyMsg: FeedbackMessage = {
+    const activeName =
+      currentUser?.employeeName || getActiveRecorderDisplay("หัวหน้างาน").employeeName;
+    const replyRole: "Supervisor" | "Technician" =
+      currentUser?.role === "Supervisor" || currentUser?.role === "Sr.Warehouse Officer"
+        ? "Supervisor"
+        : "Supervisor";
+
+    const combinedMessage = cleanVendor
+      ? cleanReply
+        ? `Vendor / ร้านซ่อม: ${cleanVendor} · ${cleanReply}`
+        : `แจ้งชื่อ Vendor / ร้านซ่อม: ${cleanVendor}`
+      : cleanReply;
+
+    const replyMsg = {
       id: `FB-${Date.now()}`,
-      author: "Technician / Requester",
-      role: "Technician",
-      message: replyText.trim(),
+      author: activeName,
+      role: replyRole,
+      queryType: "คำตอบเพิ่มเติมจากหัวหน้างาน",
+      message: combinedMessage,
       timestamp: nowStr,
     };
 
     const updatedRecord: FixFlushRecord = {
       ...target,
+      vendorName: cleanVendor || target.vendorName,
+      supervisorStatus: "Checked",
+      supervisorName: target.supervisorName || activeName,
+      supervisorCheckedAt: target.supervisorCheckedAt || nowStr,
+      workflowStage: "SupervisorChecked",
       managerStatus: "Pending Manager Approval",
       feedbackThread: [...target.feedbackThread, replyMsg],
       updatedAt: nowStr,
     };
 
     setRecords((prev) => prev.map((r) => (r.id === recordId ? updatedRecord : r)));
-
     if (selectedRecord && selectedRecord.id === recordId) {
       setSelectedRecord(updatedRecord);
     }
+    setSupVendorName(updatedRecord.vendorName || "");
+    setSupReplyVendorName(updatedRecord.vendorName || "");
+    setSupReplyText("");
+
     await saveMhMaintenanceToCloud(updatedRecord);
+    void appendWmsActivityLog({
+      module: "ระบบแจ้งซ่อม (MH)",
+      sectionId: "fleet_ops",
+      reference: updatedRecord.workOrderNo,
+      activity: `หัวหน้างานตอบข้อมูลเพิ่มเติม ${updatedRecord.workOrderNo} (${combinedMessage}) → ส่งผู้จัดการอนุมัติ`,
+      status: "Pending",
+    });
   };
 
-  const pendingManagerCount = records.filter((r) => r.managerStatus === "Pending Manager Approval").length;
-  const moreInfoCount = records.filter((r) => r.managerStatus === "More Info Requested").length;
-  const approvedManagerCount = records.filter((r) => r.managerStatus === "Approved").length;
+  // Counts for KPI and 3-Stage Tabs
+  const pendingSupervisorNewCount = useMemo(
+    () => records.filter((r) => inferMhWorkflowStage(r) === "Submitted").length,
+    [records]
+  );
+  const pendingSupervisorInfoCount = useMemo(
+    () =>
+      records.filter(
+        (r) =>
+          inferMhWorkflowStage(r) === "SupervisorChecked" &&
+          r.managerStatus === "More Info Requested"
+      ).length,
+    [records]
+  );
+  const pendingSupervisorCount = pendingSupervisorNewCount + pendingSupervisorInfoCount;
 
-  const filteredRecords = records.filter((r) => {
-    const matchesSearch =
-      r.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.repairType.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.repairDescription.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.technicianName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      r.workshopBay.toLowerCase().includes(searchQuery.toLowerCase());
+  const pendingManagerCount = useMemo(
+    () =>
+      records.filter(
+        (r) =>
+          inferMhWorkflowStage(r) === "SupervisorChecked" &&
+          r.managerStatus !== "More Info Requested" &&
+          r.managerStatus !== "Rejected"
+      ).length,
+    [records]
+  );
+  const inWorkshopCount = useMemo(
+    () => records.filter((r) => inferMhWorkflowStage(r) === "ManagerApproved").length,
+    [records]
+  );
+  const completedCount = useMemo(
+    () => records.filter((r) => inferMhWorkflowStage(r) === "Completed").length,
+    [records]
+  );
+  const totalApprovedCost = useMemo(
+    () =>
+      records
+        .filter((r) => {
+          const s = inferMhWorkflowStage(r);
+          return s === "ManagerApproved" || s === "Completed";
+        })
+        .reduce((sum, r) => sum + (Number(r.estimatedCost) || 0), 0),
+    [records]
+  );
 
-    const matchesStatus = statusFilter === "All" || r.status === statusFilter;
-    const matchesManager = managerFilter === "All" || r.managerStatus === managerFilter;
-    return matchesSearch && matchesStatus && matchesManager;
-  });
+  // Filtered work orders per active tab & toolbar filters
+  const filteredRecords = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return records.filter((r) => {
+      const stage = inferMhWorkflowStage(r);
+      const isMoreInfo =
+        stage === "SupervisorChecked" && r.managerStatus === "More Info Requested";
 
-  const filteredTireRecords = tireRecords.filter((tr) => {
-    if (!tireSearchQuery.trim()) return true;
-    const q = tireSearchQuery.toLowerCase();
-    return (
-      tr.transactionNo.toLowerCase().includes(q) ||
-      tr.tireSize.toLowerCase().includes(q) ||
-      tr.brand.toLowerCase().includes(q) ||
-      (tr.vehicleId || "").toLowerCase().includes(q) ||
-      tr.technicianOrReceiver.toLowerCase().includes(q)
-    );
-  });
+      // Tab scope filtering
+      if (activeTab === "supervisor" && stageFilter === "All") {
+        if (supervisorSubFilter === "Submitted") {
+          if (stage !== "Submitted") return false;
+        } else if (supervisorSubFilter === "MoreInfo") {
+          if (!isMoreInfo) return false;
+        } else if (supervisorSubFilter === "ManagerApproved") {
+          if (stage !== "ManagerApproved") return false;
+        } else {
+          // "all_sup": Supervisor handles new requests, Manager info-requests, and approved jobs in queue ("รอคิวซ่อม")
+          if (stage !== "Submitted" && !isMoreInfo && stage !== "ManagerApproved") {
+            return false;
+          }
+        }
+      } else if (activeTab === "manager" && stageFilter === "All") {
+        // Manager queue strictly excludes items sent back for More Info or Rejected
+        if (
+          stage !== "SupervisorChecked" ||
+          r.managerStatus === "More Info Requested" ||
+          r.managerStatus === "Rejected"
+        ) {
+          return false;
+        }
+      }
+
+      if (stageFilter !== "All") {
+        if (stageFilter === "MoreInfo") {
+          if (!isMoreInfo) return false;
+        } else if (stageFilter === "SupervisorChecked") {
+          if (stage !== "SupervisorChecked" || r.managerStatus === "More Info Requested") {
+            return false;
+          }
+        } else if (stage !== stageFilter) {
+          return false;
+        }
+      }
+
+      if (repairCategoryFilter !== "All" && r.repairType !== repairCategoryFilter) {
+        return false;
+      }
+
+      if (!q) return true;
+      return (
+        r.workOrderNo.toLowerCase().includes(q) ||
+        r.id.toLowerCase().includes(q) ||
+        (r.requesterName || "").toLowerCase().includes(q) ||
+        (r.vendorName || "").toLowerCase().includes(q) ||
+        r.vehicleId.toLowerCase().includes(q) ||
+        r.repairType.toLowerCase().includes(q) ||
+        r.repairDescription.toLowerCase().includes(q) ||
+        r.technicianName.toLowerCase().includes(q)
+      );
+    });
+  }, [records, activeTab, supervisorSubFilter, stageFilter, repairCategoryFilter, searchQuery]);
+
+  const activeEmployeeNames = useMemo(() => {
+    return employees
+      .filter((e) => e.employmentStatus === "Active")
+      .map((e) => e.employeeName);
+  }, [employees]);
+
+  const selectedVehicleObj = useMemo(
+    () => vehicles.find((v) => v.vehicleId === reqVehicleId),
+    [vehicles, reqVehicleId]
+  );
+
+  const isSupervisorOrManager =
+    currentUser?.role === "Supervisor" ||
+    currentUser?.role === "Manager" ||
+    currentUser?.role === "Sr.Warehouse Officer";
+
+  const cloudSyncControls = (
+    <div className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold border transition-colors whitespace-nowrap shrink-0 ${
+          cloudRealtime
+            ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700"
+            : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50 dark:bg-[#0d1b33] dark:text-slate-300 dark:border-[#1e3a5f]"
+        }`}
+        title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
+      >
+        {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
+        <span>{cloudRealtime ? "Cloud Sync: ON" : "Cloud Sync: OFF"}</span>
+      </button>
+
+      {!cloudRealtime && (
+        <button
+          type="button"
+          onClick={handleManualReload}
+          disabled={isRefreshing}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap shrink-0 disabled:opacity-60"
+        >
+          <RefreshCw size={13} className={isRefreshing ? "animate-spin" : ""} />
+          <span>{isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}</span>
+        </button>
+      )}
+    </div>
+  );
 
   return (
-    <div className="fix-flush-management">
-      {/* Role / View Switcher Header Bar */}
-      <div className="fixflush-topbar bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg shadow-sm" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, padding: "12px 20px", flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+    <div className="fix-flush-management space-y-4">
+      {headingPortalTarget ? createPortal(cloudSyncControls, headingPortalTarget) : null}
+
+      {/* Top Stage Switcher & Action Bar */}
+      <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 dark:bg-[#091322] rounded-lg border border-slate-200 dark:border-[#1e3a5f]">
           <button
-            onClick={() => setActiveTab("technician")}
-            className={`button ${activeTab === "technician" ? "primary" : "secondary"}`}
-            style={{ fontSize: 12, padding: "8px 16px" }}
+            type="button"
+            onClick={() => {
+              setActiveTab("requester");
+              setStageFilter("All");
+            }}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              activeTab === "requester"
+                ? "bg-[#087eaf] text-white"
+                : "text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-[#162744]"
+            }`}
           >
-            <Wrench size={14} /> Technician & Repair Log
+            <Wrench size={14} />
+            <span>1. ตารางแจ้งซ่อม / ทั้งหมด</span>
+            <span className="tabular-nums opacity-85">({records.length})</span>
           </button>
+
           <button
-            onClick={() => setActiveTab("manager")}
-            className={`button ${activeTab === "manager" ? "primary" : "secondary"}`}
-            style={{ fontSize: 12, padding: "8px 16px", position: "relative" }}
+            type="button"
+            onClick={() => {
+              setActiveTab("supervisor");
+              setStageFilter("All");
+              setSupervisorSubFilter("all_sup");
+            }}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              activeTab === "supervisor"
+                ? "bg-[#087eaf] text-white"
+                : "text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-[#162744]"
+            }`}
           >
-            <ShieldCheck size={14} /> Manager Approval Dashboard
+            <ClipboardCheck size={14} />
+            <span>2. หัวหน้างานตรวจสอบ</span>
+            {(pendingSupervisorCount > 0 || inWorkshopCount > 0) && (
+              <span
+                className={`tabular-nums px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                  activeTab === "supervisor"
+                    ? "bg-white text-[#087eaf]"
+                    : pendingSupervisorInfoCount > 0
+                    ? "bg-purple-600 text-white"
+                    : "bg-amber-500 text-white"
+                }`}
+              >
+                {pendingSupervisorCount + inWorkshopCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("manager");
+              setStageFilter("All");
+            }}
+            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              activeTab === "manager"
+                ? "bg-[#087eaf] text-white"
+                : "text-slate-600 dark:text-slate-300 hover:bg-white/70 dark:hover:bg-[#162744]"
+            }`}
+          >
+            <ShieldCheck size={14} />
+            <span>3. ผู้จัดการอนุมัติ</span>
             {pendingManagerCount > 0 && (
-              <span style={{ background: "#ef4444", color: "#fff", borderRadius: "50%", padding: "1px 6px", fontSize: 10, marginLeft: 6, fontWeight: 700 }}>
+              <span
+                className={`tabular-nums px-1.5 py-0.5 rounded text-[11px] font-bold ${
+                  activeTab === "manager"
+                    ? "bg-white text-[#087eaf]"
+                    : "bg-rose-600 text-white"
+                }`}
+              >
                 {pendingManagerCount}
               </span>
             )}
           </button>
-          <button
-            onClick={() => setActiveTab("tire_stock")}
-            className={`button ${activeTab === "tire_stock" ? "primary" : "secondary"}`}
-            style={{ fontSize: 12, padding: "8px 16px" }}
-          >
-            <Disc size={14} /> สต๊อกยางโฟล์คลิฟท์ (Tire Stock: {totalTiresInStock} เส้น)
-          </button>
         </div>
 
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="flex flex-wrap items-center gap-2">
+          {!headingPortalTarget && cloudSyncControls}
+
           <button
             type="button"
-            className="button secondary"
-            onClick={() => setForkliftCloudRealtimeEnabled(!cloudRealtime)}
-            style={{
-              padding: "6px 10px",
-              fontSize: 11,
-              borderColor: cloudRealtime ? "#22c55e" : "#94a3b8",
-              color: cloudRealtime ? "#15803d" : "#475569",
-            }}
-            title="สลับโหมด Cloud Real-time เพื่อประหยัดโควต้าการอ่านข้อมูล"
-          >
-            {cloudRealtime ? <Wifi size={13} /> : <WifiOff size={13} />}
-            {cloudRealtime ? "Cloud Real-time: ON" : "Cloud Real-time: OFF"}
-          </button>
-          {!cloudRealtime && (
-            <button
-              type="button"
-              className="button secondary"
-              onClick={handleManualReload}
-              disabled={isRefreshing}
-              style={{ padding: "6px 10px", fontSize: 11 }}
-            >
-              <RefreshCw size={13} />
-              {isRefreshing ? "กำลังโหลด..." : "ดึงข้อมูลล่าสุด"}
-            </button>
-          )}
-          <button
-            className="button secondary"
             onClick={() => {
-              setTireTxType("Inbound");
-              setIsTireModalOpen(true);
+              setReqRequesterName(
+                currentUser?.employeeName || getActiveRecorderDisplay("").employeeName || ""
+              );
+              setPhotoError(null);
+              setIsRequestModalOpen(true);
             }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white transition-colors whitespace-nowrap shrink-0"
           >
-            <Disc size={14} />
-            + บันทึกสต๊อกยาง
-          </button>
-          <button className="button primary" onClick={() => setIsModalOpen(true)}>
             <Plus size={14} />
-            + New Maintenance Order
-          </button>
-          <button className="button secondary" onClick={() => window.print()}>
-            <Printer size={13} />
-            Print Log
+            <span>+ แจ้งซ่อมใหม่</span>
           </button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="kpi-grid">
-        <div className="kpi">
-          <div className="kpi-label">Pending Manager Approval</div>
-          <div className="kpi-value" style={{ color: "#d97706" }}>{pendingManagerCount}</div>
-          <div className="kpi-note">Awaiting executive review</div>
+      {/* 4-Column KPI Summary Strip */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg p-4">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            ช่วงที่ 1–2 · หัวหน้างานตรวจสอบ / ตอบข้อมูลเพิ่ม
+          </div>
+          <div className="text-2xl font-extrabold text-amber-600 dark:text-amber-400 mt-1 tabular-nums">
+            {pendingSupervisorCount}
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+            รอตรวจสอบ {pendingSupervisorNewCount} · ผู้จัดการขอข้อมูลเพิ่ม {pendingSupervisorInfoCount}
+          </div>
         </div>
 
-        <div className="kpi" style={{ borderTopColor: "#9333ea" }}>
-          <div className="kpi-label">More Info Requested (Feedback)</div>
-          <div className="kpi-value" style={{ color: "#9333ea" }}>{moreInfoCount}</div>
-          <div className="kpi-note">Waiting technician reply</div>
+        <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg p-4">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            ช่วงที่ 3 · รอผู้จัดการอนุมัติ
+          </div>
+          <div className="text-2xl font-extrabold text-sky-600 dark:text-sky-400 mt-1 tabular-nums">
+            {pendingManagerCount}
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            ตรวจสอบราคาและข้อมูลครบถ้วนแล้ว รอพิจารณาอนุมัติ
+          </div>
         </div>
 
-        <div className="kpi" style={{ borderTopColor: "#0284c7" }}>
-          <div className="kpi-label">Approved & In Workshop</div>
-          <div className="kpi-value" style={{ color: "#0369a1" }}>{approvedManagerCount}</div>
-          <div className="kpi-note">Active repair in bays</div>
+        <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg p-4">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            ตารางแจ้งซ่อม · รอคิวซ่อม (อนุมัติแล้ว)
+          </div>
+          <div className="text-2xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-1 tabular-nums">
+            {inWorkshopCount}
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+            ซ่อมเสร็จแล้ว {completedCount} รายการ
+          </div>
         </div>
 
-        <div className="kpi" style={{ borderTopColor: "#15803d" }}>
-          <div className="kpi-label">Total Maintenance Orders</div>
-          <div className="kpi-value" style={{ color: "#15803d" }}>{records.length}</div>
-          <div className="kpi-note">All fleet records logged</div>
+        <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg p-4">
+          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            งบซ่อมที่อนุมัติแล้วทั้งหมด
+          </div>
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 mt-1 tabular-nums">
+            {totalApprovedCost.toLocaleString()} <span className="text-sm font-semibold">บาท</span>
+          </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 tabular-nums">
+            ใบแจ้งซ่อมทั้งหมด {records.length} รายการ
+          </div>
         </div>
       </div>
 
-      {/* Main Panel */}
-      <section className="panel">
-        <div className="panel-header">
-          <div>
-            <div className="panel-title">
-              {activeTab === "manager" ? "Manager Approval Dashboard & Query Loop" : "Fix & Flush Status & Maintenance Work Orders"}
+      {/* Main Content Area: 3-Stage Work Orders */}
+      <section className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-lg overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {activeTab === "supervisor"
+                  ? "งานหัวหน้างาน: ตรวจสอบประเมินราคา · ตอบข้อมูลผู้จัดการ · อัปเดตซ่อมเสร็จ"
+                  : activeTab === "manager"
+                  ? "คิวงานรอผู้จัดการพิจารณาอนุมัติ (Stage 3)"
+                  : "ตารางแจ้งซ่อมและติดตามสถานะ Material Handling"}
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {activeTab === "supervisor"
+                  ? "ตรวจสอบใบแจ้งซ่อมใหม่ ตอบข้อมูลเพิ่มเติมเมื่อผู้จัดการสอบถาม (เช่น ชื่อ Vendor) และอัปเดตสถานะรอคิวซ่อมเป็นซ่อมเสร็จ"
+                  : activeTab === "manager"
+                  ? "พิจารณาอนุมัติหรือส่งกลับให้หัวหน้างานตอบข้อมูลเพิ่มเติม (รายการที่ขอข้อมูลเพิ่มจะวิ่งกลับไปที่คิวหัวหน้างาน)"
+                  : "พนักงานแจ้งซ่อม → หัวหน้างานตรวจสอบ → ผู้จัดการอนุมัติ (วนสอบถามหัวหน้างานได้) → รอคิวซ่อม → หัวหน้างานอัปเดตซ่อมเสร็จ"}
+              </p>
             </div>
-            <div className="panel-subtitle">
-              {activeTab === "manager"
-                ? "Review repair orders, query technicians for cost estimates or parts quotation, and approve or reject."
-                : "Fleet maintenance tracking, oil changes, tire replacement, hydraulic flushing, spare parts cost and feedback responses."}
+            <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+              <User size={13} />
+              <span>
+                ผู้ใช้งาน:{" "}
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {currentUser?.employeeName || "ผู้ใช้งานทั่วไป"}
+                </strong>
+                {currentUser?.role ? ` · ${currentUser.role}` : ""}
+              </span>
             </div>
           </div>
-        </div>
 
-        {/* Toolbar & Filter */}
-        <div
-          className="filterbar fixflush-filterbar bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f]"
-          style={{
-            padding: "14px 18px",
-            display: "flex",
-            gap: 12,
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
-            <Search size={14} style={{ position: "absolute", left: 10, top: 11 }} className="text-slate-400 dark:text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by ID, vehicle, repair type, description, technician..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="field search-field w-full pl-9 pr-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
-              style={{
-                width: "100%",
-                padding: "8px 10px 8px 32px",
-                borderRadius: 6,
-                fontSize: 12,
-              }}
-            />
+          {/* Supervisor Stage Quick Sub-Filters */}
+          {activeTab === "supervisor" && (
+            <div className="px-5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50/60 dark:bg-[#091322] flex flex-wrap items-center gap-2 text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setStageFilter("All");
+                  setSupervisorSubFilter("all_sup");
+                }}
+                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                  supervisorSubFilter === "all_sup" && stageFilter === "All"
+                    ? "bg-[#087eaf] text-white border-[#087eaf]"
+                    : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
+                }`}
+              >
+                ทั้งหมดในความดูแล ({pendingSupervisorCount + inWorkshopCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStageFilter("All");
+                  setSupervisorSubFilter("Submitted");
+                }}
+                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                  supervisorSubFilter === "Submitted" && stageFilter === "All"
+                    ? "bg-amber-600 text-white border-amber-600"
+                    : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
+                }`}
+              >
+                รอตรวจสอบใหม่ ({pendingSupervisorNewCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStageFilter("All");
+                  setSupervisorSubFilter("MoreInfo");
+                }}
+                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                  supervisorSubFilter === "MoreInfo" && stageFilter === "All"
+                    ? "bg-purple-700 text-white border-purple-700"
+                    : "bg-white dark:bg-[#111e38] text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800"
+                }`}
+              >
+                ผู้จัดการขอข้อมูลเพิ่ม / Vendor ({pendingSupervisorInfoCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setStageFilter("All");
+                  setSupervisorSubFilter("ManagerApproved");
+                }}
+                className={`px-3 py-1.5 rounded-md font-semibold border transition-colors whitespace-nowrap ${
+                  supervisorSubFilter === "ManagerApproved" && stageFilter === "All"
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white dark:bg-[#111e38] text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-800"
+                }`}
+              >
+                รอคิวซ่อม → อัปเดตซ่อมเสร็จ ({inWorkshopCount})
+              </button>
+            </div>
+          )}
+
+          {/* Search & Filters */}
+          <div className="px-5 py-3 border-b border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาเลขที่ขอซ่อม (TMT-...), เบอร์รถ, ชื่อผู้แจ้ง, Vendor, อาการ..."
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-[#087eaf]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Filter size={14} className="text-slate-400" />
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                className="px-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+              >
+                <option value="All">
+                  {activeTab === "supervisor"
+                    ? "คิวงานหัวหน้างาน (ตามแถบด้านบน)"
+                    : activeTab === "manager"
+                    ? "เฉพาะงานรออนุมัติ"
+                    : "ทุกสถานะ (All Stages)"}
+                </option>
+                <option value="Submitted">1. รอหัวหน้างานตรวจสอบ</option>
+                <option value="MoreInfo">2. รอหัวหน้างานตอบข้อมูลเพิ่ม</option>
+                <option value="SupervisorChecked">3. รอผู้จัดการอนุมัติ</option>
+                <option value="ManagerApproved">4. รอคิวซ่อม (อนุมัติแล้ว)</option>
+                <option value="Completed">5. ซ่อมเสร็จ</option>
+                <option value="Rejected">ไม่อนุมัติ</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={repairCategoryFilter}
+                onChange={(e) => setRepairCategoryFilter(e.target.value)}
+                className="px-3 py-2 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+              >
+                <option value="All">ทุกประเภทการซ่อม (24 หมวด)</option>
+                {MH_REPAIR_CATEGORIES.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Filter size={14} className="text-slate-400 dark:text-slate-400" />
-            <span style={{ fontSize: 12, fontWeight: 600 }} className="text-slate-600 dark:text-slate-200">Manager Approval:</span>
-            <select
-              value={managerFilter}
-              onChange={(e) => setManagerFilter(e.target.value)}
-              className="field px-3 py-1.5 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
-              style={{
-                fontSize: 12,
-              }}
-            >
-              <option value="All" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">All Manager Statuses</option>
-              <option value="Pending Manager Approval" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Pending Manager Approval</option>
-              <option value="More Info Requested" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">More Info Requested</option>
-              <option value="Approved" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Approved</option>
-              <option value="Rejected" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Rejected</option>
-            </select>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 600 }} className="text-slate-600 dark:text-slate-200">Workshop State:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="field px-3 py-1.5 text-xs rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30"
-              style={{
-                fontSize: 12,
-              }}
-            >
-              <option value="All" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">All Workshop States</option>
-              <option value="Pending Inspection" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Pending Inspection</option>
-              <option value="In Workshop" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">In Workshop</option>
-              <option value="Testing" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Testing</option>
-              <option value="Approved" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Approved</option>
-              <option value="Completed" className="bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100">Completed</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Repair ID & Date</th>
-                <th>Vehicle & Bay</th>
-                <th>Repair Type & Scope</th>
-                <th>Estimated Cost</th>
-                <th>Manager Approval Status</th>
-                <th>Feedback / Query Loop</th>
-                <th>Workshop Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 30, color: "#647786" }}>
-                    No maintenance records found matching your filter criteria.
-                  </td>
+          {/* Work Orders Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 text-left">
+                  <th className="py-3 px-4 font-bold">เลขที่ขอซ่อม / ผู้แจ้ง</th>
+                  <th className="py-3 px-4 font-bold">เบอร์รถ</th>
+                  <th className="py-3 px-4 font-bold">ประเภท & อาการที่แจ้ง</th>
+                  <th className="py-3 px-4 font-bold text-right">ค่าอะไหล่ / ค่าแรง / รวม</th>
+                  <th className="py-3 px-4 font-bold">สถานะ 3 ช่วง</th>
+                  <th className="py-3 px-4 font-bold text-right">จัดการ</th>
                 </tr>
-              ) : (
-                filteredRecords.map((rec) => (
-                  <tr key={rec.id}>
-                    <td>
-                      <span className="code" style={{ fontWeight: 700 }}>{rec.id}</span>
-                      <div className="table-timestamp" style={{ fontSize: 10, color: "#647786", marginTop: 2 }}>{rec.workingDate}</div>
-                    </td>
-                    <td>
-                      <div className="table-item-name" style={{ fontWeight: 700, color: "#1e3648" }}>{rec.vehicleId}</div>
-                      <div className="table-sub-text" style={{ fontSize: 10, color: "#647786" }}>{rec.workshopBay}</div>
-                    </td>
-                    <td>
-                      <div className="table-item-name" style={{ fontWeight: 600, color: "#1e3648" }}>{rec.repairType}</div>
-                      <div className="table-sub-text" style={{ fontSize: 10, color: "#647786", maxWidth: 220, whiteSpace: "normal" }}>
-                        {rec.repairDescription}
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                {filteredRecords.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-12 px-4 text-center">
+                      <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                        ไม่พบรายการแจ้งซ่อมตามเงื่อนไขที่เลือก
                       </div>
-                    </td>
-                    <td>
-                      <div className="table-qty" style={{ fontWeight: 700, color: "#0f172a" }}>
-                        {rec.estimatedCost.toLocaleString()} THB
-                      </div>
-                      <div className="table-sub-text" style={{ fontSize: 10, color: "#647786" }}>{rec.spareParts.length} parts items</div>
-                    </td>
-                    <td>
-                      <span
-                        className="status"
-                        style={{
-                          background:
-                            rec.managerStatus === "Approved"
-                              ? "#dcfce7"
-                              : rec.managerStatus === "More Info Requested"
-                              ? "#f3e8ff"
-                              : rec.managerStatus === "Rejected"
-                              ? "#fee2e2"
-                              : "#fef9c3",
-                          color:
-                            rec.managerStatus === "Approved"
-                              ? "#15803d"
-                              : rec.managerStatus === "More Info Requested"
-                              ? "#7e22ce"
-                              : rec.managerStatus === "Rejected"
-                              ? "#b91c1c"
-                              : "#854d0e",
-                          border: `1px solid ${
-                            rec.managerStatus === "Approved"
-                              ? "#86efac"
-                              : rec.managerStatus === "More Info Requested"
-                              ? "#d8b4fe"
-                              : rec.managerStatus === "Rejected"
-                              ? "#fca5a5"
-                              : "#fde047"
-                          }`,
-                        }}
-                      >
-                        {rec.managerStatus}
-                      </span>
-                    </td>
-                    <td>
-                      {rec.feedbackThread.length > 0 ? (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                        {activeTab === "supervisor"
+                          ? "ไม่มีงานค้างรอหัวหน้างานตรวจสอบในขณะนี้"
+                          : activeTab === "manager"
+                          ? "ไม่มีงานค้างรอผู้จัดการอนุมัติในขณะนี้"
+                          : "เริ่มต้นแจ้งซ่อมรถโฟล์คลิฟท์หรือเปลี่ยนตัวกรองเพื่อดูรายการอื่น"}
+                      </p>
+                      {activeTab === "requester" && (
                         <button
-                          className="button secondary"
-                          style={{ padding: "3px 8px", fontSize: 11, background: "#f3e8ff", color: "#7e22ce", borderColor: "#d8b4fe" }}
-                          onClick={() => setSelectedRecord(rec)}
+                          type="button"
+                          onClick={() => setIsRequestModalOpen(true)}
+                          className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white"
                         >
-                          <MessageSquare size={12} /> {rec.feedbackThread.length} Messages
+                          <Plus size={14} />
+                          <span>+ แจ้งซ่อมใบแรก</span>
                         </button>
-                      ) : (
-                        <span style={{ fontSize: 11, color: "#94a3b8" }}>No queries</span>
                       )}
                     </td>
-                    <td>
-                      <span
-                        className="status"
-                        style={{
-                          background: rec.status === "Approved" || rec.status === "Completed" ? "#dcfce7" : "#e0f2fe",
-                          color: rec.status === "Approved" || rec.status === "Completed" ? "#15803d" : "#0369a1",
-                        }}
-                      >
-                        {rec.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button
-                          className="button secondary"
-                          style={{ padding: "4px 8px", fontSize: 11 }}
-                          onClick={() => setSelectedRecord(rec)}
-                        >
-                          <FileText size={12} /> Inspect
-                        </button>
-
-                        {activeTab === "manager" && rec.managerStatus === "Pending Manager Approval" && (
-                          <>
-                            <button
-                              className="button primary"
-                              style={{ padding: "4px 8px", fontSize: 11, background: "#15803d", borderColor: "#15803d" }}
-                              onClick={() => handleManagerApprove(rec.id)}
-                              title="Approve Repair"
-                            >
-                              <Check size={12} /> Approve
-                            </button>
-                            <button
-                              className="button secondary"
-                              style={{ padding: "4px 8px", fontSize: 11, background: "#f3e8ff", color: "#7e22ce", borderColor: "#d8b4fe" }}
-                              onClick={() => {
-                                setFeedbackRecord(rec);
-                                setIsFeedbackModalOpen(true);
-                              }}
-                              title="Request More Info"
-                            >
-                              <HelpCircle size={12} /> Query
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  filteredRecords.map((rec) => {
+                    const meta = getStageMeta(rec);
+                    const photos = rec.photos || [];
+                    const partsCostVal = Number(rec.partsCost) || 0;
+                    const laborCostVal = Number(rec.laborCost) || 0;
+                    const totalCostVal =
+                      Number(rec.estimatedCost) || partsCostVal + laborCostVal;
 
-        <div
-          className="border-t border-slate-200 dark:border-[#1e3a5f] bg-[#fafbfc] dark:bg-[#0d1b33] text-slate-500 dark:text-slate-400"
-          style={{
-            padding: "12px 18px",
-            fontSize: 11,
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>Showing {filteredRecords.length} of {records.length} maintenance and repair work orders.</span>
-          <span>WMS Warehouse 1 - Executive Manager Approval & Feedback Loop</span>
-        </div>
-      </section>
-
-      {/* Tire Stock Management Panel (mh_tire_stock) */}
-      <section className="panel" style={{ marginTop: 20 }}>
-        <div className="panel-header">
-          <div>
-            <div className="panel-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Disc size={16} color="#087eaf" />
-              สต๊อกยางโฟล์คลิฟท์และบันทึกการเบิกเปลี่ยนยาง (Tire Stock Management — mh_tire_stock)
-            </div>
-            <div className="panel-sub">
-              คงเหลือรวมทั้งสิ้น {totalTiresInStock.toLocaleString()} เส้น · แยกฐานข้อมูลอิสระสำหรับงานโฟล์คลิฟท์
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              type="button"
-              className="button primary"
-              style={{ background: "#15803d", borderColor: "#15803d" }}
-              onClick={() => {
-                setTireTxType("Inbound");
-                setIsTireModalOpen(true);
-              }}
-            >
-              <ArrowDownLeft size={14} /> + รับเข้ายางใหม่ (Inbound)
-            </button>
-            <button
-              type="button"
-              className="button primary"
-              style={{ background: "#0369a1", borderColor: "#0369a1" }}
-              onClick={() => {
-                setTireTxType("Outbound");
-                setIsTireModalOpen(true);
-              }}
-            >
-              <ArrowUpRight size={14} /> - เบิกเปลี่ยนยางโฟล์คลิฟท์ (Outbound)
-            </button>
-          </div>
-        </div>
-
-        {/* Tire Stock Balance by Size Grid */}
-        <div
-          style={{
-            padding: "14px 18px",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 10,
-            borderBottom: "1px solid #e2e8f0",
-          }}
-        >
-          {Array.from(tireStockBySize.entries()).map(([sizeLabel, stats]) => (
-            <div
-              key={sizeLabel}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "1px solid #e2e8f0",
-                background: stats.balance > 0 ? "#f8fafc" : "#fff",
-              }}
-            >
-              <div style={{ fontSize: 11, fontWeight: 700, color: "#1e3648" }}>{sizeLabel}</div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4 }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: stats.balance > 0 ? "#15803d" : "#64748b" }}>
-                  {stats.balance} <span style={{ fontSize: 11, fontWeight: 600 }}>เส้น</span>
-                </span>
-                <span style={{ fontSize: 10, color: "#64748b" }}>
-                  รับ +{stats.inbound} / เบิก -{stats.outbound}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tire Transaction Filter Bar */}
-        <div style={{ padding: "12px 18px", display: "flex", gap: 12, alignItems: "center", borderBottom: "1px solid #e2e8f0" }}>
-          <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
-            <Search size={14} style={{ position: "absolute", left: 10, top: 10, color: "#64748b" }} />
-            <input
-              type="text"
-              className="field"
-              placeholder="ค้นหาเลขที่รายการ, ขนาดยาง, ยี่ห้อ, รหัสรถโฟล์คลิฟท์, ช่างผู้เบิก..."
-              value={tireSearchQuery}
-              onChange={(e) => setTireSearchQuery(e.target.value)}
-              style={{ width: "100%", padding: "7px 10px 7px 32px", fontSize: 12 }}
-            />
-          </div>
-        </div>
-
-        {/* Tire Stock Transactions Table */}
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>เลขที่รายการ & วัน-เวลา</th>
-                <th>ประเภท</th>
-                <th>ขนาดยาง & ยี่ห้อ</th>
-                <th>จำนวน (เส้น)</th>
-                <th>ราคา/หน่วย & รวม</th>
-                <th>รถโฟล์คลิฟท์ / แหล่งที่มา</th>
-                <th>ผู้รับผิดชอบ / หมายเหตุ</th>
-                <th>จัดการ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTireRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 28, color: "#647786" }}>
-                    ยังไม่มีประวัติรายการสต๊อกยางในฐานข้อมูล (mh_tire_stock)
-                  </td>
-                </tr>
-              ) : (
-                filteredTireRecords.map((tr) => (
-                  <tr key={tr.id}>
-                    <td>
-                      <span className="code" style={{ fontWeight: 700 }}>{tr.transactionNo}</span>
-                      <div style={{ fontSize: 10, color: "#647786", marginTop: 2 }}>
-                        {tr.date} · {tr.time}
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className="status"
-                        style={{
-                          background: tr.transactionType === "Inbound" ? "#dcfce7" : "#e0f2fe",
-                          color: tr.transactionType === "Inbound" ? "#15803d" : "#0369a1",
-                          border: `1px solid ${tr.transactionType === "Inbound" ? "#86efac" : "#bae6fd"}`,
-                        }}
+                    return (
+                      <tr
+                        key={rec.id}
+                        onClick={() => openInspectModal(rec, false)}
+                        className="hover:bg-sky-50/50 dark:hover:bg-[#162744]/70 cursor-pointer transition-colors"
                       >
-                        {tr.transactionType === "Inbound" ? "+ รับเข้าสต๊อก" : "- เบิกเปลี่ยนยาง"}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: "#1e3648" }}>{tr.tireSize}</div>
-                      <div style={{ fontSize: 10, color: "#647786" }}>Brand: {tr.brand}</div>
-                    </td>
-                    <td>
-                      <span
-                        style={{
-                          fontWeight: 800,
-                          fontSize: 13,
-                          color: tr.transactionType === "Inbound" ? "#15803d" : "#0369a1",
-                        }}
-                      >
-                        {tr.transactionType === "Inbound" ? "+" : "-"}
-                        {tr.qty} เส้น
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 700, fontSize: 12 }}>{tr.totalCost.toLocaleString()} THB</div>
-                      <div style={{ fontSize: 10, color: "#647786" }}>@{tr.unitCost.toLocaleString()} THB</div>
-                    </td>
-                    <td>
-                      {tr.transactionType === "Inbound" ? (
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 11, color: "#15803d" }}>Supplier / PO</div>
-                          <div style={{ fontSize: 11, color: "#334155" }}>{tr.supplierOrInvoice || "-"}</div>
-                        </div>
-                      ) : (
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 12, color: "#0f172a" }}>{tr.vehicleId || "-"}</div>
-                          <div style={{ fontSize: 10, color: "#647786" }}>
-                            {tr.wheelPosition || "-"} {tr.operatingHours ? `· ${tr.operatingHours} HRS` : ""}
+                        <td className="py-3 px-4 align-top">
+                          <div className="font-bold text-[#087eaf] dark:text-sky-400 tabular-nums">
+                            {rec.workOrderNo}
                           </div>
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      <div style={{ fontWeight: 600, fontSize: 11 }}>{tr.technicianOrReceiver}</div>
-                      {tr.notes && <div style={{ fontSize: 10, color: "#647786" }}>{tr.notes}</div>}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="button secondary"
-                        style={{ padding: "4px 8px", fontSize: 11, color: "#b91c1c", borderColor: "#fca5a5" }}
-                        onClick={() => handleDeleteTireRecord(tr.id)}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {rec.workingDate} · {rec.requesterName || "-"}
+                          </div>
+                        </td>
 
-      {/* Tire Stock Inbound/Outbound Modal */}
-      {isTireModalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              width: "100%",
-              maxWidth: 620,
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15)",
-            }}
-          >
-            <div
-              style={{
-                padding: "16px 24px",
-                borderBottom: "1px solid #e2e8f0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: tireTxType === "Inbound" ? "#f0fdf4" : "#f0f9ff",
-                borderTopLeftRadius: 12,
-                borderTopRightRadius: 12,
-              }}
-            >
+                        <td className="py-3 px-4 align-top">
+                          <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                            {rec.vehicleId}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {rec.vehicleType || "Forklift"}
+                            {rec.operatingHours > 0 ? ` · ${rec.operatingHours} ชม.` : ""}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-4 align-top max-w-[320px] whitespace-normal">
+                          <div className="font-semibold text-slate-900 dark:text-slate-100">
+                            {rec.repairType}
+                          </div>
+                          <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
+                            {rec.repairDescription}
+                          </div>
+                          {(photos.length > 0 || rec.feedbackThread.length > 0 || rec.vendorName) && (
+                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                              {rec.vendorName && (
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                  Vendor: {rec.vendorName}
+                                </span>
+                              )}
+                              {rec.vendorName && (photos.length > 0 || rec.feedbackThread.length > 0) && (
+                                <span aria-hidden="true">·</span>
+                              )}
+                              {photos.length > 0 && (
+                                <span className="inline-flex items-center gap-1">
+                                  <Camera size={11} /> {photos.length} รูป
+                                </span>
+                              )}
+                              {photos.length > 0 && rec.feedbackThread.length > 0 && (
+                                <span aria-hidden="true">·</span>
+                              )}
+                              {rec.feedbackThread.length > 0 && (
+                                <span className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 font-medium">
+                                  <MessageSquare size={11} /> {rec.feedbackThread.length} ข้อความ
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 align-top text-right tabular-nums">
+                          {meta.stage === "Submitted" && totalCostVal === 0 ? (
+                            <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                              รอหัวหน้างานประเมิน
+                            </span>
+                          ) : (
+                            <div>
+                              <div className="font-bold text-slate-900 dark:text-slate-100">
+                                {totalCostVal.toLocaleString()} บาท
+                              </div>
+                              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                อะไหล่ {partsCostVal.toLocaleString()} · แรง{" "}
+                                {laborCostVal.toLocaleString()} ({rec.spareParts.length} รายการ)
+                              </div>
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-4 align-top">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold whitespace-nowrap ${meta.badgeClass}`}
+                          >
+                            {meta.stage === "Completed" ? (
+                              <CheckCircle2 size={12} />
+                            ) : meta.stage === "Rejected" ? (
+                              <Ban size={12} />
+                            ) : (
+                              <Clock size={12} />
+                            )}
+                            <span>{meta.labelTh}</span>
+                          </span>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                            {rec.supervisorName
+                              ? `ตรวจ: ${rec.supervisorName}`
+                              : "ยังไม่ผ่านหัวหน้าตรวจสอบ"}
+                            {rec.managerName ? ` · อนุมัติ: ${rec.managerName}` : ""}
+                          </div>
+                        </td>
+
+                        <td
+                          className="py-3 px-4 align-top text-right"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            {meta.stage === "Submitted" && (
+                              <button
+                                type="button"
+                                onClick={() => openInspectModal(rec, true)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
+                              >
+                                <ClipboardCheck size={12} />
+                                <span>ตรวจสอบ & ประเมินราคา</span>
+                              </button>
+                            )}
+
+                            {meta.stage === "SupervisorChecked" &&
+                              rec.managerStatus === "More Info Requested" && (
+                                <button
+                                  type="button"
+                                  onClick={() => openInspectModal(rec, false)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-purple-700 hover:bg-purple-800 text-white whitespace-nowrap"
+                                >
+                                  <MessageSquare size={12} />
+                                  <span>ตอบข้อมูลเพิ่ม</span>
+                                </button>
+                              )}
+
+                            {meta.stage === "SupervisorChecked" &&
+                              rec.managerStatus !== "More Info Requested" &&
+                              rec.managerStatus !== "Rejected" && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleManagerApprove(rec.id)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                                  >
+                                    <Check size={12} />
+                                    <span>อนุมัติ</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFeedbackRecord(rec);
+                                      setIsFeedbackModalOpen(true);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800 whitespace-nowrap"
+                                  >
+                                    <HelpCircle size={12} />
+                                    <span>ขอข้อมูลเพิ่ม</span>
+                                  </button>
+                                </>
+                              )}
+
+                            {meta.stage === "ManagerApproved" && (
+                              <button
+                                type="button"
+                                onClick={() => handleMarkRepairCompleted(rec.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                              >
+                                <CheckCircle2 size={12} />
+                                <span>อัปเดต: ซ่อมเสร็จ</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => openInspectModal(rec, false)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap"
+                            >
+                              <FileText size={12} />
+                              <span>รายละเอียด</span>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="px-5 py-2.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex flex-wrap justify-between items-center text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="tabular-nums">
+              แสดง {filteredRecords.length} จาก {records.length} ใบแจ้งซ่อม
+            </span>
+            <span>Material Handling · ระบบแจ้งซ่อม 3 ขั้นตอน (TMT-YYYY-MM-NNN)</span>
+          </div>
+        </section>
+
+      {/* ========================================================================
+          MODAL 1: Stage 1 - New Repair Request (พนักงานแจ้งซ่อม)
+          ======================================================================== */}
+      {isRequestModalOpen && (
+        <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between">
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-                  {tireTxType === "Inbound"
-                    ? "+ รับเข้ายางรถโฟล์คลิฟท์ (Tire Stock Inbound)"
-                    : "- เบิกเปลี่ยนยางรถโฟล์คลิฟท์ (Tire Stock Outbound)"}
-                </div>
-                <div style={{ fontSize: 11, color: "#647786", marginTop: 2 }}>
-                  บันทึกลงฐานข้อมูลแยกอิสระ (mh_tire_stock)
-                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  แบบฟอร์มแจ้งซ่อมรถ Material Handling (ช่วงที่ 1: พนักงานแจ้งซ่อม)
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  ระบุข้อมูลรถ อาการที่พบ และแนบรูปถ่ายสูงสุด 9 รูป · หัวหน้างานจะตรวจสอบและประเมินค่าใช้จ่ายในขั้นถัดไป
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsTireModalOpen(false)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}
+                onClick={() => setIsRequestModalOpen(false)}
+                className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateTireTransaction} style={{ padding: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div style={{ gridColumn: "span 2", display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  className={`button ${tireTxType === "Inbound" ? "primary" : "secondary"}`}
-                  style={{ flex: 1, justifyContent: "center" }}
-                  onClick={() => setTireTxType("Inbound")}
-                >
-                  + รับเข้ายางใหม่ (Inbound)
-                </button>
-                <button
-                  type="button"
-                  className={`button ${tireTxType === "Outbound" ? "primary" : "secondary"}`}
-                  style={{ flex: 1, justifyContent: "center" }}
-                  onClick={() => setTireTxType("Outbound")}
-                >
-                  - เบิกเปลี่ยนยาง (Outbound)
-                </button>
+            <form
+              onSubmit={handleCreateRepairRequest}
+              className="p-6 overflow-y-auto flex-1 space-y-4 text-xs"
+            >
+              {/* Auto-generated Running Number & Working Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    เลขที่ขอซ่อม (รันอัตโนมัติ TMT-ปี-เดือน-ลำดับ)
+                  </label>
+                  <div className="px-3 py-2.5 rounded-md bg-sky-50 dark:bg-[#091322] border border-sky-200 dark:border-[#1e3a5f] text-[#087eaf] dark:text-sky-400 font-bold text-sm tabular-nums flex items-center justify-between">
+                    <span>{previewRequestNo}</span>
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      อัตโนมัติ
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    วันที่แจ้งซ่อม *
+                  </label>
+                  <input
+                    type="date"
+                    value={reqWorkingDate}
+                    onChange={(e) => setReqWorkingDate(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  ขนาดยาง (Tire Size) *
-                </label>
-                <select
-                  value={tireSize}
-                  onChange={(e) => setTireSize(e.target.value)}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  {TIRE_SIZE_OPTIONS.map((sz) => (
-                    <option key={sz} value={sz}>{sz}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  ยี่ห้อ / รุ่นยาง (Brand) *
-                </label>
-                <input
-                  type="text"
-                  value={tireBrand}
-                  onChange={(e) => setTireBrand(e.target.value)}
-                  placeholder="เช่น KOMACHI, PIO, BRIDGESTONE, DUNLOP"
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  จำนวน (เส้น) *
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  value={tireQty}
-                  onChange={(e) => setTireQty(Number(e.target.value))}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                  required
-                />
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  ราคาต่อเส้น (THB) *
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={tireUnitCost}
-                  onChange={(e) => setTireUnitCost(Number(e.target.value))}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                  required
-                />
-              </div>
-
-              {tireTxType === "Inbound" ? (
-                <div style={{ gridColumn: "span 2" }}>
-                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                    ผู้จัดจำหน่าย / เลขที่ใบส่งของ (Supplier / Invoice No.) *
+              {/* Requester Name & Vehicle Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    ชื่อผู้แจ้งซ่อม *
                   </label>
                   <input
                     type="text"
-                    value={tireSupplierOrInvoice}
-                    onChange={(e) => setTireSupplierOrInvoice(e.target.value)}
-                    placeholder="เช่น บจก. สยามไทร์ / INV-2026-089"
-                    style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                    list="mh-repair-employees-list"
+                    value={reqRequesterName}
+                    onChange={(e) => setReqRequesterName(e.target.value)}
+                    placeholder="ระบุชื่อ-นามสกุลผู้แจ้งซ่อม"
                     required
+                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                  />
+                  <datalist id="mh-repair-employees-list">
+                    {activeEmployeeNames.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    เบอร์รถ *
+                  </label>
+                  <select
+                    value={reqVehicleId}
+                    onChange={(e) => setReqVehicleId(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                  >
+                    <option value="">-- เลือกเบอร์รถ --</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.vehicleId}>
+                        {v.vehicleId} - {v.vehicleType} ({v.description || "Fleet"})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedVehicleObj && (
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      ทะเบียน: {selectedVehicleObj.registrationNumber || "-"} · สถานะ:{" "}
+                      {selectedVehicleObj.operationalStatus}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Repair Category & Operating Hours */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    ประเภทการซ่อม *
+                  </label>
+                  <select
+                    value={reqRepairType}
+                    onChange={(e) => setReqRepairType(e.target.value)}
+                    required
+                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                  >
+                    {MH_REPAIR_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                    เลขไมล์ / ชั่วโมงการทำงานรถ (ชม.)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={reqOperatingHours}
+                    onChange={(e) => setReqOperatingHours(Number(e.target.value))}
+                    placeholder="0"
+                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 tabular-nums focus:outline-none focus:border-[#087eaf]"
                   />
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                      รถโฟล์คลิฟท์ที่เปลี่ยนยาง (Vehicle) *
-                    </label>
-                    <select
-                      value={tireVehicleId}
-                      onChange={(e) => setTireVehicleId(e.target.value)}
-                      style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                    >
-                      {vehicles.map((v) => (
-                        <option key={v.id} value={v.vehicleId}>
-                          {v.vehicleId} - {v.vehicleType} ({v.description})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                      ตำแหน่งล้อที่เปลี่ยน (Wheel Position) *
-                    </label>
-                    <select
-                      value={tireWheelPosition}
-                      onChange={(e) => setTireWheelPosition(e.target.value)}
-                      style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                    >
-                      {WHEEL_POSITION_OPTIONS.map((pos) => (
-                        <option key={pos} value={pos}>{pos}</option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
+              </div>
 
+              {/* Symptoms / Repair Details */}
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  ผู้บันทึก / ช่างผู้เบิก (Technician / Receiver) *
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  อาการ / รายละเอียดที่ต้องการซ่อม *
                 </label>
-                <input
-                  type="text"
-                  value={tireTechnicianName}
-                  onChange={(e) => setTireTechnicianName(e.target.value)}
-                  placeholder="ระบุชื่อช่างหรือเจ้าหน้าที่คลังอะไหล่"
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                <textarea
+                  value={reqRepairDescription}
+                  onChange={(e) => setReqRepairDescription(e.target.value)}
+                  rows={3}
                   required
+                  placeholder="อธิบายอาการเสีย เสียงผิดปกติ จุดรั่วซึม หรือส่วนที่ชำรุด..."
+                  className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
                 />
               </div>
 
+              {/* Photo Attachment (Max 9 Photos) */}
+              <div className="p-4 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33]">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                      <Camera size={14} className="text-[#087eaf]" />
+                      <span>แนบรูปถ่ายประกอบการแจ้งซ่อม (สูงสุด {MAX_REPAIR_PHOTOS} รูป)</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                      แนบแล้ว {reqPhotos.length} / {MAX_REPAIR_PHOTOS} รูป · ย่อขนาดอัตโนมัติ (
+                      {Math.round(
+                        reqPhotos.reduce((s, p) => s + p.dataUrl.length, 0) / 1024
+                      )}{" "}
+                      KB)
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={photoInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={(e) => handlePhotoFilesSelected(e.target.files)}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={reqPhotos.length >= MAX_REPAIR_PHOTOS || isCompressingPhotos}
+                      onClick={() => photoInputRef.current?.click()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162744] disabled:opacity-50"
+                    >
+                      <ImagePlus size={14} />
+                      <span>
+                        {isCompressingPhotos ? "กำลังย่อรูป..." : "+ เลือกรูปถ่าย"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {photoError && (
+                  <div className="mb-3 px-3 py-2 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px]">
+                    {photoError}
+                  </div>
+                )}
+
+                {reqPhotos.length === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="w-full py-6 border border-dashed border-slate-300 dark:border-[#1e3a5f] rounded-lg text-center text-slate-500 dark:text-slate-400 hover:border-[#087eaf] hover:text-[#087eaf] transition-colors"
+                  >
+                    คลิกเพื่อเลือกรูปถ่ายหรือถ่ายภาพหน้างาน (รองรับหลายรูปพร้อมกัน สูงสุด 9 รูป)
+                  </button>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+                    {reqPhotos.map((ph, idx) => (
+                      <div
+                        key={ph.id}
+                        className="relative group rounded-md overflow-hidden border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#091322] aspect-square"
+                      >
+                        <img
+                          src={ph.dataUrl}
+                          alt={ph.name}
+                          onClick={() => openLightbox(reqPhotos, idx)}
+                          className="w-full h-full object-cover cursor-pointer"
+                        />
+                        <div className="absolute bottom-0 inset-x-0 bg-slate-950/70 text-white text-[10px] px-1.5 py-0.5 flex justify-between items-center tabular-nums">
+                          <span>รูปที่ {idx + 1}</span>
+                          <span>{Math.round(ph.dataUrl.length / 1024)}KB</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReqPhoto(ph.id)}
+                          className="absolute top-1 right-1 p-1 rounded-full bg-slate-950/75 text-white hover:bg-rose-600 transition-colors"
+                          title="ลบรูปนี้"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Notes */}
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  หมายเหตุ (Notes)
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  หมายเหตุเพิ่มเติม
                 </label>
-                <input
-                  type="text"
-                  value={tireNotes}
-                  onChange={(e) => setTireNotes(e.target.value)}
-                  placeholder="รายละเอียดเพิ่มเติม..."
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                <textarea
+                  value={reqNotes}
+                  onChange={(e) => setReqNotes(e.target.value)}
+                  rows={2}
+                  placeholder="ตำแหน่งรถที่จอดอยู่ ความเร่งด่วน หรือหมายเหตุเพิ่มเติม..."
+                  className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
                 />
               </div>
 
-              <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 8 }}>
-                <button type="button" className="button secondary" onClick={() => setIsTireModalOpen(false)}>
+              <div className="pt-2 border-t border-slate-200 dark:border-[#1e3a5f] flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRequestModalOpen(false)}
+                  className="px-4 py-2 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50"
+                >
                   ยกเลิก
                 </button>
-                <button type="submit" className="button primary">
-                  บันทึกรายการสต๊อกยาง
+                <button
+                  type="submit"
+                  disabled={isSubmittingRequest || isCompressingPhotos}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white disabled:opacity-60"
+                >
+                  <Send size={13} />
+                  <span>
+                    {isSubmittingRequest
+                      ? "กำลังบันทึก..."
+                      : "ส่งใบแจ้งซ่อมให้หัวหน้างานตรวจสอบ"}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1262,369 +1970,1011 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
         </div>
       )}
 
-      {/* New Maintenance Order Modal */}
-      {isModalOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              width: "100%",
-              maxWidth: 800,
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
-            }}
-          >
-            <div
-              style={{
-                padding: "18px 24px",
-                borderBottom: "1px solid #e2e8f0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: "#f8fafc",
-                borderTopLeftRadius: 12,
-                borderTopRightRadius: 12,
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>Create Fix & Flush Maintenance Work Order</div>
-                <div style={{ fontSize: 12, color: "#647786", marginTop: 2 }}>
-                  Submit repair order for executive manager approval and workshop dispatch.
+      {/* ========================================================================
+          MODAL 2: 3-Stage Detail, Supervisor Inspection & Manager Approval
+          ======================================================================== */}
+      {selectedRecord && (() => {
+        const meta = getStageMeta(selectedRecord);
+        const photos = selectedRecord.photos || [];
+        const partsCostDisplay = Number(selectedRecord.partsCost) || 0;
+        const laborCostDisplay = Number(selectedRecord.laborCost) || 0;
+        const totalCostDisplay =
+          Number(selectedRecord.estimatedCost) || partsCostDisplay + laborCostDisplay;
+        const canSupervisorEdit =
+          meta.stage === "Submitted" ||
+          (meta.stage === "SupervisorChecked" && isEditingSupervisorCost);
+
+        return (
+          <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between gap-4">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100 tabular-nums">
+                      ใบขอซ่อม {selectedRecord.workOrderNo}
+                    </h3>
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded border text-[11px] font-semibold ${meta.badgeClass}`}
+                    >
+                      {meta.labelTh}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    ผู้แจ้ง: {selectedRecord.requesterName || "-"} · วันที่แจ้ง{" "}
+                    {selectedRecord.workingDate} · บันทึกเมื่อ {selectedRecord.createdAt}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecord(null)}
+                  className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Scrollable Body */}
+              <div className="p-6 overflow-y-auto flex-1 space-y-5 text-xs">
+                {/* 3-Stage Workflow Stepper */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      meta.stepNumber >= 1
+                        ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30"
+                        : "border-slate-200 bg-slate-50 dark:border-[#1e3a5f] dark:bg-[#0d1b33]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-slate-900 dark:text-slate-100">
+                      <span>ช่วงที่ 1 · พนักงานแจ้งซ่อม</span>
+                      <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                      {selectedRecord.requesterName || "-"} · {selectedRecord.createdAt}
+                    </div>
+                  </div>
+
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      selectedRecord.managerStatus === "More Info Requested"
+                        ? "border-purple-300 bg-purple-50/70 dark:border-purple-800 dark:bg-purple-950/30"
+                        : selectedRecord.supervisorStatus === "Checked"
+                        ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30"
+                        : "border-amber-200 bg-amber-50/70 dark:border-amber-900 dark:bg-amber-950/30"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-slate-900 dark:text-slate-100">
+                      <span>ช่วงที่ 2 · หัวหน้างานตรวจสอบ</span>
+                      {selectedRecord.managerStatus === "More Info Requested" ? (
+                        <HelpCircle size={14} className="text-purple-600 dark:text-purple-400" />
+                      ) : selectedRecord.supervisorStatus === "Checked" ? (
+                        <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <Clock size={14} className="text-amber-600 dark:text-amber-400" />
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                      {selectedRecord.managerStatus === "More Info Requested"
+                        ? "ผู้จัดการขอข้อมูลเพิ่ม — รอหัวหน้างานตอบกลับ"
+                        : selectedRecord.supervisorName
+                        ? `${selectedRecord.supervisorName} · ${selectedRecord.supervisorCheckedAt || ""}`
+                        : "รอหัวหน้างานตรวจสอบและประเมินราคา"}
+                    </div>
+                  </div>
+
+                  <div
+                    className={`p-3 rounded-lg border ${
+                      meta.stage === "ManagerApproved" || meta.stage === "Completed"
+                        ? "border-emerald-200 bg-emerald-50/70 dark:border-emerald-900 dark:bg-emerald-950/30"
+                        : meta.stage === "Rejected"
+                        ? "border-rose-200 bg-rose-50/70 dark:border-rose-900 dark:bg-rose-950/30"
+                        : meta.stage === "SupervisorChecked" &&
+                          selectedRecord.managerStatus !== "More Info Requested"
+                        ? "border-sky-200 bg-sky-50/70 dark:border-sky-900 dark:bg-sky-950/30"
+                        : "border-slate-200 bg-slate-50 dark:border-[#1e3a5f] dark:bg-[#0d1b33]"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between font-bold text-slate-900 dark:text-slate-100">
+                      <span>ช่วงที่ 3 · ผู้จัดการอนุมัติ</span>
+                      {meta.stage === "ManagerApproved" || meta.stage === "Completed" ? (
+                        <CheckCircle2 size={14} className="text-emerald-600 dark:text-emerald-400" />
+                      ) : meta.stage === "Rejected" ? (
+                        <Ban size={14} className="text-rose-600 dark:text-rose-400" />
+                      ) : (
+                        <Clock size={14} className="text-slate-400" />
+                      )}
+                    </div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">
+                      {meta.stage === "Completed"
+                        ? `ซ่อมเสร็จสิ้น (${selectedRecord.completedAt || ""})`
+                        : meta.stage === "ManagerApproved"
+                        ? `อนุมัติแล้ว · รอคิวซ่อม (${selectedRecord.managerName || ""})`
+                        : selectedRecord.managerStatus === "More Info Requested"
+                        ? "รอหัวหน้างานตอบข้อมูลเพิ่มเติมกลับมาก่อน"
+                        : selectedRecord.managerName
+                        ? `${selectedRecord.managerName} · ${selectedRecord.managerApprovedAt || ""}`
+                        : meta.stage === "SupervisorChecked"
+                        ? "รอผู้จัดการพิจารณาอนุมัติ"
+                        : "รอผ่านช่วงตรวจสอบก่อน"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Highlighted Manager Inquiry -> Supervisor Reply Banner */}
+                {selectedRecord.managerStatus === "More Info Requested" &&
+                  meta.stage === "SupervisorChecked" && (() => {
+                    const latestManagerQuestion = [...selectedRecord.feedbackThread]
+                      .reverse()
+                      .find((fb) => fb.role === "Manager");
+                    return (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void handleThreadReply(
+                            selectedRecord.id,
+                            supReplyText,
+                            supReplyVendorName
+                          );
+                        }}
+                        className="p-4 rounded-lg border border-purple-300 dark:border-purple-700 bg-purple-50/70 dark:bg-purple-950/25 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-bold text-sm text-purple-900 dark:text-purple-200 flex items-center gap-1.5">
+                            <HelpCircle size={15} className="text-purple-600 dark:text-purple-400" />
+                            <span>ผู้จัดการขอข้อมูลเพิ่มเติม (ส่งกลับหัวหน้างานตอบกลับ)</span>
+                          </div>
+                          {latestManagerQuestion && (
+                            <span className="text-[11px] text-purple-700 dark:text-purple-300 tabular-nums">
+                              ถามโดย {latestManagerQuestion.author} · {latestManagerQuestion.timestamp}
+                            </span>
+                          )}
+                        </div>
+
+                        {latestManagerQuestion && (
+                          <div className="p-2.5 rounded-md bg-white dark:bg-[#0d1b33] border border-purple-200 dark:border-purple-800">
+                            {latestManagerQuestion.queryType && (
+                              <div className="text-[11px] font-bold text-purple-700 dark:text-purple-300">
+                                {latestManagerQuestion.queryType}
+                              </div>
+                            )}
+                            <div className="text-slate-800 dark:text-slate-200 mt-0.5">
+                              {latestManagerQuestion.message}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div>
+                            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              ชื่อ Vendor / ร้านซ่อมที่เข้ามาซ่อม
+                            </label>
+                            <input
+                              type="text"
+                              value={supReplyVendorName}
+                              onChange={(e) => setSupReplyVendorName(e.target.value)}
+                              placeholder="ระบุชื่อ Vendor หรือบริษัทที่เข้ามาซ่อม (ถ้ามี)"
+                              className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                            />
+                          </div>
+                          <div>
+                            <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              คำชี้แจง / ข้อมูลตอบกลับผู้จัดการ *
+                            </label>
+                            <input
+                              type="text"
+                              value={supReplyText}
+                              onChange={(e) => setSupReplyText(e.target.value)}
+                              required={!supReplyVendorName.trim()}
+                              placeholder="ระบุรายละเอียดตอบกลับ เช่น ชื่อ Vendor, ใบเสนอราคา, กำหนดเข้าซ่อม..."
+                              className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-[11px] text-purple-800 dark:text-purple-300">
+                            เมื่อกดส่งข้อมูลตอบกลับ ใบขอซ่อมจะวิ่งกลับไปที่คิวผู้จัดการเพื่อพิจารณาอนุมัติทันที
+                          </span>
+                          <button
+                            type="submit"
+                            disabled={!supReplyText.trim() && !supReplyVendorName.trim()}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded bg-purple-700 hover:bg-purple-800 text-white font-bold whitespace-nowrap disabled:opacity-50"
+                          >
+                            <Send size={12} /> ส่งข้อมูลตอบกลับไปให้ผู้จัดการอนุมัติ
+                          </button>
+                        </div>
+                      </form>
+                    );
+                  })()}
+
+                {/* Section A: Request Info & Attached Photos */}
+                <div className="p-4 rounded-lg border border-slate-200 dark:border-[#1e3a5f] space-y-3">
+                  <div className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    ข้อมูลการแจ้งซ่อม (ช่วงที่ 1)
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">เบอร์รถ / รุ่นรถ</div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100 mt-0.5">
+                        {selectedRecord.vehicleDescription || selectedRecord.vehicleId}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">ประเภทการซ่อม</div>
+                      <div className="font-bold text-[#087eaf] dark:text-sky-400 mt-0.5">
+                        {selectedRecord.repairType}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400">ชั่วโมงการทำงานรถ</div>
+                      <div className="font-bold text-slate-900 dark:text-slate-100 mt-0.5 tabular-nums">
+                        {selectedRecord.operatingHours || 0} ชม.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-slate-500 dark:text-slate-400 mb-1">
+                      อาการ / รายละเอียดที่ต้องการซ่อม
+                    </div>
+                    <div className="p-3 rounded-md bg-slate-50 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                      {selectedRecord.repairDescription}
+                    </div>
+                  </div>
+
+                  {selectedRecord.notes && (
+                    <div>
+                      <div className="text-slate-500 dark:text-slate-400 mb-1">หมายเหตุเพิ่มเติม</div>
+                      <div className="p-2.5 rounded-md bg-slate-50 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-slate-700 dark:text-slate-300">
+                        {selectedRecord.notes}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Photo Gallery */}
+                  <div>
+                    <div className="text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
+                      <Camera size={13} />
+                      <span>รูปถ่ายประกอบการแจ้งซ่อม ({photos.length} / 9 รูป)</span>
+                    </div>
+                    {photos.length === 0 ? (
+                      <div className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                        ไม่มีรูปถ่ายแนบมากับใบแจ้งซ่อมนี้
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+                        {photos.map((ph, idx) => (
+                          <button
+                            key={ph.id}
+                            type="button"
+                            onClick={() => openLightbox(photos, idx)}
+                            className="relative group rounded-md overflow-hidden border border-slate-200 dark:border-[#1e3a5f] aspect-square bg-slate-100 dark:bg-[#091322]"
+                          >
+                            <img
+                              src={ph.dataUrl}
+                              alt={ph.name}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-slate-950/0 group-hover:bg-slate-950/35 transition-colors flex items-center justify-center">
+                              <ZoomIn
+                                size={18}
+                                className="text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                              />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section B: Stage 2 Supervisor Inspection & Parts/Labor Costing */}
+                {canSupervisorEdit ? (
+                  <form
+                    onSubmit={handleSupervisorConfirmInspection}
+                    className="p-4 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50/40 dark:bg-amber-950/15 space-y-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                          <ClipboardCheck size={15} className="text-amber-600 dark:text-amber-400" />
+                          <span>ช่วงที่ 2 · หัวหน้างานตรวจสอบและประเมินค่าใช้จ่าย</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                          กรอกรายการอะไหล่/ราคาต่อชิ้น ค่าอะไหล่ และค่าแรง จากนั้นยืนยันเพื่อส่งให้ผู้จัดการอนุมัติ
+                        </p>
+                      </div>
+                      {meta.stage === "SupervisorChecked" && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingSupervisorCost(false)}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400"
+                        >
+                          ยกเลิกการแก้ไข
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Workshop Bay, Technician, Vendor Name, Operating Hours */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          ช่องซ่อม / ศูนย์ซ่อม
+                        </label>
+                        <select
+                          value={supWorkshopBay}
+                          onChange={(e) => setSupWorkshopBay(e.target.value)}
+                          className="w-full px-2.5 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                        >
+                          {WORKSHOP_BAYS.map((bay) => (
+                            <option key={bay} value={bay}>
+                              {bay}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          ชื่อ Vendor / ร้านซ่อม (ถ้ามี)
+                        </label>
+                        <input
+                          type="text"
+                          value={supVendorName}
+                          onChange={(e) => setSupVendorName(e.target.value)}
+                          placeholder="เช่น บจก. โฟล์คลิฟท์ เซอร์วิส / ศูนย์ฯ"
+                          className="w-full px-2.5 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          ช่างผู้รับผิดชอบ / ตรวจประเมิน
+                        </label>
+                        <input
+                          type="text"
+                          list="mh-repair-employees-list"
+                          value={supTechnicianName}
+                          onChange={(e) => setSupTechnicianName(e.target.value)}
+                          placeholder="ระบุชื่อช่างหรือหัวหน้างาน"
+                          className="w-full px-2.5 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          ชั่วโมงรถที่ตรวจวัดได้ (ชม.)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={supOperatingHours}
+                          onChange={(e) => setSupOperatingHours(Number(e.target.value))}
+                          className="w-full px-2.5 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 tabular-nums"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Spare Parts / Price per Unit Table */}
+                    <div className="p-3 rounded-lg bg-white dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Package size={14} className="text-[#087eaf]" />
+                          <span>รายการอะไหล่ / ราคาต่อชิ้น</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={addSupSparePartRow}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#111e38] text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                        >
+                          <Plus size={12} /> เพิ่มรายการอะไหล่
+                        </button>
+                      </div>
+
+                      {supSpareParts.length === 0 ? (
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 py-2">
+                          ยังไม่มีรายการอะไหล่ (กด "+ เพิ่มรายการอะไหล่" หรือกรอกยอดค่าอะไหล่/ค่าแรงด้านล่างโดยตรง)
+                        </div>
+                      ) : (
+                        <div className="space-y-2 overflow-x-auto">
+                          <div className="grid grid-cols-[1fr_1.8fr_0.7fr_0.8fr_1fr_0.9fr_auto] gap-2 text-[11px] font-bold text-slate-500 dark:text-slate-400 min-w-[600px]">
+                            <span>รหัสอะไหล่</span>
+                            <span>ชื่อรายการอะไหล่</span>
+                            <span className="text-center">จำนวน</span>
+                            <span>หน่วย</span>
+                            <span className="text-right">ราคา/ชิ้น (บาท)</span>
+                            <span className="text-right">รวม (บาท)</span>
+                            <span />
+                          </div>
+                          {supSpareParts.map((sp, idx) => (
+                            <div
+                              key={sp.id || idx}
+                              className="grid grid-cols-[1fr_1.8fr_0.7fr_0.8fr_1fr_0.9fr_auto] gap-2 items-center min-w-[600px]"
+                            >
+                              <input
+                                type="text"
+                                placeholder="รหัส"
+                                value={sp.partCode}
+                                onChange={(e) =>
+                                  updateSupSparePart(idx, "partCode", e.target.value)
+                                }
+                                className="px-2 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                              />
+                              <input
+                                type="text"
+                                placeholder="ชื่ออะไหล่ / รายละเอียด"
+                                value={sp.partName}
+                                onChange={(e) =>
+                                  updateSupSparePart(idx, "partName", e.target.value)
+                                }
+                                className="px-2 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                              />
+                              <input
+                                type="number"
+                                min={1}
+                                value={sp.qty}
+                                onChange={(e) =>
+                                  updateSupSparePart(idx, "qty", Number(e.target.value))
+                                }
+                                className="px-2 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 text-center tabular-nums"
+                              />
+                              <select
+                                value={sp.unit || "ชิ้น"}
+                                onChange={(e) => updateSupSparePart(idx, "unit", e.target.value)}
+                                className="px-2 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                              >
+                                {SPARE_PART_UNITS.map((u) => (
+                                  <option key={u} value={u}>
+                                    {u}
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="number"
+                                min={0}
+                                value={sp.unitCost}
+                                onChange={(e) => {
+                                  setSupPartsCostManual(false);
+                                  updateSupSparePart(idx, "unitCost", Number(e.target.value));
+                                }}
+                                className="px-2 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 text-right tabular-nums"
+                              />
+                              <div className="text-right font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                                {((Number(sp.qty) || 0) * (Number(sp.unitCost) || 0)).toLocaleString()}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeSupSparePart(idx)}
+                                className="p-1 text-rose-500 hover:text-rose-700"
+                                title="ลบแถว"
+                              >
+                                <X size={15} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Parts Cost, Labor Cost, Total Cost */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-white dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f]">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="font-semibold text-slate-700 dark:text-slate-300">
+                            ค่าอะไหล่ (บาท)
+                          </label>
+                          {supPartsCostManual && supSpareParts.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSupPartsCostManual(false);
+                                setSupPartsCost(computedPartsSubtotal);
+                              }}
+                              className="text-[10px] text-[#087eaf] hover:underline flex items-center gap-0.5"
+                            >
+                              <Calculator size={10} /> ใช้ยอดจากตาราง
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          type="number"
+                          min={0}
+                          value={supPartsCost}
+                          onChange={(e) => {
+                            setSupPartsCostManual(true);
+                            setSupPartsCost(Number(e.target.value));
+                          }}
+                          className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 font-bold tabular-nums text-right"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                          ค่าแรง (บาท)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={supLaborCost}
+                          onChange={(e) => setSupLaborCost(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 font-bold tabular-nums text-right"
+                        />
+                      </div>
+
+                      <div className="flex flex-col justify-center items-end bg-sky-50 dark:bg-[#091322] rounded-md px-3 py-2 border border-sky-200 dark:border-[#1e3a5f]">
+                        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                          ยอดรวมค่าใช้จ่ายทั้งหมด
+                        </span>
+                        <span className="text-lg font-extrabold text-[#087eaf] dark:text-sky-400 tabular-nums">
+                          {supTotalEstimatedCost.toLocaleString()} บาท
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Optional Tire Stock Outbound Link for Tire Categories */}
+                    {(selectedRecord.repairType.includes("ยาง") ||
+                      selectedRecord.repairType.includes("Tire")) && (
+                      <div className="p-3 rounded-lg bg-white dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] space-y-2">
+                        <label className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={supLogTireOutbound}
+                            onChange={(e) => setSupLogTireOutbound(e.target.checked)}
+                            className="rounded border-slate-300"
+                          />
+                          <span>ตัดสต๊อกยางโฟล์คลิฟท์ (mh_tire_stock) พร้อมกัน</span>
+                        </label>
+                        {supLogTireOutbound && (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                            <select
+                              value={supTireSize}
+                              onChange={(e) => setSupTireSize(e.target.value)}
+                              className="px-2.5 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                            >
+                              {TIRE_SIZE_OPTIONS.map((sz) => (
+                                <option key={sz} value={sz}>
+                                  {sz}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={supTirePosition}
+                              onChange={(e) => setSupTirePosition(e.target.value)}
+                              className="px-2.5 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                            >
+                              {WHEEL_POSITION_OPTIONS.map((pos) => (
+                                <option key={pos} value={pos}>
+                                  {pos}
+                                </option>
+                              ))}
+                            </select>
+                            <input
+                              type="number"
+                              min={1}
+                              value={supTireQty}
+                              onChange={(e) => setSupTireQty(Number(e.target.value))}
+                              placeholder="จำนวน (เส้น)"
+                              className="px-2.5 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] tabular-nums"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Supervisor Notes */}
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                        หมายเหตุ / ความเห็นหัวหน้างาน
+                      </label>
+                      <textarea
+                        value={supNotes}
+                        onChange={(e) => setSupNotes(e.target.value)}
+                        rows={2}
+                        placeholder="สรุปผลการตรวจสอบหน้างาน เหตุผลความจำเป็น หรือเงื่อนไขการรับประกันอะไหล่..."
+                        className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                      />
+                    </div>
+
+                    {/* Return to requester inline box */}
+                    {showReturnBox && (
+                      <div className="p-3 rounded-md bg-white dark:bg-[#091322] border border-amber-300 dark:border-amber-700 space-y-2">
+                        <div className="font-semibold text-amber-800 dark:text-amber-300">
+                          ระบุเหตุผลที่ส่งกลับให้ผู้แจ้งแก้ไข:
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={returnReasonText}
+                            onChange={(e) => setReturnReasonText(e.target.value)}
+                            placeholder="เช่น กรุณาถ่ายรูปจุดรั่วซึมเพิ่ม หรือระบุเบอร์รถให้ถูกต้อง..."
+                            className="flex-1 px-3 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSupervisorReturnToRequester}
+                            disabled={!returnReasonText.trim()}
+                            className="px-3 py-1.5 rounded bg-amber-600 text-white font-bold disabled:opacity-50"
+                          >
+                            ยืนยันส่งกลับ
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap justify-between items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowReturnBox((prev) => !prev)}
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md border border-amber-300 dark:border-amber-800 bg-white dark:bg-[#0d1b33] text-amber-700 dark:text-amber-300 font-semibold hover:bg-amber-50"
+                      >
+                        <RotateCcw size={13} />
+                        <span>ส่งกลับผู้แจ้งแก้ไข</span>
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={isSavingSupervisor}
+                        className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white font-bold disabled:opacity-60"
+                      >
+                        <ClipboardCheck size={14} />
+                        <span>
+                          {isSavingSupervisor
+                            ? "กำลังบันทึก..."
+                            : "ยืนยันตรวจสอบ & ส่งผู้จัดการอนุมัติ"}
+                        </span>
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  /* Read-only Stage 2 Costing Breakdown */
+                  <div className="p-4 rounded-lg border border-slate-200 dark:border-[#1e3a5f] space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                        ผลการตรวจสอบและประเมินค่าใช้จ่าย (ช่วงที่ 2: หัวหน้างาน)
+                      </div>
+                      {meta.stage === "SupervisorChecked" && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingSupervisorCost(true)}
+                          className="text-xs font-semibold text-[#087eaf] hover:underline"
+                        >
+                          แก้ไขรายการอะไหล่ / ค่าใช้จ่าย
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400">ช่องซ่อมบำรุง</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
+                          {selectedRecord.workshopBay || "-"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400">Vendor / ร้านซ่อม</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
+                          {selectedRecord.vendorName || "-"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400">ช่างผู้รับผิดชอบ</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
+                          {selectedRecord.technicianName || "-"}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-slate-500 dark:text-slate-400">หัวหน้างานผู้ตรวจสอบ</div>
+                        <div className="font-semibold text-slate-900 dark:text-slate-100 mt-0.5">
+                          {selectedRecord.supervisorName || "-"}
+                          {selectedRecord.supervisorCheckedAt
+                            ? ` (${selectedRecord.supervisorCheckedAt})`
+                            : ""}
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedRecord.spareParts.length > 0 && (
+                      <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-md overflow-hidden">
+                        <table className="w-full text-[11px] border-collapse">
+                          <thead>
+                            <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                              <th className="py-2 px-3 text-left">รหัสอะไหล่</th>
+                              <th className="py-2 px-3 text-left">รายการอะไหล่</th>
+                              <th className="py-2 px-3 text-center">จำนวน</th>
+                              <th className="py-2 px-3 text-right">ราคา/ชิ้น</th>
+                              <th className="py-2 px-3 text-right">รวม (บาท)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                            {selectedRecord.spareParts.map((sp, idx) => (
+                              <tr key={idx}>
+                                <td className="py-2 px-3 font-semibold text-[#087eaf] dark:text-sky-400 tabular-nums">
+                                  {sp.partCode || "-"}
+                                </td>
+                                <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
+                                  {sp.partName}
+                                </td>
+                                <td className="py-2 px-3 text-center tabular-nums">
+                                  {sp.qty} {sp.unit || "ชิ้น"}
+                                </td>
+                                <td className="py-2 px-3 text-right tabular-nums">
+                                  {Number(sp.unitCost).toLocaleString()}
+                                </td>
+                                <td className="py-2 px-3 text-right font-bold tabular-nums">
+                                  {((Number(sp.qty) || 0) * (Number(sp.unitCost) || 0)).toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-md bg-slate-50 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] tabular-nums">
+                      <div className="flex justify-between sm:block">
+                        <div className="text-slate-500 dark:text-slate-400">ค่าอะไหล่</div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                          {partsCostDisplay.toLocaleString()} บาท
+                        </div>
+                      </div>
+                      <div className="flex justify-between sm:block">
+                        <div className="text-slate-500 dark:text-slate-400">ค่าแรง</div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                          {laborCostDisplay.toLocaleString()} บาท
+                        </div>
+                      </div>
+                      <div className="flex justify-between sm:block">
+                        <div className="text-slate-500 dark:text-slate-400">รวมค่าใช้จ่ายทั้งหมด</div>
+                        <div className="font-extrabold text-[#087eaf] dark:text-sky-400 text-base">
+                          {totalCostDisplay.toLocaleString()} บาท
+                        </div>
+                      </div>
+                    </div>
+
+                    {selectedRecord.supervisorNotes && (
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold">ความเห็นหัวหน้างาน: </span>
+                        {selectedRecord.supervisorNotes}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Section C: Feedback / Query Loop */}
+                <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/15 space-y-3">
+                  <div className="font-bold text-purple-800 dark:text-purple-300 flex items-center gap-1.5">
+                    <MessageSquare size={14} />
+                    <span>ประวัติการสอบถามและตอบกลับข้อมูล (Feedback Thread)</span>
+                  </div>
+
+                  {selectedRecord.feedbackThread.length === 0 ? (
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                      ยังไม่มีข้อความสอบถามหรือบันทึกเพิ่มเติม
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedRecord.feedbackThread.map((fb) => (
+                        <div
+                          key={fb.id}
+                          className="p-2.5 rounded-md bg-white dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f]"
+                        >
+                          <div className="flex justify-between text-[11px] font-bold mb-1">
+                            <span className="text-slate-800 dark:text-slate-200">
+                              {fb.author} ({fb.role})
+                            </span>
+                            <span className="text-slate-400 font-normal tabular-nums">
+                              {fb.timestamp}
+                            </span>
+                          </div>
+                          {fb.queryType && (
+                            <div className="text-[11px] font-semibold text-purple-700 dark:text-purple-300 mb-0.5">
+                              หัวข้อ: {fb.queryType}
+                            </div>
+                          )}
+                          <div className="text-slate-700 dark:text-slate-300">{fb.message}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedRecord.managerStatus === "More Info Requested" && (
+                    <div className="text-[11px] text-purple-700 dark:text-purple-300 font-semibold">
+                      * กรุณากรอกชื่อ Vendor และคำชี้แจงในกล่องตอบข้อมูลเพิ่มเติมด้านบนของหน้าต่างนี้ เพื่อส่งกลับให้ผู้จัดการอนุมัติ
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline Reject Box for Manager */}
+                {showRejectBox && (
+                  <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 space-y-2">
+                    <div className="font-bold text-rose-700 dark:text-rose-300">
+                      ระบุเหตุผลการไม่อนุมัติใบแจ้งซ่อม:
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={rejectReasonText}
+                        onChange={(e) => setRejectReasonText(e.target.value)}
+                        placeholder="เช่น ราคาสูงเกินงบประมาณ หรือให้รอตรวจสภาพซ้ำ..."
+                        className="flex-1 px-3 py-1.5 rounded border border-rose-300 dark:border-rose-700 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleManagerReject(selectedRecord.id, rejectReasonText)}
+                        className="px-4 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold whitespace-nowrap"
+                      >
+                        ยืนยันไม่อนุมัติ
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {meta.stage === "SupervisorChecked" &&
+                    selectedRecord.managerStatus !== "More Info Requested" &&
+                    selectedRecord.managerStatus !== "Rejected" && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleManagerApprove(selectedRecord.id)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                          <Check size={14} /> อนุมัติซ่อม → รอคิวซ่อม
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeedbackRecord(selectedRecord);
+                            setIsFeedbackModalOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800"
+                        >
+                          <HelpCircle size={14} /> ขอข้อมูลเพิ่ม (ส่งกลับหัวหน้างาน)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowRejectBox((prev) => !prev)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md text-xs font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800"
+                        >
+                          <Ban size={14} /> ไม่อนุมัติ
+                        </button>
+                      </>
+                    )}
+
+                  {meta.stage === "ManagerApproved" && (
+                    <button
+                      type="button"
+                      onClick={() => handleMarkRepairCompleted(selectedRecord.id)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      <CheckCircle2 size={14} /> หัวหน้างานอัปเดต: ซ่อมเสร็จ
+                    </button>
+                  )}
+
+                  {isSupervisorOrManager &&
+                    (confirmDeleteId === selectedRecord.id ? (
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMaintenanceOrder(selectedRecord.id)}
+                          className="px-3 py-1.5 rounded text-xs font-bold bg-rose-600 text-white"
+                        >
+                          ยืนยันลบใบซ่อม
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="px-2.5 py-1.5 rounded text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f]"
+                        >
+                          ยกเลิก
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(selectedRecord.id)}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-md text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                      >
+                        <Trash2 size={13} /> ลบใบงาน
+                      </button>
+                    ))}
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200"
+                  >
+                    <Printer size={13} /> พิมพ์ใบขอซ่อม
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRecord(null)}
+                    className="px-4 py-2 rounded-md text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-[#087eaf] dark:hover:bg-[#075985] text-white"
+                  >
+                    ปิดหน้าต่าง
+                  </button>
                 </div>
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ========================================================================
+          MODAL 3: Manager Query / Feedback Modal
+          ======================================================================== */}
+      {isFeedbackModalOpen && feedbackRecord && (
+        <div className="fixed inset-0 z-[1050] bg-slate-950/60 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-lg overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  สอบถามข้อมูลเพิ่มเติม: {feedbackRecord.workOrderNo}
+                </h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  ข้อมูลจะวิ่งกลับไปยังคิวหัวหน้างานตรวจสอบเพื่อตอบคำชี้แจงหรือระบุชื่อ Vendor ก่อนส่งกลับมาอนุมัติ
+                </p>
+              </div>
               <button
-                onClick={() => setIsModalOpen(false)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}
+                type="button"
+                onClick={() => setIsFeedbackModalOpen(false)}
+                className="text-slate-500 hover:text-slate-800 dark:text-slate-400"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateRecord} style={{ padding: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {/* Repair Type Dropdown */}
+            <form onSubmit={handleSendManagerQuery} className="p-5 space-y-4 text-xs">
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Repair Type (ประเภทการซ่อม) *
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  หัวข้อคำถาม *
                 </label>
                 <select
-                  value={repairType}
-                  onChange={(e) => setRepairType(e.target.value)}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                  value={queryType}
+                  onChange={(e) => setQueryType(e.target.value)}
+                  className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
                 >
-                  {REPAIR_TYPES.map((rt) => (
-                    <option key={rt} value={rt}>{rt}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Vehicle Selection Dropdown */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Vehicle to Repair (เลือกรถที่จะซ่อม) *
-                </label>
-                <select
-                  value={vehicleId}
-                  onChange={(e) => setVehicleId(e.target.value)}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  <option value="">-- เลือกรถ / Select Vehicle --</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.vehicleId}>
-                      {v.vehicleId} - {v.vehicleType} ({v.description || "Active Fleet"})
+                  {FEEDBACK_QUERY_TYPES.map((qt) => (
+                    <option key={qt} value={qt}>
+                      {qt}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Workshop Bay */}
               <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Workshop Bay (ช่องซ่อมบำรุง) *
-                </label>
-                <select
-                  value={workshopBay}
-                  onChange={(e) => setWorkshopBay(e.target.value)}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  {WORKSHOP_BAYS.map((bay) => (
-                    <option key={bay} value={bay}>{bay}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Status Workflow */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Initial Status Workflow *
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as any)}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  <option value="Pending Inspection">Pending Inspection (รอตรวจสอบ)</option>
-                  <option value="In Workshop">In Workshop (กำลังซ่อมในศูนย์)</option>
-                  <option value="Testing">Testing (กำลังทดสอบระบบ)</option>
-                </select>
-              </div>
-
-              {/* Operating Hours */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Operating Hours (ชั่วโมงการทำงานเครื่องจักร) *
-                </label>
-                <input
-                  type="number"
-                  value={operatingHours}
-                  onChange={(e) => setOperatingHours(Number(e.target.value))}
-                  min={0}
-                  required
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              {/* Technician Name */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Assigned Technician / Mechanic *
-                </label>
-                <input
-                  type="text"
-                  value={technicianName}
-                  onChange={(e) => setTechnicianName(e.target.value)}
-                  required
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              {/* Working Date */}
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Maintenance Date *
-                </label>
-                <input
-                  type="date"
-                  value={workingDate}
-                  onChange={(e) => setWorkingDate(e.target.value)}
-                  required
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              {/* Repair Description */}
-              <div style={{ gridColumn: "span 2" }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Repair Description & Scope (รายการที่ต้องซ่อม) *
-                </label>
-                <textarea
-                  value={repairDescription}
-                  onChange={(e) => setRepairDescription(e.target.value)}
-                  rows={2}
-                  required
-                  placeholder="Describe details of the malfunction, oil flush steps, or parts replacement..."
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              {/* Spare Parts List & Estimated Cost Section */}
-              <div style={{ gridColumn: "span 2", background: "#f8fafc", padding: 14, borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Spare Parts & Materials Tracking</div>
-                    <div style={{ fontSize: 11, color: "#647786" }}>Track required replacement spare parts, fluids, and estimated cost for manager review.</div>
-                  </div>
-                  <button
-                    type="button"
-                    className="button secondary"
-                    onClick={addSparePartRow}
-                    style={{ padding: "5px 10px", fontSize: 11 }}
-                  >
-                    <Plus size={12} /> Add Spare Part
-                  </button>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  {spareParts.map((sp, idx) => (
-                    <div key={idx} style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr 0.6fr 1fr auto", gap: 8, alignItems: "center" }}>
-                      <input
-                        type="text"
-                        placeholder="Part Code"
-                        value={sp.partCode}
-                        onChange={(e) => updateSparePart(idx, "partCode", e.target.value)}
-                        style={{ padding: 7, borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 11 }}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Part Name / Description"
-                        value={sp.partName}
-                        onChange={(e) => updateSparePart(idx, "partName", e.target.value)}
-                        style={{ padding: 7, borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 11 }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Qty"
-                        min={1}
-                        value={sp.qty}
-                        onChange={(e) => updateSparePart(idx, "qty", Number(e.target.value))}
-                        style={{ padding: 7, borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 11 }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Unit Cost (THB)"
-                        min={0}
-                        value={sp.unitCost}
-                        onChange={(e) => updateSparePart(idx, "unitCost", Number(e.target.value))}
-                        style={{ padding: 7, borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 11 }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeSparePart(idx)}
-                        style={{ background: "transparent", border: "none", color: "#ef4444", cursor: "pointer", padding: 4 }}
-                        title="Remove part"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10, fontSize: 13, fontWeight: 700, color: "#1e3648" }}>
-                  Estimated Total Spare Parts Cost: <span style={{ color: "#087eaf", marginLeft: 8 }}>{calculatedEstimatedCost.toLocaleString()} THB</span>
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div style={{ gridColumn: "span 2" }}>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Additional Notes & Inspection Remarks
-                </label>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  rows={2}
-                  placeholder="Enter supervisor sign-off remarks or safety checks..."
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="button primary">
-                  Submit Work Order for Approval
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Manager Query Feedback Modal */}
-      {isFeedbackModalOpen && feedbackRecord && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1050,
-            padding: 20,
-          }}
-        >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              width: "100%",
-              maxWidth: 600,
-              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                padding: "16px 20px",
-                borderBottom: "1px solid #e2e8f0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: "#f8fafc",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: "#0f172a" }}>
-                  Request More Info / Feedback: <span className="code">{feedbackRecord.id}</span>
-                </div>
-                <div style={{ fontSize: 11, color: "#647786" }}>Query technician for cost breakdown, alternative parts, or justification before approval.</div>
-              </div>
-              <button
-                onClick={() => setIsFeedbackModalOpen(false)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSendManagerQuery} style={{ padding: 20, display: "grid", gap: 14 }}>
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Query Category (ประเภทคำขอข้อมูลเพิ่มเติม) *
-                </label>
-                <select
-                  value={queryType}
-                  onChange={(e) => setQueryType(e.target.value)}
-                  style={{ width: "100%", padding: 9, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  {FEEDBACK_QUERY_TYPES.map((qt) => (
-                    <option key={qt} value={qt}>{qt}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Manager Query Message to Technician (ข้อความคำถามถึงผู้แจ้งซ่อม) *
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                  รายละเอียดคำถามส่งกลับให้หัวหน้างาน *
                 </label>
                 <textarea
                   value={feedbackMessageText}
                   onChange={(e) => setFeedbackMessageText(e.target.value)}
                   rows={4}
                   required
-                  placeholder="e.g., Please provide vendor quotation or check if alternative parts are available..."
-                  style={{ width: "100%", padding: 10, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                  placeholder="เช่น ขอทราบชื่อ Vendor / ร้านซ่อมที่เข้ามาดำเนินการซ่อม หรือรายละเอียดอะไหล่เพิ่มเติม..."
+                  className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
                 />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
-                  className="button secondary"
                   onClick={() => setIsFeedbackModalOpen(false)}
+                  className="px-4 py-2 rounded-md border border-slate-300 dark:border-[#1e3a5f] font-semibold"
                 >
-                  Cancel
+                  ยกเลิก
                 </button>
-                <button type="submit" className="button primary" style={{ background: "#7e22ce", borderColor: "#7e22ce" }}>
-                  <Send size={13} /> Send Query to Technician
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-purple-700 hover:bg-purple-800 text-white font-bold"
+                >
+                  <Send size={13} /> ส่งคำถาม
                 </button>
               </div>
             </form>
@@ -1632,253 +2982,68 @@ export function FixFlushManagement({ vehicles }: FixFlushManagementProps) {
         </div>
       )}
 
-      {/* Inspect / Details & Feedback Thread Modal */}
-      {selectedRecord && (
+      {/* ========================================================================
+          MODAL 4: Photo Lightbox Viewer
+          ======================================================================== */}
+      {lightboxPhotos.length > 0 && (
         <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15, 23, 42, 0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-            padding: 20,
-          }}
+          className="fixed inset-0 z-[1100] bg-slate-950/90 flex flex-col items-center justify-center p-4"
+          onClick={() => setLightboxPhotos([])}
         >
           <div
-            style={{
-              background: "#fff",
-              borderRadius: 12,
-              width: "100%",
-              maxWidth: 720,
-              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
-              maxHeight: "90vh",
-              display: "flex",
-              flexDirection: "column",
-            }}
+            className="w-full max-w-4xl flex items-center justify-between text-white mb-3"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              style={{
-                padding: "18px 24px",
-                borderBottom: "1px solid #e2e8f0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: "#f8fafc",
-                borderTopLeftRadius: 12,
-                borderTopRightRadius: 12,
-              }}
+            <div className="text-xs font-semibold tabular-nums">
+              รูปที่ {lightboxIndex + 1} / {lightboxPhotos.length} ·{" "}
+              {lightboxPhotos[lightboxIndex]?.name}
+            </div>
+            <button
+              type="button"
+              onClick={() => setLightboxPhotos([])}
+              className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white"
             >
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-                  Maintenance Work Order: <span className="code">{selectedRecord.id}</span>
-                </div>
-                <div style={{ fontSize: 12, color: "#647786", marginTop: 2 }}>
-                  Recorded on {selectedRecord.createdAt} by {selectedRecord.technicianName}
-                </div>
-              </div>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div
+            className="relative flex items-center justify-center max-w-4xl max-h-[80vh] w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightboxPhotos.length > 1 && (
               <button
-                onClick={() => setSelectedRecord(null)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}
+                type="button"
+                onClick={() =>
+                  setLightboxIndex((prev) =>
+                    prev === 0 ? lightboxPhotos.length - 1 : prev - 1
+                  )
+                }
+                className="absolute left-2 p-2 rounded-full bg-slate-950/70 hover:bg-slate-900 text-white"
               >
-                <X size={20} />
+                <ChevronLeft size={22} />
               </button>
-            </div>
+            )}
 
-            <div style={{ padding: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, fontSize: 12, overflowY: "auto", flex: 1 }}>
-              <div>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Repair Type:</div>
-                <div style={{ fontWeight: 700, color: "#087eaf", marginTop: 2 }}>{selectedRecord.repairType}</div>
-              </div>
-              <div>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Manager Approval Status:</div>
-                <div style={{ fontWeight: 700, color: "#7e22ce", marginTop: 2 }}>{selectedRecord.managerStatus}</div>
-              </div>
+            <img
+              src={lightboxPhotos[lightboxIndex]?.dataUrl}
+              alt={lightboxPhotos[lightboxIndex]?.name || "Repair attachment"}
+              className="max-h-[78vh] max-w-full rounded-lg object-contain border border-white/15"
+            />
 
-              <div>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Vehicle / Equipment:</div>
-                <div style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedRecord.vehicleDescription}</div>
-              </div>
-              <div>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Workshop Bay:</div>
-                <div style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedRecord.workshopBay}</div>
-              </div>
-
-              <div>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Operating Hours:</div>
-                <div style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedRecord.operatingHours} HRS</div>
-              </div>
-              <div>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Assigned Technician:</div>
-                <div style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedRecord.technicianName}</div>
-              </div>
-
-              <div style={{ gridColumn: "span 2" }}>
-                <div style={{ color: "#647786", fontWeight: 600 }}>Repair Description:</div>
-                <div style={{ fontWeight: 600, color: "#1e3648", marginTop: 2, background: "#f8fafc", padding: 10, borderRadius: 6, border: "1px solid #e2e8f0" }}>
-                  {selectedRecord.repairDescription}
-                </div>
-              </div>
-
-              <div style={{ gridColumn: "span 2" }}>
-                <div style={{ color: "#647786", fontWeight: 600, marginBottom: 6 }}>Spare Parts & Costs List:</div>
-                <div style={{ border: "1px solid #e2e8f0", borderRadius: 6, overflow: "hidden" }}>
-                  <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
-                    <thead>
-                      <tr style={{ background: "#f1f5f9" }}>
-                        <th style={{ padding: "6px 10px", textAlign: "left" }}>Part Code</th>
-                        <th style={{ padding: "6px 10px", textAlign: "left" }}>Description</th>
-                        <th style={{ padding: "6px 10px", textAlign: "center" }}>Qty</th>
-                        <th style={{ padding: "6px 10px", textAlign: "right" }}>Unit Cost</th>
-                        <th style={{ padding: "6px 10px", textAlign: "right" }}>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedRecord.spareParts.map((sp, idx) => (
-                        <tr key={idx} style={{ borderBottom: "1px solid #e2e8f0" }}>
-                          <td style={{ padding: "6px 10px" }}><span className="code">{sp.partCode}</span></td>
-                          <td style={{ padding: "6px 10px" }}>{sp.partName}</td>
-                          <td style={{ padding: "6px 10px", textAlign: "center" }}>{sp.qty}</td>
-                          <td style={{ padding: "6px 10px", textAlign: "right" }}>{sp.unitCost.toLocaleString()} THB</td>
-                          <td style={{ padding: "6px 10px", textAlign: "right", fontWeight: 600 }}>{(sp.qty * sp.unitCost).toLocaleString()} THB</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
-                  Total Estimated Cost: <span style={{ color: "#087eaf", marginLeft: 6 }}>{selectedRecord.estimatedCost.toLocaleString()} THB</span>
-                </div>
-              </div>
-
-              {/* Feedback & Query Thread Section */}
-              <div style={{ gridColumn: "span 2", background: "#faf5ff", padding: 14, borderRadius: 8, border: "1px solid #e9d5ff" }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#6b21a8", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                  <MessageSquare size={14} /> Manager & Technician Feedback / Query Thread
-                </div>
-
-                {selectedRecord.feedbackThread.length === 0 ? (
-                  <div style={{ fontSize: 11, color: "#6b7280", fontStyle: "italic" }}>No questions or clarification requests logged yet.</div>
-                ) : (
-                  <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
-                    {selectedRecord.feedbackThread.map((fb) => (
-                      <div
-                        key={fb.id}
-                        style={{
-                          background: fb.role === "Manager" ? "#fff" : "#f0fdf4",
-                          padding: 10,
-                          borderRadius: 6,
-                          border: `1px solid ${fb.role === "Manager" ? "#d8b4fe" : "#bbf7d0"}`,
-                        }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: fb.role === "Manager" ? "#7e22ce" : "#15803d", marginBottom: 2 }}>
-                          <span>{fb.author} ({fb.role})</span>
-                          <span style={{ fontSize: 10, color: "#647786" }}>{fb.timestamp}</span>
-                        </div>
-                        {fb.queryType && (
-                          <div style={{ fontSize: 11, fontWeight: 600, color: "#4b5563", marginBottom: 4, fontStyle: "italic" }}>
-                            Topic: {fb.queryType}
-                          </div>
-                        )}
-                        <div style={{ fontSize: 11, color: "#1f2937" }}>{fb.message}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Reply box for Technician if More Info Requested */}
-                {selectedRecord.managerStatus === "More Info Requested" && (
-                  <div style={{ marginTop: 10, background: "#fff", padding: 10, borderRadius: 6, border: "1px solid #d8b4fe" }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#6b21a8", marginBottom: 6 }}>
-                      Reply to Manager & Resubmit for Approval:
-                    </div>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const formElem = e.currentTarget;
-                        const inputElem = formElem.elements.namedItem("replyText") as HTMLInputElement;
-                        if (inputElem && inputElem.value) {
-                          handleTechnicianReply(selectedRecord.id, inputElem.value);
-                          inputElem.value = "";
-                        }
-                      }}
-                      style={{ display: "flex", gap: 8 }}
-                    >
-                      <input
-                        type="text"
-                        name="replyText"
-                        placeholder="Type your explanation, price check reply, or vendor quotation details..."
-                        style={{ flex: 1, padding: 7, borderRadius: 4, border: "1px solid #cbd5e1", fontSize: 11 }}
-                        required
-                      />
-                      <button type="submit" className="button primary" style={{ background: "#7e22ce", borderColor: "#7e22ce", padding: "6px 12px", fontSize: 11 }}>
-                        <Send size={12} /> Reply & Resubmit
-                      </button>
-                    </form>
-                  </div>
-                )}
-              </div>
-
-              {selectedRecord.notes && (
-                <div style={{ gridColumn: "span 2", background: "#f8fafc", padding: 10, borderRadius: 6, border: "1px solid #e2e8f0" }}>
-                  <div style={{ color: "#647786", fontWeight: 600 }}>Remarks & Notes:</div>
-                  <div style={{ color: "#334155", marginTop: 2 }}>{selectedRecord.notes}</div>
-                </div>
-              )}
-            </div>
-
-            <div
-              style={{
-                padding: "14px 24px",
-                borderTop: "1px solid #e2e8f0",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                background: "#f8fafc",
-                borderBottomLeftRadius: 12,
-                borderBottomRightRadius: 12,
-              }}
-            >
-              <div style={{ display: "flex", gap: 8 }}>
-                {selectedRecord.managerStatus === "Pending Manager Approval" && (
-                  <>
-                    <button
-                      className="button primary"
-                      style={{ padding: "6px 12px", fontSize: 12, background: "#15803d", borderColor: "#15803d" }}
-                      onClick={() => handleManagerApprove(selectedRecord.id)}
-                    >
-                      <Check size={13} /> Approve Work Order
-                    </button>
-                    <button
-                      className="button secondary"
-                      style={{ padding: "6px 12px", fontSize: 12, background: "#f3e8ff", color: "#7e22ce", borderColor: "#d8b4fe" }}
-                      onClick={() => {
-                        setFeedbackRecord(selectedRecord);
-                        setIsFeedbackModalOpen(true);
-                      }}
-                    >
-                      <HelpCircle size={13} /> Request More Info (Query)
-                    </button>
-                  </>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  className="button secondary"
-                  onClick={() => window.print()}
-                >
-                  <Printer size={13} /> Print
-                </button>
-                <button
-                  className="button primary"
-                  onClick={() => setSelectedRecord(null)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
+            {lightboxPhotos.length > 1 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setLightboxIndex((prev) =>
+                    prev === lightboxPhotos.length - 1 ? 0 : prev + 1
+                  )
+                }
+                className="absolute right-2 p-2 rounded-full bg-slate-950/70 hover:bg-slate-900 text-white"
+              >
+                <ChevronRight size={22} />
+              </button>
+            )}
           </div>
         </div>
       )}

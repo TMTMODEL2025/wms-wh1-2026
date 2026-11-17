@@ -52,6 +52,7 @@ import { TransportOperations } from "./components/TransportOperations";
 import { TransportStatisticsView } from "./components/TransportStatisticsView";
 import { DeliveryPointsManagement } from "./components/DeliveryPointsManagement";
 import { FixFlushManagement } from "./components/FixFlushManagement";
+import { TireStockManagement } from "./components/TireStockManagement";
 import { FuelManagement } from "./components/FuelManagement";
 import { PreStartInspection } from "./components/PreStartInspection";
 import { SlitFilmManagement } from "./components/SlitFilmManagement";
@@ -120,6 +121,7 @@ const getMaterialHandlingSubmenu = (t: (key: keyof Translations) => string) => [
   { id: "transport-stats", label: t("transportStats"), icon: BarChart3 },
   { id: "delivery-points", label: t("deliveryPoints"), icon: MapPin },
   { id: "fix-flush", label: t("fixFlushStatus"), icon: Wrench },
+  { id: "tire-stock", label: t("tireStockManagement"), icon: Disc },
   { id: "pre-start", label: t("preStartInspection"), icon: ShieldCheck },
   { id: "vehicles", label: t("vehicleManagement"), icon: Truck },
   { id: "employees", label: t("employeeManagement"), icon: UserCheck },
@@ -184,6 +186,11 @@ function getModuleInfo(t: (key: keyof Translations) => string): Record<string, M
         { key: "unit", label: t("colUnit") },
         { key: "status", label: t("colStatus") },
       ],
+    },
+    "tire-stock": {
+      title: t("tireStockManagement"),
+      subtitle: t("tireStockSubtitle"),
+      columns: [],
     },
     "pre-start": {
       title: t("preStartInspection"),
@@ -5160,6 +5167,7 @@ function WmsApp({
         "transport-stats",
         "delivery-points",
         "fix-flush",
+        "tire-stock",
         "pre-start",
         "vehicles",
         "employees",
@@ -5193,6 +5201,7 @@ function WmsApp({
     "transport-stats",
     "delivery-points",
     "fix-flush",
+    "tire-stock",
     "pre-start",
     "vehicles",
     "employees",
@@ -6199,7 +6208,7 @@ function WmsApp({
                       </button>
                     )}
 
-                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "transport-stats" && active !== "fuel" && active !== "slit" && active !== "admin" ? (
+                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "transport-stats" && active !== "fuel" && active !== "slit" && active !== "admin" && active !== "fix-flush" && active !== "tire-stock" ? (
                       <button className="button" onClick={() => setShowModal(true)}>
                         <Plus size={14} />
                         {translations.newEntry}
@@ -6283,7 +6292,9 @@ function WmsApp({
                 }}
               />
             ) : active === "fix-flush" ? (
-              <FixFlushManagement vehicles={vehicles} />
+              <FixFlushManagement vehicles={vehicles} employees={employeeRoster} />
+            ) : active === "tire-stock" ? (
+              <TireStockManagement vehicles={vehicles} />
             ) : active === "pre-start" ? (
               <PreStartInspection
                 vehicles={vehicles}

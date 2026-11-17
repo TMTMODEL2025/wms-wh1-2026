@@ -116,14 +116,43 @@ export interface MhDeliveryPointRecord {
 // ============================================================================
 // 2. Maintenance / Fix & Flush (mh_maintenance) Types
 // ============================================================================
-export type MhRepairType =
-  | "เปลี่ยนยาง (Tire Replacement)"
-  | "ซ่อมเครื่องยนต์ (Engine Repair)"
-  | "ระบบไฮดรอลิก (Hydraulic System)"
-  | "ระบบเบรกและช่วงล่าง (Brake & Suspension)"
-  | "ระบบไฟฟ้าและแบตเตอรี่ (Electrical & Battery)"
-  | "ซ่อมบำรุงตามรอบ PM (Preventive Maintenance)"
-  | "ฟลัชชิ่งระบบของเหลว (Fluid & Oil Flushing)";
+export const MH_REPAIR_CATEGORIES = [
+  "ซ่อมเชิงป้องกัน (PM)",
+  "ซ่อมทั่วไป (MN)",
+  "ระบบส่งกำลัง",
+  "ระบบเบรค",
+  "ยางเสื่อมสภาพ",
+  "PM ไฮดรอลิค",
+  "ยางรั่ว",
+  "ระบบระบายความร้อน",
+  "ระบบแบตเตอร์รี่",
+  "ระบบไฟรถ",
+  "เครื่องยนต์",
+  "ตู้ชาร์จไฟ",
+  "ไฮดรอลิค",
+  "ระบบช่วงล่าง",
+  "ระบบไดสตาร์ท",
+  "ระบบไดชาร์จ",
+  "ระบบเชื้อเพลิง",
+  "มอเตอร์",
+  "โครงสร้าง",
+  "ระบบปรับอากาศ",
+  "ระบบเซนเซอร์",
+  "เคส อุบัติเหตุ",
+  "พัดลม",
+  "อื่นๆ",
+] as const;
+
+export type MhRepairType = (typeof MH_REPAIR_CATEGORIES)[number] | string;
+
+export type MhWorkflowStage =
+  | "Submitted"
+  | "SupervisorChecked"
+  | "ManagerApproved"
+  | "Rejected"
+  | "Completed";
+
+export type MhSupervisorStatus = "Pending" | "Checked" | "Returned";
 
 export type MhManagerApprovalStatus =
   | "Pending Manager Approval"
@@ -146,10 +175,18 @@ export interface MhSparePartItem {
   unitCost: number;
 }
 
+export interface MhRepairPhotoItem {
+  id: string;
+  name: string;
+  dataUrl: string;
+  sizeBytes?: number;
+  uploadedAt?: string;
+}
+
 export interface MhFeedbackComment {
   id: string;
   author: string;
-  role: "Manager" | "Technician";
+  role: "Manager" | "Supervisor" | "Technician" | "Requester";
   timestamp: string;
   queryType?: string;
   message: string;
@@ -165,24 +202,37 @@ export type MhMaintenanceStatus =
 export interface MhMaintenanceRecord {
   id: string;
   workOrderNo: string;
+  requesterName?: string;
   vehicleId: string;
   vehicleNumber?: string;
   vehicleType?: string;
   vehicleDescription: string;
   repairType: string;
   repairDescription: string;
+  workflowStage?: MhWorkflowStage;
   status: MhMaintenanceStatus;
   workingDate: string;
   spareParts: MhSparePartItem[];
+  partsCost?: number;
+  laborCost?: number;
   estimatedCost: number;
   actualCost?: number;
   technicianName: string;
+  vendorName?: string;
   workshopBay: string;
   operatingHours: number;
   createdAt: string;
   completedAt?: string;
+  supervisorStatus?: MhSupervisorStatus;
+  supervisorName?: string;
+  supervisorCheckedAt?: string;
+  supervisorNotes?: string;
   managerStatus: MhManagerApprovalStatus;
+  managerName?: string;
+  managerApprovedAt?: string;
+  managerDecisionNote?: string;
   progressStatus?: MhWorkOrderProgress;
+  photos?: MhRepairPhotoItem[];
   feedbackThread: MhFeedbackComment[];
   notes?: string;
   updatedAt?: string;
@@ -661,26 +711,99 @@ export async function deleteMhTransferFromCloud(id: string): Promise<boolean> {
 // ============================================================================
 // 2. mh_maintenance (Fix & Flush / Maintenance) CRUD & Subscription
 // ============================================================================
+export function generateNextRepairRequestNo(
+  existingRecords: MhMaintenanceRecord[],
+  targetDate: Date = new Date()
+): string {
+  const year = targetDate.getFullYear();
+  const month = String(targetDate.getMonth() + 1).padStart(2, "0");
+  const prefix = `TMT-${year}-${month}-`;
+  let maxSeq = 0;
+
+  for (const rec of existingRecords) {
+    const code = String(rec.workOrderNo || rec.id || "").trim().toUpperCase();
+    if (code.startsWith(prefix)) {
+      const tail = code.slice(prefix.length);
+      const parsed = parseInt(tail, 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+  }
+
+  let nextSeq = maxSeq + 1;
+  let candidate = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+  const existingSet = new Set(
+    existingRecords.map((r) => String(r.workOrderNo || r.id || "").trim().toUpperCase())
+  );
+  while (existingSet.has(candidate)) {
+    nextSeq += 1;
+    candidate = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+  }
+  return candidate;
+}
+
+export function inferMhWorkflowStage(r: MhMaintenanceRecord): MhWorkflowStage {
+  if (
+    r.workflowStage === "Submitted" ||
+    r.workflowStage === "SupervisorChecked" ||
+    r.workflowStage === "ManagerApproved" ||
+    r.workflowStage === "Rejected" ||
+    r.workflowStage === "Completed"
+  ) {
+    return r.workflowStage;
+  }
+  if (r.managerStatus === "Rejected") return "Rejected";
+  if (r.status === "Completed") return "Completed";
+  if (r.managerStatus === "Approved") return "ManagerApproved";
+  if (r.supervisorStatus === "Checked") return "SupervisorChecked";
+  if (r.supervisorStatus === "Pending" || r.supervisorStatus === "Returned") return "Submitted";
+  // Legacy records created before 3-stage workflow
+  return "SupervisorChecked";
+}
+
 function sanitizeMhMaintenancePayload(r: MhMaintenanceRecord): MhMaintenanceRecord {
   const { timestamp, dateYmd } = formatForkliftNowTimestamp();
-  const docId = sanitizeDocId(r.id || r.workOrderNo || `FIX-${Date.now()}`);
+  const docId = sanitizeDocId(r.id || r.workOrderNo || `TMT-${Date.now()}`);
   const safeParts: MhSparePartItem[] = Array.isArray(r.spareParts)
-    ? r.spareParts.map((sp, idx) => ({
+    ? r.spareParts.slice(0, 100).map((sp, idx) => ({
         id: String(sp.id || `SP-${idx + 1}`).slice(0, 64),
         partCode: String(sp.partCode || "-").trim().slice(0, 64),
         partName: String(sp.partName || "-").trim().slice(0, 128),
         qty: typeof sp.qty === "number" && !isNaN(sp.qty) ? Math.max(0, sp.qty) : 1,
-        unit: String(sp.unit || "PCS").trim().slice(0, 32),
+        unit: String(sp.unit || "ชิ้น").trim().slice(0, 32),
         unitCost: typeof sp.unitCost === "number" && !isNaN(sp.unitCost) ? Math.max(0, sp.unitCost) : 0,
       }))
     : [];
+
+  const computedPartsFromRows = safeParts.reduce(
+    (sum, sp) => sum + (Number(sp.qty) || 0) * (Number(sp.unitCost) || 0),
+    0
+  );
+  const partsCost =
+    typeof r.partsCost === "number" && !isNaN(r.partsCost)
+      ? Math.max(0, r.partsCost)
+      : computedPartsFromRows;
+  const laborCost =
+    typeof r.laborCost === "number" && !isNaN(r.laborCost)
+      ? Math.max(0, r.laborCost)
+      : 0;
+  const estimatedCost =
+    typeof r.estimatedCost === "number" && !isNaN(r.estimatedCost) && r.estimatedCost > 0
+      ? Math.max(0, r.estimatedCost)
+      : partsCost + laborCost;
 
   const safeFeedback: MhFeedbackComment[] = Array.isArray(r.feedbackThread)
     ? r.feedbackThread.map((fb, idx) =>
         stripUndefinedDeep({
           id: String(fb.id || `FB-${idx + 1}`).slice(0, 64),
           author: String(fb.author || "-").trim().slice(0, 128),
-          role: fb.role === "Manager" ? "Manager" : "Technician",
+          role:
+            fb.role === "Manager" ||
+            fb.role === "Supervisor" ||
+            fb.role === "Requester"
+              ? fb.role
+              : "Technician",
           timestamp: String(fb.timestamp || timestamp).slice(0, 64),
           queryType: fb.queryType ? String(fb.queryType).slice(0, 128) : undefined,
           message: String(fb.message || "").trim().slice(0, 500),
@@ -688,15 +811,57 @@ function sanitizeMhMaintenancePayload(r: MhMaintenanceRecord): MhMaintenanceReco
       )
     : [];
 
+  const safePhotos: MhRepairPhotoItem[] = [];
+  let accumulatedPhotoBytes = 0;
+  const MAX_TOTAL_PHOTO_BYTES = 720 * 1024;
+  if (Array.isArray(r.photos)) {
+    for (let i = 0; i < Math.min(9, r.photos.length); i++) {
+      const ph = r.photos[i];
+      if (!ph || typeof ph.dataUrl !== "string") continue;
+      if (!ph.dataUrl.startsWith("data:image/")) continue;
+      if (ph.dataUrl.length > 340000) continue;
+      if (accumulatedPhotoBytes + ph.dataUrl.length > MAX_TOTAL_PHOTO_BYTES) break;
+      accumulatedPhotoBytes += ph.dataUrl.length;
+      safePhotos.push(
+        stripUndefinedDeep({
+          id: String(ph.id || `PH-${i + 1}`).slice(0, 64),
+          name: String(ph.name || `photo_${i + 1}.jpg`).slice(0, 128),
+          dataUrl: ph.dataUrl,
+          sizeBytes:
+            typeof ph.sizeBytes === "number" && !isNaN(ph.sizeBytes)
+              ? ph.sizeBytes
+              : ph.dataUrl.length,
+          uploadedAt: ph.uploadedAt ? String(ph.uploadedAt).slice(0, 64) : timestamp,
+        })
+      );
+    }
+  }
+
+  const workflowStage = inferMhWorkflowStage(r);
+  const supervisorStatus: MhSupervisorStatus =
+    r.supervisorStatus === "Checked" ||
+    r.supervisorStatus === "Returned" ||
+    r.supervisorStatus === "Pending"
+      ? r.supervisorStatus
+      : workflowStage === "Submitted"
+      ? "Pending"
+      : "Checked";
+
   return stripUndefinedDeep({
     id: docId,
     workOrderNo: String(r.workOrderNo || docId).trim().slice(0, 64),
+    requesterName: r.requesterName
+      ? String(r.requesterName).trim().slice(0, 128)
+      : r.technicianName
+      ? String(r.technicianName).trim().slice(0, 128)
+      : "-",
     vehicleId: String(r.vehicleId || "").trim().slice(0, 64),
     vehicleNumber: String(r.vehicleNumber || r.vehicleId || "").trim().slice(0, 64),
     vehicleType: String(r.vehicleType || "Forklift").trim().slice(0, 64),
     vehicleDescription: String(r.vehicleDescription || "-").trim().slice(0, 256),
-    repairType: String(r.repairType || "ซ่อมบำรุงทั่วไป").trim().slice(0, 128),
-    repairDescription: String(r.repairDescription || "-").trim().slice(0, 500),
+    repairType: String(r.repairType || "ซ่อมทั่วไป (MN)").trim().slice(0, 128),
+    repairDescription: String(r.repairDescription || "-").trim().slice(0, 1000),
+    workflowStage,
     status:
       r.status === "Pending Inspection" ||
       r.status === "In Workshop" ||
@@ -707,15 +872,15 @@ function sanitizeMhMaintenancePayload(r: MhMaintenanceRecord): MhMaintenanceReco
         : "Pending Inspection",
     workingDate: String(r.workingDate || dateYmd).trim().slice(0, 32),
     spareParts: safeParts,
-    estimatedCost:
-      typeof r.estimatedCost === "number" && !isNaN(r.estimatedCost)
-        ? Math.max(0, r.estimatedCost)
-        : 0,
+    partsCost,
+    laborCost,
+    estimatedCost,
     actualCost:
       typeof r.actualCost === "number" && !isNaN(r.actualCost)
         ? Math.max(0, r.actualCost)
         : undefined,
     technicianName: String(r.technicianName || "-").trim().slice(0, 128),
+    vendorName: r.vendorName ? String(r.vendorName).trim().slice(0, 128) : undefined,
     workshopBay: String(r.workshopBay || "-").trim().slice(0, 128),
     operatingHours:
       typeof r.operatingHours === "number" && !isNaN(r.operatingHours)
@@ -723,10 +888,24 @@ function sanitizeMhMaintenancePayload(r: MhMaintenanceRecord): MhMaintenanceReco
         : 0,
     createdAt: String(r.createdAt || timestamp.slice(0, 16)).slice(0, 64),
     completedAt: r.completedAt ? String(r.completedAt).slice(0, 64) : undefined,
+    supervisorStatus,
+    supervisorName: r.supervisorName ? String(r.supervisorName).trim().slice(0, 128) : undefined,
+    supervisorCheckedAt: r.supervisorCheckedAt
+      ? String(r.supervisorCheckedAt).slice(0, 64)
+      : undefined,
+    supervisorNotes: r.supervisorNotes
+      ? String(r.supervisorNotes).trim().slice(0, 1000)
+      : undefined,
     managerStatus: r.managerStatus || "Pending Manager Approval",
+    managerName: r.managerName ? String(r.managerName).trim().slice(0, 128) : undefined,
+    managerApprovedAt: r.managerApprovedAt ? String(r.managerApprovedAt).slice(0, 64) : undefined,
+    managerDecisionNote: r.managerDecisionNote
+      ? String(r.managerDecisionNote).trim().slice(0, 1000)
+      : undefined,
     progressStatus: r.progressStatus || "Awaiting Approval",
+    photos: safePhotos,
     feedbackThread: safeFeedback,
-    notes: r.notes ? String(r.notes).trim().slice(0, 500) : undefined,
+    notes: r.notes ? String(r.notes).trim().slice(0, 1000) : undefined,
     updatedAt: String(r.updatedAt || timestamp).slice(0, 64),
   });
 }
@@ -735,8 +914,32 @@ function sortMhMaintenance(items: MhMaintenanceRecord[]): MhMaintenanceRecord[] 
   return [...items].sort((a, b) => {
     const dtA = a.createdAt || a.updatedAt || "";
     const dtB = b.createdAt || b.updatedAt || "";
-    return dtB.localeCompare(dtA);
+    if (dtA !== dtB) return dtB.localeCompare(dtA);
+    return (b.workOrderNo || "").localeCompare(a.workOrderNo || "");
   });
+}
+
+function normalizeMhMaintenanceRecord(data: MhMaintenanceRecord): MhMaintenanceRecord {
+  const spareParts = Array.isArray(data.spareParts) ? data.spareParts : [];
+  const photos = Array.isArray(data.photos) ? data.photos : [];
+  const feedbackThread = Array.isArray(data.feedbackThread) ? data.feedbackThread : [];
+  const workflowStage = inferMhWorkflowStage(data);
+  return {
+    ...data,
+    spareParts,
+    photos,
+    feedbackThread,
+    workflowStage,
+    requesterName: data.requesterName || data.technicianName || "-",
+    partsCost:
+      typeof data.partsCost === "number"
+        ? data.partsCost
+        : spareParts.reduce((s, sp) => s + (Number(sp.qty) || 0) * (Number(sp.unitCost) || 0), 0),
+    laborCost: typeof data.laborCost === "number" ? data.laborCost : 0,
+    supervisorStatus:
+      data.supervisorStatus ||
+      (workflowStage === "Submitted" ? "Pending" : "Checked"),
+  };
 }
 
 export async function fetchMhMaintenanceOnce(): Promise<MhMaintenanceRecord[]> {
@@ -746,11 +949,7 @@ export async function fetchMhMaintenanceOnce(): Promise<MhMaintenanceRecord[]> {
     snap.forEach((docSnap) => {
       const data = docSnap.data() as MhMaintenanceRecord;
       if (data && data.id) {
-        records.push({
-          ...data,
-          spareParts: Array.isArray(data.spareParts) ? data.spareParts : [],
-          feedbackThread: Array.isArray(data.feedbackThread) ? data.feedbackThread : [],
-        });
+        records.push(normalizeMhMaintenanceRecord(data));
       }
     });
     return sortMhMaintenance(records);
@@ -778,11 +977,7 @@ export function subscribeToMhMaintenance(
       snapshot.forEach((docSnap) => {
         const data = docSnap.data() as MhMaintenanceRecord;
         if (data && data.id) {
-          records.push({
-            ...data,
-            spareParts: Array.isArray(data.spareParts) ? data.spareParts : [],
-            feedbackThread: Array.isArray(data.feedbackThread) ? data.feedbackThread : [],
-          });
+          records.push(normalizeMhMaintenanceRecord(data));
         }
       });
       onData(sortMhMaintenance(records));
