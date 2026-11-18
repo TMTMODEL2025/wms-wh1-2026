@@ -238,8 +238,8 @@ export function DailyReportView({
     Object.values(machineProductionStatus).forEach((item) => {
       if (item.waitingMoveInActive && item.waitingMoveInCoils > 0) {
         moveIn += item.waitingMoveInCoils;
-      } else if (item.waitingSlitActive && item.waitingSlitCoils > 0) {
-        slit += item.waitingSlitCoils;
+      } else if (item.waitingSlitActive) {
+        slit += 1;
       }
     });
     return { totalWaitingMoveIn: moveIn, totalWaitingSlit: slit };
@@ -2071,8 +2071,8 @@ export function DailyReportView({
       if (p?.waitingMoveInActive && (p?.waitingMoveInCoils || 0) > 0) {
         pStatuses.push(`รอย้ายเข้า ${p.waitingMoveInCoils} แถบ`);
       }
-      if (p?.waitingSlitActive && (p?.waitingSlitCoils || 0) > 0) {
-        pStatuses.push(`รอสลิต ${p.waitingSlitCoils} แถบ`);
+      if (p?.waitingSlitActive) {
+        pStatuses.push("รอสลิต");
       }
 
       return {
@@ -4756,7 +4756,7 @@ export function DailyReportView({
                                                 const isChecked = e.target.checked;
                                                 handleUpdateProductionStatus(m.machineId, {
                                                   waitingSlitActive: isChecked,
-                                                  waitingSlitCoils: isChecked ? (prodStatus.waitingSlitCoils || 0) : 0,
+                                                  waitingSlitCoils: 0,
                                                   waitingMoveInActive: false,
                                                   waitingMoveInCoils: 0,
                                                 });
@@ -4767,30 +4767,6 @@ export function DailyReportView({
                                               {isThai ? "รอสลิต" : "Wait Slit"}
                                             </span>
                                           </label>
-
-                                          <div className="flex items-center gap-1 shrink-0">
-                                            <input
-                                              type="number"
-                                              min={0}
-                                              value={prodStatus.waitingSlitCoils || ""}
-                                              placeholder="0"
-                                              onChange={(e) => {
-                                                const val = parseInt(e.target.value, 10);
-                                                const num = isNaN(val) ? 0 : Math.max(0, val);
-                                                handleUpdateProductionStatus(m.machineId, {
-                                                  waitingSlitCoils: num,
-                                                  waitingSlitActive: num > 0 ? true : prodStatus.waitingSlitActive,
-                                                  ...(num > 0 ? { waitingMoveInActive: false, waitingMoveInCoils: 0 } : {}),
-                                                });
-                                              }}
-                                              className={`w-11 sm:w-14 px-1 sm:px-1.5 py-0.5 text-center font-mono font-black text-[10.5px] sm:text-xs rounded border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                                                prodStatus.waitingSlitActive
-                                                  ? "bg-white dark:bg-slate-900 border-blue-400 text-blue-700 dark:text-blue-300 shadow-xs"
-                                                  : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400"
-                                              }`}
-                                            />
-                                            <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400">{isThai ? "แถบ" : "coils"}</span>
-                                          </div>
                                         </div>
                                       )}
                                     </div>
@@ -4841,7 +4817,7 @@ export function DailyReportView({
                                 <strong className="text-blue-600 dark:text-blue-400 font-bold tabular-nums">
                                   {totalWaitingSlit.toLocaleString()}
                                 </strong>
-                                <span className="text-slate-400">{isThai ? "แถบ" : "coils"}</span>
+                                <span className="text-slate-400">{isThai ? "เครื่อง" : "machines"}</span>
                               </div>
                             </div>
                           </td>
