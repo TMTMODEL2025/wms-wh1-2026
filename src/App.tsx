@@ -43,6 +43,7 @@ import {
   Moon,
   ArrowLeftRight,
   BarChart3,
+  CalendarClock,
 } from "lucide-react";
 import { VehicleManagement } from "./components/VehicleManagement";
 import { EmployeeManagement } from "./components/EmployeeManagement";
@@ -52,6 +53,7 @@ import { TransportOperations } from "./components/TransportOperations";
 import { TransportStatisticsView } from "./components/TransportStatisticsView";
 import { DeliveryPointsManagement } from "./components/DeliveryPointsManagement";
 import { FixFlushManagement } from "./components/FixFlushManagement";
+import { PmScheduleManagement } from "./components/PmScheduleManagement";
 import { TireStockManagement } from "./components/TireStockManagement";
 import { FuelManagement } from "./components/FuelManagement";
 import { PreStartInspection } from "./components/PreStartInspection";
@@ -121,6 +123,7 @@ const getMaterialHandlingSubmenu = (t: (key: keyof Translations) => string) => [
   { id: "transport-stats", label: t("transportStats"), icon: BarChart3 },
   { id: "delivery-points", label: t("deliveryPoints"), icon: MapPin },
   { id: "fix-flush", label: t("fixFlushStatus"), icon: Wrench },
+  { id: "pm-schedule", label: t("pmSchedule"), icon: CalendarClock },
   { id: "tire-stock", label: t("tireStockManagement"), icon: Disc },
   { id: "pre-start", label: t("preStartInspection"), icon: ShieldCheck },
   { id: "vehicles", label: t("vehicleManagement"), icon: Truck },
@@ -186,6 +189,11 @@ function getModuleInfo(t: (key: keyof Translations) => string): Record<string, M
         { key: "unit", label: t("colUnit") },
         { key: "status", label: t("colStatus") },
       ],
+    },
+    "pm-schedule": {
+      title: t("pmSchedule"),
+      subtitle: t("pmScheduleSubtitle"),
+      columns: [],
     },
     "tire-stock": {
       title: t("tireStockManagement"),
@@ -3868,39 +3876,6 @@ function DataTable({
   );
 }
 
-function TransactionsList({ items }: { items: TransactionItem[] }) {
-  const { t } = useLanguage();
-  return (
-    <div className="divide-y divide-slate-100 dark:divide-slate-800">
-      {items.map((item, idx) => (
-        <div className="transaction-item p-3 sm:p-3.5 flex flex-col sm:grid sm:grid-cols-[52px_1fr_auto] gap-2 sm:gap-3 items-start sm:items-center" key={item.reference + idx}>
-          <div className="flex items-center justify-between w-full sm:w-auto">
-            <span className="transaction-time text-xs font-mono text-slate-500 font-bold">{item.time}</span>
-            <div className="sm:hidden">
-              <StatusBadge value={item.status} />
-            </div>
-          </div>
-
-          <div className="w-full min-w-0">
-            <div className="transaction-name text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{item.activity}</div>
-            <div className="transaction-ref text-[11px] text-slate-500 font-mono mt-0.5 truncate">
-              {item.reference} · {item.module}
-              {item.recordedBy ? ` · โดย ${item.recordedBy}` : ""}
-            </div>
-          </div>
-
-          <div className="hidden sm:block">
-            <StatusBadge value={item.status} />
-          </div>
-        </div>
-      ))}
-
-      {items.length === 0 && (
-        <div className="empty p-4 text-center text-xs text-slate-400">{t("noTransactionsRecorded")}</div>
-      )}
-    </div>
-  );
-}
 
 function DashboardView({
   inventory,
@@ -4607,13 +4582,6 @@ function DashboardView({
         </div>
       </div>
 
-      <section className="panel">
-        <PanelHeaderComponent
-          title={translations.recentTransactions}
-        />
-
-        <TransactionsList items={transactions} />
-      </section>
 
       <section className="panel">
         <PanelHeaderComponent
@@ -5167,6 +5135,7 @@ function WmsApp({
         "transport-stats",
         "delivery-points",
         "fix-flush",
+        "pm-schedule",
         "tire-stock",
         "pre-start",
         "vehicles",
@@ -5201,6 +5170,7 @@ function WmsApp({
     "transport-stats",
     "delivery-points",
     "fix-flush",
+    "pm-schedule",
     "tire-stock",
     "pre-start",
     "vehicles",
@@ -6201,14 +6171,14 @@ function WmsApp({
                     id="page-heading-actions"
                     className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}
                   >
-                    {active !== "transport" && active !== "slit" && active !== "fuel" && (
+                    {active !== "transport" && active !== "slit" && active !== "fuel" && active !== "pm-schedule" && (
                       <button className="button secondary print-export-btn hidden sm:inline-flex" onClick={() => window.print()}>
                         <Printer size={13} />
                         <span>{translations.printExport}</span>
                       </button>
                     )}
 
-                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "transport-stats" && active !== "fuel" && active !== "slit" && active !== "admin" && active !== "fix-flush" && active !== "tire-stock" ? (
+                    {active !== "vehicles" && active !== "employees" && active !== "transport" && active !== "transport-stats" && active !== "fuel" && active !== "slit" && active !== "admin" && active !== "fix-flush" && active !== "pm-schedule" && active !== "tire-stock" ? (
                       <button className="button" onClick={() => setShowModal(true)}>
                         <Plus size={14} />
                         {translations.newEntry}
@@ -6293,6 +6263,8 @@ function WmsApp({
               />
             ) : active === "fix-flush" ? (
               <FixFlushManagement vehicles={vehicles} employees={employeeRoster} />
+            ) : active === "pm-schedule" ? (
+              <PmScheduleManagement vehicles={vehicles} employees={employeeRoster} />
             ) : active === "tire-stock" ? (
               <TireStockManagement vehicles={vehicles} />
             ) : active === "pre-start" ? (

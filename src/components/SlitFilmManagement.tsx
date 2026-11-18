@@ -6556,7 +6556,7 @@ export function SlitFilmManagement({
         </div>
       ) : (
             /* External Purchase Inbound Form Panel */
-            <div className="p-3.5 sm:p-4 rounded-xl border bg-white dark:bg-[#111e38] border-purple-200 dark:border-purple-900/60 shadow-xs space-y-3.5">
+            <div className="px-3 py-2.5 sm:px-[18px] sm:py-3 rounded-xl border bg-white dark:bg-[#111e38] border-purple-200 dark:border-purple-900/60 shadow-xs space-y-3">
               <div className="flex items-center justify-between border-b border-purple-100 dark:border-purple-900/40 pb-2">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
@@ -6595,33 +6595,33 @@ export function SlitFilmManagement({
 
               <form onSubmit={handleConfirmExternalInbound} className="space-y-3">
                 {/* 1. Storage Location Picker (Building + Row + Basket) */}
-                <div className="p-3 rounded-xl bg-purple-50/50 dark:bg-[#0c1930] border border-purple-200/80 dark:border-[#1e3a5f] space-y-2">
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <div className="px-3 py-2.5 sm:px-[18px] sm:py-3 rounded-xl bg-purple-50/50 dark:bg-[#0c1930] border border-purple-200/80 dark:border-[#1e3a5f] space-y-2.5">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
                       <MapPin size={13} className="text-purple-500" />
                       <span>{isThai ? "เลือกตำแหน่งจัดเก็บ (Storage Location):" : "Select Storage Location:"}</span>
                     </span>
-                    <span className="font-mono text-[11px] font-black text-purple-600 dark:text-purple-400">
+                    <span className="font-mono text-xs font-black text-purple-600 dark:text-purple-400">
                       {externalBuilding}-{externalRow}{String(parseInt(externalBasketNo, 10) || 1).padStart(2, "0")}
                     </span>
                   </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {/* Building Selection */}
                     <div>
-                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      <span className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                         {isThai ? "1. คลัง/อาคาร:" : "1. Building:"}
                       </span>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="inline-flex min-h-[35px] w-full flex-wrap items-center gap-0.5 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] p-0.5">
                         {["H", "F", "E9", "E10", "I"].map((bld) => (
                           <button
                             key={bld}
                             type="button"
                             onClick={() => setExternalBuilding(bld)}
-                            className={`px-2 py-1 rounded-lg text-xs font-black font-mono cursor-pointer transition-all ${
+                            className={`h-[29px] flex-1 px-2 rounded text-xs font-medium font-mono cursor-pointer transition-all ${
                               externalBuilding === bld
                                 ? "bg-purple-600 text-white shadow-xs"
-                                : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#1e3a5f]"
+                                : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#162544]"
                             }`}
                           >
                             {bld}
@@ -6632,13 +6632,14 @@ export function SlitFilmManagement({
 
                     {/* Row Selection */}
                     <div>
-                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      <span className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                         {isThai ? "2. แถว (Row):" : "2. Row:"}
                       </span>
                       <select
                         value={externalRow}
                         onChange={(e) => setExternalRow(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] text-xs font-mono font-black text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="field w-full font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500"
+                        style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
                         {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"].map((r) => (
                           <option key={r} value={r}>
@@ -6650,7 +6651,7 @@ export function SlitFilmManagement({
 
                     {/* Basket Number Input */}
                     <div>
-                      <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      <span className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
                         {isThai ? "3. ตะกร้าที่:" : "3. Basket No:"}
                       </span>
                       <input
@@ -6659,7 +6660,8 @@ export function SlitFilmManagement({
                         max={300}
                         value={externalBasketNo}
                         onChange={(e) => setExternalBasketNo(e.target.value)}
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] text-xs font-mono font-black text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        className="field w-full font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500"
+                        style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       />
                     </div>
                   </div>
@@ -6680,7 +6682,8 @@ export function SlitFilmManagement({
                       }}
                       placeholder={isThai ? "เช่น 26SL00189A หรือ CH00227080..." : "e.g. 26SL00189A..."}
                       maxLength={12}
-                      className="w-full px-3.5 py-2.5 text-sm font-mono font-black tracking-wider rounded-xl bg-white dark:bg-[#0c1930] border-2 border-purple-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-4 focus:ring-purple-500/20"
+                      className="field w-full font-mono font-normal tracking-wider rounded-md bg-white dark:bg-[#0c1930] border border-purple-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-purple-600"
+                      style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                     />
                   </div>
                 </div>
@@ -6719,9 +6722,9 @@ export function SlitFilmManagement({
                 {/* Submit button */}
                 <button
                   type="submit"
-                  className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs sm:text-sm shadow-md active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full h-[35px] px-4 rounded-md bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <Truck size={16} />
+                  <Truck size={15} />
                   <span>{isThai ? "บันทึกรับเข้าภายนอก" : "Confirm External Inbound"}</span>
                 </button>
               </form>

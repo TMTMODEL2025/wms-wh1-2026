@@ -29,6 +29,7 @@ export interface Translations {
   transportStats: string;
   deliveryPoints: string;
   fixFlushStatus: string;
+  pmSchedule: string;
   tireStockManagement: string;
   preStartInspection: string;
   vehicleManagement: string;
@@ -48,6 +49,7 @@ export interface Translations {
   transportStatsSubtitle: string;
   deliveryPointsSubtitle: string;
   fixFlushSubtitle: string;
+  pmScheduleSubtitle: string;
   tireStockSubtitle: string;
   preStartSubtitle: string;
   vehiclesSubtitle: string;
@@ -214,6 +216,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     transportStats: "สถิติการย้ายงาน",
     deliveryPoints: "จุดส่งสินค้า",
     fixFlushStatus: "ระบบแจ้งซ่อม",
+    pmSchedule: "กำหนดการPM",
     tireStockManagement: "สต๊อกยางโฟล์คลิฟท์",
     preStartInspection: "ตรวจเช็ครถประจำวัน",
     vehicleManagement: "การจัดการยานพาหนะ",
@@ -233,6 +236,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     transportStatsSubtitle: "สรุปจำนวนรถ สินค้า น้ำหนัก พนักงานขับรถ และเส้นทางขนย้ายตามช่วงวันที่",
     deliveryPointsSubtitle: "กำหนดอาคาร จุดส่งสินค้า และหมายเลขประตูสำหรับฟอร์มบันทึกงานย้ายสินค้า",
     fixFlushSubtitle: "ระบบแจ้งซ่อมบำรุง ติดตามสถานะงานซ่อม และประวัติการฟลัชชิ่งน้ำมัน",
+    pmScheduleSubtitle: "กำหนดรอบบำรุงรักษาเชิงป้องกัน (PM) รถแต่ละคัน ตารางติดตาม และปฏิทินดูวันครบกำหนด PM",
     tireStockSubtitle: "บันทึกการรับเข้า-เบิกเปลี่ยนยาง และยอดคงเหลือแยกตามขนาดยาง (mh_tire_stock)",
     preStartSubtitle: "รายการตรวจเช็คสภาพรถยกและเครื่องจักรประจำวันก่อนเริ่มปฏิบัติงาน",
     vehiclesSubtitle: "ข้อมูลทะเบียนยานพาหนะ สถานะการทำงาน และการจัดสรรคนขับ",
@@ -397,6 +401,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     transportStats: "Transport Statistics",
     deliveryPoints: "Delivery Points",
     fixFlushStatus: "Fix & Flush Status",
+    pmSchedule: "PM Schedule",
     tireStockManagement: "Forklift Tire Stock",
     preStartInspection: "Pre-Start Safety Inspection",
     vehicleManagement: "Vehicle Management",
@@ -416,6 +421,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     transportStatsSubtitle: "Date-filtered statistics for active forklifts, cargo weights, drivers and routes",
     deliveryPointsSubtitle: "Configure warehouse buildings, delivery points and gates for transport routes",
     fixFlushSubtitle: "Fleet maintenance, hydraulic line flushing, overhaul schedules and inspection clearance",
+    pmScheduleSubtitle: "Preventive maintenance (PM) cycle planning, vehicle schedule table, and due-date calendar",
     tireStockSubtitle: "Forklift solid tire inbound, outbound replacement log & stock balance",
     preStartSubtitle: "Daily forklift and heavy machinery safety checklists before operation",
     vehiclesSubtitle: "Fleet asset configuration, operational status and driver allocation",

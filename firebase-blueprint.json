@@ -364,6 +364,35 @@
       },
       "required": ["id", "deliveryPoint", "gate"]
     },
+    "MhPmScheduleRecord": {
+      "title": "Material Handling PM Schedule Record",
+      "description": "Preventive maintenance (PM) schedule, cycle interval, due date tracking, and completion history per Material Handling vehicle",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "vehicleNumber": { "type": "string", "maxLength": 64 },
+        "vehicleType": { "type": "string", "maxLength": 64 },
+        "vehicleDescription": { "type": "string", "maxLength": 256 },
+        "pmTitle": { "type": "string", "maxLength": 128 },
+        "pmCategory": { "type": "string", "maxLength": 128 },
+        "cycleDays": { "type": "number" },
+        "cycleHours": { "type": "number" },
+        "currentHours": { "type": "number" },
+        "lastPmDate": { "type": "string", "maxLength": 32 },
+        "nextPmDate": { "type": "string", "maxLength": 32 },
+        "warningDaysBefore": { "type": "number" },
+        "responsibleTech": { "type": "string", "maxLength": 128 },
+        "checklistSummary": { "type": "string", "maxLength": 500 },
+        "estimatedCost": { "type": "number" },
+        "scheduleStatus": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "history": { "type": "array", "items": { "type": "object" } },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "vehicleId", "pmCategory", "cycleDays", "lastPmDate", "nextPmDate"]
+    },
     "WmsEmployee": {
       "title": "WMS Centralized Employee Record",
       "description": "Centralized employee directory for Admin & Workforce, section-based Employee ID login, and menu permissions",
@@ -473,6 +502,10 @@
     "/mh_delivery_points/{pointId}": {
       "schema": "MhDeliveryPointRecord",
       "description": "Dedicated collection for Material Handling delivery points and gate mappings"
+    },
+    "/mh_pm_schedules/{scheduleId}": {
+      "schema": "MhPmScheduleRecord",
+      "description": "Dedicated collection for Material Handling vehicle Preventive Maintenance (PM) schedules and history"
     },
     "/wms_employees/{employeeId}": {
       "schema": "WmsEmployee",

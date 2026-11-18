@@ -116,6 +116,17 @@ service cloud.firestore {
         && data.gate is string && data.gate.size() <= 64;
     }
 
+    function isValidMhPmSchedule(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.vehicleId is string && data.vehicleId.size() > 0 && data.vehicleId.size() <= 64
+        && data.pmCategory is string && data.pmCategory.size() <= 128
+        && data.cycleDays is number && data.cycleDays >= 1 && data.cycleDays <= 3650
+        && data.lastPmDate is string && data.lastPmDate.size() <= 32
+        && data.nextPmDate is string && data.nextPmDate.size() <= 32
+        && (!('scheduleStatus' in data) || data.scheduleStatus in ['Active', 'Paused'])
+        && (!('history' in data) || (data.history is list && data.history.size() <= 50));
+    }
+
     function isValidWmsEmployee(data) {
       return data.id is string && data.id.size() <= 128
         && data.employeeId is string && data.employeeId.size() <= 64
@@ -229,6 +240,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(pointId) && isValidMhDeliveryPoint(request.resource.data);
       allow delete: if isValidId(pointId);
+    }
+
+    match /mh_pm_schedules/{scheduleId} {
+      allow read: if true;
+      allow create, update: if isValidId(scheduleId) && isValidMhPmSchedule(request.resource.data);
+      allow delete: if isValidId(scheduleId);
     }
 
     match /wms_employees/{employeeId} {

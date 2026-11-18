@@ -19,6 +19,7 @@ export const MH_FUEL_STOCK_COLLECTION = "mh_fuel_stock";
 export const MH_TIRE_STOCK_COLLECTION = "mh_tire_stock";
 export const MH_DAILY_DUTY_COLLECTION = "mh_daily_duty";
 export const MH_DELIVERY_POINTS_COLLECTION = "mh_delivery_points";
+export const MH_PM_SCHEDULES_COLLECTION = "mh_pm_schedules";
 
 // ============================================================================
 // 1. Transport Operation (mh_transfers) Types
@@ -297,6 +298,56 @@ export interface MhTireStockRecord {
   workOrderRef?: string;
   notes?: string;
   updatedAt?: string;
+}
+
+// ============================================================================
+// 5. Preventive Maintenance Schedule (mh_pm_schedules) Types & Constants
+// ============================================================================
+export const MH_PM_CATEGORIES = [
+  "PM 1 (ตรวจเช็คตามระยะพื้นฐาน)",
+  "PM 2 (เปลี่ยนถ่ายน้ำมันเครื่อง/กรอง)",
+  "PM ไฮดรอลิค / ระบบส่งกำลัง",
+  "PM แบตเตอรี่ / ระบบไฟฟ้า",
+  "PM ระบบเบรค / ช่วงล่าง",
+  "PM ใหญ่ประจำปี (Major Overhaul)",
+] as const;
+
+export type MhPmCategory = (typeof MH_PM_CATEGORIES)[number] | string;
+
+export interface MhPmHistoryEntry {
+  id: string;
+  completedDate: string; // YYYY-MM-DD
+  previousDueDate?: string; // YYYY-MM-DD
+  nextDueDate: string; // YYYY-MM-DD
+  performedBy: string;
+  operatingHours?: number;
+  cost?: number;
+  notes?: string;
+  recordedAt: string;
+}
+
+export interface MhPmScheduleRecord {
+  id: string;
+  vehicleId: string;
+  vehicleNumber?: string;
+  vehicleType: string;
+  vehicleDescription?: string;
+  pmTitle: string;
+  pmCategory: MhPmCategory;
+  cycleDays: number;
+  cycleHours?: number;
+  currentHours?: number;
+  lastPmDate: string; // YYYY-MM-DD
+  nextPmDate: string; // YYYY-MM-DD
+  warningDaysBefore: number;
+  responsibleTech: string;
+  checklistSummary?: string;
+  estimatedCost?: number;
+  scheduleStatus: "Active" | "Paused";
+  notes?: string;
+  history?: MhPmHistoryEntry[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================================================
@@ -1646,5 +1697,262 @@ export async function deleteMhDeliveryPointFromCloud(id: string): Promise<boolea
     () => deleteDoc(docRef),
     OperationType.DELETE,
     `${MH_DELIVERY_POINTS_COLLECTION}/${cleanId}`
+  );
+}
+
+// ============================================================================
+// 7. Preventive Maintenance Schedule (mh_pm_schedules) Cloud & Local Cache
+// ============================================================================
+const MH_PM_SCHEDULES_CACHE_KEY = "tmt_mh_pm_schedules_cache_v1";
+
+export function computeNextPmDate(baseDateYmd: string, cycleDays: number): string {
+  const safeDays = Math.max(1, Math.min(3650, Math.round(Number(cycleDays) || 30)));
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(baseDateYmd || "").trim());
+  const d = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date();
+  d.setDate(d.getDate() + safeDays);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function sanitizeMhPmSchedulePayload(
+  r: Partial<MhPmScheduleRecord> & { vehicleId: string }
+): MhPmScheduleRecord {
+  const { timestamp, dateYmd } = formatForkliftNowTimestamp();
+  const cleanVehicleId = String(r.vehicleId || "").trim().slice(0, 64);
+  const cleanVehicleNumber = String(r.vehicleNumber || cleanVehicleId).trim().slice(0, 64);
+  const cycleDays =
+    typeof r.cycleDays === "number" && !isNaN(r.cycleDays)
+      ? Math.max(1, Math.min(3650, Math.round(r.cycleDays)))
+      : 90;
+  const lastPmDate = String(r.lastPmDate || dateYmd).trim().slice(0, 32);
+  const nextPmDate = String(r.nextPmDate || computeNextPmDate(lastPmDate, cycleDays))
+    .trim()
+    .slice(0, 32);
+  const docId = sanitizeDocId(r.id || `PM_${cleanVehicleId}_${Date.now()}`);
+
+  const safeHistory: MhPmHistoryEntry[] = Array.isArray(r.history)
+    ? r.history.slice(0, 40).map((h, idx) =>
+        stripUndefinedDeep({
+          id: String(h.id || `PMH-${idx + 1}`).slice(0, 64),
+          completedDate: String(h.completedDate || dateYmd).trim().slice(0, 32),
+          previousDueDate: h.previousDueDate ? String(h.previousDueDate).trim().slice(0, 32) : undefined,
+          nextDueDate: String(h.nextDueDate || nextPmDate).trim().slice(0, 32),
+          performedBy: String(h.performedBy || "-").trim().slice(0, 128),
+          operatingHours:
+            typeof h.operatingHours === "number" && !isNaN(h.operatingHours)
+              ? Math.max(0, h.operatingHours)
+              : undefined,
+          cost:
+            typeof h.cost === "number" && !isNaN(h.cost) ? Math.max(0, h.cost) : undefined,
+          notes: h.notes ? String(h.notes).trim().slice(0, 500) : undefined,
+          recordedAt: String(h.recordedAt || timestamp).slice(0, 64),
+        })
+      )
+    : [];
+
+  return stripUndefinedDeep({
+    id: docId,
+    vehicleId: cleanVehicleId,
+    vehicleNumber: cleanVehicleNumber,
+    vehicleType: String(r.vehicleType || "Forklift").trim().slice(0, 64),
+    vehicleDescription: r.vehicleDescription
+      ? String(r.vehicleDescription).trim().slice(0, 256)
+      : undefined,
+    pmTitle: String(r.pmTitle || r.pmCategory || "PM เชิงป้องกันตามรอบ").trim().slice(0, 128),
+    pmCategory: String(r.pmCategory || MH_PM_CATEGORIES[0]).trim().slice(0, 128),
+    cycleDays,
+    cycleHours:
+      typeof r.cycleHours === "number" && !isNaN(r.cycleHours) && r.cycleHours > 0
+        ? Math.round(r.cycleHours)
+        : undefined,
+    currentHours:
+      typeof r.currentHours === "number" && !isNaN(r.currentHours) && r.currentHours >= 0
+        ? Math.round(r.currentHours)
+        : undefined,
+    lastPmDate,
+    nextPmDate,
+    warningDaysBefore:
+      typeof r.warningDaysBefore === "number" && !isNaN(r.warningDaysBefore)
+        ? Math.max(1, Math.min(90, Math.round(r.warningDaysBefore)))
+        : 7,
+    responsibleTech: String(r.responsibleTech || "ทีมช่างซ่อมบำรุง").trim().slice(0, 128),
+    checklistSummary: r.checklistSummary
+      ? String(r.checklistSummary).trim().slice(0, 500)
+      : undefined,
+    estimatedCost:
+      typeof r.estimatedCost === "number" && !isNaN(r.estimatedCost) && r.estimatedCost >= 0
+        ? r.estimatedCost
+        : undefined,
+    scheduleStatus: r.scheduleStatus === "Paused" ? "Paused" : "Active",
+    notes: r.notes ? String(r.notes).trim().slice(0, 500) : undefined,
+    history: safeHistory,
+    createdAt: String(r.createdAt || timestamp).slice(0, 64),
+    updatedAt: String(r.updatedAt || timestamp).slice(0, 64),
+  });
+}
+
+function sortMhPmSchedules(items: MhPmScheduleRecord[]): MhPmScheduleRecord[] {
+  return [...items].sort((a, b) => {
+    if (a.scheduleStatus !== b.scheduleStatus) {
+      return a.scheduleStatus === "Active" ? -1 : 1;
+    }
+    const dateCmp = (a.nextPmDate || "").localeCompare(b.nextPmDate || "");
+    if (dateCmp !== 0) return dateCmp;
+    return (a.vehicleId || "").localeCompare(b.vehicleId || "", "th", { numeric: true });
+  });
+}
+
+export function loadCachedMhPmSchedules(): MhPmScheduleRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MH_PM_SCHEDULES_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sortMhPmSchedules(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedMhPmSchedules(records: MhPmScheduleRecord[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      MH_PM_SCHEDULES_CACHE_KEY,
+      JSON.stringify(sortMhPmSchedules(records))
+    );
+  } catch {
+    // ignore storage quota error
+  }
+}
+
+export async function fetchMhPmSchedulesOnce(): Promise<MhPmScheduleRecord[]> {
+  try {
+    const snap = await getDocs(collection(dbForklift, MH_PM_SCHEDULES_COLLECTION));
+    const records: MhPmScheduleRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as MhPmScheduleRecord;
+      if (data && data.id && data.vehicleId) {
+        records.push({
+          ...data,
+          history: Array.isArray(data.history) ? data.history : [],
+        });
+      }
+    });
+    const sorted = sortMhPmSchedules(records);
+    if (sorted.length > 0) {
+      saveCachedMhPmSchedules(sorted);
+      return sorted;
+    }
+    return loadCachedMhPmSchedules();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, MH_PM_SCHEDULES_COLLECTION);
+    return loadCachedMhPmSchedules();
+  }
+}
+
+export function subscribeToMhPmSchedules(
+  onData: (records: MhPmScheduleRecord[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const channelKey = "mh_pm_schedules_listener";
+  if (!forkliftCloudRealtimeEnabled) {
+    fetchMhPmSchedulesOnce().then(onData).catch((err) => onError?.(err));
+    return () => {};
+  }
+
+  const colRef = collection(dbForklift, MH_PM_SCHEDULES_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: MhPmScheduleRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as MhPmScheduleRecord;
+        if (data && data.id && data.vehicleId) {
+          records.push({
+            ...data,
+            history: Array.isArray(data.history) ? data.history : [],
+          });
+        }
+      });
+      const sorted = sortMhPmSchedules(records);
+      if (sorted.length > 0 || !snapshot.metadata.fromCache) {
+        saveCachedMhPmSchedules(sorted);
+      }
+      onData(sorted);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, MH_PM_SCHEDULES_COLLECTION);
+      onError?.(error);
+    }
+  );
+
+  return registerForkliftFirestoreListener(channelKey, unsub);
+}
+
+export async function saveMhPmScheduleToCloud(
+  record: Partial<MhPmScheduleRecord> & { vehicleId: string }
+): Promise<boolean> {
+  const payload = sanitizeMhPmSchedulePayload(record);
+  const cached = loadCachedMhPmSchedules();
+  const nextCache = [payload, ...cached.filter((item) => item.id !== payload.id)];
+  saveCachedMhPmSchedules(nextCache);
+
+  const docRef = doc(dbForklift, MH_PM_SCHEDULES_COLLECTION, payload.id);
+  return runForkliftFirestoreWriteWithGuard(
+    () => setDoc(docRef, payload, { merge: true }),
+    OperationType.WRITE,
+    `${MH_PM_SCHEDULES_COLLECTION}/${payload.id}`
+  );
+}
+
+export async function saveMhPmSchedulesBatchToCloud(
+  records: Array<Partial<MhPmScheduleRecord> & { vehicleId: string }>
+): Promise<boolean> {
+  if (records.length === 0) return true;
+  const payloads = records.map(sanitizeMhPmSchedulePayload);
+  const payloadIds = new Set(payloads.map((p) => p.id));
+  const cached = loadCachedMhPmSchedules();
+  const nextCache = [...payloads, ...cached.filter((item) => !payloadIds.has(item.id))];
+  saveCachedMhPmSchedules(nextCache);
+
+  if (payloads.length === 1) {
+    const docRef = doc(dbForklift, MH_PM_SCHEDULES_COLLECTION, payloads[0].id);
+    return runForkliftFirestoreWriteWithGuard(
+      () => setDoc(docRef, payloads[0], { merge: true }),
+      OperationType.WRITE,
+      `${MH_PM_SCHEDULES_COLLECTION}/${payloads[0].id}`
+    );
+  }
+
+  return runForkliftFirestoreWriteWithGuard(
+    async () => {
+      const batch = writeBatch(dbForklift);
+      payloads.forEach((payload) => {
+        const docRef = doc(dbForklift, MH_PM_SCHEDULES_COLLECTION, payload.id);
+        batch.set(docRef, payload, { merge: true });
+      });
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    MH_PM_SCHEDULES_COLLECTION
+  );
+}
+
+export async function deleteMhPmScheduleFromCloud(id: string): Promise<boolean> {
+  const cleanId = sanitizeDocId(id);
+  if (!cleanId) return false;
+  const cached = loadCachedMhPmSchedules();
+  saveCachedMhPmSchedules(cached.filter((item) => item.id !== cleanId));
+
+  const docRef = doc(dbForklift, MH_PM_SCHEDULES_COLLECTION, cleanId);
+  return runForkliftFirestoreWriteWithGuard(
+    () => deleteDoc(docRef),
+    OperationType.DELETE,
+    `${MH_PM_SCHEDULES_COLLECTION}/${cleanId}`
   );
 }
