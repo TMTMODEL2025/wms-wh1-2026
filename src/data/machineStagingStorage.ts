@@ -306,6 +306,25 @@ export function resetAllMachineStagingToEmpty(): MachineStagingConfig[] {
   return clearedState;
 }
 
+export function fillAllMachineStagingToFull(): MachineStagingConfig[] {
+  const current = getStoredMachineStaging();
+  const filledState: MachineStagingConfig[] = (current && current.length > 0 ? current : buildInitialState()).map((m) => ({
+    ...m,
+    racks: (m.racks || []).map((r) => {
+      const maxMeters = Math.max(1, Math.round((r.maxCapacityMm || 2000) / 1000));
+      return {
+        ...r,
+        usedMeters: maxMeters,
+        status: (r.status === "maintenance" ? "maintenance" : "full") as MachineRack["status"]
+      };
+    })
+  }));
+  saveStoredMachineStaging(filledState);
+  return filledState;
+}
+
+const DEFAULT_FULL_MIGRATION_KEY = "tmt_wms_machine_staging_default_full_v1";
+
 export function getStoredMachineStaging(): MachineStagingConfig[] {
   try {
     if (typeof window !== "undefined" && window.localStorage) {
@@ -315,6 +334,8 @@ export function getStoredMachineStaging(): MachineStagingConfig[] {
       }
     }
     const saved = typeof window !== "undefined" && window.localStorage ? localStorage.getItem(STORAGE_KEY_MACHINE_STAGING) : null;
+    const migratedFull = typeof window !== "undefined" && window.localStorage ? localStorage.getItem(DEFAULT_FULL_MIGRATION_KEY) === "true" : false;
+
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -337,11 +358,27 @@ export function getStoredMachineStaging(): MachineStagingConfig[] {
               rackNo = counter;
             }
             seenRackIds.add(uniqueRackId);
+            const maxMeters = Math.max(1, Math.round((r.maxCapacityMm || 2000) / 1000));
+            const resolvedUsedMeters = !migratedFull
+              ? maxMeters
+              : typeof r.usedMeters === "number"
+              ? r.usedMeters
+              : maxMeters;
+            const resolvedStatus: MachineRack["status"] =
+              r.status === "maintenance"
+                ? "maintenance"
+                : resolvedUsedMeters >= maxMeters
+                ? "full"
+                : resolvedUsedMeters === 0
+                ? "available"
+                : "occupied";
+
             dedupedRacks.push({
               ...r,
               rackId: uniqueRackId,
               rackNo,
-              usedMeters: typeof r.usedMeters === "number" ? r.usedMeters : 0,
+              usedMeters: resolvedUsedMeters,
+              status: resolvedStatus,
               rackNameTh: formatRackName(rackNo, m)
             });
           });
@@ -352,10 +389,17 @@ export function getStoredMachineStaging(): MachineStagingConfig[] {
           };
         });
 
-        if (hasDuplicates && typeof window !== "undefined" && window.localStorage) {
-          try {
-            localStorage.setItem(STORAGE_KEY_MACHINE_STAGING, JSON.stringify(cleaned));
-          } catch (_) {}
+        if (typeof window !== "undefined" && window.localStorage) {
+          if (!migratedFull) {
+            try {
+              localStorage.setItem(DEFAULT_FULL_MIGRATION_KEY, "true");
+              localStorage.setItem(STORAGE_KEY_MACHINE_STAGING, JSON.stringify(cleaned));
+            } catch (_) {}
+          } else if (hasDuplicates) {
+            try {
+              localStorage.setItem(STORAGE_KEY_MACHINE_STAGING, JSON.stringify(cleaned));
+            } catch (_) {}
+          }
         }
 
         return cleaned;
@@ -365,6 +409,11 @@ export function getStoredMachineStaging(): MachineStagingConfig[] {
     console.error("Failed to load machine staging from localStorage:", e);
   }
   const initialState = buildInitialState();
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem(DEFAULT_FULL_MIGRATION_KEY, "true");
+    } catch (_) {}
+  }
   saveStoredMachineStaging(initialState, { skipCloudWrite: true });
   return initialState;
 }

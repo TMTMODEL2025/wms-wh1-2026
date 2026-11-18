@@ -20,6 +20,7 @@ export const MH_TIRE_STOCK_COLLECTION = "mh_tire_stock";
 export const MH_DAILY_DUTY_COLLECTION = "mh_daily_duty";
 export const MH_DELIVERY_POINTS_COLLECTION = "mh_delivery_points";
 export const MH_PM_SCHEDULES_COLLECTION = "mh_pm_schedules";
+export const MH_PRESTART_INSPECTIONS_COLLECTION = "mh_prestart_inspections";
 
 // ============================================================================
 // 1. Transport Operation (mh_transfers) Types
@@ -88,6 +89,20 @@ export const MH_WORK_AREAS = [
   "คลังสินค้า 1",
 ] as const;
 
+export const MH_END_TIMES_BY_SHIFT: Record<string, readonly string[]> = {
+  กะเช้า: ["17:00", "18:30", "19:30", "20:30"],
+  กะดึก: ["05:00", "08:30"],
+};
+
+export const MH_END_TIME_PRESETS = [
+  { time: "17:00", shift: "กะเช้า", label: "17:00 น. (กะเช้า)" },
+  { time: "18:30", shift: "กะเช้า", label: "18:30 น. (กะเช้า)" },
+  { time: "19:30", shift: "กะเช้า", label: "19:30 น. (กะเช้า)" },
+  { time: "20:30", shift: "กะเช้า", label: "20:30 น. (กะเช้า)" },
+  { time: "05:00", shift: "กะดึก", label: "05:00 น. (กะดึก)" },
+  { time: "08:30", shift: "กะดึก", label: "08:30 น. (กะดึก)" },
+] as const;
+
 export interface MhDailyDutyRecord {
   id: string;
   workingDate: string; // YYYY-MM-DD
@@ -97,6 +112,7 @@ export interface MhDailyDutyRecord {
   vehicleNumber: string;
   shift: string;
   team: string;
+  endTime?: string; // เวลาเลิกงาน กะเช้า: 17:00, 18:30, 19:30, 20:30 | กะดึก: 05:00, 08:30
   supervisorName?: string;
   notes?: string;
   createdAt: string;
@@ -318,9 +334,10 @@ export interface MhPmHistoryEntry {
   id: string;
   completedDate: string; // YYYY-MM-DD
   previousDueDate?: string; // YYYY-MM-DD
-  nextDueDate: string; // YYYY-MM-DD
+  nextDueDate?: string; // YYYY-MM-DD
   performedBy: string;
   operatingHours?: number;
+  mileageKm?: number;
   cost?: number;
   notes?: string;
   recordedAt: string;
@@ -334,11 +351,16 @@ export interface MhPmScheduleRecord {
   vehicleDescription?: string;
   pmTitle: string;
   pmCategory: MhPmCategory;
-  cycleDays: number;
+  cycleDays?: number;
   cycleHours?: number;
   currentHours?: number;
+  cycleMileageKm?: number;
+  startMileageKm?: number;
+  targetMileageKm?: number;
+  currentMileageKm?: number;
+  mileageDueDate?: string; // YYYY-MM-DD when mileage reached target
   lastPmDate: string; // YYYY-MM-DD
-  nextPmDate: string; // YYYY-MM-DD
+  nextPmDate?: string; // YYYY-MM-DD (optional when using mileage-only PM)
   warningDaysBefore: number;
   responsibleTech: string;
   checklistSummary?: string;
@@ -348,6 +370,34 @@ export interface MhPmScheduleRecord {
   history?: MhPmHistoryEntry[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ============================================================================
+// 6. Pre-Start Daily Inspection (mh_prestart_inspections) Types
+// ============================================================================
+export interface MhPreStartChecklistItem {
+  id: string;
+  categoryThai: string;
+  categoryEnglish: string;
+  status: "Pass" | "Fail" | "NA";
+  remark?: string;
+  isCustom?: boolean;
+}
+
+export interface MhPreStartInspectionRecord {
+  id: string;
+  vehicleId: string;
+  vehicleDescription: string;
+  operatorName: string;
+  shift: string;
+  operatingHours: number;
+  mileageKm: number;
+  items: MhPreStartChecklistItem[];
+  overallResult: "Passed (พร้อมใช้งาน)" | "Grounded / Needs Repair (งดใช้ชั่วคราว)";
+  inspectorSignature: string;
+  inspectionDate: string; // YYYY-MM-DD
+  createdAt: string;
+  updatedAt?: string;
 }
 
 // ============================================================================
@@ -1336,6 +1386,7 @@ function sanitizeMhDailyDutyPayload(
     vehicleNumber: String(r.vehicleNumber || "-").trim().slice(0, 64),
     shift: String(r.shift || "กะเช้า").trim().slice(0, 64),
     team: String(r.team || "ทีม A").trim().slice(0, 64),
+    endTime: r.endTime ? String(r.endTime).trim().slice(0, 32) : undefined,
     supervisorName: r.supervisorName
       ? String(r.supervisorName).trim().slice(0, 128)
       : undefined,
@@ -1725,14 +1776,40 @@ function sanitizeMhPmSchedulePayload(
   const cleanVehicleId = String(r.vehicleId || "").trim().slice(0, 64);
   const cleanVehicleNumber = String(r.vehicleNumber || cleanVehicleId).trim().slice(0, 64);
   const cycleDays =
-    typeof r.cycleDays === "number" && !isNaN(r.cycleDays)
+    typeof r.cycleDays === "number" && !isNaN(r.cycleDays) && r.cycleDays > 0
       ? Math.max(1, Math.min(3650, Math.round(r.cycleDays)))
-      : 90;
+      : undefined;
   const lastPmDate = String(r.lastPmDate || dateYmd).trim().slice(0, 32);
-  const nextPmDate = String(r.nextPmDate || computeNextPmDate(lastPmDate, cycleDays))
-    .trim()
-    .slice(0, 32);
+  const rawNextPmDate = r.nextPmDate !== undefined ? String(r.nextPmDate).trim() : "";
+  const nextPmDate = rawNextPmDate
+    ? rawNextPmDate.slice(0, 32)
+    : cycleDays
+    ? computeNextPmDate(lastPmDate, cycleDays)
+    : "";
   const docId = sanitizeDocId(r.id || `PM_${cleanVehicleId}_${Date.now()}`);
+
+  const cycleMileageKm =
+    typeof r.cycleMileageKm === "number" && !isNaN(r.cycleMileageKm) && r.cycleMileageKm > 0
+      ? Math.round(r.cycleMileageKm)
+      : undefined;
+  const startMileageKm =
+    typeof r.startMileageKm === "number" && !isNaN(r.startMileageKm) && r.startMileageKm >= 0
+      ? Math.round(r.startMileageKm)
+      : undefined;
+  const targetMileageKm =
+    typeof r.targetMileageKm === "number" && !isNaN(r.targetMileageKm) && r.targetMileageKm > 0
+      ? Math.round(r.targetMileageKm)
+      : cycleMileageKm !== undefined
+      ? (startMileageKm ?? 0) + cycleMileageKm
+      : undefined;
+  const currentMileageKm =
+    typeof r.currentMileageKm === "number" && !isNaN(r.currentMileageKm) && r.currentMileageKm >= 0
+      ? Math.round(r.currentMileageKm)
+      : undefined;
+  const mileageDueDate =
+    r.mileageDueDate && String(r.mileageDueDate).trim()
+      ? String(r.mileageDueDate).trim().slice(0, 32)
+      : undefined;
 
   const safeHistory: MhPmHistoryEntry[] = Array.isArray(r.history)
     ? r.history.slice(0, 40).map((h, idx) =>
@@ -1740,11 +1817,15 @@ function sanitizeMhPmSchedulePayload(
           id: String(h.id || `PMH-${idx + 1}`).slice(0, 64),
           completedDate: String(h.completedDate || dateYmd).trim().slice(0, 32),
           previousDueDate: h.previousDueDate ? String(h.previousDueDate).trim().slice(0, 32) : undefined,
-          nextDueDate: String(h.nextDueDate || nextPmDate).trim().slice(0, 32),
+          nextDueDate: h.nextDueDate ? String(h.nextDueDate).trim().slice(0, 32) : undefined,
           performedBy: String(h.performedBy || "-").trim().slice(0, 128),
           operatingHours:
             typeof h.operatingHours === "number" && !isNaN(h.operatingHours)
               ? Math.max(0, h.operatingHours)
+              : undefined,
+          mileageKm:
+            typeof h.mileageKm === "number" && !isNaN(h.mileageKm)
+              ? Math.max(0, h.mileageKm)
               : undefined,
           cost:
             typeof h.cost === "number" && !isNaN(h.cost) ? Math.max(0, h.cost) : undefined,
@@ -1773,8 +1854,13 @@ function sanitizeMhPmSchedulePayload(
       typeof r.currentHours === "number" && !isNaN(r.currentHours) && r.currentHours >= 0
         ? Math.round(r.currentHours)
         : undefined,
+    cycleMileageKm,
+    startMileageKm,
+    targetMileageKm,
+    currentMileageKm,
+    mileageDueDate,
     lastPmDate,
-    nextPmDate,
+    nextPmDate: nextPmDate || undefined,
     warningDaysBefore:
       typeof r.warningDaysBefore === "number" && !isNaN(r.warningDaysBefore)
         ? Math.max(1, Math.min(90, Math.round(r.warningDaysBefore)))
@@ -1800,7 +1886,9 @@ function sortMhPmSchedules(items: MhPmScheduleRecord[]): MhPmScheduleRecord[] {
     if (a.scheduleStatus !== b.scheduleStatus) {
       return a.scheduleStatus === "Active" ? -1 : 1;
     }
-    const dateCmp = (a.nextPmDate || "").localeCompare(b.nextPmDate || "");
+    const dateA = a.mileageDueDate || a.nextPmDate || "9999-99-99";
+    const dateB = b.mileageDueDate || b.nextPmDate || "9999-99-99";
+    const dateCmp = dateA.localeCompare(dateB);
     if (dateCmp !== 0) return dateCmp;
     return (a.vehicleId || "").localeCompare(b.vehicleId || "", "th", { numeric: true });
   });
@@ -1956,3 +2044,233 @@ export async function deleteMhPmScheduleFromCloud(id: string): Promise<boolean> 
     `${MH_PM_SCHEDULES_COLLECTION}/${cleanId}`
   );
 }
+
+// ============================================================================
+// 8. Pre-Start Daily Inspection (mh_prestart_inspections) Cloud & Local Cache
+// ============================================================================
+const MH_PRESTART_INSPECTIONS_CACHE_KEY = "tmt_mh_prestart_inspections_cache_v1";
+
+function sanitizeMhPreStartInspectionPayload(
+  r: Partial<MhPreStartInspectionRecord> & { vehicleId: string }
+): MhPreStartInspectionRecord {
+  const { timestamp, dateYmd } = formatForkliftNowTimestamp();
+  const docId = sanitizeDocId(r.id || `INS-${Date.now()}`);
+  const cleanVehicleId = String(r.vehicleId || "").trim().slice(0, 64);
+  const safeHours =
+    typeof r.operatingHours === "number" && !isNaN(r.operatingHours)
+      ? Math.max(0, Math.round(r.operatingHours))
+      : 0;
+  const safeMileage =
+    typeof r.mileageKm === "number" && !isNaN(r.mileageKm)
+      ? Math.max(0, Math.round(r.mileageKm))
+      : safeHours;
+
+  const safeItems: MhPreStartChecklistItem[] = Array.isArray(r.items)
+    ? r.items.slice(0, 60).map((it, idx) =>
+        stripUndefinedDeep({
+          id: String(it.id || `item-${idx}`).slice(0, 64),
+          categoryThai: String(it.categoryThai || "-").trim().slice(0, 200),
+          categoryEnglish: String(it.categoryEnglish || "").trim().slice(0, 200),
+          status: it.status === "Fail" || it.status === "NA" ? it.status : "Pass",
+          remark: it.remark ? String(it.remark).trim().slice(0, 300) : undefined,
+          isCustom: typeof it.isCustom === "boolean" ? it.isCustom : undefined,
+        })
+      )
+    : [];
+
+  return stripUndefinedDeep({
+    id: docId,
+    vehicleId: cleanVehicleId,
+    vehicleDescription: String(r.vehicleDescription || cleanVehicleId).trim().slice(0, 256),
+    operatorName: String(r.operatorName || "WMS Operator").trim().slice(0, 128),
+    shift: String(r.shift || "Shift 1 (08:00 - 16:00)").trim().slice(0, 64),
+    operatingHours: safeHours,
+    mileageKm: safeMileage,
+    items: safeItems,
+    overallResult:
+      r.overallResult && r.overallResult.includes("Grounded")
+        ? "Grounded / Needs Repair (งดใช้ชั่วคราว)"
+        : "Passed (พร้อมใช้งาน)",
+    inspectorSignature: String(r.inspectorSignature || r.operatorName || "WMS Operator")
+      .trim()
+      .slice(0, 128),
+    inspectionDate: String(r.inspectionDate || dateYmd).trim().slice(0, 32),
+    createdAt: String(r.createdAt || timestamp.slice(0, 16)).slice(0, 64),
+    updatedAt: String(r.updatedAt || timestamp).slice(0, 64),
+  });
+}
+
+function sortMhPreStartInspections(
+  items: MhPreStartInspectionRecord[]
+): MhPreStartInspectionRecord[] {
+  return [...items].sort((a, b) => {
+    const dtA = a.inspectionDate || a.createdAt || "";
+    const dtB = b.inspectionDate || b.createdAt || "";
+    if (dtA !== dtB) return dtB.localeCompare(dtA);
+    return (b.createdAt || "").localeCompare(a.createdAt || "");
+  });
+}
+
+export function loadCachedMhPreStartInspections(): MhPreStartInspectionRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MH_PRESTART_INSPECTIONS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? sortMhPreStartInspections(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedMhPreStartInspections(
+  records: MhPreStartInspectionRecord[]
+): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      MH_PRESTART_INSPECTIONS_CACHE_KEY,
+      JSON.stringify(sortMhPreStartInspections(records))
+    );
+  } catch {
+    // ignore storage quota error
+  }
+}
+
+export async function fetchMhPreStartInspectionsOnce(): Promise<MhPreStartInspectionRecord[]> {
+  try {
+    const snap = await getDocs(collection(dbForklift, MH_PRESTART_INSPECTIONS_COLLECTION));
+    const records: MhPreStartInspectionRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as MhPreStartInspectionRecord;
+      if (data && data.id && data.vehicleId) {
+        records.push({
+          ...data,
+          mileageKm:
+            typeof data.mileageKm === "number" && !isNaN(data.mileageKm)
+              ? data.mileageKm
+              : Number(data.operatingHours) || 0,
+          items: Array.isArray(data.items) ? data.items : [],
+        });
+      }
+    });
+    const sorted = sortMhPreStartInspections(records);
+    if (sorted.length > 0) {
+      saveCachedMhPreStartInspections(sorted);
+      return sorted;
+    }
+    return loadCachedMhPreStartInspections();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, MH_PRESTART_INSPECTIONS_COLLECTION);
+    return loadCachedMhPreStartInspections();
+  }
+}
+
+export function subscribeToMhPreStartInspections(
+  onData: (records: MhPreStartInspectionRecord[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const channelKey = "mh_prestart_inspections_listener";
+  const cached = loadCachedMhPreStartInspections();
+  if (cached.length > 0) {
+    onData(cached);
+  }
+  if (!forkliftCloudRealtimeEnabled) {
+    fetchMhPreStartInspectionsOnce().then(onData).catch((err) => onError?.(err));
+    return () => {};
+  }
+
+  const colRef = collection(dbForklift, MH_PRESTART_INSPECTIONS_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: MhPreStartInspectionRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as MhPreStartInspectionRecord;
+        if (data && data.id && data.vehicleId) {
+          records.push({
+            ...data,
+            mileageKm:
+              typeof data.mileageKm === "number" && !isNaN(data.mileageKm)
+                ? data.mileageKm
+                : Number(data.operatingHours) || 0,
+            items: Array.isArray(data.items) ? data.items : [],
+          });
+        }
+      });
+      const sorted = sortMhPreStartInspections(records);
+      if (sorted.length > 0 || !snapshot.metadata.fromCache) {
+        saveCachedMhPreStartInspections(sorted);
+      }
+      onData(sorted);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, MH_PRESTART_INSPECTIONS_COLLECTION);
+      onError?.(error);
+    }
+  );
+
+  return registerForkliftFirestoreListener(channelKey, unsub);
+}
+
+/**
+ * Saves a Pre-Start Inspection record and automatically syncs its latest mileageKm
+ * into any active PM Schedules for that vehicle so the PM Calendar immediately flags
+ * vehicles that have reached their target mileage.
+ */
+export async function saveMhPreStartInspectionToCloud(
+  record: Partial<MhPreStartInspectionRecord> & { vehicleId: string }
+): Promise<{ saved: boolean; duePmSchedules: MhPmScheduleRecord[] }> {
+  const payload = sanitizeMhPreStartInspectionPayload(record);
+  const cached = loadCachedMhPreStartInspections();
+  const nextCache = [payload, ...cached.filter((item) => item.id !== payload.id)];
+  saveCachedMhPreStartInspections(nextCache);
+
+  const docRef = doc(dbForklift, MH_PRESTART_INSPECTIONS_COLLECTION, payload.id);
+  const saved = await runForkliftFirestoreWriteWithGuard(
+    () => setDoc(docRef, payload, { merge: true }),
+    OperationType.WRITE,
+    `${MH_PRESTART_INSPECTIONS_COLLECTION}/${payload.id}`
+  );
+
+  // Sync latest mileage to active PM Schedules for this vehicle
+  const duePmSchedules: MhPmScheduleRecord[] = [];
+  if (payload.mileageKm > 0) {
+    try {
+      const allSchedules = await fetchMhPmSchedulesOnce();
+      const targetVeh = payload.vehicleId.trim().toUpperCase();
+      const matchingSchedules = allSchedules.filter(
+        (s) => s.scheduleStatus === "Active" && s.vehicleId.trim().toUpperCase() === targetVeh
+      );
+      for (const sch of matchingSchedules) {
+        const targetKm =
+          typeof sch.targetMileageKm === "number" && sch.targetMileageKm > 0
+            ? sch.targetMileageKm
+            : typeof sch.cycleMileageKm === "number" && sch.cycleMileageKm > 0
+            ? (sch.startMileageKm ?? 0) + sch.cycleMileageKm
+            : undefined;
+        const reachedTarget = targetKm !== undefined && payload.mileageKm >= targetKm;
+        const updatedSch: MhPmScheduleRecord = {
+          ...sch,
+          currentMileageKm: Math.max(sch.currentMileageKm ?? 0, payload.mileageKm),
+          currentHours:
+            payload.operatingHours > 0
+              ? Math.max(sch.currentHours ?? 0, payload.operatingHours)
+              : sch.currentHours,
+          mileageDueDate: reachedTarget
+            ? sch.mileageDueDate || payload.inspectionDate
+            : sch.mileageDueDate,
+        };
+        await saveMhPmScheduleToCloud(updatedSch);
+        if (reachedTarget) {
+          duePmSchedules.push(updatedSch);
+        }
+      }
+    } catch {
+      // Ignore secondary sync error
+    }
+  }
+
+  return { saved, duePmSchedules };
+}
+

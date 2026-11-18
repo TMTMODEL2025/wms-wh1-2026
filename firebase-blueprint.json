@@ -251,7 +251,7 @@
     },
     "MhDailyDutyRecord": {
       "title": "Material Handling Daily Duty Assignment",
-      "description": "Supervisor daily duty assignment mapping an employee to work area, forklift vehicle, shift, and team",
+      "description": "Supervisor daily duty and manpower planning assignment mapping an employee to shift, forklift vehicle, work area, team A/B/C, and shift end time",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
@@ -262,6 +262,7 @@
         "vehicleNumber": { "type": "string", "maxLength": 64 },
         "shift": { "type": "string", "maxLength": 64 },
         "team": { "type": "string", "maxLength": 64 },
+        "endTime": { "type": "string", "maxLength": 32 },
         "supervisorName": { "type": "string", "maxLength": 128 },
         "notes": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "string", "maxLength": 64 },
@@ -366,7 +367,7 @@
     },
     "MhPmScheduleRecord": {
       "title": "Material Handling PM Schedule Record",
-      "description": "Preventive maintenance (PM) schedule, cycle interval, due date tracking, and completion history per Material Handling vehicle",
+      "description": "Preventive maintenance (PM) schedule, cycle interval (days and/or mileage km), due date tracking, and completion history per Material Handling vehicle",
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
@@ -379,6 +380,11 @@
         "cycleDays": { "type": "number" },
         "cycleHours": { "type": "number" },
         "currentHours": { "type": "number" },
+        "cycleMileageKm": { "type": "number" },
+        "startMileageKm": { "type": "number" },
+        "targetMileageKm": { "type": "number" },
+        "currentMileageKm": { "type": "number" },
+        "mileageDueDate": { "type": "string", "maxLength": 32 },
         "lastPmDate": { "type": "string", "maxLength": 32 },
         "nextPmDate": { "type": "string", "maxLength": 32 },
         "warningDaysBefore": { "type": "number" },
@@ -391,7 +397,28 @@
         "createdAt": { "type": "string", "maxLength": 64 },
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
-      "required": ["id", "vehicleId", "pmCategory", "cycleDays", "lastPmDate", "nextPmDate"]
+      "required": ["id", "vehicleId", "pmCategory", "lastPmDate"]
+    },
+    "MhPreStartInspectionRecord": {
+      "title": "Material Handling Pre-Start Daily Inspection Record",
+      "description": "Daily vehicle pre-start inspection checklist and mileage/operating hours reading",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "vehicleDescription": { "type": "string", "maxLength": 256 },
+        "operatorName": { "type": "string", "maxLength": 128 },
+        "shift": { "type": "string", "maxLength": 64 },
+        "operatingHours": { "type": "number" },
+        "mileageKm": { "type": "number" },
+        "items": { "type": "array", "items": { "type": "object" } },
+        "overallResult": { "type": "string", "maxLength": 128 },
+        "inspectorSignature": { "type": "string", "maxLength": 128 },
+        "inspectionDate": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "vehicleId", "inspectionDate"]
     },
     "WmsEmployee": {
       "title": "WMS Centralized Employee Record",
@@ -506,6 +533,10 @@
     "/mh_pm_schedules/{scheduleId}": {
       "schema": "MhPmScheduleRecord",
       "description": "Dedicated collection for Material Handling vehicle Preventive Maintenance (PM) schedules and history"
+    },
+    "/mh_prestart_inspections/{inspectionId}": {
+      "schema": "MhPreStartInspectionRecord",
+      "description": "Dedicated collection for Material Handling daily pre-start inspection checklists and mileage readings"
     },
     "/wms_employees/{employeeId}": {
       "schema": "WmsEmployee",

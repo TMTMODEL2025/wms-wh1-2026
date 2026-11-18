@@ -28,21 +28,25 @@ import {
   X,
   AlertTriangle,
   Sparkles,
+  Gauge,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
 import {
   MH_PM_CATEGORIES,
   MhPmHistoryEntry,
   MhPmScheduleRecord,
+  MhPreStartInspectionRecord,
   computeNextPmDate,
   deleteMhPmScheduleFromCloud,
   fetchMhPmSchedulesOnce,
+  fetchMhPreStartInspectionsOnce,
   getForkliftCloudRealtimeEnabled,
   saveMhPmScheduleToCloud,
   saveMhPmSchedulesBatchToCloud,
   setForkliftCloudRealtimeEnabled,
   subscribeForkliftCloudRealtimeMode,
   subscribeToMhPmSchedules,
+  subscribeToMhPreStartInspections,
 } from "../services/forkliftDataService";
 import {
   appendWmsActivityLog,
@@ -62,8 +66,9 @@ interface CalendarEventItem {
   key: string;
   schedule: MhPmScheduleRecord;
   dateYmd: string;
-  kind: "overdue" | "due-soon" | "due" | "projected" | "completed";
+  kind: "overdue" | "due-soon" | "due" | "projected" | "completed" | "mileage-due";
   label: string;
+  mileageNote?: string;
 }
 
 const THAI_MONTHS = [
@@ -89,6 +94,14 @@ const CYCLE_PRESETS = [
   { label: "ทุก 90 วัน (3 เดือน)", days: 90 },
   { label: "ทุก 180 วัน (6 เดือน)", days: 180 },
   { label: "ทุก 365 วัน (1 ปี)", days: 365 },
+];
+
+const MILEAGE_PRESETS = [
+  { label: "300 กม.", km: 300 },
+  { label: "500 กม.", km: 500 },
+  { label: "1,000 กม.", km: 1000 },
+  { label: "2,500 กม.", km: 2500 },
+  { label: "5,000 กม.", km: 5000 },
 ];
 
 const STANDARD_CONTROL_STYLE: React.CSSProperties = {
@@ -169,52 +182,188 @@ function formatThaiFullDate(ymd: string): string {
   return `${d.getDate()} ${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + 543}`;
 }
 
-function getPmHealth(schedule: MhPmScheduleRecord, todayYmd: string): {
+export interface PmMileageInfo {
+  hasMileageRule: boolean;
+  startKm: number;
+  cycleKm?: number;
+  targetKm?: number;
+  latestKm: number;
+  latestDateYmd?: string;
+  kmRemaining?: number;
+  isMileageDue: boolean;
+  isMileageSoon: boolean;
+  mileageDueDateYmd?: string;
+}
+
+function computePmMileageInfo(
+  schedule: MhPmScheduleRecord,
+  latestReading?: { mileageKm: number; inspectionDate: string; firstReachedDateMap?: Map<number, string> }
+): PmMileageInfo {
+  const startKm = typeof schedule.startMileageKm === "number" ? schedule.startMileageKm : 0;
+  const cycleKm =
+    typeof schedule.cycleMileageKm === "number" && schedule.cycleMileageKm > 0
+      ? schedule.cycleMileageKm
+      : undefined;
+  const targetKm =
+    typeof schedule.targetMileageKm === "number" && schedule.targetMileageKm > 0
+      ? schedule.targetMileageKm
+      : cycleKm !== undefined
+      ? startKm + cycleKm
+      : undefined;
+
+  const latestKm = Math.max(
+    schedule.currentMileageKm ?? 0,
+    latestReading?.mileageKm ?? 0
+  );
+  const latestDateYmd = latestReading?.inspectionDate;
+
+  if (targetKm === undefined || targetKm <= 0) {
+    return {
+      hasMileageRule: false,
+      startKm,
+      cycleKm,
+      targetKm: undefined,
+      latestKm,
+      latestDateYmd,
+      isMileageDue: false,
+      isMileageSoon: false,
+    };
+  }
+
+  const kmRemaining = targetKm - latestKm;
+  const isMileageDue = latestKm >= targetKm;
+  const warnKmThreshold = Math.max(20, Math.round((cycleKm || targetKm) * 0.1));
+  const isMileageSoon = !isMileageDue && kmRemaining <= warnKmThreshold;
+
+  return {
+    hasMileageRule: true,
+    startKm,
+    cycleKm,
+    targetKm,
+    latestKm,
+    latestDateYmd,
+    kmRemaining,
+    isMileageDue,
+    isMileageSoon,
+    mileageDueDateYmd: isMileageDue
+      ? schedule.mileageDueDate || latestDateYmd || getTodayYmd()
+      : undefined,
+  };
+}
+
+function getPmHealth(
+  schedule: MhPmScheduleRecord,
+  todayYmd: string,
+  mileageInfo: PmMileageInfo
+): {
   status: PmHealthStatus;
-  daysRemaining: number;
+  daysRemaining: number | null;
   label: string;
+  isTriggeredByMileage: boolean;
 } {
   if (schedule.scheduleStatus === "Paused") {
     return {
       status: "paused",
-      daysRemaining: diffDaysBetweenYmd(schedule.nextPmDate, todayYmd),
+      daysRemaining: schedule.nextPmDate
+        ? diffDaysBetweenYmd(schedule.nextPmDate, todayYmd)
+        : null,
       label: "พักรอบชั่วคราว",
+      isTriggeredByMileage: false,
     };
   }
-  const daysRemaining = diffDaysBetweenYmd(schedule.nextPmDate, todayYmd);
-  const warnWindow = Math.max(1, schedule.warningDaysBefore || 7);
 
-  if (daysRemaining < 0) {
+  // 1. Check Mileage PM Due first
+  if (mileageInfo.hasMileageRule && mileageInfo.isMileageDue && mileageInfo.targetKm) {
+    const overKm = mileageInfo.latestKm - mileageInfo.targetKm;
     return {
-      status: "overdue",
-      daysRemaining,
-      label: `เกินกำหนด ${Math.abs(daysRemaining)} วัน`,
+      status: overKm > 0 ? "overdue" : "due-today",
+      daysRemaining: schedule.nextPmDate
+        ? diffDaysBetweenYmd(schedule.nextPmDate, todayYmd)
+        : 0,
+      label:
+        overKm > 0
+          ? `ครบกำหนดไมล์ (เกิน ${overKm.toLocaleString()} กม.)`
+          : `ครบรอบไมล์ต้อง PM (${mileageInfo.latestKm.toLocaleString()}/${mileageInfo.targetKm.toLocaleString()} กม.)`,
+      isTriggeredByMileage: true,
     };
   }
-  if (daysRemaining === 0) {
+
+  // 2. Check Date PM if nextPmDate is set
+  if (schedule.nextPmDate && schedule.nextPmDate.trim()) {
+    const daysRemaining = diffDaysBetweenYmd(schedule.nextPmDate, todayYmd);
+    const warnWindow = Math.max(1, schedule.warningDaysBefore || 7);
+
+    if (daysRemaining < 0) {
+      return {
+        status: "overdue",
+        daysRemaining,
+        label: `เกินกำหนด ${Math.abs(daysRemaining)} วัน`,
+        isTriggeredByMileage: false,
+      };
+    }
+    if (daysRemaining === 0) {
+      return {
+        status: "due-today",
+        daysRemaining: 0,
+        label: "ครบกำหนดวันนี้",
+        isTriggeredByMileage: false,
+      };
+    }
+    if (daysRemaining <= warnWindow) {
+      return {
+        status: "due-soon",
+        daysRemaining,
+        label: `อีก ${daysRemaining} วัน`,
+        isTriggeredByMileage: false,
+      };
+    }
+    if (mileageInfo.hasMileageRule && mileageInfo.isMileageSoon && mileageInfo.kmRemaining !== undefined) {
+      return {
+        status: "due-soon",
+        daysRemaining,
+        label: `ใกล้ครบไมล์ (อีก ${mileageInfo.kmRemaining.toLocaleString()} กม.)`,
+        isTriggeredByMileage: true,
+      };
+    }
     return {
-      status: "due-today",
-      daysRemaining: 0,
-      label: "ครบกำหนดวันนี้",
-    };
-  }
-  if (daysRemaining <= warnWindow) {
-    return {
-      status: "due-soon",
+      status: "normal",
       daysRemaining,
       label: `อีก ${daysRemaining} วัน`,
+      isTriggeredByMileage: false,
     };
   }
+
+  // 3. Mileage-only schedule (no nextPmDate set)
+  if (mileageInfo.hasMileageRule && mileageInfo.targetKm !== undefined) {
+    const rem = mileageInfo.kmRemaining ?? 0;
+    if (mileageInfo.isMileageSoon) {
+      return {
+        status: "due-soon",
+        daysRemaining: null,
+        label: `ใกล้ครบไมล์ (อีก ${rem.toLocaleString()} กม.)`,
+        isTriggeredByMileage: true,
+      };
+    }
+    return {
+      status: "normal",
+      daysRemaining: null,
+      label: `อีก ${rem.toLocaleString()} กม. ถึงรอบ PM`,
+      isTriggeredByMileage: true,
+    };
+  }
+
   return {
     status: "normal",
-    daysRemaining,
-    label: `อีก ${daysRemaining} วัน`,
+    daysRemaining: null,
+    label: "ปกติ",
+    isTriggeredByMileage: false,
   };
 }
 
 export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleManagementProps) {
   const { currentUser } = useAuth();
   const [schedules, setSchedules] = useState<MhPmScheduleRecord[]>([]);
+  const [preStartInspections, setPreStartInspections] = useState<MhPreStartInspectionRecord[]>([]);
   const [cloudRealtime, setCloudRealtime] = useState<boolean>(() =>
     getForkliftCloudRealtimeEnabled()
   );
@@ -244,13 +393,14 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   const [formVehicleId, setFormVehicleId] = useState<string>("");
   const [formPmTitle, setFormPmTitle] = useState<string>("");
   const [formPmCategory, setFormPmCategory] = useState<string>(MH_PM_CATEGORIES[0]);
-  const [formCycleDays, setFormCycleDays] = useState<number>(90);
-  const [formCycleHours, setFormCycleHours] = useState<string>("250");
+  const [formCycleDays, setFormCycleDays] = useState<string>("");
+  const [formCycleMileageKm, setFormCycleMileageKm] = useState<string>("300");
+  const [formStartMileageKm, setFormStartMileageKm] = useState<string>("0");
+  const [formTargetMileageKm, setFormTargetMileageKm] = useState<string>("300");
+  const [formCycleHours, setFormCycleHours] = useState<string>("");
   const [formCurrentHours, setFormCurrentHours] = useState<string>("");
   const [formLastPmDate, setFormLastPmDate] = useState<string>(todayYmd);
-  const [formNextPmDate, setFormNextPmDate] = useState<string>(() =>
-    computeNextPmDate(todayYmd, 90)
-  );
+  const [formNextPmDate, setFormNextPmDate] = useState<string>("");
   const [formWarningDays, setFormWarningDays] = useState<number>(7);
   const [formResponsibleTech, setFormResponsibleTech] = useState<string>("ทีมช่างซ่อมบำรุง");
   const [formChecklistSummary, setFormChecklistSummary] = useState<string>(
@@ -267,6 +417,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   const [completePerformedBy, setCompletePerformedBy] = useState<string>(
     () => currentUser?.employeeName || getActiveRecorderDisplay("").employeeName || ""
   );
+  const [completeMileageKm, setCompleteMileageKm] = useState<string>("");
   const [completeOperatingHours, setCompleteOperatingHours] = useState<string>("");
   const [completeCost, setCompleteCost] = useState<string>("");
   const [completeNotes, setCompleteNotes] = useState<string>("");
@@ -300,10 +451,16 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   }, []);
 
   useEffect(() => {
-    const unsub = subscribeToMhPmSchedules((cloudRecords) => {
+    const unsubPm = subscribeToMhPmSchedules((cloudRecords) => {
       setSchedules(cloudRecords);
     });
-    return () => unsub();
+    const unsubInsp = subscribeToMhPreStartInspections((inspRecords) => {
+      setPreStartInspections(inspRecords);
+    });
+    return () => {
+      unsubPm();
+      unsubInsp();
+    };
   }, [cloudRealtime]);
 
   useEffect(() => {
@@ -315,12 +472,42 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   const handleManualReload = async () => {
     setIsRefreshing(true);
     try {
-      const latest = await fetchMhPmSchedulesOnce();
-      setSchedules(latest);
+      const [latestPm, latestInsp] = await Promise.all([
+        fetchMhPmSchedulesOnce(),
+        fetchMhPreStartInspectionsOnce(),
+      ]);
+      setSchedules(latestPm);
+      setPreStartInspections(latestInsp);
     } finally {
       setIsRefreshing(false);
     }
   };
+
+  // Map each vehicleId -> latest mileage reading from Pre-Start Daily Inspection
+  const latestMileageByVehicle = useMemo(() => {
+    const map = new Map<
+      string,
+      { mileageKm: number; inspectionDate: string; operatorName: string }
+    >();
+    preStartInspections.forEach((ins) => {
+      const vKey = String(ins.vehicleId || "").trim().toUpperCase();
+      if (!vKey) return;
+      const km = typeof ins.mileageKm === "number" ? ins.mileageKm : Number(ins.operatingHours) || 0;
+      const cur = map.get(vKey);
+      if (
+        !cur ||
+        km > cur.mileageKm ||
+        (km === cur.mileageKm && (ins.inspectionDate || "") > cur.inspectionDate)
+      ) {
+        map.set(vKey, {
+          mileageKm: km,
+          inspectionDate: ins.inspectionDate || getTodayYmd(),
+          operatorName: ins.operatorName || "-",
+        });
+      }
+    });
+    return map;
+  }, [preStartInspections]);
 
   // Unscheduled active vehicles from fleet master
   const unscheduledVehicles = useMemo(() => {
@@ -349,13 +536,21 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     return Array.from(names);
   }, [employees]);
 
-  // Enrich schedules with computed health status
+  // Enrich schedules with computed health status and live mileage from Pre-Start Inspection
   const enrichedSchedules = useMemo(() => {
-    return schedules.map((sch) => ({
-      schedule: sch,
-      health: getPmHealth(sch, todayYmd),
-    }));
-  }, [schedules, todayYmd]);
+    return schedules.map((sch) => {
+      const vKey = sch.vehicleId.trim().toUpperCase();
+      const latestReading = latestMileageByVehicle.get(vKey);
+      const mileageInfo = computePmMileageInfo(sch, latestReading);
+      const health = getPmHealth(sch, todayYmd, mileageInfo);
+      return {
+        schedule: sch,
+        health,
+        mileageInfo,
+        latestReading,
+      };
+    });
+  }, [schedules, latestMileageByVehicle, todayYmd]);
 
   // KPI Metrics
   const kpiMetrics = useMemo(() => {
@@ -363,9 +558,11 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     let dueSoonCount = 0;
     let normalCount = 0;
     let completedThisMonth = 0;
+    let mileageDueCount = 0;
     const currentMonthPrefix = todayYmd.slice(0, 7);
 
-    enrichedSchedules.forEach(({ schedule, health }) => {
+    enrichedSchedules.forEach(({ schedule, health, mileageInfo }) => {
+      if (mileageInfo.isMileageDue) mileageDueCount += 1;
       if (health.status === "overdue") overdueCount += 1;
       else if (health.status === "due-today" || health.status === "due-soon") dueSoonCount += 1;
       else if (health.status === "normal") normalCount += 1;
@@ -385,6 +582,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       dueSoonCount,
       normalCount,
       completedThisMonth,
+      mileageDueCount,
     };
   }, [enrichedSchedules, schedules.length, todayYmd]);
 
@@ -484,23 +682,53 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     const lastDayOfMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
     const monthEnd = `${monthPrefix}-${String(lastDayOfMonth).padStart(2, "0")}`;
 
-    enrichedSchedules.forEach(({ schedule, health }) => {
-      // 1. Primary nextPmDate event
+    enrichedSchedules.forEach(({ schedule, health, mileageInfo }) => {
+      // 1A. Mileage-triggered PM event on the inspection date (or today) when mileage reached targetKm
+      if (
+        schedule.scheduleStatus === "Active" &&
+        mileageInfo.hasMileageRule &&
+        mileageInfo.isMileageDue &&
+        mileageInfo.mileageDueDateYmd
+      ) {
+        pushEvent(mileageInfo.mileageDueDateYmd, {
+          key: `mileage-due-${schedule.id}-${mileageInfo.mileageDueDateYmd}`,
+          schedule,
+          dateYmd: mileageInfo.mileageDueDateYmd,
+          kind: "mileage-due",
+          label: `รถ ${schedule.vehicleId} ครบรอบต้อง PM แล้ว (${mileageInfo.latestKm.toLocaleString()}/${mileageInfo.targetKm?.toLocaleString()} กม.)`,
+          mileageNote: `เลขไมล์ล่าสุด ${mileageInfo.latestKm.toLocaleString()} กม. ถึงกำหนด PM ที่ตั้งไว้ ${mileageInfo.targetKm?.toLocaleString()} กม.`,
+        });
+      }
+
+      // 1B. Primary nextPmDate event (if date-based schedule is set)
       if (schedule.scheduleStatus === "Active" && schedule.nextPmDate) {
         let kind: CalendarEventItem["kind"] = "due";
-        if (health.status === "overdue") kind = "overdue";
-        else if (health.status === "due-today" || health.status === "due-soon") kind = "due-soon";
+        if (health.status === "overdue" && !health.isTriggeredByMileage) kind = "overdue";
+        else if (
+          (health.status === "due-today" || health.status === "due-soon") &&
+          !health.isTriggeredByMileage
+        ) {
+          kind = "due-soon";
+        }
 
-        pushEvent(schedule.nextPmDate, {
-          key: `due-${schedule.id}-${schedule.nextPmDate}`,
-          schedule,
-          dateYmd: schedule.nextPmDate,
-          kind,
-          label: `${schedule.vehicleId} · ${schedule.pmCategory}`,
-        });
+        // Avoid duplicate card on the exact same day if already added as mileage-due
+        if (
+          !(
+            mileageInfo.isMileageDue &&
+            mileageInfo.mileageDueDateYmd === schedule.nextPmDate
+          )
+        ) {
+          pushEvent(schedule.nextPmDate, {
+            key: `due-${schedule.id}-${schedule.nextPmDate}`,
+            schedule,
+            dateYmd: schedule.nextPmDate,
+            kind,
+            label: `${schedule.vehicleId} · ${schedule.pmCategory}`,
+          });
+        }
 
         // 2. Projected recurring cycles within the currently displayed month
-        if (showProjectedCycles && schedule.cycleDays >= 1) {
+        if (showProjectedCycles && schedule.cycleDays && schedule.cycleDays >= 1) {
           let cursorDate = schedule.nextPmDate;
           let guard = 0;
           while (cursorDate < monthEnd && guard < 40) {
@@ -561,26 +789,37 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   );
 
   const overdueList = useMemo(
-    () => enrichedSchedules.filter(({ health }) => health.status === "overdue"),
+    () =>
+      enrichedSchedules.filter(
+        ({ health, mileageInfo }) =>
+          health.status === "overdue" || mileageInfo.isMileageDue
+      ),
     [enrichedSchedules]
   );
 
   // Modal Openers
   const openCreateModal = (presetDueDate?: string) => {
     const defaultVeh = unscheduledVehicles[0] || vehicles[0];
+    const defaultVehId = defaultVeh?.vehicleId || "";
+    const latestReading = latestMileageByVehicle.get(defaultVehId.trim().toUpperCase());
+    const initStartKm = latestReading?.mileageKm ?? 0;
+
     setEditingScheduleId(null);
-    setFormVehicleId(defaultVeh?.vehicleId || "");
+    setFormVehicleId(defaultVehId);
     setFormPmCategory(MH_PM_CATEGORIES[0]);
     setFormPmTitle("ตรวจเช็ค PM ตามระยะ");
-    setFormCycleDays(90);
-    setFormCycleHours("250");
+    setFormCycleDays("");
+    setFormCycleMileageKm("300");
+    setFormStartMileageKm(String(initStartKm));
+    setFormTargetMileageKm(String(initStartKm + 300));
+    setFormCycleHours("");
     setFormCurrentHours("");
     if (presetDueDate) {
       setFormLastPmDate(todayYmd);
       setFormNextPmDate(presetDueDate);
     } else {
       setFormLastPmDate(todayYmd);
-      setFormNextPmDate(computeNextPmDate(todayYmd, 90));
+      setFormNextPmDate("");
     }
     setFormWarningDays(7);
     setFormResponsibleTech("ทีมช่างซ่อมบำรุง");
@@ -595,15 +834,31 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   };
 
   const openEditModal = (sch: MhPmScheduleRecord) => {
+    const latestReading = latestMileageByVehicle.get(sch.vehicleId.trim().toUpperCase());
+    const startKm =
+      sch.startMileageKm !== undefined
+        ? sch.startMileageKm
+        : latestReading?.mileageKm ?? 0;
+    const cycleKm = sch.cycleMileageKm;
+    const targetKm =
+      sch.targetMileageKm !== undefined
+        ? sch.targetMileageKm
+        : cycleKm
+        ? startKm + cycleKm
+        : undefined;
+
     setEditingScheduleId(sch.id);
     setFormVehicleId(sch.vehicleId);
     setFormPmTitle(sch.pmTitle || "");
     setFormPmCategory(sch.pmCategory || MH_PM_CATEGORIES[0]);
-    setFormCycleDays(sch.cycleDays || 90);
+    setFormCycleDays(sch.cycleDays ? String(sch.cycleDays) : "");
+    setFormCycleMileageKm(cycleKm !== undefined ? String(cycleKm) : "");
+    setFormStartMileageKm(String(startKm));
+    setFormTargetMileageKm(targetKm !== undefined ? String(targetKm) : "");
     setFormCycleHours(sch.cycleHours ? String(sch.cycleHours) : "");
     setFormCurrentHours(sch.currentHours !== undefined ? String(sch.currentHours) : "");
     setFormLastPmDate(sch.lastPmDate || todayYmd);
-    setFormNextPmDate(sch.nextPmDate || computeNextPmDate(sch.lastPmDate || todayYmd, sch.cycleDays || 90));
+    setFormNextPmDate(sch.nextPmDate || "");
     setFormWarningDays(sch.warningDaysBefore || 7);
     setFormResponsibleTech(sch.responsibleTech || "ทีมช่างซ่อมบำรุง");
     setFormChecklistSummary(sch.checklistSummary || "");
@@ -614,11 +869,37 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     setIsFormModalOpen(true);
   };
 
-  const handleLastPmDateOrCycleChange = (newLastDate: string, newCycleDays: number) => {
+  const handleVehicleSelectChange = (newVehId: string) => {
+    setFormVehicleId(newVehId);
+    const reading = latestMileageByVehicle.get(newVehId.trim().toUpperCase());
+    const startKm = reading?.mileageKm ?? 0;
+    setFormStartMileageKm(String(startKm));
+    const cyc = Number(formCycleMileageKm) || 0;
+    if (cyc > 0) {
+      setFormTargetMileageKm(String(startKm + cyc));
+    }
+  };
+
+  const handleLastPmDateOrCycleChange = (newLastDate: string, newCycleDaysStr: string) => {
     setFormLastPmDate(newLastDate);
-    setFormCycleDays(newCycleDays);
-    if (newLastDate && newCycleDays >= 1) {
-      setFormNextPmDate(computeNextPmDate(newLastDate, newCycleDays));
+    setFormCycleDays(newCycleDaysStr);
+    const parsedDays = Number(newCycleDaysStr);
+    if (newLastDate && !isNaN(parsedDays) && parsedDays >= 1) {
+      setFormNextPmDate(computeNextPmDate(newLastDate, parsedDays));
+    } else if (!newCycleDaysStr.trim()) {
+      setFormNextPmDate("");
+    }
+  };
+
+  const handleMileageCycleOrStartChange = (newStartStr: string, newCycleStr: string) => {
+    setFormStartMileageKm(newStartStr);
+    setFormCycleMileageKm(newCycleStr);
+    const s = Math.max(0, Number(newStartStr) || 0);
+    const c = Math.max(0, Number(newCycleStr) || 0);
+    if (c > 0) {
+      setFormTargetMileageKm(String(s + c));
+    } else {
+      setFormTargetMileageKm("");
     }
   };
 
@@ -629,13 +910,30 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       setFormError("กรุณาเลือกรถหรือระบุรหัสรถที่ต้องการกำหนดรอบ PM");
       return;
     }
-    const safeCycleDays = Math.max(1, Math.min(3650, Math.round(Number(formCycleDays) || 0)));
-    if (!safeCycleDays) {
-      setFormError("กรุณาระบุรอบ PM เป็นจำนวนวันที่ถูกต้อง (อย่างน้อย 1 วัน)");
-      return;
-    }
-    if (!formLastPmDate || !formNextPmDate) {
-      setFormError("กรุณาระบุวันที่ทำ PM ล่าสุด และวันครบกำหนดครั้งถัดไป");
+
+    const parsedCycleDays = formCycleDays.trim()
+      ? Math.max(1, Math.min(3650, Math.round(Number(formCycleDays) || 0)))
+      : undefined;
+    const parsedCycleMileageKm = formCycleMileageKm.trim()
+      ? Math.max(1, Math.round(Number(formCycleMileageKm) || 0))
+      : undefined;
+    const parsedStartMileageKm = formStartMileageKm.trim()
+      ? Math.max(0, Math.round(Number(formStartMileageKm) || 0))
+      : 0;
+    const parsedTargetMileageKm = formTargetMileageKm.trim()
+      ? Math.max(1, Math.round(Number(formTargetMileageKm) || 0))
+      : parsedCycleMileageKm
+      ? parsedStartMileageKm + parsedCycleMileageKm
+      : undefined;
+
+    const cleanNextPmDate = formNextPmDate.trim()
+      ? formNextPmDate.trim()
+      : parsedCycleDays
+      ? computeNextPmDate(formLastPmDate || todayYmd, parsedCycleDays)
+      : undefined;
+
+    if (!parsedCycleDays && !cleanNextPmDate && !parsedTargetMileageKm) {
+      setFormError("กรุณากำหนดรอบ PM อย่างน้อย 1 รูปแบบ (รอบจำนวนวัน, วันครบกำหนด หรือ ระยะเลขไมล์ กม.)");
       return;
     }
 
@@ -647,6 +945,13 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       const existing = editingScheduleId
         ? schedules.find((s) => s.id === editingScheduleId)
         : undefined;
+      const latestReading = latestMileageByVehicle.get(cleanVehicleId.toUpperCase());
+      const currentKm = latestReading?.mileageKm ?? existing?.currentMileageKm;
+      const isAlreadyReached =
+        parsedTargetMileageKm !== undefined &&
+        currentKm !== undefined &&
+        currentKm >= parsedTargetMileageKm;
+
       const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
 
       const record: MhPmScheduleRecord = {
@@ -657,11 +962,18 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         vehicleDescription: matchedVehicle?.description || existing?.vehicleDescription || "",
         pmTitle: formPmTitle.trim() || formPmCategory,
         pmCategory: formPmCategory,
-        cycleDays: safeCycleDays,
+        cycleDays: parsedCycleDays,
         cycleHours: formCycleHours ? Math.max(0, Number(formCycleHours)) : undefined,
         currentHours: formCurrentHours ? Math.max(0, Number(formCurrentHours)) : undefined,
-        lastPmDate: formLastPmDate,
-        nextPmDate: formNextPmDate,
+        cycleMileageKm: parsedCycleMileageKm,
+        startMileageKm: parsedTargetMileageKm !== undefined ? parsedStartMileageKm : undefined,
+        targetMileageKm: parsedTargetMileageKm,
+        currentMileageKm: currentKm,
+        mileageDueDate: isAlreadyReached
+          ? existing?.mileageDueDate || latestReading?.inspectionDate || todayYmd
+          : undefined,
+        lastPmDate: formLastPmDate || todayYmd,
+        nextPmDate: cleanNextPmDate,
         warningDaysBefore: Math.max(1, Math.min(90, Math.round(Number(formWarningDays) || 7))),
         responsibleTech: formResponsibleTech.trim() || "ทีมช่างซ่อมบำรุง",
         checklistSummary: formChecklistSummary.trim() || undefined,
@@ -677,18 +989,24 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       setIsFormModalOpen(false);
       await saveMhPmScheduleToCloud(record);
 
+      const summaryParts: string[] = [];
+      if (record.targetMileageKm) {
+        summaryParts.push(`ครบกำหนดที่ไมล์ ${record.targetMileageKm.toLocaleString()} กม.`);
+      }
+      if (record.nextPmDate) {
+        summaryParts.push(`วันที่ ${formatThaiShortDate(record.nextPmDate)}`);
+      }
+
       setStatusFeedback({
         type: "success",
-        text: existing
-          ? `อัปเดตกำหนดการ PM รถ ${record.vehicleId} (ครบกำหนด ${formatThaiShortDate(record.nextPmDate)}) เรียบร้อยแล้ว`
-          : `เพิ่มกำหนดการ PM รถ ${record.vehicleId} (ทุก ${record.cycleDays} วัน) เรียบร้อยแล้ว`,
+        text: `${existing ? "อัปเดต" : "เพิ่ม"}กำหนดการ PM รถ ${record.vehicleId} (${summaryParts.join(" · ") || "บันทึกสำเร็จ"}) เรียบร้อยแล้ว`,
       });
 
       void appendWmsActivityLog({
         module: "PM Schedule",
         sectionId: "fleet_ops",
         reference: record.vehicleId,
-        activity: `${existing ? "แก้ไข" : "กำหนด"}รอบ PM ${record.vehicleId} (${record.pmCategory}, ทุก ${record.cycleDays} วัน, ครบกำหนด ${record.nextPmDate})`,
+        activity: `${existing ? "แก้ไข" : "กำหนด"}รอบ PM ${record.vehicleId} (${record.pmCategory}${record.targetMileageKm ? `, ไมล์ครบกำหนด ${record.targetMileageKm} กม.` : ""}${record.nextPmDate ? `, วันครบกำหนด ${record.nextPmDate}` : ""})`,
         status: "Completed",
       });
     } finally {
@@ -697,11 +1015,14 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   };
 
   const openCompletePmModal = (sch: MhPmScheduleRecord, defaultDate?: string) => {
+    const latestReading = latestMileageByVehicle.get(sch.vehicleId.trim().toUpperCase());
+    const currentKm = latestReading?.mileageKm ?? sch.currentMileageKm ?? sch.targetMileageKm;
     setCompletingSchedule(sch);
     setCompleteDate(defaultDate || todayYmd);
     setCompletePerformedBy(
       currentUser?.employeeName || getActiveRecorderDisplay("").employeeName || sch.responsibleTech
     );
+    setCompleteMileageKm(currentKm !== undefined ? String(currentKm) : "");
     setCompleteOperatingHours(sch.currentHours !== undefined ? String(sch.currentHours) : "");
     setCompleteCost(sch.estimatedCost !== undefined ? String(sch.estimatedCost) : "");
     setCompleteNotes("");
@@ -713,10 +1034,20 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     setIsSaving(true);
     try {
       const doneDate = completeDate || todayYmd;
-      const newNextDate = computeNextPmDate(doneDate, completingSchedule.cycleDays || 90);
+      const newNextDate = completingSchedule.cycleDays
+        ? computeNextPmDate(doneDate, completingSchedule.cycleDays)
+        : undefined;
       const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const parsedMileage = completeMileageKm.trim()
+        ? Math.max(0, Math.round(Number(completeMileageKm) || 0))
+        : completingSchedule.currentMileageKm;
       const parsedHours = completeOperatingHours ? Math.max(0, Number(completeOperatingHours)) : undefined;
       const parsedCost = completeCost ? Math.max(0, Number(completeCost)) : undefined;
+
+      const newStartKm = parsedMileage ?? completingSchedule.targetMileageKm ?? completingSchedule.startMileageKm ?? 0;
+      const newTargetKm = completingSchedule.cycleMileageKm
+        ? newStartKm + completingSchedule.cycleMileageKm
+        : completingSchedule.targetMileageKm;
 
       const newHistoryEntry: MhPmHistoryEntry = {
         id: `PMH-${Date.now()}`,
@@ -725,6 +1056,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         nextDueDate: newNextDate,
         performedBy: completePerformedBy.trim() || "ทีมช่างซ่อมบำรุง",
         operatingHours: parsedHours,
+        mileageKm: parsedMileage,
         cost: parsedCost,
         notes: completeNotes.trim() || undefined,
         recordedAt: nowIso,
@@ -734,6 +1066,10 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         ...completingSchedule,
         lastPmDate: doneDate,
         nextPmDate: newNextDate,
+        startMileageKm: completingSchedule.cycleMileageKm ? newStartKm : completingSchedule.startMileageKm,
+        targetMileageKm: newTargetKm,
+        currentMileageKm: parsedMileage,
+        mileageDueDate: undefined,
         currentHours: parsedHours !== undefined ? parsedHours : completingSchedule.currentHours,
         history: [newHistoryEntry, ...(completingSchedule.history || [])].slice(0, 40),
         updatedAt: nowIso,
@@ -747,14 +1083,16 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
       setStatusFeedback({
         type: "success",
-        text: `บันทึกการทำ PM รถ ${updatedRecord.vehicleId} สำเร็จ · รอบถัดไป: ${formatThaiShortDate(newNextDate)}`,
+        text: `บันทึกการทำ PM รถ ${updatedRecord.vehicleId} สำเร็จ${
+          newTargetKm ? ` · รอบไมล์ถัดไป: ${newTargetKm.toLocaleString()} กม.` : ""
+        }${newNextDate ? ` · วันครบกำหนดถัดไป: ${formatThaiShortDate(newNextDate)}` : ""}`,
       });
 
       void appendWmsActivityLog({
         module: "PM Schedule",
         sectionId: "fleet_ops",
         reference: updatedRecord.vehicleId,
-        activity: `บันทึกทำ PM รถ ${updatedRecord.vehicleId} วันที่ ${doneDate} (รอบถัดไป ${newNextDate})`,
+        activity: `บันทึกทำ PM รถ ${updatedRecord.vehicleId} วันที่ ${doneDate}${parsedMileage !== undefined ? ` (เลขไมล์ ${parsedMileage} กม.)` : ""}`,
         status: "Completed",
       });
     } finally {
@@ -1073,16 +1411,6 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
           <div className="flex items-center gap-2 flex-wrap">
             {!headingPortalTarget && cloudSyncControls}
-            {unscheduledVehicles.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsBatchModalOpen(true)}
-                className="button secondary whitespace-nowrap shrink-0"
-              >
-                <Sparkles size={13} />
-                ตั้งค่ารถที่ยังไม่มีรอบ ({unscheduledVehicles.length} คัน)
-              </button>
-            )}
             <button
               type="button"
               onClick={() => openCreateModal()}
@@ -1190,6 +1518,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   <tr>
                     <th>รหัสรถ / ประเภท</th>
                     <th>รอบ &amp; ประเภท PM</th>
+                    <th>การ PM ด้วยเลขไมล์ (ตรวจเช็ครถประจำวัน)</th>
                     <th>ทำ PM ล่าสุด</th>
                     <th>ครบกำหนดครั้งถัดไป</th>
                     <th>สถานะรอบ PM</th>
@@ -1200,7 +1529,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                 <tbody>
                   {filteredSchedules.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                      <td colSpan={8} className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
                         {schedules.length === 0 ? (
                           <div className="flex flex-col items-center gap-3">
                             <CalendarClock size={28} className="text-slate-400" />
@@ -1214,16 +1543,6 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                                 <Plus size={13} />
                                 เพิ่มกำหนดการ PM คันแรก
                               </button>
-                              {unscheduledVehicles.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setIsBatchModalOpen(true)}
-                                  className="button secondary"
-                                >
-                                  <Sparkles size={13} />
-                                  สร้างรอบ PM อัตโนมัติให้รถ {unscheduledVehicles.length} คัน
-                                </button>
-                              )}
                             </div>
                           </div>
                         ) : (
@@ -1232,7 +1551,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                       </td>
                     </tr>
                   ) : (
-                    filteredSchedules.map(({ schedule, health }) => (
+                    filteredSchedules.map(({ schedule, health, mileageInfo, latestReading }) => (
                       <tr key={schedule.id}>
                         <td>
                           <div className="flex items-center gap-2">
@@ -1255,19 +1574,88 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                             {schedule.pmCategory}
                           </div>
                           <div className="table-sub-text text-[11px] mt-0.5 font-mono tabular-nums">
-                            ทุก {schedule.cycleDays} วัน
-                            {schedule.cycleHours ? ` · ทุก ${schedule.cycleHours} ชม.` : ""}
-                            {schedule.currentHours !== undefined
-                              ? ` (ล่าสุด ${schedule.currentHours.toLocaleString()} ชม.)`
+                            {schedule.cycleDays ? `ทุก ${schedule.cycleDays} วัน` : "ไม่กำหนดรอบวัน"}
+                            {schedule.cycleMileageKm
+                              ? ` · ทุก ${schedule.cycleMileageKm.toLocaleString()} กม.`
                               : ""}
+                            {schedule.cycleHours ? ` · ทุก ${schedule.cycleHours} ชม.` : ""}
                           </div>
                           {schedule.checklistSummary && (
                             <div
-                              className="table-sub-text text-[10px] mt-0.5 max-w-[260px] truncate"
+                              className="table-sub-text text-[10px] mt-0.5 max-w-[240px] truncate"
                               title={schedule.checklistSummary}
                             >
                               {schedule.checklistSummary}
                             </div>
+                          )}
+                        </td>
+
+                        <td>
+                          {mileageInfo.hasMileageRule && mileageInfo.targetKm !== undefined ? (
+                            <div className="space-y-1 min-w-[185px]">
+                              <div className="flex items-center justify-between gap-2 text-xs">
+                                <span className="font-semibold text-slate-800 dark:text-slate-100 font-mono tabular-nums">
+                                  ตั้ง PM ที่ {mileageInfo.targetKm.toLocaleString()} กม.
+                                </span>
+                                {mileageInfo.isMileageDue && (
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-300 dark:bg-rose-950/70 dark:text-rose-300 dark:border-rose-800">
+                                    ครบไมล์ PM!
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] font-mono tabular-nums text-slate-600 dark:text-slate-300">
+                                เลขไมล์ล่าสุด:{" "}
+                                <strong
+                                  className={
+                                    mileageInfo.isMileageDue
+                                      ? "text-rose-600 dark:text-rose-400"
+                                      : mileageInfo.isMileageSoon
+                                      ? "text-amber-600 dark:text-amber-400"
+                                      : "text-[#087eaf] dark:text-sky-300"
+                                  }
+                                >
+                                  {`${mileageInfo.latestKm.toLocaleString()} กม.`}
+                                </strong>
+                                {mileageInfo.kmRemaining !== undefined && (
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 ml-1">
+                                    {mileageInfo.kmRemaining <= 0
+                                      ? `(ถึงกำหนดแล้ว)`
+                                      : `(เหลือ ${mileageInfo.kmRemaining.toLocaleString()} กม.)`}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    mileageInfo.isMileageDue
+                                      ? "bg-rose-500"
+                                      : mileageInfo.isMileageSoon
+                                      ? "bg-amber-500"
+                                      : "bg-[#087eaf]"
+                                  }`}
+                                  style={{
+                                    width: `${Math.min(
+                                      100,
+                                      Math.max(
+                                        0,
+                                        Math.round(
+                                          (mileageInfo.latestKm /
+                                            Math.max(1, mileageInfo.targetKm)) *
+                                            100
+                                        )
+                                      )
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ) : latestReading ? (
+                            <div className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400">
+                              ไมล์ล่าสุด {latestReading.mileageKm.toLocaleString()} กม.
+                              <div className="text-[10px]">ไม่ได้ตั้งรอบไมล์ PM</div>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">-</span>
                           )}
                         </td>
 
@@ -1281,20 +1669,42 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                         </td>
 
                         <td>
-                          <div
-                            className={`font-mono tabular-nums text-xs font-bold ${
-                              health.status === "overdue"
-                                ? "text-rose-600 dark:text-rose-400"
-                                : health.status === "due-today" || health.status === "due-soon"
-                                ? "text-amber-600 dark:text-amber-400"
-                                : "text-slate-800 dark:text-slate-200"
-                            }`}
-                          >
-                            {formatThaiShortDate(schedule.nextPmDate)}
-                          </div>
-                          <div className="table-sub-text font-mono tabular-nums text-[10px]">
-                            {schedule.nextPmDate}
-                          </div>
+                          {schedule.nextPmDate ? (
+                            <>
+                              <div
+                                className={`font-mono tabular-nums text-xs font-bold ${
+                                  health.status === "overdue"
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : health.status === "due-today" || health.status === "due-soon"
+                                    ? "text-amber-600 dark:text-amber-400"
+                                    : "text-slate-800 dark:text-slate-200"
+                                }`}
+                              >
+                                {formatThaiShortDate(schedule.nextPmDate)}
+                              </div>
+                              <div className="table-sub-text font-mono tabular-nums text-[10px]">
+                                {schedule.nextPmDate}
+                              </div>
+                            </>
+                          ) : mileageInfo.isMileageDue && mileageInfo.mileageDueDateYmd ? (
+                            <>
+                              <div className="font-mono tabular-nums text-xs font-bold text-rose-600 dark:text-rose-400">
+                                ครบรอบวันที่ {formatThaiShortDate(mileageInfo.mileageDueDateYmd)}
+                              </div>
+                              <div className="table-sub-text font-mono tabular-nums text-[10px] text-rose-600/80 dark:text-rose-300/80">
+                                ตามเลขไมล์ {mileageInfo.targetKm?.toLocaleString()} กม.
+                              </div>
+                            </>
+                          ) : mileageInfo.targetKm !== undefined ? (
+                            <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                              เมื่อครบไมล์{" "}
+                              <span className="font-mono font-bold text-[#087eaf] dark:text-sky-300">
+                                {mileageInfo.targetKm.toLocaleString()} กม.
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
                         </td>
 
                         <td>{renderHealthBadge(health)}</td>
@@ -1438,9 +1848,9 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                 </label>
 
                 <div className="flex items-center gap-3 flex-wrap text-[11px]">
-                  <span className="inline-flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-medium">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" />
-                    เกินกำหนด
+                  <span className="inline-flex items-center gap-1.5 text-rose-600 dark:text-rose-400 font-bold">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-rose-600 inline-block" />
+                    ครบรอบเลขไมล์ / เกินกำหนด
                   </span>
                   <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
                     <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block" />
@@ -1463,7 +1873,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
             </div>
 
             {/* Grid + Day Details Layout */}
-            <div className="grid grid-cols-1 xl:grid-cols-[1fr_340px] gap-4 items-start">
+            <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4 items-start">
               {/* Monthly Calendar Grid */}
               <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-lg overflow-hidden bg-white dark:bg-[#091528]">
                 <div className="grid grid-cols-7 bg-slate-50 dark:bg-[#0d1d35] border-b border-slate-200 dark:border-[#1e3a5f]">
@@ -1529,7 +1939,9 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                         <div className="flex flex-col gap-1 w-full overflow-hidden">
                           {events.slice(0, 3).map((ev) => {
                             const chipClass =
-                              ev.kind === "overdue"
+                              ev.kind === "mileage-due"
+                                ? "bg-rose-600 text-white border-rose-700 dark:bg-rose-600 dark:text-white dark:border-rose-500 shadow-xs"
+                                : ev.kind === "overdue"
                                 ? "bg-rose-100 text-rose-800 border-rose-300 dark:bg-rose-950/70 dark:text-rose-200 dark:border-rose-800"
                                 : ev.kind === "due-soon"
                                 ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/70 dark:text-amber-200 dark:border-amber-800"
@@ -1545,8 +1957,9 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                                 className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold truncate ${chipClass}`}
                                 title={ev.label}
                               >
-                                {ev.schedule.vehicleId}
-                                {ev.kind === "completed" ? " ✓" : ""}
+                                {ev.kind === "mileage-due"
+                                  ? `รถ ${ev.schedule.vehicleId} ครบรอบต้อง PM แล้ว`
+                                  : `${ev.schedule.vehicleId}${ev.kind === "completed" ? " ✓" : ""}`}
                               </div>
                             );
                           })}
@@ -1589,11 +2002,15 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                       ไม่มีรายการรถครบกำหนด PM ในวันที่ {formatThaiShortDate(selectedDateYmd)}
                     </div>
                   ) : (
-                    <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                    <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
                       {selectedDayEvents.map((ev) => (
                         <div
                           key={ev.key}
-                          className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1d35] space-y-1.5"
+                          className={`p-2.5 rounded-md border space-y-1.5 ${
+                            ev.kind === "mileage-due"
+                              ? "border-rose-300 bg-rose-50/80 dark:border-rose-800 dark:bg-rose-950/35"
+                              : "border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1d35]"
+                          }`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <span className="code font-bold text-xs text-[#087eaf] dark:text-sky-300">
@@ -1601,7 +2018,9 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                             </span>
                             <span
                               className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                                ev.kind === "overdue"
+                                ev.kind === "mileage-due"
+                                  ? "bg-rose-600 text-white"
+                                  : ev.kind === "overdue"
                                   ? "bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300"
                                   : ev.kind === "due-soon"
                                   ? "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
@@ -1612,7 +2031,9 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                                   : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300"
                               }`}
                             >
-                              {ev.kind === "overdue"
+                              {ev.kind === "mileage-due"
+                                ? "ครบเลขไมล์ PM!"
+                                : ev.kind === "overdue"
                                 ? "เกินกำหนด"
                                 : ev.kind === "due-soon"
                                 ? "ใกล้ครบกำหนด"
@@ -1624,12 +2045,31 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                             </span>
                           </div>
 
+                          {ev.kind === "mileage-due" && (
+                            <div className="p-2 rounded bg-white/90 dark:bg-[#091528] border border-rose-200 dark:border-rose-800/80 text-xs font-bold text-rose-700 dark:text-rose-300 flex items-start gap-1.5">
+                              <AlertTriangle size={14} className="shrink-0 mt-0.5 text-rose-600" />
+                              <div>
+                                <div>รถ {ev.schedule.vehicleId} ครบรอบต้อง PM แล้ว</div>
+                                {ev.mileageNote && (
+                                  <div className="text-[11px] font-normal text-rose-600/90 dark:text-rose-300/90 mt-0.5">
+                                    {ev.mileageNote}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="text-xs font-medium text-slate-800 dark:text-slate-100">
                             {ev.schedule.pmCategory}
                           </div>
                           <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            รอบทุก {ev.schedule.cycleDays} วัน · ผู้รับผิดชอบ:{" "}
-                            {ev.schedule.responsibleTech}
+                            {ev.schedule.cycleDays
+                              ? `รอบทุก ${ev.schedule.cycleDays} วัน · `
+                              : ""}
+                            {ev.schedule.targetMileageKm
+                              ? `ตั้งไมล์ PM ที่ ${ev.schedule.targetMileageKm.toLocaleString()} กม. · `
+                              : ""}
+                            ผู้รับผิดชอบ: {ev.schedule.responsibleTech}
                           </div>
 
                           {ev.kind !== "completed" && (
@@ -1658,25 +2098,27 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   )}
                 </div>
 
-                {/* Overdue Watchlist */}
+                {/* Overdue / Mileage-Due Watchlist */}
                 {overdueList.length > 0 && (
                   <div className="border border-rose-200 dark:border-rose-900 rounded-lg bg-rose-50/60 dark:bg-rose-950/25 p-4 space-y-2.5">
                     <div className="flex items-center gap-2 text-xs font-bold text-rose-700 dark:text-rose-300">
                       <AlertTriangle size={14} />
-                      รถที่เกินกำหนด PM ({overdueList.length} คัน)
+                      รถที่ครบรอบไมล์ / เกินกำหนดต้อง PM ({overdueList.length} คัน)
                     </div>
-                    <div className="space-y-2 max-h-[220px] overflow-y-auto">
-                      {overdueList.map(({ schedule, health }) => (
+                    <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                      {overdueList.map(({ schedule, health, mileageInfo }) => (
                         <div
                           key={`ov-${schedule.id}`}
                           className="flex items-center justify-between gap-2 p-2 rounded bg-white/90 dark:bg-[#0d1b33] border border-rose-200/80 dark:border-rose-900/70"
                         >
                           <div className="min-w-0">
                             <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                              {schedule.vehicleId} · {health.label}
+                              รถ {schedule.vehicleId} ครบรอบต้อง PM แล้ว
                             </div>
-                            <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
-                              ครบกำหนด {formatThaiShortDate(schedule.nextPmDate)}
+                            <div className="text-[10px] text-rose-600 dark:text-rose-300 font-medium truncate">
+                              {mileageInfo.isMileageDue
+                                ? `เลขไมล์ล่าสุด ${mileageInfo.latestKm?.toLocaleString()} / ${mileageInfo.targetKm?.toLocaleString()} กม.`
+                                : `${health.label} (${formatThaiShortDate(schedule.nextPmDate)})`}
                             </div>
                           </div>
                           <button
@@ -1706,7 +2148,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   <th>รหัสรถ / ประเภท</th>
                   <th>ประเภท PM</th>
                   <th>กำหนดรอบถัดไปใหม่</th>
-                  <th>ชั่วโมงใช้งาน</th>
+                  <th>เลขไมล์ / ชั่วโมงใช้งาน</th>
                   <th>ค่าใช้จ่าย (บาท)</th>
                   <th>ผู้ดำเนินการ / ช่าง</th>
                   <th>หมายเหตุ</th>
@@ -1743,13 +2185,17 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                       </td>
                       <td>
                         <div className="table-item-name font-mono tabular-nums text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                          {formatThaiShortDate(entry.nextDueDate)}
+                          {entry.nextDueDate ? formatThaiShortDate(entry.nextDueDate) : "ตามระยะเลขไมล์"}
                         </div>
                       </td>
                       <td className="font-mono tabular-nums text-xs">
+                        {entry.mileageKm !== undefined ? `${entry.mileageKm.toLocaleString()} กม.` : ""}
+                        {entry.mileageKm !== undefined && entry.operatingHours !== undefined ? " · " : ""}
                         {entry.operatingHours !== undefined
                           ? `${entry.operatingHours.toLocaleString()} ชม.`
-                          : "-"}
+                          : entry.mileageKm === undefined
+                          ? "-"
+                          : ""}
                       </td>
                       <td className="font-mono tabular-nums text-xs">
                         {entry.cost !== undefined ? `฿${entry.cost.toLocaleString()}` : "-"}
@@ -1770,7 +2216,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       {/* ADD / EDIT PM SCHEDULE MODAL */}
       {isFormModalOpen && (
         <div className="modal-backdrop">
-          <div className="modal-container" style={{ maxWidth: 680 }}>
+          <div className="modal-container" style={{ maxWidth: 720 }}>
             <div className="modal-header-box" style={{ padding: "16px 22px" }}>
               <div>
                 <div className="modal-title-text flex items-center gap-2">
@@ -1780,7 +2226,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                     : "เพิ่มกำหนดการ PM รถใหม่"}
                 </div>
                 <div className="modal-sub-text mt-0.5">
-                  กำหนดรอบบำรุงรักษา (วัน / ชั่วโมง) เพื่อคำนวณวันครบกำหนดและแสดงบนปฏิทินอัตโนมัติ
+                  สามารถตั้งรอบ PM ด้วยเลขไมล์ (ดึงเลขไมล์ล่าสุดจากหน้า ตรวจเช็ครถประจำวัน) หรือกำหนดตามจำนวนวันได้
                 </div>
               </div>
               <button
@@ -1806,7 +2252,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   </label>
                   <select
                     value={formVehicleId}
-                    onChange={(e) => setFormVehicleId(e.target.value)}
+                    onChange={(e) => handleVehicleSelectChange(e.target.value)}
                     disabled={Boolean(editingScheduleId)}
                     className="field w-full"
                     style={STANDARD_CONTROL_STYLE}
@@ -1840,18 +2286,130 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   </select>
                 </div>
 
+                {/* MILEAGE-BASED PM CONFIGURATION BOX */}
+                <div className="sm:col-span-2 p-3.5 rounded-lg border border-sky-200 dark:border-sky-900/70 bg-sky-50/50 dark:bg-[#0d1f3a] space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <div className="text-xs font-bold text-[#087eaf] dark:text-sky-300">
+                        การตั้งค่า PM ด้วยเลขไมล์ (กม.) — เชื่อมโยงหน้า ตรวจเช็ครถประจำวัน
+                      </div>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                        เมื่อพนักงานบันทึกเลขไมล์ในหน้า ตรวจเช็ครถประจำวัน ถึงระยะที่ตั้งไว้ ระบบจะแจ้งเตือนในปฏิทินทันทีว่าครบรอบต้อง PM แล้ว
+                      </div>
+                    </div>
+                    {formVehicleId && (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-white dark:bg-[#091528] border border-sky-200 dark:border-sky-800 text-slate-700 dark:text-slate-200">
+                        ไมล์ล่าสุด {formVehicleId}:{" "}
+                        {(
+                          latestMileageByVehicle.get(formVehicleId.trim().toUpperCase())
+                            ?.mileageKm ?? 0
+                        ).toLocaleString()}{" "}
+                        กม.
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      เลือกระยะเลขไมล์ PM ด่วน หรือระบุระยะไมล์เอง
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {MILEAGE_PRESETS.map((preset) => (
+                        <button
+                          type="button"
+                          key={preset.km}
+                          onClick={() =>
+                            handleMileageCycleOrStartChange(formStartMileageKm, String(preset.km))
+                          }
+                          className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
+                            Number(formCycleMileageKm) === preset.km
+                              ? "bg-[#087eaf] text-white border-[#087eaf]"
+                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100 dark:bg-[#091528] dark:text-slate-200 dark:border-[#1e3a5f]"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormCycleMileageKm("");
+                          setFormTargetMileageKm("");
+                        }}
+                        className="px-2.5 py-1 rounded text-[11px] font-medium border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#132542]"
+                      >
+                        ไม่ใช้เลขไมล์
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="modal-label-text block text-xs mb-1">
+                        เลขไมล์เริ่มต้นตั้ง PM (กม.)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="เช่น 0"
+                        value={formStartMileageKm}
+                        onChange={(e) =>
+                          handleMileageCycleOrStartChange(e.target.value, formCycleMileageKm)
+                        }
+                        className="field w-full font-mono tabular-nums"
+                        style={STANDARD_CONTROL_STYLE}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="modal-label-text block text-xs mb-1">
+                        รอบระยะทาง PM (ทุกกี่ กม.)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="เช่น 300"
+                        value={formCycleMileageKm}
+                        onChange={(e) =>
+                          handleMileageCycleOrStartChange(formStartMileageKm, e.target.value)
+                        }
+                        className="field w-full font-mono tabular-nums"
+                        style={STANDARD_CONTROL_STYLE}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="modal-label-text block text-xs mb-1 font-bold text-[#087eaf] dark:text-sky-300">
+                        ตั้ง PM ที่เลขไมล์ครบกำหนด (กม.)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        placeholder="เช่น 300"
+                        value={formTargetMileageKm}
+                        onChange={(e) => setFormTargetMileageKm(e.target.value)}
+                        className="field w-full font-mono tabular-nums font-bold"
+                        style={STANDARD_CONTROL_STYLE}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* OPTIONAL DAY-BASED PM CONFIGURATION */}
                 <div className="sm:col-span-2">
                   <label className="modal-label-text block text-xs mb-1.5">
-                    เลือกรอบระยะเวลา PM ด่วน หรือกำหนดจำนวนวันเอง *
+                    เลือกรอบระยะเวลา PM ด่วน หรือกำหนดจำนวนวันเอง (ไม่บังคับ)
                   </label>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
+                  <div className="flex flex-wrap gap-1.5 mb-1">
                     {CYCLE_PRESETS.map((preset) => (
                       <button
                         type="button"
                         key={preset.days}
-                        onClick={() => handleLastPmDateOrCycleChange(formLastPmDate, preset.days)}
+                        onClick={() =>
+                          handleLastPmDateOrCycleChange(formLastPmDate, String(preset.days))
+                        }
                         className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
-                          formCycleDays === preset.days
+                          Number(formCycleDays) === preset.days
                             ? "bg-[#087eaf] text-white border-[#087eaf]"
                             : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100 dark:bg-[#0d1b33] dark:text-slate-200 dark:border-[#1e3a5f]"
                         }`}
@@ -1859,27 +2417,38 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                         {preset.label}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormCycleDays("");
+                        setFormNextPmDate("");
+                      }}
+                      className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                        !formCycleDays && !formNextPmDate
+                          ? "bg-slate-700 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900"
+                          : "bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100 dark:bg-[#0d1b33] dark:text-slate-300 dark:border-[#1e3a5f]"
+                      }`}
+                    >
+                      ไม่กำหนดวัน (ใช้เลขไมล์อย่างเดียว)
+                    </button>
                   </div>
                 </div>
 
                 <div>
                   <label className="modal-label-text block text-xs mb-1.5">
-                    รอบกำหนด PM (จำนวนวัน) *
+                    รอบกำหนด PM (จำนวนวัน - ไม่บังคับ)
                   </label>
                   <input
                     type="number"
                     min={1}
                     max={3650}
+                    placeholder="เว้นว่างได้หากตั้ง PM ด้วยเลขไมล์"
                     value={formCycleDays}
                     onChange={(e) =>
-                      handleLastPmDateOrCycleChange(
-                        formLastPmDate,
-                        Math.max(1, Number(e.target.value) || 1)
-                      )
+                      handleLastPmDateOrCycleChange(formLastPmDate, e.target.value)
                     }
                     className="field w-full"
                     style={STANDARD_CONTROL_STYLE}
-                    required
                   />
                 </div>
 
@@ -1900,7 +2469,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
                 <div>
                   <label className="modal-label-text block text-xs mb-1.5">
-                    วันที่ทำ PM ล่าสุด *
+                    วันที่เริ่มตั้ง PM / ทำ PM ล่าสุด *
                   </label>
                   <input
                     type="date"
@@ -1916,7 +2485,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
                 <div>
                   <label className="modal-label-text block text-xs mb-1.5">
-                    วันครบกำหนด PM ครั้งถัดไป *
+                    วันครบกำหนด PM ครั้งถัดไป (ไม่บังคับ)
                   </label>
                   <input
                     type="date"
@@ -1924,7 +2493,6 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                     onChange={(e) => setFormNextPmDate(e.target.value)}
                     className="field w-full dark:[color-scheme:dark]"
                     style={STANDARD_DATE_STYLE}
-                    required
                   />
                 </div>
 
@@ -2048,7 +2616,13 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   บันทึกการทำ PM แล้ว · {completingSchedule.vehicleId}
                 </div>
                 <div className="modal-sub-text mt-0.5">
-                  {completingSchedule.pmCategory} (รอบทุก {completingSchedule.cycleDays} วัน)
+                  {completingSchedule.pmCategory}
+                  {completingSchedule.cycleDays
+                    ? ` (รอบทุก ${completingSchedule.cycleDays} วัน)`
+                    : ""}
+                  {completingSchedule.targetMileageKm
+                    ? ` · เป้าหมายไมล์ ${completingSchedule.targetMileageKm.toLocaleString()} กม.`
+                    : ""}
                 </div>
               </div>
               <button
@@ -2061,18 +2635,33 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
             </div>
 
             <form onSubmit={handleConfirmCompletePm} className="p-5 space-y-3.5">
-              <div className="p-3 rounded-md border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/30 dark:border-emerald-800 text-xs">
-                <div className="text-emerald-800 dark:text-emerald-200 font-semibold">
-                  วันครบกำหนดรอบถัดไปใหม่:{" "}
-                  <span className="font-mono tabular-nums underline">
-                    {formatThaiFullDate(
-                      computeNextPmDate(completeDate || todayYmd, completingSchedule.cycleDays)
-                    )}
-                  </span>
-                </div>
-                <div className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">
-                  ระบบจะบันทึกประวัติและเลื่อนวันครบกำหนดถัดไปให้อัตโนมัติ (+
-                  {completingSchedule.cycleDays} วัน)
+              <div className="p-3 rounded-md border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/30 dark:border-emerald-800 text-xs space-y-1">
+                {completingSchedule.cycleDays && (
+                  <div className="text-emerald-800 dark:text-emerald-200 font-semibold">
+                    วันครบกำหนดรอบถัดไปใหม่:{" "}
+                    <span className="font-mono tabular-nums underline">
+                      {formatThaiFullDate(
+                        computeNextPmDate(completeDate || todayYmd, completingSchedule.cycleDays)
+                      )}
+                    </span>
+                  </div>
+                )}
+                {completingSchedule.cycleMileageKm && (
+                  <div className="text-emerald-800 dark:text-emerald-200 font-semibold">
+                    รอบเลขไมล์ครบกำหนดถัดไป:{" "}
+                    <span className="font-mono tabular-nums underline">
+                      {(
+                        (Number(completeMileageKm) ||
+                          completingSchedule.targetMileageKm ||
+                          completingSchedule.startMileageKm ||
+                          0) + completingSchedule.cycleMileageKm
+                      ).toLocaleString()}{" "}
+                      กม.
+                    </span>
+                  </div>
+                )}
+                <div className="text-[11px] text-emerald-700/80 dark:text-emerald-300/80">
+                  ระบบจะบันทึกประวัติและรีเซ็ตการแจ้งเตือนรอบถัดไปให้อัตโนมัติ
                 </div>
               </div>
 
@@ -2107,6 +2696,21 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
                 <div>
                   <label className="modal-label-text block text-xs mb-1.5">
+                    เลขไมล์รถขณะทำ PM (กม.)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="เช่น 300"
+                    value={completeMileageKm}
+                    onChange={(e) => setCompleteMileageKm(e.target.value)}
+                    className="field w-full font-mono tabular-nums"
+                    style={STANDARD_CONTROL_STYLE}
+                  />
+                </div>
+
+                <div>
+                  <label className="modal-label-text block text-xs mb-1.5">
                     เลขชั่วโมงรถขณะทำ PM
                   </label>
                   <input
@@ -2115,12 +2719,12 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                     placeholder="ชั่วโมงใช้งาน"
                     value={completeOperatingHours}
                     onChange={(e) => setCompleteOperatingHours(e.target.value)}
-                    className="field w-full"
+                    className="field w-full font-mono tabular-nums"
                     style={STANDARD_CONTROL_STYLE}
                   />
                 </div>
 
-                <div>
+                <div className="sm:col-span-2">
                   <label className="modal-label-text block text-xs mb-1.5">
                     ค่าใช้จ่ายจริง (บาท)
                   </label>
@@ -2130,7 +2734,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                     placeholder="0"
                     value={completeCost}
                     onChange={(e) => setCompleteCost(e.target.value)}
-                    className="field w-full"
+                    className="field w-full font-mono tabular-nums"
                     style={STANDARD_CONTROL_STYLE}
                   />
                 </div>

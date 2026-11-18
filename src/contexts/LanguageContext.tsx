@@ -27,6 +27,7 @@ export interface Translations {
   // Submenu
   transportOperation: string;
   transportStats: string;
+  manpowerPlanning: string;
   deliveryPoints: string;
   fixFlushStatus: string;
   pmSchedule: string;
@@ -47,6 +48,7 @@ export interface Translations {
   // Subtitles
   transportSubtitle: string;
   transportStatsSubtitle: string;
+  manpowerPlanningSubtitle: string;
   deliveryPointsSubtitle: string;
   fixFlushSubtitle: string;
   pmScheduleSubtitle: string;
@@ -214,6 +216,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     // Submenu
     transportOperation: "การปฏิบัติการขนย้าย",
     transportStats: "สถิติการย้ายงาน",
+    manpowerPlanning: "วางแผนกำลังคน",
     deliveryPoints: "จุดส่งสินค้า",
     fixFlushStatus: "ระบบแจ้งซ่อม",
     pmSchedule: "กำหนดการPM",
@@ -234,6 +237,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     // Subtitles
     transportSubtitle: "การเคลื่อนย้ายวัสดุภายใน ใบกำกับการเดินทาง และจุดตรวจเส้นทาง",
     transportStatsSubtitle: "สรุปจำนวนรถ สินค้า น้ำหนัก พนักงานขับรถ และเส้นทางขนย้ายตามช่วงวันที่",
+    manpowerPlanningSubtitle: "กำหนดหน้าที่ของพนักงานรายวัน: 1.กะทำงาน 2.รถที่ขึ้นขับ 3.พื้นที่รับผิดชอบ 4.ทีม A/B/C และ 5.เวลาเลิกงาน",
     deliveryPointsSubtitle: "กำหนดอาคาร จุดส่งสินค้า และหมายเลขประตูสำหรับฟอร์มบันทึกงานย้ายสินค้า",
     fixFlushSubtitle: "ระบบแจ้งซ่อมบำรุง ติดตามสถานะงานซ่อม และประวัติการฟลัชชิ่งน้ำมัน",
     pmScheduleSubtitle: "กำหนดรอบบำรุงรักษาเชิงป้องกัน (PM) รถแต่ละคัน ตารางติดตาม และปฏิทินดูวันครบกำหนด PM",
@@ -399,6 +403,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     // Submenu
     transportOperation: "Transport Operation",
     transportStats: "Transport Statistics",
+    manpowerPlanning: "Manpower Planning",
     deliveryPoints: "Delivery Points",
     fixFlushStatus: "Fix & Flush Status",
     pmSchedule: "PM Schedule",
@@ -419,6 +424,7 @@ const TRANSLATIONS: Record<Language, Translations> = {
     // Subtitles
     transportSubtitle: "Internal material movements, trip manifests and route checkpoints",
     transportStatsSubtitle: "Date-filtered statistics for active forklifts, cargo weights, drivers and routes",
+    manpowerPlanningSubtitle: "Daily workforce duty planning: 1.Shift 2.Assigned Vehicle 3.Work Area 4.Team A/B/C and 5.End of Shift Time",
     deliveryPointsSubtitle: "Configure warehouse buildings, delivery points and gates for transport routes",
     fixFlushSubtitle: "Fleet maintenance, hydraulic line flushing, overhaul schedules and inspection clearance",
     pmScheduleSubtitle: "Preventive maintenance (PM) cycle planning, vehicle schedule table, and due-date calendar",

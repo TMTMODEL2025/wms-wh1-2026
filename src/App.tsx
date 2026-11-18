@@ -57,6 +57,7 @@ import { PmScheduleManagement } from "./components/PmScheduleManagement";
 import { TireStockManagement } from "./components/TireStockManagement";
 import { FuelManagement } from "./components/FuelManagement";
 import { PreStartInspection } from "./components/PreStartInspection";
+import { DailyDutyAssignmentPanel } from "./components/DailyDutyAssignmentPanel";
 import { SlitFilmManagement } from "./components/SlitFilmManagement";
 import { CoilManagement } from "./components/CoilManagement";
 import {
@@ -121,6 +122,7 @@ interface TransactionItem {
 const getMaterialHandlingSubmenu = (t: (key: keyof Translations) => string) => [
   { id: "transport", label: t("transportOperation"), icon: Activity },
   { id: "transport-stats", label: t("transportStats"), icon: BarChart3 },
+  { id: "manpower-planning", label: t("manpowerPlanning"), icon: Users },
   { id: "delivery-points", label: t("deliveryPoints"), icon: MapPin },
   { id: "fix-flush", label: t("fixFlushStatus"), icon: Wrench },
   { id: "pm-schedule", label: t("pmSchedule"), icon: CalendarClock },
@@ -171,6 +173,11 @@ function getModuleInfo(t: (key: keyof Translations) => string): Record<string, M
     "transport-stats": {
       title: t("transportStats"),
       subtitle: t("transportStatsSubtitle"),
+      columns: [],
+    },
+    "manpower-planning": {
+      title: t("manpowerPlanning"),
+      subtitle: t("manpowerPlanningSubtitle"),
       columns: [],
     },
     "delivery-points": {
@@ -1213,6 +1220,29 @@ const CSS = `
     display: none !important;
   }
 
+  /* Smooth Accordion Slide-Down & Staggered Cascade for Sidebar Submenus */
+  .nav-submenu-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+    transition:
+      grid-template-rows 0.36s cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .nav-submenu-collapse.open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .nav-submenu-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+
   /* Submenu (Visually Subordinate & Indented Tree Level) */
   .nav-submenu {
     display: flex;
@@ -1239,12 +1269,40 @@ const CSS = `
     border-radius: 6px;
     font-size: 11px;
     font-weight: 500;
-    transition: all 0.18s ease;
+    transition:
+      background 0.18s ease,
+      color 0.18s ease,
+      border-color 0.18s ease,
+      opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .nav-submenu-collapse:not(.open) .nav-sub-btn,
+  .nav-submenu-collapse:not(.open) .nav-card-btn {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  .nav-submenu-collapse.open .nav-sub-btn,
+  .nav-submenu-collapse.open .nav-card-btn {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(1),
+  .nav-submenu-collapse.open .nav-card-btn:nth-child(1) { transition-delay: 0.02s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(2),
+  .nav-submenu-collapse.open .nav-card-btn:nth-child(2) { transition-delay: 0.045s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(3) { transition-delay: 0.07s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(4) { transition-delay: 0.095s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(5) { transition-delay: 0.12s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(6) { transition-delay: 0.145s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(7) { transition-delay: 0.17s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(8) { transition-delay: 0.195s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(9) { transition-delay: 0.22s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(10) { transition-delay: 0.245s; }
+  .nav-submenu-collapse.open .nav-sub-btn:nth-child(11) { transition-delay: 0.27s; }
   .nav-sub-btn span:last-child {
     white-space: nowrap;
     overflow: hidden;
@@ -5142,6 +5200,7 @@ function WmsApp({
       ![
         "transport",
         "transport-stats",
+        "manpower-planning",
         "delivery-points",
         "fix-flush",
         "pm-schedule",
@@ -5177,6 +5236,7 @@ function WmsApp({
   const isMaterialHandlingActive = [
     "transport",
     "transport-stats",
+    "manpower-planning",
     "delivery-points",
     "fix-flush",
     "pm-schedule",
@@ -5699,35 +5759,41 @@ function WmsApp({
                       </button>
 
                       {/* Submenu under Material Handling */}
-                      {materialHandlingExpanded && (
-                        <div className="nav-submenu">
-                          {materialHandlingSubmenu.map((item) => {
-                            const Icon = item.icon;
-                            const isItemActive = active === item.id;
+                      <div
+                        className={`nav-submenu-collapse ${materialHandlingExpanded ? "open" : ""}`}
+                        aria-hidden={!materialHandlingExpanded}
+                      >
+                        <div className="nav-submenu-inner">
+                          <div className="nav-submenu">
+                            {materialHandlingSubmenu.map((item) => {
+                              const Icon = item.icon;
+                              const isItemActive = active === item.id;
 
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                className={`nav-sub-btn ${isItemActive ? "active" : ""}`}
-                                onClick={() => {
-                                  setActive(item.id);
-                                  setSelectedRecord(null);
-                                  if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                    setSidebarCollapsed(true);
-                                  }
-                                }}
-                                title={item.label}
-                              >
-                                <span className="nav-icon" style={{ width: 16, height: 16 }}>
-                                  <Icon size={14} />
-                                </span>
-                                <span>{item.label}</span>
-                              </button>
-                            );
-                          })}
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  tabIndex={materialHandlingExpanded ? 0 : -1}
+                                  className={`nav-sub-btn ${isItemActive ? "active" : ""}`}
+                                  onClick={() => {
+                                    setActive(item.id);
+                                    setSelectedRecord(null);
+                                    if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                      setSidebarCollapsed(true);
+                                    }
+                                  }}
+                                  title={item.label}
+                                >
+                                  <span className="nav-icon" style={{ width: 16, height: 16 }}>
+                                    <Icon size={14} />
+                                  </span>
+                                  <span>{item.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                     )}
 
@@ -5799,291 +5865,317 @@ function WmsApp({
                                 </button>
 
                                 {/* Submenu for Steel Coil (การจัดการเหล็กม้วน) */}
-                                {isCoil && coilMenuExpanded && (
-                                  <div className="nav-submenu">
-                                    {[
-                                      {
-                                        id: "inbound" as CoilModeTab,
-                                        labelTh: "+ รับเข้า",
-                                        labelEn: "+ Inbound",
-                                        icon: ArrowDownRight,
-                                        color: "#10b981",
-                                      },
-                                      {
-                                        id: "operator_receive" as CoilModeTab,
-                                        labelTh: "จ่ายออก",
-                                        labelEn: "Issue",
-                                        icon: Cpu,
-                                        color: "#38bdf8",
-                                      },
-                                      {
-                                        id: "outbound" as CoilModeTab,
-                                        labelTh: "- เตรียมเบิก",
-                                        labelEn: "- Staging",
-                                        icon: ArrowUpRight,
-                                        color: "#f59e0b",
-                                      },
-                                      {
-                                        id: "relocate_layout" as CoilModeTab,
-                                        labelTh: "ย้าย Layout",
-                                        labelEn: "Relocate Layout",
-                                        icon: ArrowRightLeft,
-                                        color: "#c084fc",
-                                      },
-                                      {
-                                        id: "stock_balance" as CoilModeTab,
-                                        labelTh: "สต๊อก",
-                                        labelEn: "Stock Balance",
-                                        icon: Package,
-                                        color: "#06b6d4",
-                                      },
-                                    ].map((sub) => {
-                                      const SubIcon = sub.icon;
-                                      return (
-                                        <button
-                                          key={sub.id}
-                                          type="button"
-                                          className={`nav-sub-btn ${
-                                            active === "coil" && coilMode === sub.id ? "active" : ""
-                                          }`}
-                                          onClick={() => {
-                                            setActive("coil");
-                                            setCoilMode(sub.id);
-                                            setSelectedRecord(null);
-                                            if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                              setSidebarCollapsed(true);
-                                            }
-                                          }}
-                                          title={language === "th" ? sub.labelTh : sub.labelEn}
-                                        >
-                                          <span
-                                            className="nav-icon"
-                                            style={{ width: 16, height: 16, color: sub.color }}
-                                          >
-                                            <SubIcon size={14} />
-                                          </span>
-                                          <span>{language === "th" ? sub.labelTh : sub.labelEn}</span>
-                                        </button>
-                                      );
-                                    })}
+                                {isCoil && (
+                                  <div
+                                    className={`nav-submenu-collapse ${coilMenuExpanded ? "open" : ""}`}
+                                    aria-hidden={!coilMenuExpanded}
+                                  >
+                                    <div className="nav-submenu-inner">
+                                      <div className="nav-submenu">
+                                        {[
+                                          {
+                                            id: "inbound" as CoilModeTab,
+                                            labelTh: "+ รับเข้า",
+                                            labelEn: "+ Inbound",
+                                            icon: ArrowDownRight,
+                                            color: "#10b981",
+                                          },
+                                          {
+                                            id: "operator_receive" as CoilModeTab,
+                                            labelTh: "จ่ายออก",
+                                            labelEn: "Issue",
+                                            icon: Cpu,
+                                            color: "#38bdf8",
+                                          },
+                                          {
+                                            id: "outbound" as CoilModeTab,
+                                            labelTh: "- เตรียมเบิก",
+                                            labelEn: "- Staging",
+                                            icon: ArrowUpRight,
+                                            color: "#f59e0b",
+                                          },
+                                          {
+                                            id: "relocate_layout" as CoilModeTab,
+                                            labelTh: "ย้าย Layout",
+                                            labelEn: "Relocate Layout",
+                                            icon: ArrowRightLeft,
+                                            color: "#c084fc",
+                                          },
+                                          {
+                                            id: "stock_balance" as CoilModeTab,
+                                            labelTh: "สต๊อก",
+                                            labelEn: "Stock Balance",
+                                            icon: Package,
+                                            color: "#06b6d4",
+                                          },
+                                        ].map((sub) => {
+                                          const SubIcon = sub.icon;
+                                          return (
+                                            <button
+                                              key={sub.id}
+                                              type="button"
+                                              tabIndex={coilMenuExpanded ? 0 : -1}
+                                              className={`nav-sub-btn ${
+                                                active === "coil" && coilMode === sub.id ? "active" : ""
+                                              }`}
+                                              onClick={() => {
+                                                setActive("coil");
+                                                setCoilMode(sub.id);
+                                                setSelectedRecord(null);
+                                                if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                                  setSidebarCollapsed(true);
+                                                }
+                                              }}
+                                              title={language === "th" ? sub.labelTh : sub.labelEn}
+                                            >
+                                              <span
+                                                className="nav-icon"
+                                                style={{ width: 16, height: 16, color: sub.color }}
+                                              >
+                                                <SubIcon size={14} />
+                                              </span>
+                                              <span>{language === "th" ? sub.labelTh : sub.labelEn}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
                                   </div>
                                 )}
 
                                  {/* Submenu for Slit / Film */}
-                                 {isSlit && slitMenuExpanded && (
-                                   <div className="nav-submenu">
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${
-                                         slitMode === "inbound" || slitMode === "outbound" || slitMode === "operator_receive" ? "active" : ""
-                                       }`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         if (slitMode !== "inbound" && slitMode !== "outbound" && slitMode !== "operator_receive") {
-                                           setSlitMode("inbound");
-                                         }
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={translations.slitInboundOutbound}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
-                                         <ArrowRightLeft size={14} />
-                                       </span>
-                                       <span>{translations.slitInboundOutbound}</span>
-                                     </button>
+                                 {isSlit && (
+                                   <div
+                                     className={`nav-submenu-collapse ${slitMenuExpanded ? "open" : ""}`}
+                                     aria-hidden={!slitMenuExpanded}
+                                   >
+                                     <div className="nav-submenu-inner">
+                                       <div className="nav-submenu">
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${
+                                             slitMode === "inbound" || slitMode === "outbound" || slitMode === "operator_receive" ? "active" : ""
+                                           }`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             if (slitMode !== "inbound" && slitMode !== "outbound" && slitMode !== "operator_receive") {
+                                               setSlitMode("inbound");
+                                             }
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={translations.slitInboundOutbound}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
+                                             <ArrowRightLeft size={14} />
+                                           </span>
+                                           <span>{translations.slitInboundOutbound}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "relocate_layout" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("relocate_layout");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title="ย้าย Layout"
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#f59e0b" }}>
-                                         <ArrowRightLeft size={14} />
-                                       </span>
-                                       <span>ย้าย Layout</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "relocate_layout" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("relocate_layout");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title="ย้าย Layout"
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#f59e0b" }}>
+                                             <ArrowRightLeft size={14} />
+                                           </span>
+                                           <span>ย้าย Layout</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "return_warehouse" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("return_warehouse");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={language === "th" ? "คืนคลัง" : "Return to Warehouse"}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#f97316" }}>
-                                         <RotateCcw size={14} />
-                                       </span>
-                                       <span>{language === "th" ? "คืนคลัง" : "Return to Warehouse"}</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "return_warehouse" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("return_warehouse");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "คืนคลัง" : "Return to Warehouse"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#f97316" }}>
+                                             <RotateCcw size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "คืนคลัง" : "Return to Warehouse"}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "stock_balance" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("stock_balance");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={language === "th" ? "สต็อกคงคลัง" : "Stock Balance"}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
-                                         <Package size={14} />
-                                       </span>
-                                       <span>{language === "th" ? "สต็อกคงคลัง" : "Stock Balance"}</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "stock_balance" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("stock_balance");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "สต็อกคงคลัง" : "Stock Balance"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
+                                             <Package size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "สต็อกคงคลัง" : "Stock Balance"}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "movement_history" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("movement_history");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={translations.movementHistory}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#c084fc" }}>
-                                         <ClipboardList size={14} />
-                                       </span>
-                                       <span>{translations.movementHistory}</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "movement_history" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("movement_history");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={translations.movementHistory}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#c084fc" }}>
+                                             <ClipboardList size={14} />
+                                           </span>
+                                           <span>{translations.movementHistory}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "space_management" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("space_management");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title="พื้นที่"
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#06b6d4" }}>
-                                         <Boxes size={14} />
-                                       </span>
-                                       <span>พื้นที่</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "space_management" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("space_management");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title="พื้นที่"
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#06b6d4" }}>
+                                             <Boxes size={14} />
+                                           </span>
+                                           <span>พื้นที่</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "daily_report" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("daily_report");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={language === "th" ? "รายงาน" : "Reports"}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
-                                         <FileText size={14} />
-                                       </span>
-                                       <span>{language === "th" ? "รายงาน" : "Reports"}</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "daily_report" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("daily_report");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "รายงาน" : "Reports"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
+                                             <FileText size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "รายงาน" : "Reports"}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "transfer_car_report" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("transfer_car_report");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={language === "th" ? "รายงาน Transfer Car" : "Transfer Car Report"}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#f59e0b" }}>
-                                         <Truck size={14} />
-                                       </span>
-                                       <span>{language === "th" ? "รายงาน Transfer Car" : "Transfer Car Report"}</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "transfer_car_report" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("transfer_car_report");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "รายงาน Transfer Car" : "Transfer Car Report"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#f59e0b" }}>
+                                             <Truck size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "รายงาน Transfer Car" : "Transfer Car Report"}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "equipment_inspection" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("equipment_inspection");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title={language === "th" ? "ตรวจสอบอุปกรณ์" : "Equipment Inspection"}
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
-                                         <ShieldCheck size={14} />
-                                       </span>
-                                       <span>{language === "th" ? "ตรวจสอบอุปกรณ์" : "Equipment Inspection"}</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "equipment_inspection" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("equipment_inspection");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "ตรวจสอบอุปกรณ์" : "Equipment Inspection"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
+                                             <ShieldCheck size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "ตรวจสอบอุปกรณ์" : "Equipment Inspection"}</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "tmt_recheck" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("tmt_recheck");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title="TMT Recheck"
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
-                                         <ShieldCheck size={14} />
-                                       </span>
-                                       <span>TMT Recheck</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "tmt_recheck" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("tmt_recheck");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title="TMT Recheck"
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#38bdf8" }}>
+                                             <ShieldCheck size={14} />
+                                           </span>
+                                           <span>TMT Recheck</span>
+                                         </button>
 
-                                     <button
-                                       type="button"
-                                       className={`nav-sub-btn ${slitMode === "tmt_recheck_report" ? "active" : ""}`}
-                                       onClick={() => {
-                                         setActive("slit");
-                                         setSlitMode("tmt_recheck_report");
-                                         setSelectedRecord(null);
-                                         if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                           setSidebarCollapsed(true);
-                                         }
-                                       }}
-                                       title="รายงานการขึ้นสินค้าประจำวัน"
-                                     >
-                                       <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
-                                         <FileText size={14} />
-                                       </span>
-                                       <span>รายงานการขึ้นสินค้าประจำวัน</span>
-                                     </button>
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "tmt_recheck_report" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("tmt_recheck_report");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title="รายงานการขึ้นสินค้าประจำวัน"
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#10b981" }}>
+                                             <FileText size={14} />
+                                           </span>
+                                           <span>รายงานการขึ้นสินค้าประจำวัน</span>
+                                         </button>
+                                       </div>
+                                     </div>
                                    </div>
                                  )}
                               </div>
@@ -6118,36 +6210,42 @@ function WmsApp({
                       </button>
 
                       {/* Submenu / Items under Administration */}
-                      {administrationExpanded && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
-                          {administrationItems.map((item) => {
-                            const Icon = item.icon;
-                            const isActive = active === item.id;
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                className={`nav-card-btn ${isActive ? "active" : ""}`}
-                                onClick={() => {
-                                  setActive(item.id);
-                                  setSelectedRecord(null);
-                                  if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                    setSidebarCollapsed(true);
-                                  }
-                                }}
-                                title={item.label}
-                              >
-                                <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                                  <span className="nav-icon">
-                                    <Icon size={16} />
-                                  </span>
-                                  <span>{item.label}</span>
-                                </div>
-                              </button>
-                            );
-                          })}
+                      <div
+                        className={`nav-submenu-collapse ${administrationExpanded ? "open" : ""}`}
+                        aria-hidden={!administrationExpanded}
+                      >
+                        <div className="nav-submenu-inner">
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                            {administrationItems.map((item) => {
+                              const Icon = item.icon;
+                              const isActive = active === item.id;
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  tabIndex={administrationExpanded ? 0 : -1}
+                                  className={`nav-card-btn ${isActive ? "active" : ""}`}
+                                  onClick={() => {
+                                    setActive(item.id);
+                                    setSelectedRecord(null);
+                                    if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                      setSidebarCollapsed(true);
+                                    }
+                                  }}
+                                  title={item.label}
+                                >
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+                                    <span className="nav-icon">
+                                      <Icon size={16} />
+                                    </span>
+                                    <span>{item.label}</span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                     )}
                   </div>
@@ -6157,7 +6255,7 @@ function WmsApp({
           </aside>
 
           <main className={`main ${active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report") ? "main-flush" : ""}`}>
-            {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && (
+            {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && active !== "manpower-planning" && (
               <div className={`page-heading ${active === "slit" || active === "coil" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : active === "transport" ? "!items-center" : ""}`}>
                 <div>
                   <h1>{pageTitle}</h1>
@@ -6292,6 +6390,11 @@ function WmsApp({
                   setActive("transport");
                   setSelectedRecord(null);
                 }}
+              />
+            ) : active === "manpower-planning" ? (
+              <DailyDutyAssignmentPanel
+                employees={employeeRoster}
+                vehicles={vehicles}
               />
             ) : active === "transport-stats" ? (
               <TransportStatisticsView

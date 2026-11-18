@@ -31,8 +31,8 @@ export const WMS_SECTIONS: WmsSectionMeta[] = [
     shortLabelTh: "ขนย้าย/รถยก",
     labelEn: "Material Handling & Fleet",
     defaultMenuId: "transport",
-    menuIds: ["transport", "transport-stats", "delivery-points", "fix-flush", "pm-schedule", "tire-stock", "pre-start", "vehicles", "employees", "fuel"],
-    descriptionTh: "ขนย้ายสินค้า, สถิติการย้ายงาน, จุดส่งสินค้า, ซ่อมบำรุง, กำหนดการPM, ตรวจเช็ครถ, น้ำมัน และตารางงาน",
+    menuIds: ["transport", "transport-stats", "manpower-planning", "delivery-points", "fix-flush", "pm-schedule", "tire-stock", "pre-start", "vehicles", "employees", "fuel"],
+    descriptionTh: "ขนย้ายสินค้า, สถิติการย้ายงาน, วางแผนกำลังคน, จุดส่งสินค้า, ซ่อมบำรุง, กำหนดการPM, ตรวจเช็ครถ, น้ำมัน และตารางงาน",
   },
   {
     id: "slit_ops",
@@ -78,6 +78,7 @@ export const MENU_TO_SECTION_MAP: Record<string, WmsSectionId> = {
   dashboard: "overview",
   transport: "fleet_ops",
   "transport-stats": "fleet_ops",
+  "manpower-planning": "fleet_ops",
   "delivery-points": "fleet_ops",
   "fix-flush": "fleet_ops",
   "pm-schedule": "fleet_ops",

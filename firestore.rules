@@ -107,7 +107,8 @@ service cloud.firestore {
         && data.workArea is string && data.workArea.size() <= 128
         && data.vehicleNumber is string && data.vehicleNumber.size() <= 64
         && data.shift is string && data.shift.size() <= 64
-        && data.team is string && data.team.size() <= 64;
+        && data.team is string && data.team.size() <= 64
+        && (!('endTime' in data) || (data.endTime is string && data.endTime.size() <= 32));
     }
 
     function isValidMhDeliveryPoint(data) {
@@ -120,11 +121,25 @@ service cloud.firestore {
       return data.id is string && data.id.size() <= 128
         && data.vehicleId is string && data.vehicleId.size() > 0 && data.vehicleId.size() <= 64
         && data.pmCategory is string && data.pmCategory.size() <= 128
-        && data.cycleDays is number && data.cycleDays >= 1 && data.cycleDays <= 3650
+        && (!('cycleDays' in data) || (data.cycleDays is number && data.cycleDays >= 0 && data.cycleDays <= 3650))
+        && (!('cycleMileageKm' in data) || (data.cycleMileageKm is number && data.cycleMileageKm >= 0 && data.cycleMileageKm <= 1000000))
+        && (!('startMileageKm' in data) || (data.startMileageKm is number && data.startMileageKm >= 0 && data.startMileageKm <= 10000000))
+        && (!('targetMileageKm' in data) || (data.targetMileageKm is number && data.targetMileageKm >= 0 && data.targetMileageKm <= 10000000))
+        && (!('currentMileageKm' in data) || (data.currentMileageKm is number && data.currentMileageKm >= 0 && data.currentMileageKm <= 10000000))
+        && (!('mileageDueDate' in data) || (data.mileageDueDate is string && data.mileageDueDate.size() <= 32))
         && data.lastPmDate is string && data.lastPmDate.size() <= 32
-        && data.nextPmDate is string && data.nextPmDate.size() <= 32
+        && (!('nextPmDate' in data) || (data.nextPmDate is string && data.nextPmDate.size() <= 32))
         && (!('scheduleStatus' in data) || data.scheduleStatus in ['Active', 'Paused'])
         && (!('history' in data) || (data.history is list && data.history.size() <= 50));
+    }
+
+    function isValidMhPreStartInspection(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.vehicleId is string && data.vehicleId.size() > 0 && data.vehicleId.size() <= 64
+        && data.inspectionDate is string && data.inspectionDate.size() <= 32
+        && (!('mileageKm' in data) || (data.mileageKm is number && data.mileageKm >= 0 && data.mileageKm <= 10000000))
+        && (!('operatingHours' in data) || (data.operatingHours is number && data.operatingHours >= 0 && data.operatingHours <= 1000000))
+        && (!('items' in data) || (data.items is list && data.items.size() <= 100));
     }
 
     function isValidWmsEmployee(data) {
@@ -246,6 +261,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(scheduleId) && isValidMhPmSchedule(request.resource.data);
       allow delete: if isValidId(scheduleId);
+    }
+
+    match /mh_prestart_inspections/{inspectionId} {
+      allow read: if true;
+      allow create, update: if isValidId(inspectionId) && isValidMhPreStartInspection(request.resource.data);
+      allow delete: if isValidId(inspectionId);
     }
 
     match /wms_employees/{employeeId} {

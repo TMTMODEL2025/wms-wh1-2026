@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ShieldCheck,
   CheckCircle2,
@@ -18,36 +18,23 @@ import {
   Clock,
   Check,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Gauge,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
 import {
   appendWmsActivityLog,
   getActiveRecorderDisplay,
 } from "../services/authWorkforceService";
+import {
+  MhPreStartChecklistItem,
+  MhPreStartInspectionRecord,
+  saveMhPreStartInspectionToCloud,
+  subscribeToMhPreStartInspections,
+} from "../services/forkliftDataService";
 
-interface ChecklistItem {
-  id: string;
-  categoryThai: string;
-  categoryEnglish: string;
-  status: "Pass" | "Fail" | "NA";
-  remark?: string;
-  isCustom?: boolean;
-}
-
-interface InspectionRecord {
-  id: string;
-  vehicleId: string;
-  vehicleDescription: string;
-  operatorName: string;
-  shift: string;
-  operatingHours: number;
-  items: ChecklistItem[];
-  overallResult: "Passed (พร้อมใช้งาน)" | "Grounded / Needs Repair (งดใช้ชั่วคราว)";
-  inspectorSignature: string;
-  inspectionDate: string;
-  createdAt: string;
-}
+type ChecklistItem = MhPreStartChecklistItem;
+type InspectionRecord = MhPreStartInspectionRecord;
 
 interface PreStartInspectionProps {
   vehicles: Vehicle[];
@@ -131,6 +118,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [resultFilter, setResultFilter] = useState("All");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<InspectionRecord | null>(null);
+  const [pmMileageNotice, setPmMileageNotice] = useState<string | null>(null);
 
   // Saved Custom Template Items State
   const [customTemplateItems, setCustomTemplateItems] = useState<ChecklistTemplateItem[]>(() =>
@@ -141,7 +129,8 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [vehicleId, setVehicleId] = useState(vehicles[0]?.vehicleId || "");
   const [operatorName, setOperatorName] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [shift, setShift] = useState("Shift 1 (08:00 - 16:00)");
-  const [operatingHours, setOperatingHours] = useState(0);
+  const [mileageKm, setMileageKm] = useState<string>("");
+  const [operatingHours, setOperatingHours] = useState<string>("");
   const [inspectionDate, setInspectionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [formItems, setFormItems] = useState<ChecklistItem[]>(() =>
     buildChecklistFormItems(loadCustomChecklistTemplate())
@@ -154,11 +143,26 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [saveAsTemplateItem, setSaveAsTemplateItem] = useState(true);
   const [addItemError, setAddItemError] = useState("");
 
+  useEffect(() => {
+    const unsub = subscribeToMhPreStartInspections((records) => {
+      setInspections(records);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!pmMileageNotice) return;
+    const t = setTimeout(() => setPmMileageNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [pmMileageNotice]);
+
   const openNewChecklistModal = () => {
     const savedCustoms = loadCustomChecklistTemplate();
     setCustomTemplateItems(savedCustoms);
     setFormItems(buildChecklistFormItems(savedCustoms));
     setInspectionDate(new Date().toISOString().slice(0, 10));
+    setMileageKm("");
+    setOperatingHours("");
     setShowAddItemForm(false);
     setNewItemThai("");
     setNewItemEnglish("");
@@ -256,19 +260,27 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
     ? "Grounded / Needs Repair (งดใช้ชั่วคราว)"
     : "Passed (พร้อมใช้งาน)";
 
-  const handleCreateInspection = (e: React.FormEvent) => {
+  const handleCreateInspection = async (e: React.FormEvent) => {
     e.preventDefault();
     const targetVehicle = vehicles.find((v) => v.vehicleId === vehicleId);
-    const vehicleDescription = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})` : `${vehicleId} - Warehouse Fleet Unit`;
+    const vehicleDescription = targetVehicle
+      ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})`
+      : `${vehicleId} - Warehouse Fleet Unit`;
 
     const resolvedOperator = operatorName.trim() || getActiveRecorderDisplay("WMS Operator").label;
+    const parsedMileage = Math.max(0, Math.round(Number(mileageKm) || 0));
+    const parsedHours = operatingHours.trim()
+      ? Math.max(0, Math.round(Number(operatingHours) || 0))
+      : parsedMileage;
+
     const newRecord: InspectionRecord = {
-      id: `INS-2026-${String(inspections.length + 1).padStart(3, "0")}`,
+      id: `INS-${new Date().getFullYear()}-${String(inspections.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-3)}`,
       vehicleId,
       vehicleDescription,
       operatorName: resolvedOperator,
       shift,
-      operatingHours: Number(operatingHours) || 0,
+      operatingHours: parsedHours,
+      mileageKm: parsedMileage,
       items: formItems.map((item) => ({ ...item })),
       overallResult,
       inspectorSignature: resolvedOperator,
@@ -276,15 +288,27 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
     };
 
-    setInspections([newRecord, ...inspections]);
+    setInspections((prev) => [newRecord, ...prev]);
+    setIsModalOpen(false);
+
+    const { duePmSchedules } = await saveMhPreStartInspectionToCloud(newRecord);
+    if (duePmSchedules.length > 0) {
+      setPmMileageNotice(
+        `แจ้งเตือน PM ตามเลขไมล์: รถ ${vehicleId} เลขไมล์ปัจจุบัน ${parsedMileage.toLocaleString()} กม. ครบรอบที่ต้องทำ PM แล้ว (ระบบแจ้งเตือนในปฏิทินหน้า กำหนดการ PM เรียบร้อยแล้ว)`
+      );
+    } else {
+      setPmMileageNotice(
+        `บันทึกตรวจเช็ครถ ${vehicleId} สำเร็จ (เลขไมล์ ${parsedMileage.toLocaleString()} กม. ซิงค์ไปยังหน้ากำหนดการ PM แล้ว)`
+      );
+    }
+
     void appendWmsActivityLog({
       module: "Pre-Start Inspection",
       sectionId: "fleet_ops",
       reference: newRecord.id,
-      activity: `ตรวจเช็คก่อนเริ่มงานรถ ${vehicleId} (${overallResult})`,
+      activity: `ตรวจเช็คก่อนเริ่มงานรถ ${vehicleId} เลขไมล์ ${parsedMileage.toLocaleString()} กม. (${overallResult})`,
       status: hasAnyFail ? "Attention" : "Completed",
     });
-    setIsModalOpen(false);
   };
 
   const passedCount = inspections.filter((i) => i.overallResult.includes("Passed")).length;
@@ -303,6 +327,32 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
 
   return (
     <div className="pre-start-inspection">
+      {pmMileageNotice && (
+        <div
+          className={`mb-3 px-4 py-2.5 rounded-lg border text-xs font-semibold flex items-center justify-between gap-3 ${
+            pmMileageNotice.includes("ครบรอบที่ต้องทำ PM แล้ว")
+              ? "bg-amber-50 border-amber-300 text-amber-800 dark:bg-amber-950/50 dark:border-amber-700 dark:text-amber-200"
+              : "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200"
+          }`}
+        >
+          <span className="inline-flex items-center gap-2">
+            {pmMileageNotice.includes("ครบรอบที่ต้องทำ PM แล้ว") ? (
+              <AlertTriangle size={15} />
+            ) : (
+              <CheckCircle2 size={15} />
+            )}
+            {pmMileageNotice}
+          </span>
+          <button
+            type="button"
+            onClick={() => setPmMileageNotice(null)}
+            className="opacity-70 hover:opacity-100"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Top Header */}
       <div className="prestart-header-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, background: "#fff", padding: "12px 20px", borderRadius: 8, border: "1px solid #d9e0e5", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -331,8 +381,8 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         </div>
 
         <div className="kpi" style={{ borderTopColor: "#f59e0b" }}>
-          <div className="kpi-label">Service Interval Alert (250h/500h)</div>
-          <div className="kpi-value" style={{ color: "#d97706" }}>{inspections.filter((i) => i.operatingHours >= 250).length} Units</div>
+          <div className="kpi-label">Service Interval Alert (250km/250h)</div>
+          <div className="kpi-value" style={{ color: "#d97706" }}>{inspections.filter((i) => (i.mileageKm ?? i.operatingHours) >= 250).length} Units</div>
         </div>
 
         <div className="kpi" style={{ borderTopColor: "#087eaf" }}>
@@ -392,9 +442,9 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
           <table>
             <thead>
               <tr>
-                <th>Inspection ID & Date</th>
-                <th>Vehicle & Operating Hours</th>
-                <th>Operator & Shift</th>
+                <th>Inspection ID &amp; Date</th>
+                <th>Vehicle &amp; Mileage (เลขไมล์)</th>
+                <th>Operator &amp; Shift</th>
                 <th>Checklist Summary</th>
                 <th>Overall Safety Clearance</th>
                 <th>Actions</th>
@@ -416,7 +466,10 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                     </td>
                     <td>
                       <div className="prestart-modal-val" style={{ fontWeight: 700, color: "#1e3648" }}>{ins.vehicleId}</div>
-                      <div className="prestart-modal-sub" style={{ fontSize: 10, color: "#647786" }}>{ins.operatingHours} Operating Hours</div>
+                      <div className="prestart-modal-sub font-mono tabular-nums" style={{ fontSize: 11, color: "#087eaf", fontWeight: 600 }}>
+                        เลขไมล์: {(ins.mileageKm ?? ins.operatingHours ?? 0).toLocaleString()} กม.
+                        {ins.operatingHours && ins.operatingHours !== ins.mileageKm ? ` · ${ins.operatingHours.toLocaleString()} ชม.` : ""}
+                      </div>
                     </td>
                     <td>
                       <div className="prestart-modal-val" style={{ fontWeight: 600, color: "#334155" }}>{ins.operatorName}</div>
@@ -488,7 +541,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
 
             <form onSubmit={handleCreateInspection} style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Vehicle to Inspect (เลือกรถฟอร์คลิฟท์) *</label>
+                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Vehicle to Inspect (เลือกรถโฟล์คลิฟท์ / รถลากจูง) *</label>
                 <select
                   value={vehicleId}
                   onChange={(e) => setVehicleId(e.target.value)}
@@ -531,12 +584,13 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               </div>
 
               <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Operating Hours Meter (ชั่วโมงการทำงานปัจจุบัน) *</label>
+                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  Inspection Date (วันที่ตรวจเช็ค) *
+                </label>
                 <input
-                  type="number"
-                  min={0}
-                  value={operatingHours}
-                  onChange={(e) => setOperatingHours(Number(e.target.value))}
+                  type="date"
+                  value={inspectionDate}
+                  onChange={(e) => setInspectionDate(e.target.value)}
                   required
                   className="prestart-form-input"
                   style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
@@ -544,12 +598,32 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               </div>
 
               <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Inspection Date *</label>
+                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  <Gauge size={13} className="inline mr-1 text-[#087eaf]" />
+                  เลขไมล์ปัจจุบัน (กม. / Mileage Odometer) *
+                </label>
                 <input
-                  type="date"
-                  value={inspectionDate}
-                  onChange={(e) => setInspectionDate(e.target.value)}
+                  type="number"
+                  min={0}
+                  placeholder="เช่น 300 (ใช้คำนวณรอบ PM ตามเลขไมล์อัตโนมัติ)"
+                  value={mileageKm}
+                  onChange={(e) => setMileageKm(e.target.value)}
                   required
+                  className="prestart-form-input"
+                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+                />
+              </div>
+
+              <div>
+                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+                  ชั่วโมงการทำงานปัจจุบัน (Operating Hours - ถ้ามี)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="ระบุชั่วโมงทำงาน (ถ้ามี)"
+                  value={operatingHours}
+                  onChange={(e) => setOperatingHours(e.target.value)}
                   className="prestart-form-input"
                   style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
                 />
@@ -809,8 +883,11 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                 <div className="prestart-modal-val" style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedInspection.operatorName} ({selectedInspection.shift})</div>
               </div>
               <div>
-                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600 }}>Operating Hours:</div>
-                <div className="prestart-modal-val" style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedInspection.operatingHours} HRS</div>
+                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600 }}>เลขไมล์ / ชั่วโมงใช้งาน:</div>
+                <div className="prestart-modal-val font-mono tabular-nums" style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>
+                  {(selectedInspection.mileageKm ?? selectedInspection.operatingHours ?? 0).toLocaleString()} กม.
+                  {selectedInspection.operatingHours ? ` (${selectedInspection.operatingHours.toLocaleString()} HRS)` : ""}
+                </div>
               </div>
 
               <div style={{ gridColumn: "span 2" }}>

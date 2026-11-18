@@ -28,6 +28,7 @@ import {
   getStoredMachineStaging,
   saveStoredMachineStaging,
   resetAllMachineStagingToEmpty,
+  fillAllMachineStagingToFull,
   ensureMachineStagingCloudSync,
   computeMachineStagingSummarySnapshot,
   STORAGE_KEY_MACHINE_STAGING,
@@ -71,6 +72,25 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
     const unsubCloud = subscribeToSlitMachineStaging((cloudDoc) => {
       setIsMachineStagingCloudLoaded(true);
       if (cloudDoc && Array.isArray(cloudDoc.machines) && cloudDoc.machines.length > 0) {
+        const cloudFullInitKey = "tmt_wms_machine_staging_cloud_full_init_v1";
+        if (!localStorage.getItem(cloudFullInitKey)) {
+          localStorage.setItem(cloudFullInitKey, "true");
+          const fullMachines = cloudDoc.machines.map((m) => ({
+            ...m,
+            racks: (m.racks || []).map((r) => {
+              const maxMeters = Math.max(1, Math.round((r.maxCapacityMm || 2000) / 1000));
+              if (r.status === "maintenance") return r;
+              return {
+                ...r,
+                usedMeters: maxMeters,
+                status: "full" as const,
+              };
+            }),
+          }));
+          saveStoredMachineStaging(fullMachines);
+          setMachines(fullMachines);
+          return;
+        }
         saveStoredMachineStaging(cloudDoc.machines, { skipCloudWrite: true });
         setMachines((prev) => {
           if (JSON.stringify(prev) === JSON.stringify(cloudDoc.machines)) return prev;
@@ -395,8 +415,8 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
       rackNo: nextRackNo,
       rackNameTh: newRackName,
       maxCapacityMm: 2000,
-      usedMeters: 0,
-      status: "available",
+      usedMeters: 2,
+      status: "full",
       coils: []
     };
 
@@ -410,7 +430,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
       })
     );
 
-    showToast(`เพิ่มแคร่ ${newRackName} ความยาว 2 เมตร สำเร็จแล้ว`, "success");
+    showToast(`เพิ่มแคร่ ${newRackName} (เต็มพิกัดแคร่ 2 ม.) สำเร็จแล้ว`, "success");
   };
 
   // Handler: Adjust Rack Length (in meters)
@@ -536,6 +556,13 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
         "แคร่ทุกเครื่องว่างพร้อมรับงานแล้ว"
       );
     }
+  };
+
+  // Handler: Instantly fill all racks on current machine (and all machines) to full capacity in 1 tap
+  const handleFillAllRacksToFull = () => {
+    const fullData = fillAllMachineStagingToFull();
+    setMachines(fullData);
+    showToast(`ปรับแคร่ทั้งหมดเป็น เต็มพิกัดแคร่ (100%) ทันทีแล้ว`, "success");
   };
 
   // Helper: Status badge info
@@ -1179,23 +1206,32 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             </h2>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleFillAllRacksToFull}
+              className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-[9.5px] sm:text-[11px] leading-tight transition-colors flex items-center gap-0.5 sm:gap-1 shadow-2xs cursor-pointer whitespace-nowrap"
+              title="ปรับแคร่ทุกแคร่ให้เต็มพิกัดแคร่ (100%) ทันที"
+            >
+              <Layers size={10} className="sm:w-3 sm:h-3 shrink-0" />
+              <span>เต็มทุกแคร่</span>
+            </button>
             <button
               type="button"
               onClick={handleResetAllRacksToEmpty}
-              className="px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 font-semibold text-[10.5px] sm:text-xs transition-colors flex items-center gap-1 sm:gap-1.5 border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer whitespace-nowrap"
+              className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 font-semibold text-[9.5px] sm:text-[11px] leading-tight transition-colors flex items-center gap-0.5 sm:gap-1 border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer whitespace-nowrap"
               title="ล้างข้อมูลแคร่ทุกเครื่องเป็น 0 เมตร"
             >
-              <RotateCcw size={12} className="sm:w-[13px] sm:h-[13px]" />
+              <RotateCcw size={10} className="sm:w-3 sm:h-3 shrink-0" />
               <span className="sm:hidden">ล้างทั้งหมด</span>
               <span className="hidden sm:inline">ล้างข้อมูลแคร่ทั้งหมด</span>
             </button>
             <button
               type="button"
               onClick={handleAddNewRack}
-              className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-900 dark:bg-cyan-500 hover:bg-slate-800 text-white font-bold text-[10.5px] sm:text-xs transition-colors flex items-center gap-1 sm:gap-1.5 shadow-sm cursor-pointer whitespace-nowrap"
+              className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-slate-900 dark:bg-cyan-500 hover:bg-slate-800 text-white font-semibold text-[9.5px] sm:text-[11px] leading-tight transition-colors flex items-center gap-0.5 sm:gap-1 shadow-2xs cursor-pointer whitespace-nowrap"
             >
-              <Plus size={13} className="sm:w-3.5 sm:h-3.5" />
+              <Plus size={10} className="sm:w-3 sm:h-3 shrink-0" />
               <span className="sm:hidden">เพิ่มแคร่</span>
               <span className="hidden sm:inline">เพิ่มแคร่ใหม่</span>
             </button>
@@ -1203,14 +1239,13 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
         </div>
 
         {/* Rack Cards */}
-        <div className="grid grid-cols-1 gap-3 sm:gap-5">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3">
           {currentMachine.racks.map((rack, rIdx) => {
             const maxMeters = Math.max(1, Math.round(rack.maxCapacityMm / 1000));
             const usedMeters = Math.min(maxMeters, Math.max(0, rack.usedMeters ?? 0));
             const remainingMeters = Math.max(0, maxMeters - usedMeters);
             const maxTons = metersToTons(maxMeters);
             const usedTons = metersToTons(usedMeters);
-            const remainingTons = metersToTons(remainingMeters);
             const percent = Math.min(100, Math.round((usedMeters / maxMeters) * 100));
             const isMaintenance = rack.status === "maintenance";
             const statusInfo = getRackStatusInfo(rack.status, usedMeters, maxMeters);
@@ -1218,279 +1253,257 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             return (
               <div
                 key={`${rack.rackId}-${rIdx}`}
-                className={`bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-3 sm:p-5 shadow-md border space-y-2.5 sm:space-y-4 transition-all ${
+                className={`bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl px-2.5 py-2 sm:p-3.5 shadow-xs border space-y-1.5 sm:space-y-2 transition-all ${
                   isMaintenance
                     ? "border-rose-200 dark:border-rose-900/50 opacity-90"
-                    : "border-slate-200 dark:border-slate-800"
+                    : "border-slate-200/90 dark:border-slate-800"
                 }`}
               >
-                {/* Rack Header (Desktop sm: and up) */}
-                <div className="hidden sm:flex sm:flex-row sm:flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
-                  <div className="flex items-center justify-start w-auto gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center font-black text-cyan-600 dark:text-cyan-400 text-sm shrink-0">
-                        {String(rack.rackNo).padStart(2, "0")}
-                      </div>
-                      <h3 className="text-base font-black text-slate-800 dark:text-slate-100 whitespace-nowrap">
-                        {formatRackName(rack.rackNo, currentMachine)}
-                      </h3>
+                {/* Single-Line Compact Header Row (No +/- Stepper) */}
+                <div className="flex items-center justify-between gap-1.5">
+                  {/* Left: Rack Badge, Name & Status Pill */}
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <div
+                      className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg border flex items-center justify-center font-mono font-black text-[11px] sm:text-xs shrink-0 ${
+                        isMaintenance
+                          ? "bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                          : usedMeters >= maxMeters
+                          ? "bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                          : usedMeters === 0
+                          ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                          : "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/30 text-cyan-600 dark:text-cyan-400"
+                      }`}
+                    >
+                      {String(rack.rackNo).padStart(2, "0")}
                     </div>
+                    <h3 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 whitespace-nowrap">
+                      {formatRackName(rack.rackNo, currentMachine)}
+                    </h3>
                     <span
-                      className={`inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-lg border whitespace-nowrap ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}
+                      className={`inline-block text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-md border whitespace-nowrap truncate ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}
                     >
                       {statusInfo.label}
                     </span>
                   </div>
 
-                  {/* Actions on this rack */}
-                  <div className="flex items-center justify-end gap-2 w-auto">
-                    {/* ฟังก์ชันปรับความยาวแคร่ */}
-                    <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs shadow-2xs">
-                      <Ruler size={13} className="text-slate-400 shrink-0" />
-                      <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">ความยาวแคร่:</span>
-                      <select
-                        value={maxMeters}
-                        disabled={isMaintenance}
-                        onChange={(e) => handleUpdateRackLength(rack.rackId, parseInt(e.target.value, 10))}
-                        className="bg-transparent font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer text-xs disabled:opacity-50"
-                      >
-                        <option value={1} className="dark:bg-slate-900">1 เมตร (13.33 ตัน)</option>
-                        <option value={2} className="dark:bg-slate-900">2 เมตร (26.67 ตัน - มาตรฐาน)</option>
-                        <option value={3} className="dark:bg-slate-900">3 เมตร (40 ตัน)</option>
-                        <option value={4} className="dark:bg-slate-900">4 เมตร (53.33 ตัน)</option>
-                        <option value={5} className="dark:bg-slate-900">5 เมตร (66.67 ตัน)</option>
-                        <option value={6} className="dark:bg-slate-900">6 เมตร (80 ตัน - สูงสุด)</option>
-                      </select>
+                  {/* Right: Inline Summary & Desktop Rack Actions */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-[10.5px] sm:text-xs font-mono tabular-nums flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                      <span className="hidden md:inline text-[11px] font-sans">
+                        สถานะการใช้งานแคร่ปัจจุบัน:
+                      </span>
+                      <strong className="text-slate-800 dark:text-slate-100">
+                        {usedMeters}/{maxMeters}ม.
+                      </strong>
+                      <span className="text-slate-300 dark:text-slate-600">·</span>
+                      <strong className="text-cyan-600 dark:text-cyan-400">
+                        {formatTons(usedTons)}/{formatTons(maxTons)}T
+                      </strong>
                     </div>
 
-                    {/* ปุ่มปิดซ่อมบำรุง */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleRackMaintenance(rack.rackId)}
-                      className={`flex px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-colors items-center gap-1 shadow-2xs cursor-pointer shrink-0 whitespace-nowrap ${
-                        isMaintenance
-                          ? "bg-rose-500 hover:bg-rose-600 text-white border-rose-600"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
-                      }`}
-                      title={isMaintenance ? "เปิดใช้งานแคร่" : "ปิดปรับปรุงแคร่"}
-                    >
-                      <AlertTriangle size={13} className={isMaintenance ? "text-white" : "text-amber-500"} />
-                      <span>{isMaintenance ? "เปิดใช้งาน" : "ปิดซ่อมบำรุง"}</span>
-                    </button>
+                    {/* Desktop Rack Length & Maintenance Actions */}
+                    <div className="hidden sm:flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+                        <Ruler size={12} className="text-slate-400 shrink-0" />
+                        <select
+                          value={maxMeters}
+                          disabled={isMaintenance}
+                          onChange={(e) =>
+                            handleUpdateRackLength(rack.rackId, parseInt(e.target.value, 10))
+                          }
+                          aria-label="ความยาวแคร่"
+                          className="bg-transparent font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer text-[11px] disabled:opacity-50"
+                        >
+                          <option value={1} className="dark:bg-slate-900">1 ม. (13.3T)</option>
+                          <option value={2} className="dark:bg-slate-900">2 ม. (26.7T)</option>
+                          <option value={3} className="dark:bg-slate-900">3 ม. (40T)</option>
+                          <option value={4} className="dark:bg-slate-900">4 ม. (53.3T)</option>
+                          <option value={5} className="dark:bg-slate-900">5 ม. (66.7T)</option>
+                          <option value={6} className="dark:bg-slate-900">6 ม. (80T)</option>
+                        </select>
+                      </div>
 
-                    {/* ปุ่มลบแคร่ (เมื่อไม่มีการใช้งาน) */}
-                    {usedMeters === 0 && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteRack(rack.rackId)}
-                        className="inline-flex p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors shadow-2xs cursor-pointer shrink-0"
-                        title="ลบแคร่ที่ว่างนี้"
+                        onClick={() => handleToggleRackMaintenance(rack.rackId)}
+                        className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
+                          isMaintenance
+                            ? "bg-rose-500 hover:bg-rose-600 text-white border-rose-600"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        }`}
+                        title={isMaintenance ? "เปิดใช้งานแคร่" : "ปิดปรับปรุงแคร่"}
                       >
-                        <Trash2 size={13} />
+                        <AlertTriangle
+                          size={12}
+                          className={isMaintenance ? "text-white" : "text-amber-500"}
+                        />
+                        <span>{isMaintenance ? "เปิดใช้" : "ซ่อมบำรุง"}</span>
                       </button>
-                    )}
+
+                      {usedMeters === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRack(rack.rackId)}
+                          className="inline-flex p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
+                          title="ลบแคร่ที่ว่างนี้"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Manual Rack Utilization Section */}
-                <div className="space-y-2 sm:space-y-3">
-                  {/* Top Metric Bar & Numeric Input with 1-meter intervals */}
-                  <div className="flex flex-row sm:flex-wrap items-center justify-between gap-2 sm:gap-3 bg-slate-50 dark:bg-slate-800/50 px-2.5 py-1.5 sm:p-3 rounded-lg sm:rounded-xl border border-slate-200/80 dark:border-slate-800">
-                    {/* Mobile: Rack Number & Machine Name inline with Numeric Input */}
-                    <div className="flex sm:hidden items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 flex items-center justify-center font-black text-cyan-600 dark:text-cyan-400 text-xs shrink-0">
-                        {String(rack.rackNo).padStart(2, "0")}
-                      </div>
-                      <h3 className="text-xs font-black text-slate-800 dark:text-slate-100 whitespace-nowrap truncate">
-                        {formatRackName(rack.rackNo, currentMachine)}
-                      </h3>
-                    </div>
-
-                    {/* Desktop: Current Rack Utilization Status */}
-                    <div className="hidden sm:flex items-center gap-2">
-                      <Scale size={16} className="text-cyan-500 shrink-0" />
-                      <div className="min-w-0">
-                        <div className="flex text-xs font-bold text-slate-800 dark:text-slate-100 items-center gap-1.5">
-                          <span>สถานะการใช้งานแคร่ปัจจุบัน</span>
-                        </div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                          <span>ยาว: <strong className="text-slate-700 dark:text-slate-200 font-mono">{maxMeters} ม.</strong> (<strong className="text-slate-700 dark:text-slate-200 font-mono">{formatTons(maxTons)}T</strong>)</span>
-                          <span>·</span>
-                          <span>ใช้: <strong className="text-cyan-600 dark:text-cyan-400 font-mono">{usedMeters} ม.</strong> (<strong className="text-cyan-600 dark:text-cyan-400 font-mono">{formatTons(usedTons)}T</strong> · {percent}%)</span>
-                          <span>·</span>
-                          <span>คงเหลือ: <strong className={`font-mono ${remainingMeters === 0 ? "text-rose-500" : "text-emerald-600 dark:text-emerald-400"}`}>{remainingMeters} ม. ({formatTons(remainingTons)}T)</strong></span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Numeric Input with 1-Meter Interval Controls */}
-                    <div className="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
-                      <span className="hidden sm:inline text-xs font-semibold text-slate-600 dark:text-slate-300">
-                        ปริมาณการใช้แคร่:
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <div className="inline-flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg sm:rounded-xl overflow-hidden shadow-2xs">
-                          {/* Minus 1 Meter Button */}
-                          <button
-                            type="button"
-                            disabled={isMaintenance || usedMeters <= 0}
-                            onClick={() => handleUpdateUsedMeters(rack.rackId, usedMeters - 1)}
-                            className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-sm sm:text-base transition-colors cursor-pointer"
-                            title="ลดลง 1 เมตร"
-                          >
-                            -
-                          </button>
-
-                          {/* Number Input (Step = 1 meter) */}
-                          <input
-                            type="number"
-                            min={0}
-                            max={maxMeters}
-                            step={1}
-                            value={usedMeters}
-                            disabled={isMaintenance}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              handleUpdateUsedMeters(rack.rackId, isNaN(val) ? 0 : val);
-                            }}
-                            className="w-10 sm:w-14 h-7 sm:h-8 text-center font-mono font-black text-xs sm:text-sm text-slate-800 dark:text-slate-100 bg-transparent focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                {/* Slim Mobile-First Touch Progress Bar + Quick Meter Pills */}
+                <div className="space-y-1">
+                  <div className="relative select-none py-0.5">
+                    {/* Slim Track Container */}
+                    <div
+                      className={`relative w-full h-6 sm:h-7 rounded-lg border overflow-hidden transition-colors ${
+                        isMaintenance
+                          ? "bg-rose-950/10 border-rose-300 dark:bg-rose-950/30 dark:border-rose-800/60"
+                          : usedMeters === 0
+                          ? "bg-emerald-500/10 border-emerald-500/35 dark:bg-emerald-950/30 dark:border-emerald-700/50"
+                          : "bg-slate-100 dark:bg-slate-950/90 border-slate-200/90 dark:border-slate-800"
+                      }`}
+                    >
+                      {/* Segmented 1-Meter Grid Dividers */}
+                      <div className="absolute inset-0 grid grid-flow-col auto-cols-fr pointer-events-none z-10">
+                        {Array.from({ length: maxMeters }).map((_, segIdx) => (
+                          <div
+                            key={segIdx}
+                            className={`h-full ${
+                              segIdx > 0
+                                ? "border-l border-dashed border-slate-400/35 dark:border-slate-600/40"
+                                : ""
+                            }`}
                           />
+                        ))}
+                      </div>
 
-                          {/* Plus 1 Meter Button */}
-                          <button
-                            type="button"
-                            disabled={isMaintenance || usedMeters >= maxMeters}
-                            onClick={() => handleUpdateUsedMeters(rack.rackId, usedMeters + 1)}
-                            className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-sm sm:text-base transition-colors cursor-pointer"
-                            title="เพิ่มขึ้น 1 เมตร"
-                          >
-                            +
-                          </button>
-                        </div>
-                        <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-200">
-                          เมตร
+                      {/* Smooth Animated Progress Fill */}
+                      <div
+                        style={{ width: `${percent}%` }}
+                        className={`h-full transition-all duration-200 ease-out relative ${
+                          isMaintenance
+                            ? "bg-gradient-to-r from-rose-500/60 to-rose-600/60"
+                            : usedMeters >= maxMeters
+                            ? "bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 shadow-[0_0_12px_rgba(244,63,94,0.4)]"
+                            : "bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600 shadow-[0_0_12px_rgba(14,165,233,0.35)]"
+                        }`}
+                      >
+                        <div className="absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/25 to-transparent" />
+                      </div>
+
+                      {/* Clean Single Status Readout inside Track (with safe horizontal padding so Thumb never overlaps) */}
+                      <div className="absolute inset-0 z-15 flex items-center justify-between pl-6 pr-6 pointer-events-none text-[10.5px] sm:text-[11px] font-mono font-bold tabular-nums">
+                        <span
+                          className={`truncate drop-shadow-2xs ${
+                            usedMeters > 0
+                              ? "text-white"
+                              : "text-emerald-700 dark:text-emerald-300"
+                          }`}
+                        >
+                          {isMaintenance
+                            ? "ปิดซ่อมบำรุง"
+                            : usedMeters === 0
+                            ? `ว่างพร้อมวาง (${maxMeters} ม. · ${formatTons(maxTons)}T)`
+                            : `ใช้ ${usedMeters} ม. (${formatTons(usedTons)}T)`}
+                        </span>
+
+                        <span
+                          className={`shrink-0 ml-2 text-[10px] sm:text-[10.5px] font-extrabold drop-shadow-2xs ${
+                            usedMeters >= maxMeters
+                              ? "text-white"
+                              : usedMeters === 0
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-cyan-700 dark:text-cyan-200"
+                          }`}
+                        >
+                          {usedMeters >= maxMeters
+                            ? "เต็ม 100%"
+                            : usedMeters === 0
+                            ? "ว่าง 100%"
+                            : `ว่าง ${remainingMeters} ม. (${percent}%)`}
                         </span>
                       </div>
                     </div>
+
+                    {/* Compact Tactile Thumb Handle */}
+                    {!isMaintenance && (
+                      <div
+                        style={{
+                          left: `clamp(10px, ${(usedMeters / maxMeters) * 100}%, calc(100% - 10px))`,
+                        }}
+                        className="pointer-events-none absolute top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 transition-all duration-200 ease-out"
+                      >
+                        <div
+                          className={`h-4.5 w-4.5 sm:h-5 sm:w-5 rounded-full bg-white dark:bg-slate-100 border-2 shadow-[0_1px_6px_rgba(0,0,0,0.35)] flex items-center justify-center ${
+                            usedMeters >= maxMeters
+                              ? "border-rose-600"
+                              : usedMeters === 0
+                              ? "border-emerald-500"
+                              : "border-cyan-500"
+                          }`}
+                        >
+                          <div
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              usedMeters >= maxMeters
+                                ? "bg-rose-600"
+                                : usedMeters === 0
+                                ? "bg-emerald-500"
+                                : "bg-cyan-500"
+                            }`}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Full-Surface Invisible Touch Range Input */}
+                    <input
+                      type="range"
+                      min={0}
+                      max={maxMeters}
+                      step={1}
+                      value={usedMeters}
+                      disabled={isMaintenance}
+                      onChange={(e) =>
+                        handleUpdateUsedMeters(rack.rackId, parseInt(e.target.value, 10))
+                      }
+                      aria-label={`เลื่อนปรับสถานะการใช้งานแคร่ ${formatRackName(
+                        rack.rackNo,
+                        currentMachine
+                      )}`}
+                      className="absolute -inset-y-1 inset-x-0 w-full h-[calc(100%+8px)] opacity-0 cursor-ew-resize touch-pan-x z-30 disabled:cursor-not-allowed"
+                    />
                   </div>
 
-                  {/* Touch Draggable Status Tube (Interactive Range Slider Tube) */}
-                  <div className="relative">
-                    <div className="relative w-full h-11 sm:h-14 bg-slate-100 dark:bg-slate-950 rounded-xl sm:rounded-2xl border-2 border-slate-300 dark:border-slate-800 p-1 flex items-stretch overflow-hidden shadow-inner select-none">
-                      {/* Rail Skid Metal Track Texture Line */}
-                      <div className="absolute inset-x-0 bottom-0 h-1 sm:h-1.5 bg-slate-300 dark:bg-slate-800 pointer-events-none" />
-
-                      {/* 1-Meter Interval Grid Line Markers across the tube */}
-                      {Array.from({ length: maxMeters + 1 }).map((_, idx) => {
-                        if (idx === 0 || idx === maxMeters) return null;
-                        const leftPercent = (idx / maxMeters) * 100;
-                        return (
-                          <div
-                            key={idx}
-                            style={{ left: `${leftPercent}%` }}
-                            className="absolute top-0 bottom-0 w-[1px] bg-slate-400/40 dark:bg-slate-600/50 z-10 pointer-events-none"
-                          />
-                        );
-                      })}
-
-                      {/* Active Used Segment */}
-                      {usedMeters > 0 && (
-                        <div
-                          style={{ width: `${(usedMeters / maxMeters) * 100}%` }}
-                          className={`h-full rounded-lg sm:rounded-xl transition-all duration-150 flex items-center justify-center text-white font-bold text-[10.5px] sm:text-xs shadow-md shrink-0 relative overflow-hidden ${
-                            usedMeters >= maxMeters
-                              ? "bg-gradient-to-r from-rose-600 via-rose-500 to-red-600"
-                              : "bg-gradient-to-r from-cyan-600 via-sky-500 to-blue-600"
-                          }`}
+                  {/* Compact One-Tap Meter Step Pills (0 ม. ... maxMeters ม.) */}
+                  <div className="grid grid-flow-col auto-cols-fr gap-1">
+                    {Array.from({ length: maxMeters + 1 }).map((_, mVal) => {
+                      const isActive = usedMeters === mVal;
+                      return (
+                        <button
+                          key={mVal}
+                          type="button"
+                          disabled={isMaintenance}
+                          onClick={() => handleUpdateUsedMeters(rack.rackId, mVal)}
+                          className={`h-6 sm:h-6.5 rounded-md font-mono text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-0.5 active:scale-95 ${
+                            isActive
+                              ? mVal >= maxMeters
+                                ? "bg-rose-600 text-white shadow-2xs"
+                                : mVal === 0
+                                ? "bg-emerald-600 text-white shadow-2xs"
+                                : "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-2xs"
+                              : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/70"
+                          } disabled:opacity-40 disabled:cursor-not-allowed`}
+                          title={`แตะเพื่อตั้งค่าใช้แคร่ ${mVal} เมตร`}
                         >
-                          <span className="font-mono tabular-nums drop-shadow-xs px-1.5 sm:px-2 whitespace-nowrap truncate">
-                            ใช้แล้ว {usedMeters} ม. ({formatTons(usedTons)}T)
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Empty Segment */}
-                      {remainingMeters > 0 && (
-                        <div
-                          style={{ width: `${(remainingMeters / maxMeters) * 100}%` }}
-                          className={`h-full rounded-lg sm:rounded-xl flex items-center justify-center font-bold text-[10.5px] sm:text-xs shrink-0 transition-all duration-150 overflow-hidden ${
-                            usedMeters === 0
-                              ? "w-full bg-emerald-600 text-emerald-50 shadow-sm"
-                              : "text-slate-500 dark:text-slate-400 bg-slate-200/50 dark:bg-slate-800/40"
-                          }`}
-                        >
-                          <span className="font-mono tabular-nums whitespace-nowrap px-1.5 sm:px-2 truncate">
-                            {usedMeters === 0
-                              ? `แคร่ว่างพร้อมวาง (${maxMeters} ม. · ${formatTons(maxTons)} ตัน)`
-                              : `ว่าง ${remainingMeters} ม. (${formatTons(remainingTons)}T)`}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Touch & Drag Range Slider Overlay */}
-                      <input
-                        type="range"
-                        min={0}
-                        max={maxMeters}
-                        step={1}
-                        value={usedMeters}
-                        disabled={isMaintenance}
-                        onChange={(e) => handleUpdateUsedMeters(rack.rackId, parseInt(e.target.value, 10))}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-ew-resize touch-pan-x z-20 disabled:cursor-not-allowed"
-                        title="ใช้นิ้วหรือเมาส์เลื่อนแถบสถานะเพื่อปรับปริมาณการใช้งานแคร่ (แบ่งช่วงละ 1 เมตร)"
-                      />
-
-                      {/* Visual Thumb Indicator for Touch Dragging */}
-                      {!isMaintenance && (
-                        <div
-                          style={{
-                            left: `calc(${(usedMeters / maxMeters) * 100}% - 12px)`,
-                            pointerEvents: "none"
-                          }}
-                          className="absolute top-1/2 -translate-y-1/2 w-6 h-8 sm:w-7 sm:h-10 rounded-md sm:rounded-lg bg-white dark:bg-slate-200 border-2 border-slate-700 dark:border-slate-900 shadow-lg flex items-center justify-center z-15 transition-all duration-150"
-                        >
-                          <div className="flex flex-col gap-0.5">
-                            <div className="w-2 sm:w-2.5 h-[2px] bg-slate-600 dark:bg-slate-700 rounded-full" />
-                            <div className="w-2 sm:w-2.5 h-[2px] bg-slate-600 dark:bg-slate-700 rounded-full" />
-                            <div className="w-2 sm:w-2.5 h-[2px] bg-slate-600 dark:bg-slate-700 rounded-full" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick 1-Meter Interval Selector Buttons / Ruler underneath */}
-                    <div className="mt-2 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center justify-between text-[11px] text-slate-500 sm:px-1 gap-1.5 sm:gap-2">
-                      <span className="hidden sm:flex text-[11px] font-medium text-slate-500 dark:text-slate-400 items-center gap-1.5">
-                        <Hand size={12} className="text-cyan-500 shrink-0" />
-                        <span>ใช้นิ้วเลื่อนแถบสถานะ หรือแตะเลือกระยะ (เมตร):</span>
-                      </span>
-
-                      <div className="grid grid-flow-col auto-cols-fr sm:flex items-center gap-1 sm:gap-1.5 w-full sm:w-auto">
-                        {Array.from({ length: maxMeters + 1 }).map((_, mVal) => {
-                          const isActive = usedMeters === mVal;
-                          return (
-                            <button
-                              key={mVal}
-                              type="button"
-                              disabled={isMaintenance}
-                              onClick={() => handleUpdateUsedMeters(rack.rackId, mVal)}
-                              className={`px-1.5 sm:px-2 py-1 sm:py-0.5 rounded-lg sm:rounded-md font-mono text-[10.5px] sm:text-[11px] font-bold transition-all shadow-2xs cursor-pointer text-center ${
-                                isActive
-                                  ? mVal >= maxMeters
-                                    ? "bg-rose-600 text-white shadow-xs"
-                                    : mVal === 0
-                                    ? "bg-emerald-600 text-white shadow-xs"
-                                    : "bg-cyan-600 text-white shadow-xs"
-                                  : "bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
-                              } disabled:opacity-40 disabled:cursor-not-allowed`}
-                              title={`กำหนดปริมาณใช้งานเป็น ${mVal} เมตร`}
-                            >
-                              {mVal} ม.
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                          <span>{mVal}</span>
+                          <span className="text-[9px] opacity-85">ม.</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
