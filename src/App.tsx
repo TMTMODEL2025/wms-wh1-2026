@@ -1302,9 +1302,18 @@ const CSS = `
     overflow-y: auto;
   }
 
+  .main.main-flush {
+    max-width: none !important;
+    padding: 8px 10px 24px 10px !important;
+  }
+
   @media (max-width: 768px) {
     .main {
       padding: 12px 12px 76px 12px !important;
+    }
+
+    .main.main-flush {
+      padding: 6px 6px 76px 6px !important;
     }
   }
 
@@ -6147,7 +6156,7 @@ function WmsApp({
             </div>
           </aside>
 
-          <main className="main">
+          <main className={`main ${active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report") ? "main-flush" : ""}`}>
             {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && (
               <div className={`page-heading ${active === "slit" || active === "coil" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : active === "transport" ? "!items-center" : ""}`}>
                 <div>

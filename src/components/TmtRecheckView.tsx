@@ -8,22 +8,17 @@ import {
   Image as ImageIcon,
   Trash2,
   Save,
-  Search,
-  Printer,
   FileText,
   ShieldCheck,
   Truck,
   X,
-  Calendar,
-  Building2,
-  ChevronDown,
-  ChevronUp,
   Scale,
 } from "lucide-react";
 import { subscribeToTmtRecheck, syncTmtRecheckState } from "../services/slitDataService";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { showSuccessAlert, showWarningAlert, showErrorAlert } from "../utils/swalUtils";
 import { WeightTicketModal } from "./WeightTicketModal";
+import { TmtRecheckDailyReport } from "./TmtRecheckDailyReport";
 import { appendWmsActivityLog } from "../services/authWorkforceService";
 
 // ============================================================================
@@ -712,10 +707,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
   };
 
   // ============================================================================
-  // Tab 3: Daily Report State & Filter
+  // Tab 3: Photo & Weight Ticket Modal State
   // ============================================================================
-  const [reportSearchQuery, setReportSearchQuery] = useState("");
-  const [reportDateFilter, setReportDateFilter] = useState<string>("");
   const [viewingPhotoModalGroup, setViewingPhotoModalGroup] = useState<TmtRecheckVehicleGroup | null>(null);
 
   // Weight Ticket Modal State
@@ -727,50 +720,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
     setIsWeightTicketModalOpen(true);
   };
 
-  // Accordion Expand/Collapse State (default is collapsed)
-  const [expandedVehicleIds, setExpandedVehicleIds] = useState<Record<string, boolean>>({});
-
-  const toggleExpandVehicle = (vehicleId: string) => {
-    setExpandedVehicleIds((prev) => ({
-      ...prev,
-      [vehicleId]: !prev[vehicleId],
-    }));
-  };
-
-  const expandAllVehicles = () => {
-    const next: Record<string, boolean> = {};
-    filteredCompletedReports.forEach((v) => {
-      next[v.vehicleId] = true;
-    });
-    setExpandedVehicleIds(next);
-  };
-
-  const collapseAllVehicles = () => {
-    setExpandedVehicleIds({});
-  };
-
-  // Grouping completed reports by Date -> Customer Name
-  const filteredCompletedReports = completedReports.filter((report) => {
-    if (reportDateFilter && report.completedDate !== reportDateFilter) return false;
-    if (!reportSearchQuery.trim()) return true;
-    const q = reportSearchQuery.toLowerCase();
-    const matchVehicle = report.vehicleId.toLowerCase().includes(q);
-    const matchCustomer = report.customerNames.some((c) => c.toLowerCase().includes(q));
-    const matchDo = report.doNumbers.some((d) => d.toLowerCase().includes(q));
-    const matchBatch = report.items.some((i) => i.batch.toLowerCase().includes(q));
-    return matchVehicle || matchCustomer || matchDo || matchBatch;
-  });
-
-  const dateGroupedMap = new Map<string, TmtRecheckVehicleGroup[]>();
-  filteredCompletedReports.forEach((rep) => {
-    const d = rep.completedDate || rep.completedAt?.slice(0, 10) || "ไม่ระบุวันที่";
-    const existing = dateGroupedMap.get(d) || [];
-    existing.push(rep);
-    dateGroupedMap.set(d, existing);
-  });
-
   return (
-    <div className="space-y-3 max-w-5xl mx-auto">
+    <div className="space-y-3 w-full max-w-none">
       {/* ============================================================================ */}
       {/* Header Bar & Tab Switcher (Compact Mobile Layout) */}
       {/* ============================================================================ */}
@@ -1020,7 +971,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                   <p className="text-xs font-medium text-slate-300">ยังไม่มีทะเบียนรถในคิวรอตรวจสอบ</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
                   {activeVehicles.map((v) => {
                     const reqCount = v.items.filter((i) => i.requiresScan).length;
                     const scannedCount = v.items.filter((i) => i.requiresScan && i.scanned).length;
@@ -1305,198 +1256,19 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       )}
 
       {/* ============================================================================ */}
-      {/* TAB 3: รายงานการขึ้นสินค้าประจำวัน (Daily Loading Inspection Report) */}
+      {/* TAB 3: รายงานการขึ้นสินค้าประจำวัน (Executive Daily Report & LINE Share) */}
       {/* ============================================================================ */}
       {activeTab === "report" && (
-        <div className="space-y-3">
-          {/* Filter Bar */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 sm:px-[18px] sm:py-3 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2 flex-1">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" size={14} />
-                <input
-                  type="text"
-                  value={reportSearchQuery}
-                  onChange={(e) => setReportSearchQuery(e.target.value)}
-                  placeholder="ค้นหาทะเบียนรถ, ชื่อลูกค้า, DO, SO หรือ Batch..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-md font-normal text-slate-200 focus:outline-none focus:border-cyan-500"
-                  style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
-                />
-              </div>
-
-              <input
-                type="date"
-                value={reportDateFilter}
-                onChange={(e) => setReportDateFilter(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-md font-normal text-slate-200 [color-scheme:dark] focus:outline-none focus:border-cyan-500"
-                style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
-              />
-              {reportDateFilter && (
-                <button
-                  type="button"
-                  onClick={() => setReportDateFilter("")}
-                  className="text-xs text-slate-400 hover:text-white"
-                >
-                  ล้าง
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => handleOpenWeightTicketModal()}
-                className="hidden sm:inline-flex px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 rounded-lg text-[11px] sm:text-xs font-bold items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                title="พิมพ์บัตรชั่งน้ำหนัก (แยกตาม DO)"
-              >
-                <Scale size={14} />
-                <span>พิมพ์บัตรชั่ง</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={expandAllVehicles}
-                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 rounded-lg text-[11px] sm:text-xs font-semibold inline-flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0"
-                title="ขยายตารางทั้งหมด"
-              >
-                <ChevronDown size={14} />
-                <span>ขยายทั้งหมด</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={collapseAllVehicles}
-                className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px] sm:text-xs font-semibold inline-flex items-center gap-1 transition-all active:scale-95 whitespace-nowrap shrink-0"
-                title="ย่อตารางทั้งหมด"
-              >
-                <ChevronUp size={14} />
-                <span>ย่อทั้งหมด</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="hidden sm:inline-flex px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold items-center gap-1.5 shrink-0 whitespace-nowrap"
-              >
-                <Printer size={14} />
-                <span>พิมพ์</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Grouped Reports Display (Flat & Collapsible Accordion Layout) */}
-          {filteredCompletedReports.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center space-y-2">
-              <FileText size={36} className="mx-auto text-slate-600" />
-              <p className="text-xs font-medium text-slate-300">ยังไม่มีรายงานการขึ้นสินค้าที่ตรวจสอบเสร็จสิ้น</p>
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {filteredCompletedReports.map((v) => {
-                const dateStr = v.completedDate || v.completedAt?.slice(0, 10) || "ไม่ระบุวันที่";
-                const custName = v.customerNames.join(", ") || "ไม่ระบุชื่อลูกค้า";
-                const isExpanded = Boolean(expandedVehicleIds[v.vehicleId]);
-
-                return (
-                  <div key={v.vehicleId} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xs transition-all">
-                    {/* Compact Accordion Header Strip */}
-                    <div
-                      onClick={() => toggleExpandVehicle(v.vehicleId)}
-                      className="bg-slate-950 p-2.5 sm:px-3.5 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-xs cursor-pointer hover:bg-slate-900/90 transition-colors select-none"
-                    >
-                      {/* Left side: Chevron icon, Date, Vehicle ID, Customer Name */}
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="w-5 h-5 rounded bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 shrink-0">
-                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                        </div>
-                        <span className="font-mono text-cyan-300 font-bold bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/80 text-[11px] flex items-center gap-1">
-                          <Calendar size={12} className="text-cyan-400" />
-                          <span>{dateStr}</span>
-                        </span>
-                        <span className="font-mono font-extrabold text-white text-sm">
-                          {v.vehicleId}
-                        </span>
-                        <span className="text-slate-300 font-medium truncate max-w-[180px] sm:max-w-[320px]">
-                          {custName}
-                        </span>
-                      </div>
-
-                      {/* Right side: Status, Photo Modal Button, Print Ticket Button, Total Gross Weight */}
-                      <div className="flex items-center gap-2.5 font-mono text-[11px] shrink-0">
-                        <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold">
-                          ตรวจเสร็จสิ้น
-                        </span>
-
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenWeightTicketModal(v.vehicleId);
-                          }}
-                          className="hidden sm:inline-flex text-amber-400 hover:text-amber-300 items-center gap-1 font-sans text-xs underline font-semibold cursor-pointer whitespace-nowrap shrink-0"
-                          title="พิมพ์บัตรชั่งของคันนี้"
-                        >
-                          <Scale size={13} />
-                          <span>บัตรชั่ง</span>
-                        </button>
-
-                        {v.photos.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setViewingPhotoModalGroup(v);
-                            }}
-                            className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-sans text-xs underline font-semibold"
-                          >
-                            <ImageIcon size={13} />
-                            <span>รูปหลักฐาน ({v.photos.length})</span>
-                          </button>
-                        )}
-
-                        <span className="text-slate-300">
-                          <strong className="text-slate-100 font-extrabold">{v.totalGrossWeight.toLocaleString()} kg</strong>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Collapsible Detail Table */}
-                    {isExpanded && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-[11px] text-left text-slate-300">
-                          <thead className="bg-slate-900/90 text-slate-400 font-bold uppercase text-[10px] border-b border-slate-800">
-                            <tr>
-                              <th className="py-2 px-3 font-mono">BATCH</th>
-                              <th className="py-2 px-3">DESCRIPTION</th>
-                              <th className="py-2 px-3 text-right font-mono">น้ำหนัก (KG)</th>
-                              <th className="py-2 px-3 font-mono">SO</th>
-                              <th className="py-2 px-3 font-mono">DO</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800/60 bg-slate-950/30">
-                            {v.items.map((item, idx) => (
-                              <tr key={item.id || idx} className="hover:bg-slate-800/40 transition-colors">
-                                <td className="py-2 px-3 font-mono font-bold text-cyan-300 whitespace-nowrap">
-                                  {item.batch || <span className="text-amber-400 text-[9.5px] font-sans">(เศษ)</span>}
-                                </td>
-                                <td className="py-2 px-3 text-slate-200">{item.description}</td>
-                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-100 whitespace-nowrap">
-                                  {item.grossWeight.toLocaleString()}
-                                </td>
-                                <td className="py-2 px-3 font-mono text-slate-400 whitespace-nowrap">{item.soNo}</td>
-                                <td className="py-2 px-3 font-mono text-slate-400 whitespace-nowrap">{item.doNo}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <TmtRecheckDailyReport
+          activeVehicles={activeVehicles}
+          completedReports={completedReports}
+          onOpenWeightTicket={handleOpenWeightTicketModal}
+          onViewPhotos={(group) => setViewingPhotoModalGroup(group)}
+          onNavigateToInspector={(vId) => {
+            setSelectedVehicleId(vId);
+            setActiveTab("inspector");
+          }}
+        />
       )}
 
       {/* ============================================================================ */}
