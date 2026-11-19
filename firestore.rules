@@ -148,7 +148,29 @@ service cloud.firestore {
         && data.employeeName is string && data.employeeName.size() <= 128
         && data.role is string && data.role.size() <= 32
         && data.employmentStatus in ['Active', 'Inactive']
-        && (!('allowedSections' in data) || (data.allowedSections is list && data.allowedSections.size() <= 10));
+        && (!('allowedSections' in data) || (data.allowedSections is list && data.allowedSections.size() <= 10))
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 350000));
+    }
+
+    function isValidWmsVehicle(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.vehicleId is string && data.vehicleId.size() > 0 && data.vehicleId.size() <= 64
+        && data.vehicleType is string && data.vehicleType.size() <= 32
+        && data.activeStatus in ['Active', 'Inactive']
+        && data.operationalStatus is string && data.operationalStatus.size() <= 32
+        && (!('description' in data) || (data.description is string && data.description.size() <= 256))
+        && (!('registrationNumber' in data) || (data.registrationNumber is string && data.registrationNumber.size() <= 64))
+        && (!('department' in data) || (data.department is string && data.department.size() <= 128))
+        && (!('capacityTon' in data) || (data.capacityTon is number && data.capacityTon >= 0 && data.capacityTon <= 1000));
+    }
+
+    function isValidWmsVehicleAssignment(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.workingDate is string && data.workingDate.size() <= 32
+        && data.vehicleId is string && data.vehicleId.size() <= 64
+        && (!('vehicleNumber' in data) || (data.vehicleNumber is string && data.vehicleNumber.size() <= 64))
+        && (!('driverName' in data) || (data.driverName is string && data.driverName.size() <= 128))
+        && (!('status' in data) || (data.status is string && data.status.size() <= 32));
     }
 
     function isValidWmsActivityLog(data) {
@@ -273,6 +295,18 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(employeeId) && isValidWmsEmployee(request.resource.data);
       allow delete: if isValidId(employeeId);
+    }
+
+    match /wms_vehicles/{vehicleId} {
+      allow read: if true;
+      allow create, update: if isValidId(vehicleId) && isValidWmsVehicle(request.resource.data);
+      allow delete: if isValidId(vehicleId);
+    }
+
+    match /wms_vehicle_assignments/{assignmentId} {
+      allow read: if true;
+      allow create, update: if isValidId(assignmentId) && isValidWmsVehicleAssignment(request.resource.data);
+      allow delete: if isValidId(assignmentId);
     }
 
     match /wms_activity_logs/{logId} {

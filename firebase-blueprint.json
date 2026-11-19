@@ -436,12 +436,57 @@
         "phoneNumber": { "type": "string", "maxLength": 32 },
         "employmentStatus": { "type": "string", "maxLength": 32 },
         "allowedSections": { "type": "array", "items": { "type": "string" } },
+        "photoUrl": { "type": "string", "maxLength": 350000 },
         "licenseType": { "type": "string", "maxLength": 128 },
         "notes": { "type": "string", "maxLength": 500 },
         "createdAt": { "type": "string", "maxLength": 64 },
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "employeeId", "employeeName", "role", "employmentStatus"]
+    },
+    "WmsVehicle": {
+      "title": "WMS Centralized Vehicle Record",
+      "description": "Centralized vehicle fleet registry (Tractors TT-, Forklifts FL-, Trailers TTL-) shared across the entire warehouse",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "number": { "type": "string", "maxLength": 64 },
+        "vehicleType": { "type": "string", "maxLength": 32 },
+        "type": { "type": "string", "maxLength": 64 },
+        "description": { "type": "string", "maxLength": 256 },
+        "registrationNumber": { "type": "string", "maxLength": 64 },
+        "activeStatus": { "type": "string", "maxLength": 32 },
+        "operationalStatus": { "type": "string", "maxLength": 32 },
+        "department": { "type": "string", "maxLength": 128 },
+        "capacityTon": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "vehicleId", "vehicleType", "activeStatus", "operationalStatus"]
+    },
+    "WmsVehicleAssignment": {
+      "title": "WMS Vehicle Assignment Record",
+      "description": "Shared daily vehicle and driver dispatch assignment record across the warehouse",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "workingDate": { "type": "string", "maxLength": 32 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "vehicleNumber": { "type": "string", "maxLength": 64 },
+        "vehicleType": { "type": "string", "maxLength": 64 },
+        "driverId": { "type": "string", "maxLength": 64 },
+        "driverName": { "type": "string", "maxLength": 128 },
+        "shift": { "type": "string", "maxLength": 64 },
+        "workArea": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 32 },
+        "assignedBy": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "workingDate", "vehicleId"]
     },
     "WmsActivityLog": {
       "title": "WMS Activity Audit Log",
@@ -543,6 +588,14 @@
     "/wms_employees/{employeeId}": {
       "schema": "WmsEmployee",
       "description": "Centralized employee directory and section access permissions managed from Admin & Workforce"
+    },
+    "/wms_vehicles/{vehicleId}": {
+      "schema": "WmsVehicle",
+      "description": "Centralized shared vehicle fleet registry across the warehouse"
+    },
+    "/wms_vehicle_assignments/{assignmentId}": {
+      "schema": "WmsVehicleAssignment",
+      "description": "Centralized shared vehicle and driver daily assignment records"
     },
     "/wms_activity_logs/{logId}": {
       "schema": "WmsActivityLog",

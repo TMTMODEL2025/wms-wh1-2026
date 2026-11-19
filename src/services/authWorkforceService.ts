@@ -17,6 +17,8 @@ import {
 import { db, handleFirestoreError, OperationType } from "./firebase";
 import {
   Employee,
+  Vehicle,
+  VehicleAssignment,
   WmsActivityLogRecord,
   WmsSectionId,
   WmsSessionUser,
@@ -24,6 +26,10 @@ import {
 import {
   loadStoredEmployees,
   saveStoredEmployees,
+  loadStoredVehicles,
+  saveStoredVehicles,
+  loadStoredAssignments,
+  saveStoredAssignments,
 } from "../data/officerData";
 import {
   getSectionIdForMenu,
@@ -32,6 +38,8 @@ import {
 } from "../utils/sectionPermissions";
 
 export const WMS_EMPLOYEES_COLLECTION = "wms_employees";
+export const WMS_VEHICLES_COLLECTION = "wms_vehicles";
+export const WMS_VEHICLE_ASSIGNMENTS_COLLECTION = "wms_vehicle_assignments";
 export const WMS_ACTIVITY_LOGS_COLLECTION = "wms_activity_logs";
 
 const STORAGE_KEY_CURRENT_SESSION = "tmt_wms_current_session_v1";
@@ -290,6 +298,260 @@ export async function fetchWmsEmployeesOnce(): Promise<Employee[]> {
     handleFirestoreError(error, OperationType.LIST, WMS_EMPLOYEES_COLLECTION);
     return loadStoredEmployees();
   }
+}
+
+// ============================================================================
+// Centralized Vehicle Fleet Cloud Sync (wms_vehicles) - Shared across warehouse
+// ============================================================================
+let hasSyncedLocalVehiclesToCloud = false;
+
+export async function saveWmsVehicleToCloud(vehicle: Vehicle): Promise<void> {
+  const normalizedVehicleId = String(vehicle.vehicleId || vehicle.number || vehicle.id || "")
+    .trim()
+    .toUpperCase();
+  const docId = sanitizeDocId(normalizedVehicleId);
+  const payload = stripUndefinedDeep({
+    ...vehicle,
+    id: vehicle.id || docId,
+    vehicleId: normalizedVehicleId,
+    number: normalizedVehicleId,
+    updatedAt: vehicle.updatedAt || formatLocalTimestamp().timestamp,
+  });
+
+  try {
+    await setDoc(doc(db, WMS_VEHICLES_COLLECTION, docId), payload, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${WMS_VEHICLES_COLLECTION}/${docId}`);
+  }
+}
+
+export async function syncVehicleFleetDiffToCloud(
+  prevList: Vehicle[],
+  nextList: Vehicle[]
+): Promise<void> {
+  saveStoredVehicles(nextList);
+
+  const prevMap = new Map<string, Vehicle>();
+  prevList.forEach((v) => {
+    const key = sanitizeDocId(v.vehicleId || v.number || v.id);
+    prevMap.set(key, v);
+  });
+
+  const nextIds = new Set<string>();
+  const upserts: Vehicle[] = [];
+
+  nextList.forEach((v) => {
+    const key = sanitizeDocId(v.vehicleId || v.number || v.id);
+    nextIds.add(key);
+    const prev = prevMap.get(key);
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(v)) {
+      upserts.push(v);
+    }
+  });
+
+  const deletedIds: string[] = [];
+  prevMap.forEach((_, key) => {
+    if (!nextIds.has(key)) deletedIds.push(key);
+  });
+
+  if (upserts.length === 0 && deletedIds.length === 0) return;
+
+  try {
+    const batch = writeBatch(db);
+    upserts.forEach((v) => {
+      const normalizedVehicleId = String(v.vehicleId || v.number || v.id || "")
+        .trim()
+        .toUpperCase();
+      const docId = sanitizeDocId(normalizedVehicleId);
+      const payload = stripUndefinedDeep({
+        ...v,
+        id: v.id || docId,
+        vehicleId: normalizedVehicleId,
+        number: normalizedVehicleId,
+        updatedAt: v.updatedAt || formatLocalTimestamp().timestamp,
+      });
+      batch.set(doc(db, WMS_VEHICLES_COLLECTION, docId), payload, { merge: true });
+    });
+    deletedIds.forEach((docId) => {
+      batch.delete(doc(db, WMS_VEHICLES_COLLECTION, docId));
+    });
+    await batch.commit();
+  } catch (error) {
+    for (const v of upserts) {
+      await saveWmsVehicleToCloud(v);
+    }
+    for (const docId of deletedIds) {
+      try {
+        await deleteDoc(doc(db, WMS_VEHICLES_COLLECTION, docId));
+      } catch (delErr) {
+        handleFirestoreError(delErr, OperationType.DELETE, `${WMS_VEHICLES_COLLECTION}/${docId}`);
+      }
+    }
+    if (upserts.length === 0 && deletedIds.length === 0) {
+      handleFirestoreError(error, OperationType.WRITE, WMS_VEHICLES_COLLECTION);
+    }
+  }
+}
+
+export function subscribeToWmsVehicles(
+  onUpdate: (vehicles: Vehicle[]) => void
+): () => void {
+  const cached = loadStoredVehicles();
+  if (cached.length > 0) {
+    onUpdate(cached);
+  }
+
+  const colRef = collection(db, WMS_VEHICLES_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const cloudList: Vehicle[] = snapshot.docs.map((d) => {
+        const raw = d.data() as Vehicle;
+        const normalizedVehicleId = String(raw.vehicleId || raw.number || d.id)
+          .trim()
+          .toUpperCase();
+        return {
+          ...raw,
+          id: raw.id || d.id,
+          vehicleId: normalizedVehicleId,
+          number: raw.number || normalizedVehicleId,
+          vehicleType: raw.vehicleType || "Forklift",
+          type: raw.type || raw.vehicleType || "Forklift",
+          description: raw.description || "",
+          registrationNumber: raw.registrationNumber || `TMT-${normalizedVehicleId}`,
+          activeStatus: raw.activeStatus || "Active",
+          operationalStatus: raw.operationalStatus || "Available",
+          department: raw.department || "Material Handling - Fleet",
+          status:
+            raw.status ||
+            (raw.operationalStatus === "Maintenance"
+              ? "Maintenance"
+              : raw.activeStatus === "Inactive"
+              ? "Inactive"
+              : "Available"),
+          createdAt: raw.createdAt || "",
+          updatedAt: raw.updatedAt || "",
+        };
+      });
+
+      if (cloudList.length === 0 && !hasSyncedLocalVehiclesToCloud) {
+        hasSyncedLocalVehiclesToCloud = true;
+        const localNow = loadStoredVehicles();
+        if (localNow.length > 0) {
+          void syncVehicleFleetDiffToCloud([], localNow);
+          onUpdate(localNow);
+          return;
+        }
+      }
+
+      hasSyncedLocalVehiclesToCloud = true;
+      cloudList.sort((a, b) =>
+        a.vehicleId.localeCompare(b.vehicleId, undefined, { numeric: true })
+      );
+      saveStoredVehicles(cloudList);
+      onUpdate(cloudList);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, WMS_VEHICLES_COLLECTION);
+    }
+  );
+
+  return unsub;
+}
+
+// ============================================================================
+// Centralized Vehicle Assignments Cloud Sync (wms_vehicle_assignments)
+// ============================================================================
+let hasSyncedLocalAssignmentsToCloud = false;
+
+export async function syncVehicleAssignmentsDiffToCloud(
+  prevList: VehicleAssignment[],
+  nextList: VehicleAssignment[]
+): Promise<void> {
+  saveStoredAssignments(nextList);
+
+  const prevMap = new Map<string, VehicleAssignment>();
+  prevList.forEach((a) => prevMap.set(sanitizeDocId(a.id), a));
+
+  const nextIds = new Set<string>();
+  const upserts: VehicleAssignment[] = [];
+
+  nextList.forEach((a) => {
+    const key = sanitizeDocId(a.id);
+    nextIds.add(key);
+    const prev = prevMap.get(key);
+    if (!prev || JSON.stringify(prev) !== JSON.stringify(a)) {
+      upserts.push(a);
+    }
+  });
+
+  const deletedIds: string[] = [];
+  prevMap.forEach((_, key) => {
+    if (!nextIds.has(key)) deletedIds.push(key);
+  });
+
+  if (upserts.length === 0 && deletedIds.length === 0) return;
+
+  try {
+    const batch = writeBatch(db);
+    upserts.forEach((a) => {
+      const docId = sanitizeDocId(a.id);
+      const payload = stripUndefinedDeep({
+        ...a,
+        id: docId,
+      });
+      batch.set(doc(db, WMS_VEHICLE_ASSIGNMENTS_COLLECTION, docId), payload, { merge: true });
+    });
+    deletedIds.forEach((docId) => {
+      batch.delete(doc(db, WMS_VEHICLE_ASSIGNMENTS_COLLECTION, docId));
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, WMS_VEHICLE_ASSIGNMENTS_COLLECTION);
+  }
+}
+
+export function subscribeToWmsVehicleAssignments(
+  onUpdate: (assignments: VehicleAssignment[]) => void
+): () => void {
+  const cached = loadStoredAssignments();
+  if (cached.length > 0) {
+    onUpdate(cached);
+  }
+
+  const colRef = collection(db, WMS_VEHICLE_ASSIGNMENTS_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const cloudList: VehicleAssignment[] = snapshot.docs.map((d) => {
+        const raw = d.data() as VehicleAssignment;
+        return {
+          ...raw,
+          id: raw.id || d.id,
+        };
+      });
+
+      if (cloudList.length === 0 && !hasSyncedLocalAssignmentsToCloud) {
+        hasSyncedLocalAssignmentsToCloud = true;
+        const localNow = loadStoredAssignments();
+        if (localNow.length > 0) {
+          void syncVehicleAssignmentsDiffToCloud([], localNow);
+          onUpdate(localNow);
+          return;
+        }
+      }
+
+      hasSyncedLocalAssignmentsToCloud = true;
+      cloudList.sort((a, b) => (b.workingDate || "").localeCompare(a.workingDate || ""));
+      saveStoredAssignments(cloudList);
+      onUpdate(cloudList);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, WMS_VEHICLE_ASSIGNMENTS_COLLECTION);
+    }
+  );
+
+  return unsub;
 }
 
 // ============================================================================

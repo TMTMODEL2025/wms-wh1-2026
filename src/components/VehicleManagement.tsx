@@ -223,7 +223,7 @@ export function VehicleManagement({
       now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
     const newVehicle: Vehicle = {
-      id: `VEH-${String(vehicles.length + 1).padStart(3, "0")}`,
+      id: trimmedId,
       vehicleId: trimmedId,
       number: trimmedId,
       vehicleType: form.vehicleType,
@@ -242,7 +242,7 @@ export function VehicleManagement({
     const updatedList = [...vehicles, newVehicle];
     onUpdateVehicles(updatedList);
     setShowAddModal(false);
-    showToast(`Vehicle ${newVehicle.vehicleId} registered successfully and added to fleet.`);
+    showToast(`Vehicle ${newVehicle.vehicleId} registered successfully and synced to Cloud.`);
 
     onLogTransaction?.(
       `Registered new vehicle ${newVehicle.vehicleId} (${newVehicle.vehicleType})`,
@@ -283,10 +283,12 @@ export function VehicleManagement({
       updatedAt: timestampStr,
     };
 
-    const updatedList = vehicles.map((v) => (v.id === editingVehicle.id ? updatedVehicle : v));
+    const updatedList = vehicles.map((v) =>
+      v.vehicleId === editingVehicle.vehicleId || v.id === editingVehicle.id ? updatedVehicle : v
+    );
     onUpdateVehicles(updatedList);
     setEditingVehicle(null);
-    showToast(`Vehicle ${editingVehicle.vehicleId} information updated successfully.`);
+    showToast(`Vehicle ${editingVehicle.vehicleId} information updated and synced to Cloud.`);
 
     onLogTransaction?.(
       `Updated vehicle specification for ${editingVehicle.vehicleId}`,
@@ -315,11 +317,13 @@ export function VehicleManagement({
       updatedAt: timestampStr,
     };
 
-    const updatedList = vehicles.map((v) => (v.id === targetVehicle.id ? updatedVehicle : v));
+    const updatedList = vehicles.map((v) =>
+      v.vehicleId === targetVehicle.vehicleId || v.id === targetVehicle.id ? updatedVehicle : v
+    );
     onUpdateVehicles(updatedList);
 
     const actionText = newActiveStatus === "Active" ? "activated" : "deactivated";
-    showToast(`Vehicle ${targetVehicle.vehicleId} has been ${actionText}.`);
+    showToast(`Vehicle ${targetVehicle.vehicleId} has been ${actionText} and synced to Cloud.`);
 
     onLogTransaction?.(
       `Vehicle ${targetVehicle.vehicleId} ${actionText}`,

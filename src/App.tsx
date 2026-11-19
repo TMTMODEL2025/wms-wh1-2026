@@ -69,6 +69,10 @@ import { unsubscribeAllForkliftFirestoreListeners } from "./services/forkliftDat
 import {
   subscribeToWmsEmployees,
   syncEmployeeRosterDiffToCloud,
+  subscribeToWmsVehicles,
+  syncVehicleFleetDiffToCloud,
+  subscribeToWmsVehicleAssignments,
+  syncVehicleAssignmentsDiffToCloud,
   subscribeToWmsActivityLogs,
 } from "./services/authWorkforceService";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -5431,6 +5435,19 @@ function WmsApp({
     loadStoredAssignments()
   );
 
+  useEffect(() => {
+    const unsubVehicles = subscribeToWmsVehicles((cloudVehicles) => {
+      setVehicles(cloudVehicles);
+    });
+    const unsubAssignments = subscribeToWmsVehicleAssignments((cloudAssignments) => {
+      setOfficerAssignments(cloudAssignments);
+    });
+    return () => {
+      unsubVehicles();
+      unsubAssignments();
+    };
+  }, []);
+
   const isMaterialHandlingActive = [
     "transport",
     "transport-stats",
@@ -5455,13 +5472,19 @@ function WmsApp({
   const [toast, setToast] = useState<string | null>(null);
 
   const handleUpdateVehicles = (updated: Vehicle[]) => {
-    setVehicles(updated);
-    saveStoredVehicles(updated);
+    setVehicles((prev) => {
+      saveStoredVehicles(updated);
+      void syncVehicleFleetDiffToCloud(prev, updated);
+      return updated;
+    });
   };
 
   const handleUpdateOfficerAssignments = (updated: VehicleAssignment[]) => {
-    setOfficerAssignments(updated);
-    saveStoredAssignments(updated);
+    setOfficerAssignments((prev) => {
+      saveStoredAssignments(updated);
+      void syncVehicleAssignmentsDiffToCloud(prev, updated);
+      return updated;
+    });
   };
 
   const showNotification = (msg: string) => {
