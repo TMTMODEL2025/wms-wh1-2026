@@ -326,6 +326,8 @@
         "transactionType": { "type": "string", "maxLength": 32 },
         "fuelType": { "type": "string", "maxLength": 64 },
         "liters": { "type": "number" },
+        "pricePerLiter": { "type": "number" },
+        "totalCost": { "type": "number" },
         "driverOrReceiver": { "type": "string", "maxLength": 128 },
         "recordedBy": { "type": "string", "maxLength": 128 },
         "updatedAt": { "type": "string", "maxLength": 64 }

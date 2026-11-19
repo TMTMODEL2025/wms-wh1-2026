@@ -332,175 +332,124 @@ function emitSharedEvent(eventName: SseEventName, payload: any): void {
   }
 }
 
+let backendApiAvailable = true;
+
+function applySlitStatePayload(data: any, fallbackTime = ""): void {
+  if (!data || typeof data !== "object") return;
+  const updatedAtMap = data.updatedAtMap || {};
+  if (data.warehouseSpaceConfig) {
+    emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
+  }
+  if (data.machineStagingConfig) {
+    emitSharedEvent("machine_staging_state", data.machineStagingConfig);
+  }
+  if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
+    emitSharedEvent("slit_inbound", {
+      records: data.inboundRecords,
+      updatedAt: updatedAtMap.inbound || fallbackTime,
+    });
+  }
+  if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
+    emitSharedEvent("slit_outbound", {
+      records: data.outboundRecords,
+      updatedAt: updatedAtMap.outbound || fallbackTime,
+    });
+  }
+  if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
+    emitSharedEvent("slit_picklists", {
+      orders: data.pickLists,
+      updatedAt: updatedAtMap.pickLists || fallbackTime,
+    });
+  }
+  if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
+    emitSharedEvent("slit_sap_updated", {
+      itemCount: data.sapItemCount,
+      updatedAt: updatedAtMap.sap || fallbackTime,
+    });
+  }
+  if (Array.isArray(data.tmtRecheckActiveVehicles) || Array.isArray(data.tmtRecheckCompletedReports)) {
+    emitSharedEvent("tmt_recheck_updated", {
+      activeVehicles: data.tmtRecheckActiveVehicles || [],
+      completedReports: data.tmtRecheckCompletedReports || [],
+      updatedAt: updatedAtMap.tmtRecheck || fallbackTime,
+    });
+  }
+}
+
 function fetchInitialSlitStateOnce(): Promise<any> {
-  if (typeof window === "undefined") return Promise.resolve(null);
+  if (typeof window === "undefined" || !backendApiAvailable) return Promise.resolve(null);
   if (!initialStateFetchPromise) {
     initialStateFetchPromise = fetch("/api/slit-state", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        const contentType = res.headers.get("content-type") || "";
+        if (!res.ok || !contentType.includes("application/json")) {
+          backendApiAvailable = false;
+          if (sharedPollInterval) {
+            clearInterval(sharedPollInterval);
+            sharedPollInterval = null;
+          }
+          return null;
+        }
+        return res.json();
+      })
       .then((data) => {
         if (data && typeof data === "object") {
-          const updatedAtMap = data.updatedAtMap || {};
-          if (data.warehouseSpaceConfig) {
-            emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
-          }
-          if (data.machineStagingConfig) {
-            emitSharedEvent("machine_staging_state", data.machineStagingConfig);
-          }
-          if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
-            emitSharedEvent("slit_inbound", {
-              records: data.inboundRecords,
-              updatedAt: updatedAtMap.inbound || new Date().toISOString(),
-            });
-          }
-          if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
-            emitSharedEvent("slit_outbound", {
-              records: data.outboundRecords,
-              updatedAt: updatedAtMap.outbound || new Date().toISOString(),
-            });
-          }
-          if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
-            emitSharedEvent("slit_picklists", {
-              orders: data.pickLists,
-              updatedAt: updatedAtMap.pickLists || new Date().toISOString(),
-            });
-          }
-          if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
-            emitSharedEvent("slit_sap_updated", {
-              itemCount: data.sapItemCount,
-              updatedAt: updatedAtMap.sap || new Date().toISOString(),
-            });
-          }
-          if (Array.isArray(data.tmtRecheckActiveVehicles) || Array.isArray(data.tmtRecheckCompletedReports)) {
-            emitSharedEvent("tmt_recheck_updated", {
-              activeVehicles: data.tmtRecheckActiveVehicles || [],
-              completedReports: data.tmtRecheckCompletedReports || [],
-              updatedAt: updatedAtMap.tmtRecheck || new Date().toISOString(),
-            });
-          }
+          applySlitStatePayload(data, new Date().toISOString());
         }
         return data;
       })
-      .catch(() => null);
+      .catch(() => {
+        backendApiAvailable = false;
+        return null;
+      });
   }
   return initialStateFetchPromise;
 }
 
 function pollSlitStateNow(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !backendApiAvailable) return;
   fetch("/api/slit-state", { cache: "no-store" })
-    .then((res) => (res.ok ? res.json() : null))
+    .then((res) => {
+      const contentType = res.headers.get("content-type") || "";
+      if (!res.ok || !contentType.includes("application/json")) {
+        backendApiAvailable = false;
+        if (sharedPollInterval) {
+          clearInterval(sharedPollInterval);
+          sharedPollInterval = null;
+        }
+        return null;
+      }
+      return res.json();
+    })
     .then((data) => {
-      if (!data || typeof data !== "object") return;
-      const updatedAtMap = data.updatedAtMap || {};
-      if (data.warehouseSpaceConfig) {
-        emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
-      }
-      if (data.machineStagingConfig) {
-        emitSharedEvent("machine_staging_state", data.machineStagingConfig);
-      }
-      if (Array.isArray(data.inboundRecords) && (updatedAtMap.inbound || data.inboundRecords.length > 0)) {
-        emitSharedEvent("slit_inbound", {
-          records: data.inboundRecords,
-          updatedAt: updatedAtMap.inbound || "",
-        });
-      }
-      if (Array.isArray(data.outboundRecords) && (updatedAtMap.outbound || data.outboundRecords.length > 0)) {
-        emitSharedEvent("slit_outbound", {
-          records: data.outboundRecords,
-          updatedAt: updatedAtMap.outbound || "",
-        });
-      }
-      if (Array.isArray(data.pickLists) && (updatedAtMap.pickLists || data.pickLists.length > 0)) {
-        emitSharedEvent("slit_picklists", {
-          orders: data.pickLists,
-          updatedAt: updatedAtMap.pickLists || "",
-        });
-      }
-      if (typeof data.sapItemCount === "number" && (updatedAtMap.sap || data.sapItemCount > 0)) {
-        emitSharedEvent("slit_sap_updated", {
-          itemCount: data.sapItemCount,
-          updatedAt: updatedAtMap.sap || "",
-        });
-      }
-      if (Array.isArray(data.tmtRecheckActiveVehicles) || Array.isArray(data.tmtRecheckCompletedReports)) {
-        emitSharedEvent("tmt_recheck_updated", {
-          activeVehicles: data.tmtRecheckActiveVehicles || [],
-          completedReports: data.tmtRecheckCompletedReports || [],
-          updatedAt: updatedAtMap.tmtRecheck || "",
-        });
-      }
+      applySlitStatePayload(data, "");
     })
     .catch(() => {});
 }
 
 function ensureSharedRealtimeStream(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || !backendApiAvailable) return;
 
-  fetchInitialSlitStateOnce();
+  fetchInitialSlitStateOnce().then((initialData) => {
+    if (!backendApiAvailable || !initialData) return;
 
-  const connectSse = () => {
-    if (typeof EventSource === "undefined") return;
-    try {
-      if (sharedEventSource) {
-        try {
-          sharedEventSource.close();
-        } catch {
-          // ignore
-        }
-      }
-      sharedEventSource = new EventSource("/api/space-config/stream");
-      const events: SseEventName[] = [
-        "warehouse_space_state",
-        "machine_staging_state",
-        "slit_inbound",
-        "slit_outbound",
-        "slit_picklists",
-        "slit_sap_updated",
-        "tmt_recheck_updated",
-        "warehouse_space_reset",
-      ];
-      for (const evtName of events) {
-        sharedEventSource.addEventListener(evtName, (evt: MessageEvent) => {
-          try {
-            const parsed = evt.data ? JSON.parse(evt.data) : {};
-            emitSharedEvent(evtName, parsed);
-          } catch {
-            // ignore malformed JSON
+    if (!sharedPollInterval) {
+      sharedPollInterval = setInterval(pollSlitStateNow, 3000);
+
+      if (typeof document !== "undefined") {
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible" && backendApiAvailable) {
+            pollSlitStateNow();
+          }
+        });
+        window.addEventListener("focus", () => {
+          if (backendApiAvailable) {
+            pollSlitStateNow();
           }
         });
       }
-      sharedEventSource.onerror = () => {
-        if (sharedEventSource?.readyState === EventSource.CLOSED) {
-          sharedEventSource = null;
-          setTimeout(connectSse, 2500);
-        }
-      };
-    } catch {
-      // ignore EventSource init error
     }
-  };
-
-  if (!sharedEventSource) {
-    connectSse();
-  }
-
-  if (!sharedPollInterval) {
-    sharedPollInterval = setInterval(pollSlitStateNow, 3000);
-
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible") {
-          pollSlitStateNow();
-          if (!sharedEventSource || sharedEventSource.readyState === EventSource.CLOSED) {
-            connectSse();
-          }
-        }
-      });
-      window.addEventListener("focus", () => {
-        pollSlitStateNow();
-      });
-    }
-  }
+  });
 }
 
 function subscribeSharedSse(
@@ -1416,9 +1365,12 @@ export function subscribeToSlitSapMaster(
   let lastSapUpdatedAt = "";
 
   const fetchServerSap = () => {
-    if (typeof window === "undefined" || isDisposed) return;
+    if (typeof window === "undefined" || isDisposed || !backendApiAvailable) return;
     fetch("/api/slit-sap", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        const ct = res.headers.get("content-type") || "";
+        return res.ok && ct.includes("application/json") ? res.json() : null;
+      })
       .then((data) => {
         if (isDisposed || !data || !Array.isArray(data.items)) return;
         if (data.updatedAt || data.items.length > 0) {
@@ -1727,9 +1679,12 @@ export function subscribeToSlitSpaceConfig(
       })
     : () => {};
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && backendApiAvailable) {
     fetch("/api/space-config", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        const ct = res.headers.get("content-type") || "";
+        return res.ok && ct.includes("application/json") ? res.json() : null;
+      })
       .then((json) => {
         if (json?.warehouseSpaceConfig) {
           handleIncomingDoc(json.warehouseSpaceConfig as SlitWarehouseSpaceCloudDoc, "api");
@@ -1740,6 +1695,8 @@ export function subscribeToSlitSpaceConfig(
       .catch(() => {
         apiResponded = true;
       });
+  } else {
+    apiResponded = true;
   }
 
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, SPACE_CONFIG_DOC_ID);
@@ -1818,22 +1775,23 @@ export async function saveSlitSpaceConfigToCloud(
     }
   }
 
-  // 1. Always persist immediately to backend /api/space-config (instant SSE broadcast)
-  if (typeof window !== "undefined") {
+  // 1. Always persist immediately to backend /api/space-config (if backend API is available)
+  if (typeof window !== "undefined" && backendApiAvailable) {
     try {
       const res = await fetch("/api/space-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
+      const ct = res.headers.get("content-type") || "";
+      if (res.ok && ct.includes("application/json")) {
         const data = await res.json();
         if (data?.warehouseSpaceConfig) {
           emitSharedEvent("warehouse_space_state", data.warehouseSpaceConfig);
         }
       }
-    } catch (err) {
-      console.warn("Failed to post space-config to server API:", err);
+    } catch {
+      // ignore when backend API is unavailable
     }
   }
 
@@ -1972,9 +1930,12 @@ export function subscribeToSlitMachineStaging(
       })
     : () => {};
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && backendApiAvailable) {
     fetch("/api/space-config", { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        const ct = res.headers.get("content-type") || "";
+        return res.ok && ct.includes("application/json") ? res.json() : null;
+      })
       .then((json) => {
         if (json?.machineStagingConfig) {
           handleIncomingDoc(json.machineStagingConfig as SlitMachineStagingCloudDoc, "api");
@@ -1985,6 +1946,8 @@ export function subscribeToSlitMachineStaging(
       .catch(() => {
         apiResponded = true;
       });
+  } else {
+    apiResponded = true;
   }
 
   const docRef = doc(db, SPACE_CONFIG_COLLECTION, MACHINE_STAGING_DOC_ID);
@@ -2057,21 +2020,22 @@ export async function saveSlitMachineStagingToCloud(
     updatedAt: nowIso,
   });
 
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && backendApiAvailable) {
     try {
       const res = await fetch("/api/machine-staging", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (res.ok) {
+      const ct = res.headers.get("content-type") || "";
+      if (res.ok && ct.includes("application/json")) {
         const data = await res.json();
         if (data?.machineStagingConfig) {
           emitSharedEvent("machine_staging_state", data.machineStagingConfig);
         }
       }
-    } catch (err) {
-      console.warn("Failed to post machine-staging to server API:", err);
+    } catch {
+      // ignore when backend API is unavailable
     }
   }
 

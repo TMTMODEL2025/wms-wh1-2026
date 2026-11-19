@@ -98,9 +98,34 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     }
   };
 
+  // Helper: Find latest Price per Liter from the newest Inbound Receipt (or any record) for a fuel category
+  const getLatestPricePerLiter = (fuelCategory: "Diesel (ดีเซล)" | "Gasoline (เบนซิน)"): number => {
+    const latestInboundWithPrice = transactions.find(
+      (t) =>
+        t.fuelType === fuelCategory &&
+        t.type.includes("Inbound") &&
+        typeof t.pricePerLiter === "number" &&
+        t.pricePerLiter > 0
+    );
+    if (latestInboundWithPrice && typeof latestInboundWithPrice.pricePerLiter === "number") {
+      return latestInboundWithPrice.pricePerLiter;
+    }
+    const anyWithPrice = transactions.find(
+      (t) =>
+        t.fuelType === fuelCategory &&
+        typeof t.pricePerLiter === "number" &&
+        t.pricePerLiter > 0
+    );
+    return anyWithPrice?.pricePerLiter ?? 0;
+  };
+
+  const latestDieselPrice = getLatestPricePerLiter("Diesel (ดีเซล)");
+  const latestGasolinePrice = getLatestPricePerLiter("Gasoline (เบนซิน)");
+
   // Inbound Form State
   const [inFuelType, setInFuelType] = useState<"Diesel (ดีเซล)" | "Gasoline (เบนซิน)">("Diesel (ดีเซล)");
   const [inQty, setInQty] = useState<number>(0);
+  const [inPricePerLiter, setInPricePerLiter] = useState<string>("");
   const [inRecorder, setInRecorder] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [inNotes, setInNotes] = useState("");
   const [inDate, setInDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -113,6 +138,11 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const [outRecorder, setOutRecorder] = useState(() => getActiveRecorderDisplay("").employeeName);
   const [outPurpose, setOutPurpose] = useState("");
   const [outDate, setOutDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const activeOutboundPricePerLiter = getLatestPricePerLiter(outFuelType);
+  const activeOutboundTotalCost = Number(((Number(outQty) || 0) * activeOutboundPricePerLiter).toFixed(2));
+  const activeInboundPriceNum = Math.max(0, Number(inPricePerLiter) || 0);
+  const activeInboundTotalCost = Number(((Number(inQty) || 0) * activeInboundPriceNum).toFixed(2));
 
   // Calculate current tank stocks based on transactions
   const dieselStock = transactions.reduce((acc, t) => {
@@ -132,9 +162,23 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   const DIESEL_LOW_THRESHOLD = 4000;
   const GASOLINE_LOW_THRESHOLD = 2000;
 
+  const handleOpenInboundModal = () => {
+    const latestPrice = getLatestPricePerLiter(inFuelType);
+    setInPricePerLiter(latestPrice > 0 ? String(latestPrice) : "");
+    setIsInboundModalOpen(true);
+  };
+
+  const handleInboundFuelTypeChange = (nextType: "Diesel (ดีเซล)" | "Gasoline (เบนซิน)") => {
+    setInFuelType(nextType);
+    const latestPrice = getLatestPricePerLiter(nextType);
+    setInPricePerLiter(latestPrice > 0 ? String(latestPrice) : "");
+  };
+
   const handleInboundSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const qtyNum = Number(inQty) || 0;
+    const priceNum = Math.max(0, Number(inPricePerLiter) || 0);
+    const totalCostNum = Number((qtyNum * priceNum).toFixed(2));
     const currentTankStock = inFuelType === "Diesel (ดีเซล)" ? dieselStock : gasolineStock;
     const startNum = Math.max(0, currentTankStock);
     const endNum = startNum + qtyNum;
@@ -147,6 +191,8 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       type: "Inbound Receipt (รับเข้า)",
       fuelType: inFuelType,
       qty: qtyNum,
+      pricePerLiter: priceNum,
+      totalCost: totalCostNum,
       meterStart: startNum,
       meterEnd: endNum,
       recorderName: inRecorder.trim() || getActiveRecorderDisplay("WMS Storekeeper").label,
@@ -160,13 +206,14 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     setTransactions((prev) => [newTx, ...prev]);
     setIsInboundModalOpen(false);
     setInQty(0);
+    setInPricePerLiter("");
     setInNotes("");
     await saveMhFuelTransactionToCloud(newTx);
     void appendWmsActivityLog({
       module: "Fuel Management",
       sectionId: "fleet_ops",
       reference: txId,
-      activity: `รับเข้าน้ำมัน ${inFuelType} ปริมาณ ${qtyNum} ลิตร`,
+      activity: `รับเข้าน้ำมัน ${inFuelType} ปริมาณ ${qtyNum} ลิตร (ราคา ${priceNum.toFixed(2)} บาท/ลิตร รวม ${totalCostNum.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท)`,
       status: "Completed",
     });
   };
@@ -176,6 +223,8 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     const qtyNum = Number(outQty) || 0;
     const startNum = Number(outMeterStart) || 0;
     const endNum = Math.max(0, startNum - qtyNum);
+    const latestPrice = getLatestPricePerLiter(outFuelType);
+    const totalCostNum = Number((qtyNum * latestPrice).toFixed(2));
 
     const targetVehicle = vehicles.find((v) => v.vehicleId === outVehicleId);
     const vehicleLabel = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})` : `${outVehicleId} - Warehouse Fleet`;
@@ -188,6 +237,8 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       type: "Outbound Withdrawal (เบิกออก)",
       fuelType: outFuelType,
       qty: qtyNum,
+      pricePerLiter: latestPrice,
+      totalCost: totalCostNum,
       meterStart: startNum,
       meterEnd: endNum,
       recorderName: outRecorder.trim() || getActiveRecorderDisplay("WMS Operator").label,
@@ -206,7 +257,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
       module: "Fuel Management",
       sectionId: "fleet_ops",
       reference: txId,
-      activity: `เบิกจ่ายน้ำมัน ${outFuelType} ปริมาณ ${qtyNum} ลิตร (${vehicleLabel})`,
+      activity: `เบิกจ่ายน้ำมัน ${outFuelType} ปริมาณ ${qtyNum} ลิตร (${vehicleLabel}) ราคา ${latestPrice.toFixed(2)} บาท/ลิตร รวม ${totalCostNum.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`,
       status: "Completed",
     });
   };
@@ -279,6 +330,9 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
           <div className="kpi-value" style={{ color: dieselStock <= DIESEL_LOW_THRESHOLD ? "#ef4444" : "#087eaf" }}>
             {dieselStock.toLocaleString()} <span style={{ fontSize: 14, fontWeight: 600 }}>Liters</span>
           </div>
+          <div className="kpi-note" style={{ marginTop: 4, fontSize: 11, fontWeight: 600, color: "#0284c7" }}>
+            ราคาล่าสุด: {latestDieselPrice > 0 ? `฿${latestDieselPrice.toFixed(2)} / ลิตร` : "ยังไม่ระบุราคารับเข้า"}
+          </div>
           {dieselStock <= DIESEL_LOW_THRESHOLD && (
             <div className="kpi-note" style={{ marginTop: 4 }}>
               <span style={{ color: "#ef4444", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -292,6 +346,9 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
           <div className="kpi-label">Gasoline Tank Stock (ถังน้ำมันเบนซิน)</div>
           <div className="kpi-value" style={{ color: gasolineStock <= GASOLINE_LOW_THRESHOLD ? "#ef4444" : "#d97706" }}>
             {gasolineStock.toLocaleString()} <span style={{ fontSize: 14, fontWeight: 600 }}>Liters</span>
+          </div>
+          <div className="kpi-note" style={{ marginTop: 4, fontSize: 11, fontWeight: 600, color: "#d97706" }}>
+            ราคาล่าสุด: {latestGasolinePrice > 0 ? `฿${latestGasolinePrice.toFixed(2)} / ลิตร` : "ยังไม่ระบุราคารับเข้า"}
           </div>
           {gasolineStock <= GASOLINE_LOW_THRESHOLD && (
             <div className="kpi-note" style={{ marginTop: 4 }}>
@@ -322,7 +379,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             {!headingPortalTarget && cloudSyncControls}
-            <button className="button primary whitespace-nowrap shrink-0" onClick={() => setIsInboundModalOpen(true)}>
+            <button className="button primary whitespace-nowrap shrink-0" onClick={handleOpenInboundModal}>
               <Plus size={14} /> + Inbound Receipt (รับเข้าน้ำมัน)
             </button>
             <button className="button secondary whitespace-nowrap shrink-0" style={{ background: "#0284c7", color: "#ffffff", borderColor: "#0284c7" }} onClick={() => setIsOutboundModalOpen(true)}>
@@ -388,6 +445,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                 <th>Movement Type</th>
                 <th>Fuel Category</th>
                 <th>Quantity (Liters)</th>
+                <th>Price / Total Cost (ราคา/มูลค่า)</th>
                 <th>Meter Start ➔ End</th>
                 <th>Source / Vehicle Ref</th>
                 <th>Recorder Name</th>
@@ -397,64 +455,90 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
             <tbody>
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: "center", padding: 30, color: "#647786" }}>
+                  <td colSpan={9} style={{ textAlign: "center", padding: 30, color: "#647786" }}>
                     No fuel transactions found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                filteredTransactions.map((tx) => (
-                  <tr key={tx.id}>
-                    <td>
-                      <span className="code" style={{ fontWeight: 700 }}>{tx.id}</span>
-                      <div className="table-timestamp" style={{ fontSize: 10, marginTop: 2 }}>{tx.timestamp}</div>
-                    </td>
-                    <td>
-                      <span
-                        className="status"
-                        style={{
-                          background: tx.type.includes("Inbound") ? "#dcfce7" : "#e0f2fe",
-                          color: tx.type.includes("Inbound") ? "#15803d" : "#0369a1",
-                          border: `1px solid ${tx.type.includes("Inbound") ? "#86efac" : "#bae6fd"}`,
-                        }}
-                      >
-                        {tx.type}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="table-item-name" style={{ fontWeight: 700, color: tx.fuelType.includes("Diesel") ? "#0284c7" : "#d97706" }}>
-                        {tx.fuelType}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="table-qty" style={{ fontWeight: 800, fontSize: 13, color: tx.type.includes("Inbound") ? "#16a34a" : "#0284c7" }}>
-                        {tx.type.includes("Inbound") ? "+" : "-"}{tx.qty.toLocaleString()} L
-                      </div>
-                    </td>
-                    <td>
-                      <div className="table-sub-text" style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontVariantNumeric: "tabular-nums", fontSize: 11 }}>
-                        {tx.meterStart.toLocaleString()} ➔ {tx.meterEnd.toLocaleString()}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="table-item-name" style={{ fontWeight: 600, maxWidth: 220, whiteSpace: "normal" }}>
-                        {tx.referenceSource}
-                      </div>
-                      <div className="table-sub-text" style={{ fontSize: 10 }}>{tx.purposeOrNotes}</div>
-                    </td>
-                    <td>
-                      <div className="table-sub-text" style={{ fontWeight: 600 }}>{tx.recorderName}</div>
-                    </td>
-                    <td>
-                      <button
-                        className="button secondary"
-                        style={{ padding: "4px 8px", fontSize: 11 }}
-                        onClick={() => setSelectedTx(tx)}
-                      >
-                        <FileText size={12} /> Details
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                filteredTransactions.map((tx) => {
+                  const unitPrice =
+                    typeof tx.pricePerLiter === "number" && tx.pricePerLiter > 0
+                      ? tx.pricePerLiter
+                      : getLatestPricePerLiter(tx.fuelType);
+                  const computedTotal =
+                    typeof tx.totalCost === "number" && tx.totalCost > 0
+                      ? tx.totalCost
+                      : unitPrice > 0
+                      ? Number((tx.qty * unitPrice).toFixed(2))
+                      : 0;
+                  return (
+                    <tr key={tx.id}>
+                      <td>
+                        <span className="code" style={{ fontWeight: 700 }}>{tx.id}</span>
+                        <div className="table-timestamp" style={{ fontSize: 10, marginTop: 2 }}>{tx.timestamp}</div>
+                      </td>
+                      <td>
+                        <span
+                          className="status"
+                          style={{
+                            background: tx.type.includes("Inbound") ? "#dcfce7" : "#e0f2fe",
+                            color: tx.type.includes("Inbound") ? "#15803d" : "#0369a1",
+                            border: `1px solid ${tx.type.includes("Inbound") ? "#86efac" : "#bae6fd"}`,
+                          }}
+                        >
+                          {tx.type}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="table-item-name" style={{ fontWeight: 700, color: tx.fuelType.includes("Diesel") ? "#0284c7" : "#d97706" }}>
+                          {tx.fuelType}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="table-qty" style={{ fontWeight: 800, fontSize: 13, color: tx.type.includes("Inbound") ? "#16a34a" : "#0284c7" }}>
+                          {tx.type.includes("Inbound") ? "+" : "-"}{tx.qty.toLocaleString()} L
+                        </div>
+                      </td>
+                      <td>
+                        {unitPrice > 0 ? (
+                          <div>
+                            <div className="table-item-name" style={{ fontWeight: 700, fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
+                              ฿{computedTotal.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="table-sub-text" style={{ fontSize: 10.5, fontVariantNumeric: "tabular-nums" }}>
+                              ฿{unitPrice.toFixed(2)} / ลิตร
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="table-sub-text" style={{ fontSize: 11 }}>-</span>
+                        )}
+                      </td>
+                      <td>
+                        <div className="table-sub-text" style={{ fontFamily: "'Noto Sans Thai', sans-serif", fontVariantNumeric: "tabular-nums", fontSize: 11 }}>
+                          {tx.meterStart.toLocaleString()} ➔ {tx.meterEnd.toLocaleString()}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="table-item-name" style={{ fontWeight: 600, maxWidth: 220, whiteSpace: "normal" }}>
+                          {tx.referenceSource}
+                        </div>
+                        <div className="table-sub-text" style={{ fontSize: 10 }}>{tx.purposeOrNotes}</div>
+                      </td>
+                      <td>
+                        <div className="table-sub-text" style={{ fontWeight: 600 }}>{tx.recorderName}</div>
+                      </td>
+                      <td>
+                        <button
+                          className="button secondary"
+                          style={{ padding: "4px 8px", fontSize: 11 }}
+                          onClick={() => setSelectedTx(tx)}
+                        >
+                          <FileText size={12} /> Details
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -492,7 +576,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                 <label className="modal-label-text" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Fuel Category (ประเภทน้ำมัน) *</label>
                 <select
                   value={inFuelType}
-                  onChange={(e) => setInFuelType(e.target.value as any)}
+                  onChange={(e) => handleInboundFuelTypeChange(e.target.value as any)}
                   className="field fuel-select"
                   style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
                 >
@@ -506,8 +590,24 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                 <input
                   type="number"
                   min={1}
+                  step="any"
                   value={inQty}
                   onChange={(e) => setInQty(Number(e.target.value))}
+                  required
+                  className="field fuel-input"
+                  style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
+                />
+              </div>
+
+              <div>
+                <label className="modal-label-text" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Price per Liter (ราคาต่อลิตร - บาท/ลิตร) *</label>
+                <input
+                  type="number"
+                  min={0.01}
+                  step="0.01"
+                  placeholder="เช่น 32.50"
+                  value={inPricePerLiter}
+                  onChange={(e) => setInPricePerLiter(e.target.value)}
                   required
                   className="field fuel-input"
                   style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
@@ -526,7 +626,29 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                 />
               </div>
 
-              <div>
+              <div style={{ gridColumn: "span 2" }}>
+                <div
+                  className="fuel-detail-box modal-notes-box"
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div className="modal-label-text" style={{ fontSize: 12 }}>
+                    คำนวณมูลค่ารับเข้า ({Number(inQty || 0).toLocaleString()} ลิตร × ฿{activeInboundPriceNum.toFixed(2)}/ลิตร):
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: "#16a34a", fontVariantNumeric: "tabular-nums" }}>
+                    ฿{activeInboundTotalCost.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ gridColumn: "span 2" }}>
                 <label className="modal-label-text" style={{ display: "block", fontSize: 12, marginBottom: 6 }}>Recorder Name (ผู้บันทึกรายการ) *</label>
                 <input
                   type="text"
@@ -607,6 +729,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                 <input
                   type="number"
                   min={1}
+                  step="any"
                   value={outQty}
                   onChange={(e) => setOutQty(Number(e.target.value))}
                   required
@@ -625,6 +748,38 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                   className="field fuel-input"
                   style={{ width: "100%", padding: 9, borderRadius: 6, fontSize: 12 }}
                 />
+              </div>
+
+              <div style={{ gridColumn: "span 2" }}>
+                <div
+                  className="fuel-detail-box modal-notes-box"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                    padding: "12px 14px",
+                    borderRadius: 8,
+                  }}
+                >
+                  <div>
+                    <div className="modal-label-text" style={{ fontSize: 11 }}>
+                      ราคาต่อลิตรล่าสุด ({outFuelType}):
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: "#0284c7", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                      {activeOutboundPricePerLiter > 0
+                        ? `฿${activeOutboundPricePerLiter.toFixed(2)} / ลิตร`
+                        : "ยังไม่มีประวัติราคารับเข้า (฿0.00)"}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div className="modal-label-text" style={{ fontSize: 11 }}>
+                      คำนวณมูลค่าการเบิกออก ({Number(outQty || 0).toLocaleString()} ลิตร):
+                    </div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: "#0284c7", marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                      ฿{activeOutboundTotalCost.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -709,6 +864,27 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
               <div className="fuel-detail-box modal-notes-box">
                 <div className="modal-label-text">Working Date:</div>
                 <div className="modal-val-text" style={{ fontWeight: 700, marginTop: 2 }}>{selectedTx.workingDate}</div>
+              </div>
+
+              <div className="fuel-detail-box modal-notes-box">
+                <div className="modal-label-text">Price per Liter (ราคาต่อลิตร):</div>
+                <div className="modal-val-text" style={{ fontWeight: 700, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
+                  {(selectedTx.pricePerLiter ?? getLatestPricePerLiter(selectedTx.fuelType)) > 0
+                    ? `฿${(selectedTx.pricePerLiter ?? getLatestPricePerLiter(selectedTx.fuelType)).toFixed(2)} / ลิตร`
+                    : "-"}
+                </div>
+              </div>
+              <div className="fuel-detail-box modal-notes-box">
+                <div className="modal-label-text">Total Fuel Cost (มูลค่ารวม):</div>
+                <div className="modal-val-text" style={{ fontWeight: 800, fontSize: 14, marginTop: 2, color: selectedTx.type.includes("Inbound") ? "#16a34a" : "#0284c7", fontVariantNumeric: "tabular-nums" }}>
+                  {(() => {
+                    const unitP = selectedTx.pricePerLiter ?? getLatestPricePerLiter(selectedTx.fuelType);
+                    const tot = selectedTx.totalCost ?? (unitP > 0 ? Number((selectedTx.qty * unitP).toFixed(2)) : 0);
+                    return tot > 0
+                      ? `฿${tot.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`
+                      : "-";
+                  })()}
+                </div>
               </div>
 
               <div>

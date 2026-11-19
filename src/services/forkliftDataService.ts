@@ -270,6 +270,8 @@ export interface MhFuelStockRecord {
   type: MhFuelTransactionType;
   fuelType: MhFuelType;
   qty: number;
+  pricePerLiter?: number;
+  totalCost?: number;
   meterStart: number;
   meterEnd: number;
   recorderName: string;
@@ -1122,6 +1124,16 @@ function sanitizeMhFuelStockPayload(r: MhFuelStockRecord): MhFuelStockRecord {
   const { timestamp, dateYmd } = formatForkliftNowTimestamp();
   const docId = sanitizeDocId(r.id || r.transactionNo || `FUEL-${Date.now()}`);
   const safeQty = typeof r.qty === "number" && !isNaN(r.qty) ? Math.max(0, r.qty) : 0;
+  const safePricePerLiter =
+    typeof r.pricePerLiter === "number" && !isNaN(r.pricePerLiter) && r.pricePerLiter >= 0
+      ? Number(r.pricePerLiter.toFixed(2))
+      : undefined;
+  const safeTotalCost =
+    typeof r.totalCost === "number" && !isNaN(r.totalCost) && r.totalCost >= 0
+      ? Number(r.totalCost.toFixed(2))
+      : safePricePerLiter !== undefined
+      ? Number((safeQty * safePricePerLiter).toFixed(2))
+      : undefined;
   const safeStart =
     typeof r.meterStart === "number" && !isNaN(r.meterStart) ? Math.max(0, r.meterStart) : 0;
   const safeEnd =
@@ -1137,6 +1149,8 @@ function sanitizeMhFuelStockPayload(r: MhFuelStockRecord): MhFuelStockRecord {
       ? "Gasoline (เบนซิน)"
       : "Diesel (ดีเซล)",
     qty: safeQty,
+    pricePerLiter: safePricePerLiter,
+    totalCost: safeTotalCost,
     meterStart: safeStart,
     meterEnd: safeEnd,
     recorderName: String(r.recorderName || "WMS Storekeeper").trim().slice(0, 128),
