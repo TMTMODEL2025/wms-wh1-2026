@@ -27,6 +27,9 @@ import {
   Check,
   SlidersHorizontal,
   ChevronDown,
+  ChevronRight,
+  Layers,
+  List,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import {
@@ -109,6 +112,8 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<
     "all" | EquipmentStatus
   >("all");
+  const [groupByArea, setGroupByArea] = useState<boolean>(false);
+  const [collapsedAreas, setCollapsedAreas] = useState<Record<string, boolean>>({});
 
   // Modal States
   const [isEquipmentModalOpen, setIsEquipmentModalOpen] = useState<boolean>(false);
@@ -168,6 +173,40 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
       return true;
     });
   }, [equipmentList, searchKeyword, selectedAreaFilter, selectedStatusFilter]);
+
+  // Grouped Equipment List by Inspection Area
+  const groupedEquipment = useMemo(() => {
+    const areaMap = new Map<string, EquipmentItem[]>();
+    filteredEquipment.forEach((item) => {
+      const areaKey = (item.area || "").trim() || "ไม่ระบุพื้นที่";
+      const list = areaMap.get(areaKey);
+      if (list) {
+        list.push(item);
+      } else {
+        areaMap.set(areaKey, [item]);
+      }
+    });
+
+    return Array.from(areaMap.entries()).map(([area, items]) => {
+      const totalQty = items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+      const readyCount = items.filter((i) => i.status === "ready").length;
+      const issueCount = items.length - readyCount;
+      return {
+        area,
+        items,
+        totalQty,
+        readyCount,
+        issueCount,
+      };
+    });
+  }, [filteredEquipment]);
+
+  const toggleAreaGroupCollapse = (area: string) => {
+    setCollapsedAreas((prev) => ({
+      ...prev,
+      [area]: !prev[area],
+    }));
+  };
 
   // Status Badge Helper
   const getStatusBadge = (status: EquipmentStatus) => {
@@ -739,8 +778,8 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
           </div>
         </div>
 
-        {/* Status Filter Segmented Tab Buttons */}
-        <div className="pt-2 border-t border-slate-100 dark:border-[#1e3a5f] min-w-0 max-w-full">
+        {/* Status Filter Segmented Tab Buttons + Group-by-Area Mode Switch */}
+        <div className="pt-2 border-t border-slate-100 dark:border-[#1e3a5f] min-w-0 max-w-full flex flex-col md:flex-row md:items-center md:justify-between gap-2">
           <div className="flex w-full max-w-full min-w-0 flex-nowrap overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-h-[33px] md:inline-flex md:min-h-[35px] md:w-auto md:flex-wrap md:overflow-visible items-center gap-0.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5">
             <button
               type="button"
@@ -802,6 +841,45 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
               งดใช้งาน ({metrics.outOfService})
             </button>
           </div>
+
+          {/* Display Mode Toggle: Normal List vs Group by Inspection Area */}
+          <div className="flex items-center justify-between md:justify-end gap-2 shrink-0">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 md:hidden">
+              รูปแบบตาราง:
+            </span>
+            <div className="inline-flex items-center gap-0.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5 min-h-[33px] md:min-h-[35px]">
+              <button
+                type="button"
+                onClick={() => setGroupByArea(false)}
+                className={`h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                  !groupByArea
+                    ? "bg-white dark:bg-[#1a2f52] text-slate-900 dark:text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <List size={13} />
+                <span>แสดงปกติ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setGroupByArea(true)}
+                className={`h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                  groupByArea
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Layers size={13} />
+                <span>จัดกลุ่มตามพื้นที่</span>
+                {groupByArea && groupedEquipment.length > 0 && (
+                  <span className="text-[10px] font-mono bg-white/20 px-1 rounded">
+                    {groupedEquipment.length}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -824,95 +902,232 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-                {filteredEquipment.map((item, idx) => (
-                  <tr
-                    key={item.id}
-                    className="hover:bg-slate-50 dark:hover:bg-[#152646] transition-colors"
-                  >
-                    <td className="p-2 sm:p-3 text-center font-mono text-slate-400">
-                      {idx + 1}
-                    </td>
-                    <td className="p-2 sm:p-3 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
-                        <Wrench size={13} className="text-slate-400 shrink-0 sm:w-[15px] sm:h-[15px]" />
-                        <span>{item.name}</span>
-                      </div>
-                      {item.notes && (
-                        <div className="text-[10px] sm:text-[11px] text-slate-400 font-normal mt-0.5">
-                          {item.notes}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-2 sm:p-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
-                      {item.code}
-                    </td>
-                    <td className="p-2 sm:p-3 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px]">
-                        <MapPin size={11} className="text-emerald-500 sm:w-3 sm:h-3" />
-                        <span>{item.area}</span>
-                      </span>
-                    </td>
-                    <td className="p-2 sm:p-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums">
-                      {item.quantity}
-                    </td>
-                    <td className="p-2 sm:p-3 text-center whitespace-nowrap">{getStatusBadge(item.status)}</td>
-                    <td className="p-2 sm:p-3 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
-                      {item.lastInspector ? (
-                        <div className="flex items-center gap-1">
-                          <User size={12} className="text-slate-400 sm:w-[13px] sm:h-[13px]" />
-                          <span>{item.lastInspector}</span>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">ยังไม่ได้ตรวจ</span>
-                      )}
-                    </td>
-                    <td className="p-2 sm:p-3 font-mono text-slate-600 dark:text-slate-400 text-[10px] sm:text-[11px] whitespace-nowrap">
-                      {item.lastInspectionDate ? (
-                        <div>
-                          <div>{item.lastInspectionDate}</div>
-                          {item.lastShift && (
-                            <span className="text-[9.5px] sm:text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
-                              ({item.lastShift === "day" ? "กะเช้า" : "กะดึก"})
-                            </span>
+                {groupByArea
+                  ? groupedEquipment.map((group) => {
+                      const isCollapsed = !!collapsedAreas[group.area];
+                      return (
+                        <React.Fragment key={`area-group-${group.area}`}>
+                          {/* Area Group Header Row */}
+                          <tr className="bg-emerald-50/80 dark:bg-[#0d223f] border-y border-emerald-200/80 dark:border-[#1e3a5f]">
+                            <td colSpan={9} className="px-2.5 sm:px-3 py-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleAreaGroupCollapse(group.area)}
+                                  className="flex items-center gap-1.5 sm:gap-2 text-left font-bold text-slate-900 dark:text-slate-100 hover:text-emerald-700 dark:hover:text-emerald-300 cursor-pointer"
+                                >
+                                  {isCollapsed ? (
+                                    <ChevronRight size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  ) : (
+                                    <ChevronDown size={15} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  )}
+                                  <MapPin size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                  <span className="text-xs sm:text-sm">{group.area}</span>
+                                </button>
+
+                                <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] sm:text-xs">
+                                  <span className="px-2 py-0.5 rounded bg-white dark:bg-[#091529] border border-slate-200 dark:border-[#1e3a5f] font-bold text-slate-700 dark:text-slate-200 font-mono tabular-nums">
+                                    {group.items.length} รายการ
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-white dark:bg-[#091529] border border-slate-200 dark:border-[#1e3a5f] font-bold text-blue-700 dark:text-blue-300 font-mono tabular-nums">
+                                    รวม {group.totalQty.toLocaleString()} ชิ้น
+                                  </span>
+                                  <span className="px-2 py-0.5 rounded bg-emerald-100/90 dark:bg-emerald-950/80 border border-emerald-300 dark:border-emerald-800 font-bold text-emerald-800 dark:text-emerald-300 font-mono tabular-nums">
+                                    พร้อมใช้ {group.readyCount}
+                                  </span>
+                                  {group.issueCount > 0 && (
+                                    <span className="px-2 py-0.5 rounded bg-amber-100/90 dark:bg-amber-950/80 border border-amber-300 dark:border-amber-800 font-bold text-amber-800 dark:text-amber-300 font-mono tabular-nums">
+                                      ชำรุด/ซ่อม/งด {group.issueCount}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Rows inside this Area Group */}
+                          {!isCollapsed &&
+                            group.items.map((item, idx) => (
+                              <tr
+                                key={item.id}
+                                className="hover:bg-slate-50 dark:hover:bg-[#152646] transition-colors"
+                              >
+                                <td className="p-2 sm:p-3 text-center font-mono text-slate-400">
+                                  {idx + 1}
+                                </td>
+                                <td className="p-2 sm:p-3 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                                  <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <Wrench size={13} className="text-slate-400 shrink-0 sm:w-[15px] sm:h-[15px]" />
+                                    <span>{item.name}</span>
+                                  </div>
+                                  {item.notes && (
+                                    <div className="text-[10px] sm:text-[11px] text-slate-400 font-normal mt-0.5">
+                                      {item.notes}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="p-2 sm:p-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                                  {item.code}
+                                </td>
+                                <td className="p-2 sm:p-3 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px]">
+                                    <MapPin size={11} className="text-emerald-500 sm:w-3 sm:h-3" />
+                                    <span>{item.area}</span>
+                                  </span>
+                                </td>
+                                <td className="p-2 sm:p-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                                  {item.quantity}
+                                </td>
+                                <td className="p-2 sm:p-3 text-center whitespace-nowrap">{getStatusBadge(item.status)}</td>
+                                <td className="p-2 sm:p-3 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                                  {item.lastInspector ? (
+                                    <div className="flex items-center gap-1">
+                                      <User size={12} className="text-slate-400 sm:w-[13px] sm:h-[13px]" />
+                                      <span>{item.lastInspector}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic">ยังไม่ได้ตรวจ</span>
+                                  )}
+                                </td>
+                                <td className="p-2 sm:p-3 font-mono text-slate-600 dark:text-slate-400 text-[10px] sm:text-[11px] whitespace-nowrap">
+                                  {item.lastInspectionDate ? (
+                                    <div>
+                                      <div>{item.lastInspectionDate}</div>
+                                      {item.lastShift && (
+                                        <span className="text-[9.5px] sm:text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                                          ({item.lastShift === "day" ? "กะเช้า" : "กะดึก"})
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic">-</span>
+                                  )}
+                                </td>
+                                <td className="p-2 sm:p-3 text-center whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCheckModal(item)}
+                                      className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-[10px] sm:text-[11px] flex items-center gap-1 cursor-pointer"
+                                      title="บันทึกการตรวจเช็คสภาพประจำวัน"
+                                    >
+                                      <ClipboardCheck size={12} className="sm:w-[13px] sm:h-[13px]" />
+                                      <span>ตรวจเช็ค</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenEquipmentModal(item)}
+                                      className="p-1 rounded-md text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                                      title="แก้ไขข้อมูลอุปกรณ์"
+                                    >
+                                      <Edit2 size={13} className="sm:w-3.5 sm:h-3.5" />
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteEquipment(item)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
+                                      title="ลบรายการ"
+                                    >
+                                      <Trash2 size={13} className="sm:w-3.5 sm:h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </React.Fragment>
+                      );
+                    })
+                  : filteredEquipment.map((item, idx) => (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-slate-50 dark:hover:bg-[#152646] transition-colors"
+                      >
+                        <td className="p-2 sm:p-3 text-center font-mono text-slate-400">
+                          {idx + 1}
+                        </td>
+                        <td className="p-2 sm:p-3 font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <Wrench size={13} className="text-slate-400 shrink-0 sm:w-[15px] sm:h-[15px]" />
+                            <span>{item.name}</span>
+                          </div>
+                          {item.notes && (
+                            <div className="text-[10px] sm:text-[11px] text-slate-400 font-normal mt-0.5">
+                              {item.notes}
+                            </div>
                           )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 italic">-</span>
-                      )}
-                    </td>
-                    <td className="p-2 sm:p-3 text-center whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenCheckModal(item)}
-                          className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-[10px] sm:text-[11px] flex items-center gap-1 cursor-pointer"
-                          title="บันทึกการตรวจเช็คสภาพประจำวัน"
-                        >
-                          <ClipboardCheck size={12} className="sm:w-[13px] sm:h-[13px]" />
-                          <span>ตรวจเช็ค</span>
-                        </button>
+                        </td>
+                        <td className="p-2 sm:p-3 font-mono font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                          {item.code}
+                        </td>
+                        <td className="p-2 sm:p-3 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-[11px]">
+                            <MapPin size={11} className="text-emerald-500 sm:w-3 sm:h-3" />
+                            <span>{item.area}</span>
+                          </span>
+                        </td>
+                        <td className="p-2 sm:p-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200 tabular-nums">
+                          {item.quantity}
+                        </td>
+                        <td className="p-2 sm:p-3 text-center whitespace-nowrap">{getStatusBadge(item.status)}</td>
+                        <td className="p-2 sm:p-3 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap">
+                          {item.lastInspector ? (
+                            <div className="flex items-center gap-1">
+                              <User size={12} className="text-slate-400 sm:w-[13px] sm:h-[13px]" />
+                              <span>{item.lastInspector}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">ยังไม่ได้ตรวจ</span>
+                          )}
+                        </td>
+                        <td className="p-2 sm:p-3 font-mono text-slate-600 dark:text-slate-400 text-[10px] sm:text-[11px] whitespace-nowrap">
+                          {item.lastInspectionDate ? (
+                            <div>
+                              <div>{item.lastInspectionDate}</div>
+                              {item.lastShift && (
+                                <span className="text-[9.5px] sm:text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                                  ({item.lastShift === "day" ? "กะเช้า" : "กะดึก"})
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">-</span>
+                          )}
+                        </td>
+                        <td className="p-2 sm:p-3 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCheckModal(item)}
+                              className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:hover:bg-emerald-900 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 font-bold text-[10px] sm:text-[11px] flex items-center gap-1 cursor-pointer"
+                              title="บันทึกการตรวจเช็คสภาพประจำวัน"
+                            >
+                              <ClipboardCheck size={12} className="sm:w-[13px] sm:h-[13px]" />
+                              <span>ตรวจเช็ค</span>
+                            </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEquipmentModal(item)}
-                          className="p-1 rounded-md text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                          title="แก้ไขข้อมูลอุปกรณ์"
-                        >
-                          <Edit2 size={13} className="sm:w-3.5 sm:h-3.5" />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEquipmentModal(item)}
+                              className="p-1 rounded-md text-slate-500 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                              title="แก้ไขข้อมูลอุปกรณ์"
+                            >
+                              <Edit2 size={13} className="sm:w-3.5 sm:h-3.5" />
+                            </button>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteEquipment(item)}
-                          className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
-                          title="ลบรายการ"
-                        >
-                          <Trash2 size={13} className="sm:w-3.5 sm:h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteEquipment(item)}
+                              className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 cursor-pointer"
+                              title="ลบรายการ"
+                            >
+                              <Trash2 size={13} className="sm:w-3.5 sm:h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
               </tbody>
             </table>
           </div>
