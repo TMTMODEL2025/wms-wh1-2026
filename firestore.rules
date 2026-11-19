@@ -183,6 +183,36 @@ service cloud.firestore {
         && data.activity is string && data.activity.size() <= 500;
     }
 
+    function isValidSlitEquipmentItem(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 128
+        && data.code is string && data.code.size() > 0 && data.code.size() <= 64
+        && data.area is string && data.area.size() > 0 && data.area.size() <= 128
+        && data.quantity is number && data.quantity >= 1 && data.quantity <= 99999
+        && data.status in ['ready', 'repair_needed', 'in_maintenance', 'out_of_service']
+        && data.createdAt is string && data.createdAt.size() <= 64
+        && (!('lastInspector' in data) || (data.lastInspector is string && data.lastInspector.size() <= 128))
+        && (!('lastInspectionDate' in data) || (data.lastInspectionDate is string && data.lastInspectionDate.size() <= 64))
+        && (!('lastShift' in data) || data.lastShift in ['day', 'night'])
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidSlitEquipmentLog(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.equipmentId is string && data.equipmentId.size() > 0 && data.equipmentId.size() <= 128
+        && data.equipmentName is string && data.equipmentName.size() > 0 && data.equipmentName.size() <= 128
+        && data.equipmentCode is string && data.equipmentCode.size() > 0 && data.equipmentCode.size() <= 64
+        && data.area is string && data.area.size() > 0 && data.area.size() <= 128
+        && data.inspectionDate is string && data.inspectionDate.size() > 0 && data.inspectionDate.size() <= 32
+        && data.shift in ['day', 'night']
+        && data.status in ['ready', 'repair_needed', 'in_maintenance', 'out_of_service']
+        && data.inspector is string && data.inspector.size() > 0 && data.inspector.size() <= 128
+        && data.timestamp is string && data.timestamp.size() > 0 && data.timestamp.size() <= 64
+        && (!('remarks' in data) || (data.remarks is string && data.remarks.size() <= 500))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -211,6 +241,18 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(configId) && isValidSpaceConfig(request.resource.data);
       allow delete: if isValidId(configId);
+    }
+
+    match /slit_equipment_items/{equipmentId} {
+      allow read: if true;
+      allow create, update: if isValidId(equipmentId) && isValidSlitEquipmentItem(request.resource.data);
+      allow delete: if isValidId(equipmentId);
+    }
+
+    match /slit_equipment_logs/{logId} {
+      allow read: if true;
+      allow create, update: if isValidId(logId) && isValidSlitEquipmentLog(request.resource.data);
+      allow delete: if isValidId(logId);
     }
 
     match /coil_stock/{recordId} {

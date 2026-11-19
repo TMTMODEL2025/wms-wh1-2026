@@ -510,6 +510,46 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "timestamp", "employeeId", "employeeName", "sectionId", "module", "activity"]
+    },
+    "SlitEquipmentItem": {
+      "title": "Slit & Film Equipment Inspection Master Item",
+      "description": "Shared central registry of cranes, slings, chains, hooks, and safety equipment in the Slit/Film section",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 128 },
+        "code": { "type": "string", "maxLength": 64 },
+        "area": { "type": "string", "maxLength": 128 },
+        "quantity": { "type": "number" },
+        "status": { "type": "string", "maxLength": 32 },
+        "lastInspector": { "type": "string", "maxLength": 128 },
+        "lastInspectionDate": { "type": "string", "maxLength": 64 },
+        "lastShift": { "type": "string", "maxLength": 16 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "name", "code", "area", "quantity", "status", "createdAt"]
+    },
+    "SlitEquipmentLog": {
+      "title": "Slit & Film Equipment Inspection Log",
+      "description": "Shared central daily/shift equipment inspection history log across all devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "equipmentId": { "type": "string", "maxLength": 128 },
+        "equipmentName": { "type": "string", "maxLength": 128 },
+        "equipmentCode": { "type": "string", "maxLength": 64 },
+        "area": { "type": "string", "maxLength": 128 },
+        "inspectionDate": { "type": "string", "maxLength": 32 },
+        "shift": { "type": "string", "maxLength": 16 },
+        "status": { "type": "string", "maxLength": 32 },
+        "inspector": { "type": "string", "maxLength": 128 },
+        "remarks": { "type": "string", "maxLength": 500 },
+        "timestamp": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "equipmentId", "equipmentName", "equipmentCode", "area", "inspectionDate", "shift", "status", "inspector", "timestamp"]
     }
   },
   "firestore": {
@@ -600,6 +640,14 @@
     "/wms_activity_logs/{logId}": {
       "schema": "WmsActivityLog",
       "description": "Cross-module operational audit log referencing logged-in employee and section"
+    },
+    "/slit_equipment_items/{equipmentId}": {
+      "schema": "SlitEquipmentItem",
+      "description": "Centralized shared master list of Slit/Film equipment for inspection synced in real-time across all devices"
+    },
+    "/slit_equipment_logs/{logId}": {
+      "schema": "SlitEquipmentLog",
+      "description": "Centralized shared shift inspection logs for Slit/Film equipment synced in real-time across all devices"
     }
   }
 }

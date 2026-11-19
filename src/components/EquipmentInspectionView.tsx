@@ -33,6 +33,15 @@ import {
   appendWmsActivityLog,
   getActiveRecorderDisplay,
 } from "../services/authWorkforceService";
+import {
+  deleteSlitEquipmentItem,
+  loadCachedEquipmentList,
+  loadCachedInspectionLogs,
+  recordSlitEquipmentInspection,
+  saveSlitEquipmentItem,
+  subscribeSlitEquipmentItems,
+  subscribeSlitEquipmentLogs,
+} from "../services/slitEquipmentService";
 
 export type EquipmentStatus =
   | "ready"
@@ -68,47 +77,30 @@ export interface InspectionLog {
   timestamp: string;
 }
 
-const STORAGE_KEY_EQUIPMENT_LIST = "wms_equipment_master_list";
-const STORAGE_KEY_INSPECTION_LOGS = "wms_equipment_inspection_logs";
-
 export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean }) {
-  // Master Equipment List & Logs loaded from localStorage
-  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_EQUIPMENT_LIST);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error("Failed to load equipment list from localStorage", e);
-    }
-    return []; // Start empty as requested
-  });
+  // Master Equipment List & Logs synced in real-time with central Firestore collections
+  // (localStorage is used strictly as initial cache mirror before the first cloud snapshot arrives)
+  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(() =>
+    loadCachedEquipmentList()
+  );
 
-  const [inspectionLogs, setInspectionLogs] = useState<InspectionLog[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_INSPECTION_LOGS);
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error("Failed to load inspection logs from localStorage", e);
-    }
-    return [];
-  });
-
-  // Save to localStorage on state changes
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_EQUIPMENT_LIST, JSON.stringify(equipmentList));
-    } catch (e) {
-      console.error("Failed to save equipment list to localStorage", e);
-    }
-  }, [equipmentList]);
+  const [inspectionLogs, setInspectionLogs] = useState<InspectionLog[]>(() =>
+    loadCachedInspectionLogs()
+  );
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_INSPECTION_LOGS, JSON.stringify(inspectionLogs));
-    } catch (e) {
-      console.error("Failed to save inspection logs to localStorage", e);
-    }
-  }, [inspectionLogs]);
+    const unsubItems = subscribeSlitEquipmentItems((cloudItems) => {
+      setEquipmentList(cloudItems);
+    });
+    const unsubLogs = subscribeSlitEquipmentLogs((cloudLogs) => {
+      setInspectionLogs(cloudLogs);
+    });
+
+    return () => {
+      unsubItems();
+      unsubLogs();
+    };
+  }, []);
 
   // Filter & Search Controls
   const [searchKeyword, setSearchKeyword] = useState<string>("");
@@ -240,7 +232,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
   };
 
   // Submit Add / Edit Form
-  const handleSaveEquipment = (e: React.FormEvent) => {
+  const handleSaveEquipment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.code.trim()) {
       Swal.fire({
@@ -253,57 +245,77 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
     }
 
     if (editingEquipment) {
-      // Update
-      setEquipmentList((prev) =>
-        prev.map((item) =>
-          item.id === editingEquipment.id
-            ? {
-                ...item,
-                name: formData.name.trim(),
-                code: formData.code.trim().toUpperCase(),
-                area: formData.area,
-                quantity: Number(formData.quantity) || 1,
-                status: formData.status,
-                notes: formData.notes.trim(),
-              }
-            : item
-        )
-      );
-      Swal.fire({
-        icon: "success",
-        title: "แก้ไขข้อมูลอุปกรณ์เรียบร้อยแล้ว",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    } else {
-      // Add
-      const newItem: EquipmentItem = {
-        id: `EQ-${Date.now()}`,
+      const updatedItem: EquipmentItem = {
+        ...editingEquipment,
         name: formData.name.trim(),
         code: formData.code.trim().toUpperCase(),
-        area: formData.area,
-        quantity: Number(formData.quantity) || 1,
+        area: formData.area.trim() || "อาคาร A",
+        quantity: Math.max(1, Number(formData.quantity) || 1),
+        status: formData.status,
+        notes: formData.notes.trim(),
+      };
+
+      setEquipmentList((prev) =>
+        prev.map((item) => (item.id === editingEquipment.id ? updatedItem : item))
+      );
+      setIsEquipmentModalOpen(false);
+
+      try {
+        await saveSlitEquipmentItem(updatedItem);
+        Swal.fire({
+          icon: "success",
+          title: "แก้ไขข้อมูลอุปกรณ์เรียบร้อยแล้ว",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch {
+        Swal.fire({
+          icon: "error",
+          title: "บันทึกข้อมูลขึ้น Cloud ไม่สำเร็จ",
+          text: "กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง",
+          confirmButtonColor: "#ef4444",
+        });
+      }
+    } else {
+      const randSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+      const newItem: EquipmentItem = {
+        id: `EQ-${Date.now()}-${randSuffix}`,
+        name: formData.name.trim(),
+        code: formData.code.trim().toUpperCase(),
+        area: formData.area.trim() || "อาคาร A",
+        quantity: Math.max(1, Number(formData.quantity) || 1),
         status: formData.status,
         notes: formData.notes.trim(),
         createdAt: new Date().toISOString(),
       };
-      setEquipmentList((prev) => [newItem, ...prev]);
-      void appendWmsActivityLog({
-        module: "Equipment Inspection",
-        sectionId: "slit_ops",
-        reference: newItem.code,
-        activity: `เพิ่มอุปกรณ์ใหม่ ${newItem.name} (${newItem.area})`,
-        status: "Completed",
-      });
-      Swal.fire({
-        icon: "success",
-        title: "เพิ่มรายการอุปกรณ์ใหม่เรียบร้อยแล้ว",
-        timer: 1500,
-        showConfirmButton: false,
-      });
-    }
 
-    setIsEquipmentModalOpen(false);
+      setEquipmentList((prev) => [newItem, ...prev]);
+      setIsEquipmentModalOpen(false);
+
+      try {
+        await saveSlitEquipmentItem(newItem);
+        void appendWmsActivityLog({
+          module: "Equipment Inspection",
+          sectionId: "slit_ops",
+          reference: newItem.code,
+          activity: `เพิ่มอุปกรณ์ใหม่ ${newItem.name} (${newItem.area})`,
+          status: "Completed",
+        });
+        Swal.fire({
+          icon: "success",
+          title: "เพิ่มรายการอุปกรณ์ใหม่เรียบร้อยแล้ว",
+          timer: 1500,
+          showConfirmButton: false,
+        });
+      } catch {
+        Swal.fire({
+          icon: "error",
+          title: "บันทึกข้อมูลขึ้น Cloud ไม่สำเร็จ",
+          text: "กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง",
+          confirmButtonColor: "#ef4444",
+        });
+      }
+    }
   };
 
   // Delete Equipment Item
@@ -326,15 +338,25 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
       cancelButtonColor: "#64748b",
       confirmButtonText: "ยืนยันลบข้อมูล",
       cancelButtonText: "ยกเลิก",
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
         setEquipmentList((prev) => prev.filter((i) => i.id !== item.id));
-        Swal.fire({
-          icon: "success",
-          title: "ลบรายการอุปกรณ์เรียบร้อยแล้ว",
-          timer: 1500,
-          showConfirmButton: false,
-        });
+        try {
+          await deleteSlitEquipmentItem(item.id);
+          Swal.fire({
+            icon: "success",
+            title: "ลบรายการอุปกรณ์เรียบร้อยแล้ว",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } catch {
+          Swal.fire({
+            icon: "error",
+            title: "ลบข้อมูลบน Cloud ไม่สำเร็จ",
+            text: "กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง",
+            confirmButtonColor: "#ef4444",
+          });
+        }
       }
     });
   };
@@ -359,7 +381,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
   };
 
   // Save Shift Check Inspection
-  const handleSaveCheck = (e: React.FormEvent) => {
+  const handleSaveCheck = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!checkingEquipment) return;
 
@@ -373,10 +395,11 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
     }
 
     const timestampStr = `${checkFormData.inspectionDate} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+    const randSuffix = Math.random().toString(36).slice(2, 6).toUpperCase();
 
     // Create log entry
     const newLog: InspectionLog = {
-      id: `LOG-${Date.now()}`,
+      id: `LOG-${Date.now()}-${randSuffix}`,
       equipmentId: checkingEquipment.id,
       equipmentName: checkingEquipment.name,
       equipmentCode: checkingEquipment.code,
@@ -389,46 +412,52 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
       timestamp: timestampStr,
     };
 
+    const updatedEquipment: EquipmentItem = {
+      ...checkingEquipment,
+      status: checkFormData.status,
+      lastInspector: checkFormData.inspector.trim(),
+      lastInspectionDate: timestampStr,
+      lastShift: checkFormData.shift,
+    };
+
     setInspectionLogs((prev) => [newLog, ...prev]);
-
-    // Update equipment item's status, lastInspector, and lastInspectionDate
     setEquipmentList((prev) =>
-      prev.map((item) =>
-        item.id === checkingEquipment.id
-          ? {
-              ...item,
-              status: checkFormData.status,
-              lastInspector: checkFormData.inspector.trim(),
-              lastInspectionDate: timestampStr,
-              lastShift: checkFormData.shift,
-            }
-          : item
-      )
+      prev.map((item) => (item.id === checkingEquipment.id ? updatedEquipment : item))
     );
-
     setIsCheckModalOpen(false);
-    void appendWmsActivityLog({
-      module: "Equipment Inspection",
-      sectionId: "slit_ops",
-      reference: checkingEquipment.code,
-      activity: `ตรวจเช็คอุปกรณ์ ${checkingEquipment.name} (${checkingEquipment.code}) สถานะ: ${checkFormData.status}`,
-      status: checkFormData.status === "ready" ? "Completed" : "Attention",
-    });
 
-    Swal.fire({
-      icon: "success",
-      title: "บันทึกผลการตรวจเช็คสภาพอุปกรณ์สำเร็จ",
-      text: `อุปกรณ์: ${checkingEquipment.name} (${checkingEquipment.code}) - สถานะ: ${
-        checkFormData.status === "ready"
-          ? "พร้อมใช้งาน"
-          : checkFormData.status === "repair_needed"
-          ? "ชำรุด/รอซ่อม"
-          : checkFormData.status === "in_maintenance"
-          ? "ส่งซ่อมบำรุง"
-          : "งดใช้งาน"
-      }`,
-      confirmButtonColor: "#087eaf",
-    });
+    try {
+      await recordSlitEquipmentInspection(updatedEquipment, newLog);
+      void appendWmsActivityLog({
+        module: "Equipment Inspection",
+        sectionId: "slit_ops",
+        reference: checkingEquipment.code,
+        activity: `ตรวจเช็คอุปกรณ์ ${checkingEquipment.name} (${checkingEquipment.code}) สถานะ: ${checkFormData.status}`,
+        status: checkFormData.status === "ready" ? "Completed" : "Attention",
+      });
+
+      Swal.fire({
+        icon: "success",
+        title: "บันทึกผลการตรวจเช็คสภาพอุปกรณ์สำเร็จ",
+        text: `อุปกรณ์: ${checkingEquipment.name} (${checkingEquipment.code}) - สถานะ: ${
+          checkFormData.status === "ready"
+            ? "พร้อมใช้งาน"
+            : checkFormData.status === "repair_needed"
+            ? "ชำรุด/รอซ่อม"
+            : checkFormData.status === "in_maintenance"
+            ? "ส่งซ่อมบำรุง"
+            : "งดใช้งาน"
+        }`,
+        confirmButtonColor: "#087eaf",
+      });
+    } catch {
+      Swal.fire({
+        icon: "error",
+        title: "บันทึกผลการตรวจเช็คขึ้น Cloud ไม่สำเร็จ",
+        text: "กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วลองใหม่อีกครั้ง",
+        confirmButtonColor: "#ef4444",
+      });
+    }
   };
 
   // Export Equipment List to Excel
@@ -711,12 +740,12 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
         </div>
 
         {/* Status Filter Segmented Tab Buttons */}
-        <div className="pt-2 border-t border-slate-100 dark:border-[#1e3a5f]">
-          <div className="inline-flex min-h-[35px] w-full sm:w-auto flex-wrap items-center gap-0.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5">
+        <div className="pt-2 border-t border-slate-100 dark:border-[#1e3a5f] min-w-0 max-w-full">
+          <div className="flex w-full max-w-full min-w-0 flex-nowrap overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-h-[33px] md:inline-flex md:min-h-[35px] md:w-auto md:flex-wrap md:overflow-visible items-center gap-0.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5">
             <button
               type="button"
               onClick={() => setSelectedStatusFilter("all")}
-              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`shrink-0 h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
                 selectedStatusFilter === "all"
                   ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 shadow-xs"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -728,7 +757,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
             <button
               type="button"
               onClick={() => setSelectedStatusFilter("ready")}
-              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`shrink-0 h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
                 selectedStatusFilter === "ready"
                   ? "bg-emerald-600 text-white shadow-xs"
                   : "text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10"
@@ -740,7 +769,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
             <button
               type="button"
               onClick={() => setSelectedStatusFilter("repair_needed")}
-              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`shrink-0 h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
                 selectedStatusFilter === "repair_needed"
                   ? "bg-amber-600 text-white shadow-xs"
                   : "text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
@@ -752,7 +781,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
             <button
               type="button"
               onClick={() => setSelectedStatusFilter("in_maintenance")}
-              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`shrink-0 h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
                 selectedStatusFilter === "in_maintenance"
                   ? "bg-blue-600 text-white shadow-xs"
                   : "text-blue-700 dark:text-blue-400 hover:bg-blue-500/10"
@@ -764,7 +793,7 @@ export function EquipmentInspectionView({ isThai = true }: { isThai?: boolean })
             <button
               type="button"
               onClick={() => setSelectedStatusFilter("out_of_service")}
-              className={`h-[29px] px-2.5 rounded text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
+              className={`shrink-0 h-[27px] md:h-[29px] px-2 md:px-2.5 rounded text-[11px] md:text-xs font-medium whitespace-nowrap transition-colors cursor-pointer inline-flex items-center justify-center ${
                 selectedStatusFilter === "out_of_service"
                   ? "bg-rose-600 text-white shadow-xs"
                   : "text-rose-700 dark:text-rose-400 hover:bg-rose-500/10"
