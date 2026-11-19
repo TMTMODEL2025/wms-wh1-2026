@@ -25,6 +25,7 @@ import {
   Building,
   UserX,
   UserCheck,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   X,
@@ -137,9 +138,8 @@ export function EmployeeManagement({
   const [sortKey, setSortKey] = useState<keyof Employee>("employeeId");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const pageSize = 10;
+  // Collapsible Department / Section Groups (Default: all collapsed)
+  const [expandedDepartments, setExpandedDepartments] = useState<Record<string, boolean>>({});
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -320,12 +320,63 @@ export function EmployeeManagement({
       });
   }, [employees, searchKeyword, filterDepartment, filterRole, filterPosition, filterStatus, sortKey, sortOrder]);
 
-  // Paginated records
-  const totalPages = Math.max(1, Math.ceil(filteredEmployees.length / pageSize));
-  const paginatedEmployees = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredEmployees.slice(start, start + pageSize);
-  }, [filteredEmployees, currentPage, pageSize]);
+  // Group filtered employees by Department / Section
+  const groupedEmployeesByDepartment = useMemo(() => {
+    const groupMap = new Map<string, Employee[]>();
+    filteredEmployees.forEach((emp) => {
+      const deptKey = emp.department?.trim() || "ไม่ระบุแผนก / Unassigned";
+      const list = groupMap.get(deptKey);
+      if (list) {
+        list.push(emp);
+      } else {
+        groupMap.set(deptKey, [emp]);
+      }
+    });
+
+    const groups = Array.from(groupMap.entries()).map(([department, list]) => {
+      const activeCount = list.filter((e) => e.employmentStatus === "Active").length;
+      const inactiveCount = list.length - activeCount;
+      const driverCount = list.filter((e) => e.role === "Driver").length;
+      return {
+        department,
+        employees: list,
+        activeCount,
+        inactiveCount,
+        driverCount,
+      };
+    });
+
+    groups.sort((a, b) => {
+      const comp = a.department.localeCompare(b.department, undefined, { numeric: true });
+      return sortKey === "department" && sortOrder === "desc" ? -comp : comp;
+    });
+
+    return groups;
+  }, [filteredEmployees, sortKey, sortOrder]);
+
+  const expandedDepartmentCount = useMemo(
+    () => groupedEmployeesByDepartment.filter((g) => Boolean(expandedDepartments[g.department])).length,
+    [groupedEmployeesByDepartment, expandedDepartments]
+  );
+
+  const toggleDepartmentGroup = (department: string) => {
+    setExpandedDepartments((prev) => ({
+      ...prev,
+      [department]: !prev[department],
+    }));
+  };
+
+  const handleExpandAllDepartments = () => {
+    const next: Record<string, boolean> = {};
+    groupedEmployeesByDepartment.forEach((g) => {
+      next[g.department] = true;
+    });
+    setExpandedDepartments(next);
+  };
+
+  const handleCollapseAllDepartments = () => {
+    setExpandedDepartments({});
+  };
 
   // Sort click helper
   const handleSort = (key: keyof Employee) => {
@@ -780,7 +831,33 @@ export function EmployeeManagement({
             <div className="panel-title">Employee Registry & Operational Roles</div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {groupedEmployeesByDepartment.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={handleExpandAllDepartments}
+                  disabled={expandedDepartmentCount === groupedEmployeesByDepartment.length}
+                  style={{ fontSize: 11, padding: "5px 10px" }}
+                  title="ขยายทุกแผนก"
+                >
+                  <ChevronDown size={13} />
+                  ขยายทั้งหมด
+                </button>
+                <button
+                  type="button"
+                  className="button secondary"
+                  onClick={handleCollapseAllDepartments}
+                  disabled={expandedDepartmentCount === 0}
+                  style={{ fontSize: 11, padding: "5px 10px" }}
+                  title="ย่อทุกแผนก"
+                >
+                  <ChevronRight size={13} />
+                  ย่อทั้งหมด
+                </button>
+              </>
+            )}
             <button
               className="button"
               onClick={() => setShowAddModal(true)}
@@ -811,7 +888,6 @@ export function EmployeeManagement({
               value={searchKeyword}
               onChange={(e) => {
                 setSearchKeyword(e.target.value);
-                setCurrentPage(1);
               }}
               placeholder="Search by Employee ID, name, position, phone..."
               aria-label="Search employees"
@@ -825,7 +901,6 @@ export function EmployeeManagement({
             value={filterDepartment}
             onChange={(e) => {
               setFilterDepartment(e.target.value);
-              setCurrentPage(1);
             }}
             aria-label="Filter Department"
             title="Filter by Department"
@@ -845,7 +920,6 @@ export function EmployeeManagement({
             value={filterRole}
             onChange={(e) => {
               setFilterRole(e.target.value);
-              setCurrentPage(1);
             }}
             aria-label="Filter Role"
             title="Filter by Employee Role"
@@ -865,7 +939,6 @@ export function EmployeeManagement({
             value={filterPosition}
             onChange={(e) => {
               setFilterPosition(e.target.value);
-              setCurrentPage(1);
             }}
             aria-label="Filter Job Position"
             title="Filter by Job Position"
@@ -885,7 +958,6 @@ export function EmployeeManagement({
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value);
-              setCurrentPage(1);
             }}
             aria-label="Filter Status"
             title="Filter by Employment Status"
@@ -904,7 +976,6 @@ export function EmployeeManagement({
               setFilterRole("All");
               setFilterPosition("All");
               setFilterStatus("All");
-              setCurrentPage(1);
             }}
             title="Reset all filters"
           >
@@ -983,22 +1054,85 @@ export function EmployeeManagement({
             </thead>
 
             <tbody>
-              {paginatedEmployees.map((emp, index) => {
-                const isInactive = emp.employmentStatus === "Inactive";
-                const todayAssignment = activeDriverAssignmentMap.get(emp.employeeId);
-                const todayDuty =
-                  todayDailyDutyMap.get(emp.employeeId.trim().toLowerCase()) ||
-                  todayDailyDutyMap.get(emp.employeeName.trim().toLowerCase());
-                const rowNumber = (currentPage - 1) * pageSize + index + 1;
-                const isConfirming = confirmingDeactivateId === emp.employeeId;
+              {groupedEmployeesByDepartment.map((group) => {
+                const isExpanded = Boolean(expandedDepartments[group.department]);
 
                 return (
-                  <tr
-                    key={emp.employeeId}
-                    style={{
-                      opacity: isInactive ? 0.75 : 1,
-                    }}
-                  >
+                  <React.Fragment key={group.department}>
+                    {/* Collapsible Department / Section Group Header Row */}
+                    <tr
+                      onClick={() => toggleDepartmentGroup(group.department)}
+                      className="cursor-pointer select-none bg-slate-100/90 hover:bg-slate-200/75 dark:bg-slate-800/80 dark:hover:bg-slate-800 border-y border-slate-200 dark:border-slate-700 transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleDepartmentGroup(group.department);
+                        }
+                      }}
+                    >
+                      <td colSpan={10} className="!py-2.5 !px-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors ${
+                                isExpanded
+                                  ? "bg-sky-600 text-white border-sky-600 dark:bg-sky-500 dark:border-sky-500"
+                                  : "bg-white text-slate-600 border-slate-300 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-600"
+                              }`}
+                            >
+                              {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </span>
+                            <Building size={15} className="text-sky-600 dark:text-sky-400 shrink-0" />
+                            <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                              {group.department}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800 border border-sky-200 dark:bg-sky-950/70 dark:text-sky-300 dark:border-sky-800 whitespace-nowrap">
+                              {group.employees.length} คน
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="px-2 py-0.5 rounded-md font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/80 whitespace-nowrap">
+                              Active: {group.activeCount}
+                            </span>
+                            {group.driverCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md font-semibold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800/80 whitespace-nowrap">
+                                Driver: {group.driverCount}
+                              </span>
+                            )}
+                            {group.inactiveCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-md font-semibold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/80 whitespace-nowrap">
+                                Inactive: {group.inactiveCount}
+                              </span>
+                            )}
+                            <span className="hidden sm:inline text-[10.5px] font-medium text-slate-500 dark:text-slate-400 ml-1">
+                              {isExpanded ? "คลิกเพื่อย่อ" : "คลิกเพื่อขยาย"}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {isExpanded &&
+                      group.employees.map((emp, index) => {
+                        const isInactive = emp.employmentStatus === "Inactive";
+                        const todayAssignment = activeDriverAssignmentMap.get(emp.employeeId);
+                        const todayDuty =
+                          todayDailyDutyMap.get(emp.employeeId.trim().toLowerCase()) ||
+                          todayDailyDutyMap.get(emp.employeeName.trim().toLowerCase());
+                        const rowNumber = index + 1;
+                        const isConfirming = confirmingDeactivateId === emp.employeeId;
+
+                        return (
+                          <tr
+                            key={emp.employeeId}
+                            style={{
+                              opacity: isInactive ? 0.75 : 1,
+                            }}
+                          >
                     <td className="emp-row-num">{rowNumber}</td>
 
                     <td>
@@ -1209,6 +1343,9 @@ export function EmployeeManagement({
                       </div>
                     </td>
                   </tr>
+                        );
+                      })}
+                  </React.Fragment>
                 );
               })}
 
@@ -1228,12 +1365,11 @@ export function EmployeeManagement({
           </table>
         </div>
 
-        {/* Pagination & Table Footer */}
+        {/* Grouped Summary Footer */}
         <div
+          className="border-t border-slate-200 dark:border-slate-700/80 text-slate-500 dark:text-slate-400"
           style={{
             padding: "12px 18px",
-            borderTop: "1px solid #e7ecef",
-            color: "#71818c",
             fontSize: 11,
             display: "flex",
             justifyContent: "space-between",
@@ -1243,44 +1379,24 @@ export function EmployeeManagement({
           }}
         >
           <div>
-            Showing{" "}
-            <strong>
-              {filteredEmployees.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}
+            จัดกลุ่มตาม Department / Section:{" "}
+            <strong className="text-slate-800 dark:text-slate-100">
+              {groupedEmployeesByDepartment.length}
             </strong>{" "}
-            to{" "}
-            <strong>
-              {Math.min(currentPage * pageSize, filteredEmployees.length)}
+            แผนก · แสดง{" "}
+            <strong className="text-slate-800 dark:text-slate-100">
+              {filteredEmployees.length}
             </strong>{" "}
-            of <strong>{filteredEmployees.length}</strong> employees (Total: {employees.length})
+            คน (Total: {employees.length})
           </div>
 
-          {totalPages > 1 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button
-                className="button secondary"
-                style={{ padding: "4px 8px", fontSize: 11 }}
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              >
-                <ChevronLeft size={13} />
-                Previous
-              </button>
-
-              <span style={{ padding: "0 6px", fontWeight: 600 }}>
-                Page {currentPage} of {totalPages}
-              </span>
-
-              <button
-                className="button secondary"
-                style={{ padding: "4px 8px", fontSize: 11 }}
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Next
-                <ChevronRight size={13} />
-              </button>
-            </div>
-          )}
+          <div className="text-[11px] font-medium">
+            กำลังขยาย{" "}
+            <strong className="text-slate-800 dark:text-slate-100">
+              {expandedDepartmentCount} / {groupedEmployeesByDepartment.length}
+            </strong>{" "}
+            แผนก
+          </div>
         </div>
       </section>
       </>
