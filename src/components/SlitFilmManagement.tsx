@@ -60,6 +60,7 @@ import {
   Camera,
   Calendar,
   Truck,
+  Filter,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
@@ -6338,7 +6339,8 @@ export function SlitFilmManagement({
               }`}
             >
               <Cpu size={15} />
-              <span>{isThai ? "รับจากเครื่องจักร (SM01 - SM04)" : "Internal Machine (SM01 - SM04)"}</span>
+              <span className="sm:hidden">{isThai ? "รับโอนย้าย" : "Transfer In"}</span>
+              <span className="hidden sm:inline">{isThai ? "รับจากเครื่องจักร (SM01 - SM04)" : "Internal Machine (SM01 - SM04)"}</span>
             </button>
 
             <button
@@ -6351,7 +6353,8 @@ export function SlitFilmManagement({
               }`}
             >
               <Truck size={15} />
-              <span>{isThai ? "รับเข้าภายนอก (ซื้อจากลูกค้า/Supplier)" : "External Purchase Inbound"}</span>
+              <span className="sm:hidden">{isThai ? "รับภายนอก" : "External In"}</span>
+              <span className="hidden sm:inline">{isThai ? "รับเข้าภายนอก (ซื้อจากลูกค้า/Supplier)" : "External Purchase Inbound"}</span>
             </button>
           </div>
 
@@ -8549,25 +8552,25 @@ export function SlitFilmManagement({
 
       {/* 4. Table Section: 10-Column Scanned Batch Summary Table (AGENT.MD Standards) */}
       {activeMode === "movement_history" && (
-        <section className="rounded-lg border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-sm overflow-hidden">
+        <section className="w-full max-w-full min-w-0 rounded-lg border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-sm overflow-hidden">
         {/* Collapsible Header with Chevron */}
         <div
           onClick={() => setIsTableCollapsed(!isTableCollapsed)}
-          className="py-2.5 px-3 sm:px-4 flex flex-nowrap items-center justify-between gap-2.5 cursor-pointer select-none bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] hover:bg-slate-100/70 dark:hover:bg-[#142340] transition-colors overflow-hidden"
+          className="py-2.5 px-3 md:px-4 flex flex-nowrap items-center justify-between gap-2 cursor-pointer select-none bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] hover:bg-slate-100/70 dark:hover:bg-[#142340] transition-colors overflow-hidden"
         >
-          <div className="flex items-center gap-2.5 min-w-0 flex-1 whitespace-nowrap overflow-hidden">
+          <div className="flex items-center gap-2 md:gap-2.5 min-w-0 flex-1 overflow-hidden">
             <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex-shrink-0">
               <TableIcon size={15} />
             </div>
             <div className="flex flex-col justify-center min-w-0 flex-1 overflow-hidden">
-              <div className="flex items-center gap-2 whitespace-nowrap flex-nowrap min-w-0 overflow-hidden">
-                <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap flex-shrink-0">
+              <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap flex-nowrap min-w-0 overflow-hidden">
+                <h3 className="text-xs md:text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
                   {isThai ? "ตารางประวัติการเคลื่อนไหว" : "History Summary Table"}
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[10.5px] font-extrabold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 whitespace-nowrap flex-shrink-0">
                   {filteredList.length} {isThai ? "รายการ" : "items"}
                 </span>
-                <span className="hidden sm:inline-block text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/80 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border border-slate-300/50 dark:border-[#1e3a5f] whitespace-nowrap flex-shrink-0">
+                <span className="hidden md:inline-block text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/80 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border border-slate-300/50 dark:border-[#1e3a5f] whitespace-nowrap flex-shrink-0">
                   {totalWeightKg.toLocaleString()} kg ({totalWeightTon} TON)
                 </span>
               </div>
@@ -8579,11 +8582,11 @@ export function SlitFilmManagement({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap ml-2">
+          <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap ml-1 md:ml-2">
             <span className="hidden md:inline-block text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
               {isTableCollapsed ? (isThai ? "ขยายตาราง" : "Expand Table") : (isThai ? "ย่อตาราง" : "Collapse Table")}
             </span>
-            <div className={`p-1 rounded-md border bg-white dark:bg-[#0c1930] border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 transition-transform duration-200 ${isTableCollapsed ? "" : "rotate-180"}`}>
+            <div className={`p-1.5 md:p-1 rounded-md border bg-white dark:bg-[#0c1930] border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 transition-transform duration-200 ${isTableCollapsed ? "" : "rotate-180"}`}>
               <ChevronDown size={14} />
             </div>
           </div>
@@ -8591,40 +8594,52 @@ export function SlitFilmManagement({
 
         {/* Collapsible Content */}
         {!isTableCollapsed && (
-          <div>
+          <div className="w-full max-w-full min-w-0">
             {/* Table Toolbar & Search & Page Size */}
-            <div className="filterbar px-3 py-2 sm:px-[18px] sm:py-2.5 border-b flex flex-wrap items-center justify-between gap-2 bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
-              <div className="flex items-center gap-2 flex-1 min-w-[220px]">
-                <div className="relative flex-1">
-                  <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="filterbar p-2.5 md:px-[18px] md:py-2.5 border-b flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center md:justify-between gap-2.5 md:gap-2 bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
+              {/* Row 1 (Mobile Full Width) / Left (Desktop): Search Input */}
+              <div className="flex items-center gap-2 w-full md:flex-1 md:min-w-[220px]">
+                <div className="relative flex-1 w-full">
+                  <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     type="text"
                     value={searchKeyword}
-                    onChange={(e) => setSearchKeyword(e.target.value)}
+                    onChange={(e) => {
+                      setSearchKeyword(e.target.value);
+                      setCurrentPage(1);
+                    }}
                     placeholder={isThai ? "ค้นหาตาม Batch, Grade, ผู้ผลิต, เครื่อง, Location..." : "Filter by Batch, Grade, Machine, Location..."}
                     className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50"
-                    style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
+                    style={{ width: "100%", height: 36, minHeight: 36, padding: "7px 32px 7px 32px", borderRadius: 6, fontSize: 12 }}
                   />
                   {searchKeyword && (
                     <button
                       type="button"
-                      onClick={() => setSearchKeyword("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      onClick={() => {
+                        setSearchKeyword("");
+                        setCurrentPage(1);
+                      }}
+                      aria-label={isThai ? "ล้างคำค้นหา" : "Clear search"}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 md:p-0.5 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                     >
-                      <RotateCcw size={11} />
+                      <X size={13} />
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Date Filter & Rows Per Page Selector */}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <div className="flex items-center gap-1.5">
-                  <Calendar size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {isThai ? "วันที่:" : "Date:"}
-                  </span>
-                  <div className="relative flex items-center">
+              {/* Row 2 (Mobile: 2-Column Grid) / Right (Desktop: Inline Flex): Date Filter & Rows Per Page */}
+              <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:flex-wrap md:items-center md:gap-2 text-xs text-slate-600 dark:text-slate-300">
+                {/* Date Picker */}
+                <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1.5 min-w-0">
+                  <label className="flex items-center gap-1 text-[11px] md:text-xs font-semibold md:font-normal text-slate-600 dark:text-slate-400 md:text-slate-500">
+                    <Calendar size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                    <span>
+                      {isThai ? "วันที่" : "Date"}
+                      <span className="hidden md:inline">:</span>
+                    </span>
+                  </label>
+                  <div className="relative flex items-center gap-1 w-full md:w-auto min-w-0">
                     <input
                       type="date"
                       value={historyDateFilter}
@@ -8632,8 +8647,8 @@ export function SlitFilmManagement({
                         setHistoryDateFilter(e.target.value);
                         setCurrentPage(1);
                       }}
-                      className="field font-mono font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500/50 cursor-pointer"
-                      style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
+                      className="field w-full md:w-auto min-w-0 font-mono font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                      style={{ height: 36, minHeight: 36, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
                     />
                     {historyDateFilter && (
                       <button
@@ -8643,26 +8658,28 @@ export function SlitFilmManagement({
                           setCurrentPage(1);
                         }}
                         title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
-                        className="ml-1 p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        className="shrink-0 p-2 md:p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
                       >
-                        <X size={11} />
+                        <X size={12} />
                       </button>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-500 dark:text-slate-400">
-                    {isThai ? "แสดง:" : "Show:"}
-                  </span>
+                {/* Page Size Selector */}
+                <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1.5 min-w-0">
+                  <label className="text-[11px] md:text-xs font-semibold md:font-normal text-slate-600 dark:text-slate-400 md:text-slate-500">
+                    {isThai ? "แสดง" : "Show"}
+                    <span className="hidden md:inline">:</span>
+                  </label>
                   <select
                     value={pageSize}
                     onChange={(e) => {
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="field font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
-                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                    className="field w-full md:w-auto font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
+                    style={{ height: 36, minHeight: 36, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
                   >
                     <option value={5}>5 {isThai ? "แถว/หน้า" : "/ page"}</option>
                     <option value={10}>10 {isThai ? "แถว/หน้า" : "/ page"}</option>
@@ -8670,51 +8687,71 @@ export function SlitFilmManagement({
                   </select>
                 </div>
               </div>
+
+              {/* Mobile-only Reset All Filters Button (easy tap target when any filter is active) */}
+              {(searchKeyword || historyDateFilter) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchKeyword("");
+                    setHistoryDateFilter("");
+                    setCurrentPage(1);
+                  }}
+                  className="md:hidden w-full h-9 px-3 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-[0.99]"
+                >
+                  <RotateCcw size={13} />
+                  <span>{isThai ? "ล้างตัวกรองทั้งหมด" : "Reset All Filters"}</span>
+                </button>
+              )}
             </div>
 
-            {/* 11-Column Scanned Batch Summary Table */}
-            <div className="w-full overflow-x-auto">
+            {/* 12-Column Scanned Batch Summary Table (Compact Mobile View + Full Desktop Table) */}
+            <div className="w-full max-w-full overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
                 <thead>
                   <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-[#1e3a5f]">
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">No.</th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-cyan-50/50 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-300">
+                    <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">No.</th>
+                    <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-cyan-50/50 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-300">
                       Batch
                     </th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">
+                    <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-amber-50/50 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300">
                       เลขที่ใบสั่งเบิก
                     </th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">หนา(mm)</th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">กว้าง(mm)</th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-emerald-700 dark:text-emerald-400">
-                      น้ำหนัก (kg)
+                    <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">หนา(mm)</th>
+                    <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">กว้าง(mm)</th>
+                    <th className="md:hidden !px-2 !py-2 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">
+                      {isThai ? "หนา × กว้าง" : "Thick × Width"}
                     </th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Grade</th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">ผู้ผลิต</th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300">
-                      รับจากเครื่อง
+                    <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-emerald-700 dark:text-emerald-400">
+                      {isThai ? "น้ำหนัก (kg)" : "Weight (kg)"}
                     </th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-slate-600 dark:text-slate-300 bg-slate-50/60 dark:bg-slate-900/30">
+                    <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Grade</th>
+                    <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">ผู้ผลิต</th>
+                    <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300">
+                      <span className="md:hidden">{isThai ? "เครื่อง" : "M/C"}</span>
+                      <span className="hidden md:inline">{isThai ? "รับจากเครื่อง" : "Machine"}</span>
+                    </th>
+                    <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-slate-600 dark:text-slate-300 bg-slate-50/60 dark:bg-slate-900/30">
                       {isThai ? "Location เดิม" : "Prev Location"}
                     </th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-blue-700 dark:text-blue-400">
+                    <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-blue-700 dark:text-blue-400">
                       Location
                     </th>
-                    <th className="py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-center">จัดการ</th>
+                    <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {paginatedList.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-4 text-center text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                        <div className="flex flex-col items-center justify-center gap-1">
+                      <td colSpan={13} className="!py-6 !px-3 md:!py-4 text-center text-slate-400 dark:text-slate-500 whitespace-normal md:whitespace-nowrap">
+                        <div className="flex flex-col items-center justify-center gap-1.5">
                           <Disc size={24} className="text-slate-300 dark:text-slate-600 animate-pulse" />
                           <div className="font-semibold text-xs">
                             {isThai
                               ? `ยังไม่มีรายการสแกนในรอบนี้`
                               : `No scanned records in current batch`}
                           </div>
-                          <p className="text-[10px] text-slate-400 max-w-md">
+                          <p className="text-[11px] md:text-[10px] text-slate-400 max-w-xs md:max-w-md leading-relaxed">
                             {isThai
                               ? "กรุณากดเลือกเครื่องจักร [ SM01 ] - [ SM04 ] ด้านบน เพื่อเปิดหน้าต่างสแกนบาร์โค้ด Batch 10 หลัก"
                               : "Please select a machine [ SM01 ] - [ SM04 ] above to start scanning 10-digit Batch barcodes."}
@@ -8723,167 +8760,206 @@ export function SlitFilmManagement({
                       </td>
                     </tr>
                   ) : (
-                    paginatedList.map((row, idx) => (
-                      <tr
-                        key={row.id}
-                        className="h-5 hover:bg-slate-50/80 dark:hover:bg-[#152646] transition-colors text-slate-800 dark:text-slate-200"
-                      >
-                        {/* 1. ลำดับ (No.) */}
-                        <td className="py-0 px-1 font-mono text-slate-400 text-[11px] leading-tight whitespace-nowrap">
-                          {startIndex + idx + 1}
-                        </td>
+                    paginatedList.map((row, idx) => {
+                      const rowOrderNo = getOrderNoForRecord(row);
+                      const prevLoc = getPreviousLocationForRecord(row);
+                      const hasThickness = Boolean(
+                        row.hasSapData && row.certThickness && row.certThickness !== "รอข้อมูล SAP"
+                      );
+                      const hasWidth = Boolean(
+                        row.hasSapData && row.width && row.width !== "รอข้อมูล SAP"
+                      );
+                      const hasAnyDimension = hasThickness || hasWidth;
 
-                        {/* 2. Batch (10 หลัก) */}
-                        <td className="py-0 px-1 font-mono font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/10 text-[11px] leading-tight whitespace-nowrap">
-                          {row.batch}
-                        </td>
+                      return (
+                        <tr
+                          key={row.id}
+                          className="md:h-5 hover:bg-slate-50/80 dark:hover:bg-[#152646] transition-colors text-slate-800 dark:text-slate-200"
+                        >
+                          {/* 1. ลำดับ (No.) - Desktop */}
+                          <td className="hidden md:table-cell py-0 px-1 font-mono text-slate-400 text-[11px] leading-tight whitespace-nowrap">
+                            {startIndex + idx + 1}
+                          </td>
 
-                        {/* 3. เลขที่ใบสั่งเบิก (Order No.) */}
-                        <td className="py-0 px-1 font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-950/10 text-[11px] leading-tight whitespace-nowrap">
-                          {getOrderNoForRecord(row)}
-                        </td>
+                          {/* 2. Batch (10 หลัก) + Mobile grouped Order No */}
+                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 font-mono font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/10 text-xs md:text-[11px] leading-tight whitespace-nowrap align-middle">
+                            <div>{row.batch}</div>
+                            {rowOrderNo && rowOrderNo !== "-" && (
+                              <div className="md:hidden mt-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
+                                {rowOrderNo}
+                              </div>
+                            )}
+                          </td>
 
-                        {/* 3. หนา Certificated.(mm) */}
-                        <td className="py-0 px-1 font-medium text-[11px] leading-tight whitespace-nowrap">
-                          {row.hasSapData && row.certThickness && row.certThickness !== "รอข้อมูล SAP" ? (
-                            formatDimension2Decimals(row.certThickness)
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
-                              รอข้อมูล SAP
-                            </span>
-                          )}
-                        </td>
+                          {/* 3. เลขที่ใบสั่งเบิก (Order No.) - Desktop */}
+                          <td className="hidden md:table-cell py-0 px-1 font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50/30 dark:bg-amber-950/10 text-[11px] leading-tight whitespace-nowrap">
+                            {rowOrderNo}
+                          </td>
 
-                        {/* 4. กว้าง(mm) */}
-                        <td className="py-0 px-1 font-medium text-[11px] leading-tight whitespace-nowrap">
-                          {row.hasSapData && row.width && row.width !== "รอข้อมูล SAP" ? (
-                            formatDimension2Decimals(row.width)
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
-                              รอข้อมูล SAP
-                            </span>
-                          )}
-                        </td>
+                          {/* 4. หนา Certificated.(mm) - Desktop */}
+                          <td className="hidden md:table-cell py-0 px-1 font-medium text-[11px] leading-tight whitespace-nowrap">
+                            {hasThickness ? (
+                              formatDimension2Decimals(row.certThickness)
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
+                                รอข้อมูล SAP
+                              </span>
+                            )}
+                          </td>
 
-                        {/* 5. Unrestricted(น้ำหนักkg) */}
-                        <td className="py-0 px-1 font-bold text-emerald-600 dark:text-emerald-400 font-mono text-[11px] leading-tight whitespace-nowrap">
-                          {row.hasSapData && row.unrestricted && row.unrestricted !== "รอข้อมูล SAP" ? (
-                            row.unrestricted
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
-                              รอข้อมูล SAP
-                            </span>
-                          )}
-                        </td>
+                          {/* 5. กว้าง(mm) - Desktop */}
+                          <td className="hidden md:table-cell py-0 px-1 font-medium text-[11px] leading-tight whitespace-nowrap">
+                            {hasWidth ? (
+                              formatDimension2Decimals(row.width)
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
+                                รอข้อมูล SAP
+                              </span>
+                            )}
+                          </td>
 
-                        {/* 6. Grade */}
-                        <td className="py-0 px-1 font-semibold text-[11px] leading-tight whitespace-nowrap">
-                          {row.hasSapData && row.grade && row.grade !== "รอข้อมูล SAP" ? (
-                            row.grade
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
-                              รอข้อมูล SAP
-                            </span>
-                          )}
-                        </td>
+                          {/* 5b. หนา × กว้าง - Mobile dedicated single-line column */}
+                          <td className="md:hidden !px-2 !py-2 font-mono font-medium text-xs leading-tight whitespace-nowrap align-middle text-slate-700 dark:text-slate-200">
+                            {hasAnyDimension ? (
+                              <span className="inline-block whitespace-nowrap">
+                                {`${hasThickness ? formatDimension2Decimals(row.certThickness) : "-"}×${hasWidth ? formatDimension2Decimals(row.width) : "-"}`}
+                              </span>
+                            ) : (
+                              <span className="inline-block whitespace-nowrap px-1.5 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
+                                รอข้อมูล SAP
+                              </span>
+                            )}
+                          </td>
 
-                        {/* 7. ผู้ผลิต */}
-                        <td className="py-0 px-1 text-slate-600 dark:text-slate-400 text-[11px] leading-tight whitespace-nowrap">
-                          {row.hasSapData && row.manufacturer && row.manufacturer !== "รอข้อมูล SAP" ? (
-                            row.manufacturer
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
-                              รอข้อมูล SAP
-                            </span>
-                          )}
-                        </td>
+                          {/* 6. Unrestricted(น้ำหนักkg) */}
+                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 font-bold text-emerald-600 dark:text-emerald-400 font-mono text-xs md:text-[11px] leading-tight whitespace-nowrap align-middle">
+                            {row.hasSapData && row.unrestricted && row.unrestricted !== "รอข้อมูล SAP" ? (
+                              row.unrestricted
+                            ) : (
+                              <span className="px-1.5 py-0.5 md:py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
+                                รอข้อมูล SAP
+                              </span>
+                            )}
+                          </td>
 
-                        {/* 8. รับจากเครื่อง (Dropdown SM01-SM04 or Machine Badge) */}
-                        <td className="py-0 px-1 whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10">
-                          {AVAILABLE_MACHINES.includes(row.machine) ? (
-                            <select
-                              value={row.machine}
-                              onChange={(e) => handleMachineChange(row.id, e.target.value)}
-                              className="bg-white dark:bg-[#0c1930] text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 py-0 px-0.5 h-4.5 rounded border border-slate-300 dark:border-[#1e3a5f] focus:outline-none focus:border-cyan-500 leading-none"
-                            >
-                              {AVAILABLE_MACHINES.map((m) => (
-                                <option key={m} value={m}>
-                                  {m}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded font-mono font-bold text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                              {row.machine}
-                            </span>
-                          )}
-                        </td>
+                          {/* 7. Grade + Mobile grouped Manufacturer */}
+                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 font-semibold text-xs md:text-[11px] leading-tight whitespace-nowrap align-middle">
+                            <div className="whitespace-nowrap">
+                              {row.hasSapData && row.grade && row.grade !== "รอข้อมูล SAP" ? (
+                                row.grade
+                              ) : (
+                                <span className="inline-block whitespace-nowrap px-1.5 py-0.5 md:py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
+                                  รอข้อมูล SAP
+                                </span>
+                              )}
+                            </div>
+                            {row.hasSapData && row.manufacturer && row.manufacturer !== "รอข้อมูล SAP" && (
+                              <div className="md:hidden mt-0.5 text-[10px] font-normal text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                {row.manufacturer}
+                              </div>
+                            )}
+                          </td>
 
-                        {/* 9. Location เดิม (จากการย้าย Layout ครั้งล่าสุด) */}
-                        <td className="py-0 px-1 whitespace-nowrap bg-slate-50/30 dark:bg-slate-900/10">
-                          {(() => {
-                            const prevLoc = getPreviousLocationForRecord(row);
-                            return prevLoc !== "-" ? (
+                          {/* 8. ผู้ผลิต - Desktop */}
+                          <td className="hidden md:table-cell py-0 px-1 text-slate-600 dark:text-slate-400 text-[11px] leading-tight whitespace-nowrap">
+                            {row.hasSapData && row.manufacturer && row.manufacturer !== "รอข้อมูล SAP" ? (
+                              row.manufacturer
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-semibold border border-amber-300/80 dark:border-amber-800">
+                                รอข้อมูล SAP
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 9. รับจากเครื่อง (Dropdown SM01-SM04 or Machine Badge) */}
+                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10 align-middle">
+                            {AVAILABLE_MACHINES.includes(row.machine) ? (
+                              <select
+                                value={row.machine}
+                                onChange={(e) => handleMachineChange(row.id, e.target.value)}
+                                className="bg-white dark:bg-[#0c1930] text-xs md:text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 py-1 px-1.5 md:py-0 md:px-0.5 md:h-4.5 rounded border border-slate-300 dark:border-[#1e3a5f] focus:outline-none focus:border-cyan-500 leading-none"
+                              >
+                                {AVAILABLE_MACHINES.map((m) => (
+                                  <option key={m} value={m}>
+                                    {m}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="inline-flex items-center px-1.5 py-0.5 md:py-0.2 rounded font-mono font-bold text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                                {row.machine}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* 10. Location เดิม (จากการย้าย Layout ครั้งล่าสุด) - Desktop */}
+                          <td className="hidden md:table-cell py-0 px-1 whitespace-nowrap bg-slate-50/30 dark:bg-slate-900/10">
+                            {prevLoc !== "-" ? (
                               <span className="px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 font-mono font-bold text-[11px] leading-none inline-flex items-center gap-1">
                                 {prevLoc}
                               </span>
                             ) : (
                               <span className="text-slate-400 dark:text-slate-500 font-mono text-[11px] px-1">-</span>
-                            );
-                          })()}
-                        </td>
+                            )}
+                          </td>
 
-                        {/* 10. Location */}
-                        <td className="py-0 px-1 whitespace-nowrap">
-                          <span className="px-1 py-0 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-mono font-bold text-[11px] leading-none">
-                            {row.location}
-                          </span>
-                        </td>
+                          {/* 11. Location + Mobile grouped Prev Location */}
+                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 whitespace-nowrap align-middle">
+                            <span className="px-1.5 py-0.5 md:px-1 md:py-0 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-mono font-bold text-xs md:text-[11px] leading-none inline-block">
+                              {row.location}
+                            </span>
+                            {prevLoc !== "-" && (
+                              <div className="md:hidden mt-0.5 text-[10px] font-mono text-amber-700 dark:text-amber-400">
+                                {isThai ? "เดิม:" : "Prev:"} {prevLoc}
+                              </div>
+                            )}
+                          </td>
 
-                        {/* 10. จัดการ (ลบแถว / ดูรายละเอียด) */}
-                        <td className="py-0 px-1 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedRecord(row)}
-                              className="p-0.5 rounded text-cyan-600 hover:text-cyan-700 hover:bg-cyan-50 dark:hover:bg-cyan-950/50"
-                              title={isThai ? "ดูรายละเอียด" : "View Details"}
-                            >
-                              <Eye size={11} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteRecord(row.id, row.batch)}
-                              className="p-0.5 rounded text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50"
-                              title={isThai ? "ลบรายการ" : "Remove"}
-                            >
-                              <Trash2 size={11} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                          {/* 12. จัดการ (ลบแถว / ดูรายละเอียด) */}
+                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 text-center whitespace-nowrap align-middle">
+                            <div className="inline-flex items-center gap-1.5 md:gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedRecord(row)}
+                                className="p-1.5 md:p-0.5 rounded bg-cyan-50/80 md:bg-transparent dark:bg-cyan-950/40 md:dark:bg-transparent text-cyan-600 hover:text-cyan-700 hover:bg-cyan-100 md:hover:bg-cyan-50 dark:hover:bg-cyan-950/60 cursor-pointer"
+                                title={isThai ? "ดูรายละเอียด" : "View Details"}
+                              >
+                                <Eye size={14} className="md:w-[11px] md:h-[11px]" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRecord(row.id, row.batch)}
+                                className="p-1.5 md:p-0.5 rounded bg-rose-50/80 md:bg-transparent dark:bg-rose-950/40 md:dark:bg-transparent text-rose-500 hover:text-rose-700 hover:bg-rose-100 md:hover:bg-rose-50 dark:hover:bg-rose-950/60 cursor-pointer"
+                                title={isThai ? "ลบรายการ" : "Remove"}
+                              >
+                                <Trash2 size={14} className="md:w-[11px] md:h-[11px]" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
 
-            {/* Pagination Controls Bar (AGENT.MD Standards) */}
-            <div className="p-3 border-t flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+            {/* Pagination Controls Bar (Centered & Touch-Friendly on Mobile + Inline on Desktop) */}
+            <div className="p-3 border-t flex flex-col md:flex-row md:flex-wrap items-center md:justify-between gap-2.5 md:gap-3 text-xs bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
               {/* Pagination Status Text */}
-              <div className="text-slate-600 dark:text-slate-300 font-medium">
+              <div className="text-slate-600 dark:text-slate-300 font-medium text-center md:text-left text-[11px] md:text-xs">
                 {isThai
                   ? `แสดง ${filteredList.length === 0 ? 0 : startIndex + 1} - ${endIndex} จากทั้งหมด ${filteredList.length} รายการ (หน้าที่ ${validCurrentPage} จาก ${totalPages})`
                   : `Showing ${filteredList.length === 0 ? 0 : startIndex + 1} - ${endIndex} of ${filteredList.length} items (Page ${validCurrentPage} of ${totalPages})`}
               </div>
 
               {/* Navigation Buttons */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-center gap-1.5 w-full md:w-auto">
                 <button
                   type="button"
                   onClick={() => handlePageChange(1)}
                   disabled={validCurrentPage <= 1}
-                  className={`p-1.5 rounded border text-xs font-semibold flex items-center justify-center transition-all ${
+                  className={`min-h-[36px] min-w-[36px] md:min-h-0 md:min-w-0 p-2 md:p-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
                     validCurrentPage <= 1
                       ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
                       : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
@@ -8897,7 +8973,7 @@ export function SlitFilmManagement({
                   type="button"
                   onClick={() => handlePageChange(validCurrentPage - 1)}
                   disabled={validCurrentPage <= 1}
-                  className={`px-2.5 py-1.5 rounded border text-xs font-semibold flex items-center gap-1 transition-all ${
+                  className={`min-h-[36px] md:min-h-0 px-3 py-2 md:px-2.5 md:py-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
                     validCurrentPage <= 1
                       ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
                       : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
@@ -8908,7 +8984,7 @@ export function SlitFilmManagement({
                 </button>
 
                 {/* Page Indicator */}
-                <div className="px-3 py-1 rounded bg-slate-200/60 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-mono text-xs font-bold border border-slate-300/60 dark:border-[#1e3a5f]">
+                <div className="min-h-[36px] md:min-h-0 min-w-[54px] md:min-w-0 px-3 py-1.5 md:py-1 rounded-md md:rounded bg-slate-200/70 dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 font-mono text-xs font-bold border border-slate-300/70 dark:border-[#1e3a5f] flex items-center justify-center">
                   {validCurrentPage} / {totalPages}
                 </div>
 
@@ -8916,7 +8992,7 @@ export function SlitFilmManagement({
                   type="button"
                   onClick={() => handlePageChange(validCurrentPage + 1)}
                   disabled={validCurrentPage >= totalPages}
-                  className={`px-2.5 py-1.5 rounded border text-xs font-semibold flex items-center gap-1 transition-all ${
+                  className={`min-h-[36px] md:min-h-0 px-3 py-2 md:px-2.5 md:py-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
                     validCurrentPage >= totalPages
                       ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
                       : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
@@ -8930,7 +9006,7 @@ export function SlitFilmManagement({
                   type="button"
                   onClick={() => handlePageChange(totalPages)}
                   disabled={validCurrentPage >= totalPages}
-                  className={`p-1.5 rounded border text-xs font-semibold flex items-center justify-center transition-all ${
+                  className={`min-h-[36px] min-w-[36px] md:min-h-0 md:min-w-0 p-2 md:p-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
                     validCurrentPage >= totalPages
                       ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
                       : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
@@ -8942,14 +9018,22 @@ export function SlitFilmManagement({
               </div>
             </div>
 
-            {/* Table Footer with Summary Only */}
-            <div className="py-2.5 px-3 border-t flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
-              <div className="text-xs text-slate-600 dark:text-slate-300">
-                {isThai ? "ยอดรวมน้ำหนักรอบนี้:" : "Total Weight:"}{" "}
-                <strong className="text-emerald-600 dark:text-emerald-400 font-mono text-sm">
-                  {totalWeightKg.toLocaleString()} kg
-                </strong>{" "}
-                <span className="text-slate-400">({totalWeightTon} TON)</span>
+            {/* Table Footer with Structured KG / TON Summary */}
+            <div className="p-2.5 md:py-2.5 md:px-3 border-t flex flex-wrap items-center justify-between gap-2 md:gap-3 bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+              <div className="w-full md:w-auto flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2 rounded-lg md:rounded-none bg-emerald-50/80 dark:bg-emerald-950/30 md:bg-transparent md:dark:bg-transparent border border-emerald-200/80 dark:border-emerald-800/60 md:border-0 px-3 py-2 md:p-0 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-semibold md:font-normal text-slate-700 dark:text-slate-300">
+                  {isThai ? "ยอดรวมน้ำหนักรอบนี้:" : "Total Weight:"}
+                </span>
+                <div className="flex items-center justify-between md:justify-start gap-2">
+                  <strong className="text-emerald-700 dark:text-emerald-400 font-mono text-sm font-extrabold tabular-nums">
+                    {totalWeightKg.toLocaleString()} <span className="text-xs font-bold">kg</span>
+                  </strong>
+                  <span className="px-2 py-0.5 md:p-0 rounded-md md:rounded-none bg-white/80 dark:bg-[#0c1930] md:bg-transparent md:dark:bg-transparent border border-emerald-200 dark:border-emerald-800/70 md:border-0 font-mono font-bold md:font-normal text-xs text-emerald-700 dark:text-emerald-300 md:text-slate-400 tabular-nums">
+                    <span className="hidden md:inline">(</span>
+                    {totalWeightTon} TON
+                    <span className="hidden md:inline">)</span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -9182,39 +9266,39 @@ export function SlitFilmManagement({
             </button>
           </div>
 
-          <section className="p-2.5 sm:p-3.5 rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-sm space-y-2.5 font-sans animate-fade-in">
+          <section className="w-full max-w-full min-w-0 p-2.5 sm:p-3.5 rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-sm space-y-2.5 font-sans animate-fade-in">
             {/* Header & Subtitle */}
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5 border-slate-100 dark:border-[#1e3a5f]">
-              <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  <Package size={18} />
-                </div>
-                <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-2">
-                    <span>{isThai ? "Stock คงคลัง" : "Stock Balance"}</span>
-                    <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                      {filteredStockList.length} {isThai ? "รายการ" : "items"}
-                    </span>
-                    {sapMasterMap.size > 0 && (
-                      <span
-                        className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800 font-mono"
-                        title={isThai ? `มัดรวมข้อมูล SAP บน Cloud Firestore (${SAP_CHUNK_SIZE} รายการ/ก้อน)` : "Bundled SAP Master Data on Cloud Firestore"}
-                      >
-                        ☁️ SAP Cloud: {sapChunkCount || Math.ceil(sapMasterMap.size / SAP_CHUNK_SIZE)} {isThai ? "ก้อน" : "chunks"} ({sapMasterMap.size.toLocaleString()})
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5 border-slate-100 dark:border-[#1e3a5f]">
+              <div className="flex items-start sm:items-center justify-between gap-2 w-full sm:w-auto">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                    <Package size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span>{isThai ? "Stock คงคลัง" : "Stock Balance"}</span>
+                      <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 whitespace-nowrap">
+                        {filteredStockList.length} {isThai ? "รายการ" : "items"}
                       </span>
-                    )}
-                  </h2>
-                  <p className="hidden text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {isThai
-                      ? "ตารางแสดงปริมาณวัตถุดิบสลิต/ฟิล์มคงคลังล่าสุด"
-                      : "Real-time Slit Steel & Film inventory balance"}
-                  </p>
+                    </h2>
+                    <p className="hidden text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {isThai
+                        ? "ตารางแสดงปริมาณวัตถุดิบสลิต/ฟิล์มคงคลังล่าสุด"
+                        : "Real-time Slit Steel & Film inventory balance"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Mobile Total TON badge on top-right */}
+                <div className="sm:hidden shrink-0 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs whitespace-nowrap">
+                  {stockTotalWeightTon} TON
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Desktop Total TON */}
+              <div className="hidden sm:flex flex-wrap items-center gap-2 shrink-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                     {isThai ? "รวมน้ำหนักคลัง:" : "Total Stock:"}
                   </span>
                   <div className="px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs">
@@ -9224,43 +9308,77 @@ export function SlitFilmManagement({
               </div>
             </div>
 
-          {/* SAP Fiori Style Top Toolbar: Quick Search & Status Filter */}
-          <div className="filterbar flex flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-[18px] sm:py-2.5 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
-            {/* Search Input */}
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={stockSearchKeyword}
-                onChange={(e) => {
-                  setStockSearchKeyword(e.target.value);
-                  setStockCurrentPage(1);
-                }}
-                placeholder={
-                  isThai
-                    ? "ค้นหาด่วนตาม Batch, Location, Grade, Material No..."
-                    : "Search by Batch, Location, Grade..."
-                }
-                className="field w-full rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
-              />
-              {stockSearchKeyword && (
-                <button
-                  type="button"
-                  onClick={() => setStockSearchKeyword("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                >
-                  <X size={14} />
-                </button>
-              )}
+          {/* SAP Fiori Style Top Toolbar: Mobile 2-Row Balanced Layout (< md) + Desktop Inline Row (>= md) */}
+          <div className="filterbar w-full max-w-full min-w-0 flex !flex-col md:!flex-row md:!flex-wrap !items-stretch md:!items-center justify-between !gap-2 p-2.5 md:px-[18px] md:py-2.5 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
+            {/* Row 1 (Mobile < md): Primary Search + Compact Status | Unwrapped into Desktop Row via md:contents */}
+            <div className="flex items-center gap-2 w-full min-w-0 md:contents">
+              {/* Search Input (Primary expandable field) */}
+              <div className="relative flex-1 min-w-0 md:min-w-[220px] md:order-1">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={stockSearchKeyword}
+                  onChange={(e) => {
+                    setStockSearchKeyword(e.target.value);
+                    setStockCurrentPage(1);
+                  }}
+                  placeholder={
+                    isThai
+                      ? "ค้นหา Batch, Location, Grade, Material No..."
+                      : "Search by Batch, Location, Grade..."
+                  }
+                  className="field w-full min-w-0 !h-9 !min-h-[36px] !py-[7px] !pl-8 !pr-7 !rounded-md !text-xs font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                />
+                {stockSearchKeyword && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStockSearchKeyword("");
+                      setStockCurrentPage(1);
+                    }}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 md:p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter (Compact beside Search on Mobile < md, Inline after Date on Desktop >= md) */}
+              <div className="shrink-0 w-[124px] sm:w-[144px] md:w-auto md:order-3 flex items-center md:gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <label className="hidden md:inline text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0">
+                  {isThai ? "สถานะ:" : "Status:"}
+                </label>
+                <div className="relative w-full md:w-auto min-w-0">
+                  <Filter size={12} className="md:hidden pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400" />
+                  <select
+                    value={stockStatusFilter}
+                    onChange={(e) => {
+                      setStockStatusFilter(e.target.value as "all" | "ready" | "preparing" | "pending_location");
+                      setStockCurrentPage(1);
+                    }}
+                    aria-label={isThai ? "สถานะ" : "Status"}
+                    title={isThai ? "สถานะ" : "Status"}
+                    className="field w-full md:w-auto min-w-0 !h-9 md:!h-[35px] !min-h-[36px] md:!min-h-[35px] !py-1.5 !pl-6 !pr-1.5 md:!px-2.5 !rounded-md !text-xs font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    <option value="all">{isThai ? "ทั้งหมด (All)" : "All Status"}</option>
+                    <option value="ready">{isThai ? "🟢 พร้อมใช้ (Unrestricted)" : "🟢 Ready"}</option>
+                    <option value="preparing">{isThai ? "🟠 กำลังเตรียม (Preparing)" : "🟠 Preparing"}</option>
+                    <option value="pending_location">{isThai ? "🟡 รอสแกน Location" : "🟡 Pending Location Scan"}</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            {/* Date Filter, Status Filter Dropdown & Page Size */}
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <Calendar size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>{isThai ? "วันที่:" : "Date:"}</span>
-                <div className="relative flex items-center">
+            {/* Row 2 (Mobile < md): Balanced Date + Page Size | Unwrapped into Desktop Row via md:contents */}
+            <div className="flex items-end gap-2 w-full min-w-0 md:contents">
+              {/* Date Filter */}
+              <div className="flex-1 min-w-0 md:flex-initial md:w-auto md:order-2 flex flex-col md:flex-row md:items-center gap-1 md:gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <label className="flex items-center gap-1 text-[11px] md:text-xs font-semibold text-slate-600 dark:text-slate-400 md:text-slate-700 md:dark:text-slate-300">
+                  <Calendar size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>{isThai ? "วันที่" : "Date"}<span className="hidden md:inline">:</span></span>
+                </label>
+                <div className="relative flex items-center w-full md:w-auto min-w-0 gap-1">
                   <input
                     type="date"
                     value={stockDateFilter}
@@ -9268,8 +9386,7 @@ export function SlitFilmManagement({
                       setStockDateFilter(e.target.value);
                       setStockCurrentPage(1);
                     }}
-                    className="field font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 dark:[color-scheme:dark] focus:outline-none focus:border-emerald-500 cursor-pointer"
-                    style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
+                    className="field flex-1 md:flex-initial w-full md:w-auto min-w-0 max-w-full !h-9 md:!h-[35px] !min-h-[36px] md:!min-h-[35px] !py-1.5 !px-2 !rounded-md !text-xs font-mono font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 dark:[color-scheme:dark] focus:outline-none focus:border-emerald-500 cursor-pointer"
                   />
                   {stockDateFilter && (
                     <button
@@ -9279,7 +9396,7 @@ export function SlitFilmManagement({
                         setStockCurrentPage(1);
                       }}
                       title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
-                      className="ml-1 p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                      className="shrink-0 p-1.5 md:p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
                     >
                       <X size={12} />
                     </button>
@@ -9287,33 +9404,19 @@ export function SlitFilmManagement({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <span>{isThai ? "สถานะ:" : "Status:"}</span>
-                <select
-                  value={stockStatusFilter}
-                  onChange={(e) => {
-                    setStockStatusFilter(e.target.value as "all" | "ready" | "preparing" | "pending_location");
-                    setStockCurrentPage(1);
-                  }}
-                  className="field font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
-                  style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
-                >
-                  <option value="all">{isThai ? "ทั้งหมด (All)" : "All Status"}</option>
-                  <option value="ready">{isThai ? "🟢 พร้อมใช้ (Unrestricted)" : "🟢 Ready"}</option>
-                  <option value="preparing">{isThai ? "🟠 กำลังเตรียม (Preparing)" : "🟠 Preparing"}</option>
-                  <option value="pending_location">{isThai ? "🟡 รอสแกน Location" : "🟡 Pending Location Scan"}</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+              {/* Page Size Dropdown (Aligned with Status column above on mobile < md, at end on desktop >= md) */}
+              <div className="shrink-0 w-[124px] sm:w-[144px] md:w-auto md:order-4 flex flex-col md:flex-row md:items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <span className="md:hidden text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+                  {isThai ? "จำนวนแถว" : "Rows"}
+                </span>
                 <select
                   value={stockPageSize}
                   onChange={(e) => {
                     setStockPageSize(Number(e.target.value));
                     setStockCurrentPage(1);
                   }}
-                  className="field font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500"
-                  style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                  aria-label="Rows per page"
+                  className="field w-full md:w-auto min-w-0 !h-9 md:!h-[35px] !min-h-[36px] md:!min-h-[35px] !py-1.5 !px-2 !rounded-md !text-xs font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
                 >
                   <option value={10}>10 {isThai ? "แถว" : "rows"}</option>
                   <option value={20}>20 {isThai ? "แถว" : "rows"}</option>
@@ -9321,6 +9424,24 @@ export function SlitFilmManagement({
                 </select>
               </div>
             </div>
+
+            {/* Mobile-only Reset All Filters Button (shown cleanly below Row 2 when any filter is active) */}
+            {(stockSearchKeyword || stockDateFilter || stockStatusFilter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setStockSearchKeyword("");
+                  setStockDateFilter("");
+                  setStockStatusFilter("all");
+                  setStockCurrentPage(1);
+                }}
+                className="md:hidden w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold cursor-pointer transition-colors"
+                title={isThai ? "ล้างตัวกรองทั้งหมด" : "Reset all filters"}
+              >
+                <RotateCcw size={12} />
+                <span>{isThai ? "ล้างตัวกรองทั้งหมด" : "Reset all filters"}</span>
+              </button>
+            )}
           </div>
 
           {/* SAP Fiori Compact Table */}
