@@ -9046,13 +9046,12 @@ export function SlitFilmManagement({
       {/* 5. Relocate Layout View */}
       {activeMode === "relocate_layout" && (
         <div className="flex flex-col space-y-2 sm:space-y-2.5 animate-fade-in">
-          {/* Top-Most Primary Camera Viewfinder for Batch or Destination Layout (1D Barcode Only) */}
+          {/* Top-Most Primary Camera Viewfinder for Batch or Destination Layout (1D Barcode Only, same size as Inbound Transfer) */}
           {relocateCameraTarget !== null && (
-            <div className="w-full flex flex-col">
+            <div className="w-full max-w-md mx-auto">
               <CameraBarcodeScanner
                 isThai={isThai}
                 barcodeOnly
-                fullHeight
                 onScan={(decoded) => {
                   if (relocateCameraTarget === "batch") {
                     const cleaned = cleanBarcode(decoded);
@@ -9763,13 +9762,12 @@ export function SlitFilmManagement({
       {/* 5. Return to Warehouse (คืนคลัง) View */}
       {activeMode === "return_warehouse" && (
         <section className="flex flex-col space-y-2 sm:space-y-3 font-sans">
-          {/* Top-Most Primary Camera Viewfinder when scanning Batch (1D Barcode Only) */}
+          {/* Top-Most Primary Camera Viewfinder when scanning Batch (1D Barcode Only, same size as Inbound Transfer) */}
           {isReturnCameraActive && (
-            <div className="w-full flex flex-col">
+            <div className="w-full max-w-md mx-auto">
               <CameraBarcodeScanner
                 isThai={isThai}
                 barcodeOnly
-                fullHeight
                 onScan={(decoded) => {
                   const cleaned = cleanBarcode(decoded);
                   if (!cleaned) return;

@@ -26,10 +26,6 @@ export interface CameraBarcodeScannerProps {
   isThai?: boolean;
   placeholderText?: string;
   barcodeOnly?: boolean;
-  statusPlacement?: "overlay" | "below";
-  titleText?: string;
-  descriptionText?: string;
-  fullHeight?: boolean;
 }
 
 // 1D and 2D barcode formats strictly used in industrial warehouse operations
@@ -81,7 +77,6 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   onClose,
   isThai = true,
   barcodeOnly = false,
-  fullHeight = false,
 }) => {
   const containerId = useRef(`barcode-reader-${Math.random().toString(36).substring(2, 9)}`).current;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -507,11 +502,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   };
 
   return (
-    <div
-      className={`relative w-full rounded-2xl overflow-hidden bg-[#0c1930] border border-slate-700/80 shadow-xl flex flex-col ${
-        fullHeight ? "h-full min-h-[360px] sm:min-h-[420px]" : ""
-      }`}
-    >
+    <div className="relative w-full rounded-2xl overflow-hidden bg-[#0c1930] border border-slate-700/80 shadow-xl flex flex-col">
       {/* Suppress html5-qrcode internal shaded region border to prevent double-bracket clutter */}
       <style>{`
         #${containerId} #qr-shaded-region {
@@ -526,12 +517,8 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         }
       `}</style>
 
-      {/* Video Viewfinder Container (Top Primary Area) */}
-      <div
-        className={`relative w-full bg-black flex items-center justify-center overflow-hidden ${
-          fullHeight ? "flex-1 min-h-[280px] sm:min-h-[340px]" : "h-[280px] sm:h-[330px]"
-        }`}
-      >
+      {/* Video Viewfinder Container (Same dimensions as Inbound Transfer camera: h-[280px] sm:h-[330px]) */}
+      <div className="relative w-full h-[280px] sm:h-[330px] bg-black flex items-center justify-center overflow-hidden">
         {/* Hardware-accelerated Native Video Element */}
         <video
           ref={videoRef}
