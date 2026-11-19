@@ -3958,15 +3958,19 @@ export function SlitFilmManagement({
   const [relocateBarcodeInput, setRelocateBarcodeInput] = useState<string>("");
   const [relocateBatchList, setRelocateBatchList] = useState<RelocateBatchItem[]>([]);
   const [destinationLayout, setDestinationLayout] = useState<string>("");
+  const [relocateCameraTarget, setRelocateCameraTarget] = useState<"batch" | "destination" | null>(null);
   const relocateInputRef = useRef<HTMLInputElement>(null);
+  const destinationLayoutInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus barcode input when in relocate_layout mode
+  // Auto-focus barcode input when in relocate_layout mode and close camera when leaving
   useEffect(() => {
     if (activeMode === "relocate_layout") {
       const timer = setTimeout(() => {
         relocateInputRef.current?.focus();
       }, 150);
       return () => clearTimeout(timer);
+    } else {
+      setRelocateCameraTarget(null);
     }
   }, [activeMode]);
 
@@ -4192,17 +4196,20 @@ export function SlitFilmManagement({
   const [bulkReturnLocation, setBulkReturnLocation] = useState<string>("");
   const [returnPageSize, setReturnPageSize] = useState<number>(10);
   const [returnCurrentPage, setReturnCurrentPage] = useState<number>(1);
+  const [isReturnCameraActive, setIsReturnCameraActive] = useState<boolean>(false);
   const returnBarcodeInputRef = useRef<HTMLInputElement>(null);
 
   const [deletedReturnBatchIds, setDeletedReturnBatchIds] = useState<string[]>([]);
 
-  // Auto-focus barcode input when in return_warehouse mode
+  // Auto-focus barcode input when in return_warehouse mode and close camera when leaving
   useEffect(() => {
     if (activeMode === "return_warehouse") {
       const timer = setTimeout(() => {
         returnBarcodeInputRef.current?.focus();
       }, 150);
       return () => clearTimeout(timer);
+    } else {
+      setIsReturnCameraActive(false);
     }
   }, [activeMode]);
 
@@ -8595,51 +8602,45 @@ export function SlitFilmManagement({
         {/* Collapsible Content */}
         {!isTableCollapsed && (
           <div className="w-full max-w-full min-w-0">
-            {/* Table Toolbar & Search & Page Size */}
-            <div className="filterbar p-2.5 md:px-[18px] md:py-2.5 border-b flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center md:justify-between gap-2.5 md:gap-2 bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
-              {/* Row 1 (Mobile Full Width) / Left (Desktop): Search Input */}
-              <div className="flex items-center gap-2 w-full md:flex-1 md:min-w-[220px]">
-                <div className="relative flex-1 w-full">
-                  <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={searchKeyword}
-                    onChange={(e) => {
-                      setSearchKeyword(e.target.value);
+            {/* Table Toolbar & Search & Page Size (Single Row on Mobile < md + Inline Row on Desktop >= md) */}
+            <div className="filterbar w-full max-w-full min-w-0 !p-2 md:!px-[18px] md:!py-2.5 border-b flex !flex-row !flex-nowrap md:!flex-wrap !items-center md:justify-between !gap-1.5 md:!gap-2 overflow-x-auto md:overflow-visible bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
+              {/* Search Input */}
+              <div className="relative flex-1 min-w-[115px] md:min-w-[220px]">
+                <Search size={14} className="pointer-events-none absolute left-2 md:left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={searchKeyword}
+                  onChange={(e) => {
+                    setSearchKeyword(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder={isThai ? "ค้นหา Batch, Grade, เครื่อง, Location..." : "Filter by Batch, Grade, Machine, Location..."}
+                  className="field w-full min-w-0 !h-9 !min-h-[36px] !py-1.5 !pl-7 md:!pl-8 !pr-6 md:!pr-8 !rounded-md !text-xs font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50"
+                />
+                {searchKeyword && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchKeyword("");
                       setCurrentPage(1);
                     }}
-                    placeholder={isThai ? "ค้นหาตาม Batch, Grade, ผู้ผลิต, เครื่อง, Location..." : "Filter by Batch, Grade, Machine, Location..."}
-                    className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-xs font-normal text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50"
-                    style={{ width: "100%", height: 36, minHeight: 36, padding: "7px 32px 7px 32px", borderRadius: 6, fontSize: 12 }}
-                  />
-                  {searchKeyword && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSearchKeyword("");
-                        setCurrentPage(1);
-                      }}
-                      aria-label={isThai ? "ล้างคำค้นหา" : "Clear search"}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 md:p-0.5 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                    >
-                      <X size={13} />
-                    </button>
-                  )}
-                </div>
+                    aria-label={isThai ? "ล้างคำค้นหา" : "Clear search"}
+                    className="absolute right-1 md:right-1.5 top-1/2 -translate-y-1/2 p-1 md:p-0.5 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
               </div>
 
-              {/* Row 2 (Mobile: 2-Column Grid) / Right (Desktop: Inline Flex): Date Filter & Rows Per Page */}
-              <div className="grid grid-cols-2 gap-2 w-full md:w-auto md:flex md:flex-wrap md:items-center md:gap-2 text-xs text-slate-600 dark:text-slate-300">
+              {/* Date Filter & Rows Per Page (Same Single Row on Mobile & Desktop) */}
+              <div className="flex items-center gap-1.5 md:gap-2 shrink-0 text-xs text-slate-600 dark:text-slate-300">
                 {/* Date Picker */}
-                <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1.5 min-w-0">
-                  <label className="flex items-center gap-1 text-[11px] md:text-xs font-semibold md:font-normal text-slate-600 dark:text-slate-400 md:text-slate-500">
+                <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+                  <label className="hidden md:flex items-center gap-1 text-xs font-normal text-slate-500 dark:text-slate-400">
                     <Calendar size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />
-                    <span>
-                      {isThai ? "วันที่" : "Date"}
-                      <span className="hidden md:inline">:</span>
-                    </span>
+                    <span>{isThai ? "วันที่:" : "Date:"}</span>
                   </label>
-                  <div className="relative flex items-center gap-1 w-full md:w-auto min-w-0">
+                  <div className="relative flex items-center gap-1 shrink-0">
                     <input
                       type="date"
                       value={historyDateFilter}
@@ -8647,8 +8648,9 @@ export function SlitFilmManagement({
                         setHistoryDateFilter(e.target.value);
                         setCurrentPage(1);
                       }}
-                      className="field w-full md:w-auto min-w-0 font-mono font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500/50 cursor-pointer"
-                      style={{ height: 36, minHeight: 36, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
+                      aria-label={isThai ? "วันที่" : "Date"}
+                      title={isThai ? "กรองตามวันที่" : "Filter by date"}
+                      className="field w-[114px] sm:w-[132px] md:w-auto !h-9 !min-h-[36px] !py-1.5 !px-1.5 md:!px-2 !rounded-md !text-[11px] md:!text-xs font-mono font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500/50 cursor-pointer"
                     />
                     {historyDateFilter && (
                       <button
@@ -8658,7 +8660,7 @@ export function SlitFilmManagement({
                           setCurrentPage(1);
                         }}
                         title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
-                        className="shrink-0 p-2 md:p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        className="shrink-0 p-1.5 md:p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
                       >
                         <X size={12} />
                       </button>
@@ -8667,10 +8669,9 @@ export function SlitFilmManagement({
                 </div>
 
                 {/* Page Size Selector */}
-                <div className="flex flex-col gap-1 md:flex-row md:items-center md:gap-1.5 min-w-0">
-                  <label className="text-[11px] md:text-xs font-semibold md:font-normal text-slate-600 dark:text-slate-400 md:text-slate-500">
-                    {isThai ? "แสดง" : "Show"}
-                    <span className="hidden md:inline">:</span>
+                <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+                  <label className="hidden md:inline text-xs font-normal text-slate-500 dark:text-slate-400">
+                    {isThai ? "แสดง:" : "Show:"}
                   </label>
                   <select
                     value={pageSize}
@@ -8678,31 +8679,32 @@ export function SlitFilmManagement({
                       setPageSize(Number(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="field w-full md:w-auto font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50"
-                    style={{ height: 36, minHeight: 36, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
+                    aria-label={isThai ? "จำนวนแถวต่อหน้า" : "Rows per page"}
+                    className="field w-[82px] sm:w-[96px] md:w-auto !h-9 !min-h-[36px] !py-1.5 !px-1.5 md:!px-2.5 !rounded-md !text-[11px] md:!text-xs font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
                   >
                     <option value={5}>5 {isThai ? "แถว/หน้า" : "/ page"}</option>
                     <option value={10}>10 {isThai ? "แถว/หน้า" : "/ page"}</option>
                     <option value={20}>20 {isThai ? "แถว/หน้า" : "/ page"}</option>
                   </select>
                 </div>
-              </div>
 
-              {/* Mobile-only Reset All Filters Button (easy tap target when any filter is active) */}
-              {(searchKeyword || historyDateFilter) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearchKeyword("");
-                    setHistoryDateFilter("");
-                    setCurrentPage(1);
-                  }}
-                  className="md:hidden w-full h-9 px-3 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer active:scale-[0.99]"
-                >
-                  <RotateCcw size={13} />
-                  <span>{isThai ? "ล้างตัวกรองทั้งหมด" : "Reset All Filters"}</span>
-                </button>
-              )}
+                {/* Mobile-only Compact Reset Filters Button (inline on same row when active) */}
+                {(searchKeyword || historyDateFilter) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchKeyword("");
+                      setHistoryDateFilter("");
+                      setCurrentPage(1);
+                    }}
+                    title={isThai ? "ล้างตัวกรองทั้งหมด" : "Reset All Filters"}
+                    aria-label={isThai ? "ล้างตัวกรองทั้งหมด" : "Reset All Filters"}
+                    className="md:hidden shrink-0 h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer active:scale-95"
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* 12-Column Scanned Batch Summary Table (Compact Mobile View + Full Desktop Table) */}
@@ -9066,7 +9068,7 @@ export function SlitFilmManagement({
                 className="space-y-1.5"
               >
                 <div className="flex gap-1.5">
-                  <div className="relative flex-1">
+                  <div className="relative flex-1 min-w-0">
                     <input
                       ref={relocateInputRef}
                       type="text"
@@ -9090,14 +9092,73 @@ export function SlitFilmManagement({
                     </div>
                   </div>
                   <button
+                    type="button"
+                    onClick={() =>
+                      setRelocateCameraTarget((prev) => (prev === "batch" ? null : "batch"))
+                    }
+                    className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0 border ${
+                      relocateCameraTarget === "batch"
+                        ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500"
+                        : "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700"
+                    }`}
+                    title={
+                      isThai
+                        ? relocateCameraTarget === "batch"
+                          ? "ปิดกล้องสแกนบาร์โค้ด Batch"
+                          : "เปิดกล้องสแกนบาร์โค้ด Batch (เฉพาะ Barcode 1D)"
+                        : relocateCameraTarget === "batch"
+                          ? "Close Batch camera"
+                          : "Open camera to scan Batch barcode (1D Barcode only)"
+                    }
+                    aria-label={isThai ? "เปิดกล้องสแกนบาร์โค้ด Batch" : "Scan Batch barcode with camera"}
+                  >
+                    <Camera size={14} />
+                    <span className="hidden sm:inline">
+                      {relocateCameraTarget === "batch"
+                        ? isThai ? "ปิดกล้อง" : "Close Cam"
+                        : isThai ? "สแกนกล้อง" : "Scan Cam"}
+                    </span>
+                  </button>
+                  <button
                     type="submit"
-                    className="px-3 py-1.5 rounded-lg font-bold text-xs bg-amber-600 hover:bg-amber-700 text-white shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap"
+                    className="px-3 py-1.5 rounded-lg font-bold text-xs bg-amber-600 hover:bg-amber-700 text-white shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0"
                   >
                     <Plus size={13} />
                     <span>{isThai ? "เพิ่ม" : "Add"}</span>
                   </button>
                 </div>
               </form>
+
+              {/* Inline Camera Barcode Scanner for Batch (1D Barcode Only) */}
+              {relocateCameraTarget === "batch" && (
+                <div className="pt-1">
+                  <CameraBarcodeScanner
+                    isThai={isThai}
+                    barcodeOnly
+                    placeholderText={
+                      isThai
+                        ? "เล็งกล้องไปที่บาร์โค้ด Batch (รองรับเฉพาะ Barcode 1D)"
+                        : "Aim at Batch barcode (1D Barcode only)"
+                    }
+                    onScan={(decoded) => {
+                      const cleaned = cleanBarcode(decoded);
+                      if (!cleaned) return;
+                      setRelocateBarcodeInput(cleaned);
+                      setRelocateCameraTarget(null);
+                      if (soundEnabled) playScanSound(true);
+                      setTimeout(() => {
+                        relocateInputRef.current?.focus();
+                      }, 100);
+                    }}
+                    onClose={() => {
+                      setRelocateCameraTarget(null);
+                      setTimeout(() => {
+                        relocateInputRef.current?.focus();
+                      }, 100);
+                    }}
+                  />
+                </div>
+              )}
 
               {/* Accumulation Table */}
               <div className="space-y-1.5 pt-1.5 border-t border-slate-100 dark:border-[#1e3a5f]/60">
@@ -9185,24 +9246,89 @@ export function SlitFilmManagement({
                     <span>{isThai ? "สแกนหรือระบุ Layout ปลายทาง:" : "Destination Layout:"}</span>
                     <span className="text-[9px] text-rose-500 font-extrabold uppercase">{isThai ? "* บังคับระบุ" : "* Required"}</span>
                   </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={destinationLayout}
-                      onChange={(e) => setDestinationLayout(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && relocateBatchList.length > 0 && destinationLayout.trim()) {
-                          e.preventDefault();
-                          handleConfirmRelocation();
-                        }
-                      }}
-                      placeholder={isThai ? "ยิงบาร์โค้ดหรือระบุ Layout ปลายทาง..." : "Enter Destination..."}
-                      className="w-full pl-3 pr-8 py-1.5 text-xs font-mono font-black rounded-lg bg-white dark:bg-[#0c1930] border-2 border-emerald-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                    />
-                    <div className="absolute right-2.5 top-2 text-emerald-500">
-                      <Layers size={16} />
+                  <div className="flex gap-1.5">
+                    <div className="relative flex-1 min-w-0">
+                      <input
+                        ref={destinationLayoutInputRef}
+                        type="text"
+                        value={destinationLayout}
+                        onChange={(e) => setDestinationLayout(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && relocateBatchList.length > 0 && destinationLayout.trim()) {
+                            e.preventDefault();
+                            handleConfirmRelocation();
+                          }
+                        }}
+                        placeholder={isThai ? "ยิงบาร์โค้ดหรือระบุ Layout ปลายทาง..." : "Enter Destination..."}
+                        className="w-full pl-3 pr-8 py-1.5 text-xs font-mono font-black rounded-lg bg-white dark:bg-[#0c1930] border-2 border-emerald-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                      <div className="absolute right-2.5 top-2 text-emerald-500">
+                        <Layers size={16} />
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRelocateCameraTarget((prev) => (prev === "destination" ? null : "destination"))
+                      }
+                      className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0 border ${
+                        relocateCameraTarget === "destination"
+                          ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500"
+                          : "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700"
+                      }`}
+                      title={
+                        isThai
+                          ? relocateCameraTarget === "destination"
+                            ? "ปิดกล้องสแกน Layout ปลายทาง"
+                            : "เปิดกล้องสแกน Layout ปลายทาง (เฉพาะ Barcode 1D)"
+                          : relocateCameraTarget === "destination"
+                            ? "Close Destination camera"
+                            : "Open camera to scan Destination Layout (1D Barcode only)"
+                      }
+                      aria-label={isThai ? "เปิดกล้องสแกน Layout ปลายทาง" : "Scan Destination Layout with camera"}
+                    >
+                      <Camera size={14} />
+                      <span className="hidden sm:inline">
+                        {relocateCameraTarget === "destination"
+                          ? isThai ? "ปิดกล้อง" : "Close Cam"
+                          : isThai ? "สแกนกล้อง" : "Scan Cam"}
+                      </span>
+                    </button>
                   </div>
+
+                  {/* Inline Camera Barcode Scanner for Destination Layout (1D Barcode Only) */}
+                  {relocateCameraTarget === "destination" && (
+                    <div className="mt-2">
+                      <CameraBarcodeScanner
+                        isThai={isThai}
+                        barcodeOnly
+                        placeholderText={
+                          isThai
+                            ? "เล็งกล้องไปที่บาร์โค้ด Layout ปลายทาง (เฉพาะ Barcode 1D)"
+                            : "Aim at Destination Layout barcode (1D Barcode only)"
+                        }
+                        onScan={(decoded) => {
+                          const cleaned = cleanBarcode(decoded)
+                            .replace(/[\r\n\t\0\x02\x03\x04]+/g, "")
+                            .replace(/^\*+|\*+$/g, "")
+                            .toUpperCase();
+                          if (!cleaned) return;
+                          setDestinationLayout(cleaned);
+                          setRelocateCameraTarget(null);
+                          if (soundEnabled) playScanSound(true);
+                          setTimeout(() => {
+                            destinationLayoutInputRef.current?.focus();
+                          }, 100);
+                        }}
+                        onClose={() => {
+                          setRelocateCameraTarget(null);
+                          setTimeout(() => {
+                            destinationLayoutInputRef.current?.focus();
+                          }, 100);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Relocation Summary Box */}
@@ -9784,7 +9910,7 @@ export function SlitFilmManagement({
                 }}
                 className="flex gap-1.5 sm:gap-2"
               >
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <input
                     ref={returnBarcodeInputRef}
                     type="text"
@@ -9808,13 +9934,70 @@ export function SlitFilmManagement({
                   </div>
                 </div>
                 <button
+                  type="button"
+                  onClick={() => setIsReturnCameraActive((prev) => !prev)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg font-bold text-xs shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0 border ${
+                    isReturnCameraActive
+                      ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-500"
+                      : "bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/50 dark:hover:bg-orange-900/60 text-orange-700 dark:text-orange-300 border-orange-300 dark:border-orange-700"
+                  }`}
+                  title={
+                    isThai
+                      ? isReturnCameraActive
+                        ? "ปิดกล้องสแกนบาร์โค้ด"
+                        : "เปิดกล้องสแกนบาร์โค้ด Batch (เฉพาะ Barcode)"
+                      : isReturnCameraActive
+                        ? "Close barcode camera"
+                        : "Open camera to scan Batch barcode (Barcode only)"
+                  }
+                  aria-label={isThai ? "เปิดกล้องสแกนบาร์โค้ด Batch" : "Scan Batch barcode with camera"}
+                >
+                  <Camera size={14} />
+                  <span className="hidden sm:inline">
+                    {isReturnCameraActive
+                      ? isThai ? "ปิดกล้อง" : "Close Cam"
+                      : isThai ? "สแกนกล้อง" : "Scan Cam"}
+                  </span>
+                </button>
+                <button
                   type="submit"
-                  className="px-3 py-1.5 rounded-lg font-bold text-xs bg-orange-600 hover:bg-orange-700 text-white shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap"
+                  className="px-3 py-1.5 rounded-lg font-bold text-xs bg-orange-600 hover:bg-orange-700 text-white shadow-xs cursor-pointer transition-all active:scale-95 flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
                   <Plus size={13} />
                   <span>{isThai ? "เลือก" : "Select"}</span>
                 </button>
               </form>
+
+              {/* Inline Camera Barcode Scanner (1D Barcode Only - No QR Code) */}
+              {isReturnCameraActive && (
+                <div className="mt-2">
+                  <CameraBarcodeScanner
+                    isThai={isThai}
+                    barcodeOnly
+                    placeholderText={
+                      isThai
+                        ? "เล็งกล้องไปที่บาร์โค้ด Batch (รองรับเฉพาะ Barcode)"
+                        : "Aim at Batch barcode (1D Barcode only)"
+                    }
+                    onScan={(decoded) => {
+                      const cleaned = cleanBarcode(decoded);
+                      if (!cleaned) return;
+                      setReturnBarcodeInput(cleaned);
+                      setIsReturnCameraActive(false);
+                      if (soundEnabled) playScanSound(true);
+                      setTimeout(() => {
+                        returnBarcodeInputRef.current?.focus();
+                      }, 100);
+                    }}
+                    onClose={() => {
+                      setIsReturnCameraActive(false);
+                      setTimeout(() => {
+                        returnBarcodeInputRef.current?.focus();
+                      }, 100);
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* 2. Filter Bar: Machine, Order No., Keyword (Single Row on Mobile & Desktop) */}

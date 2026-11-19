@@ -25,6 +25,7 @@ export interface CameraBarcodeScannerProps {
   onClose?: () => void;
   isThai?: boolean;
   placeholderText?: string;
+  barcodeOnly?: boolean;
 }
 
 // 1D and 2D barcode formats strictly used in industrial warehouse operations
@@ -37,6 +38,19 @@ const WAREHOUSE_BARCODE_FORMATS = [
   "qr_code",
 ];
 
+// Strictly 1D linear barcode formats only (excludes QR Code and other 2D formats)
+const LINEAR_BARCODE_ONLY_FORMATS = [
+  "code_128",
+  "code_39",
+  "code_93",
+  "ean_13",
+  "ean_8",
+  "itf",
+  "codabar",
+  "upc_a",
+  "upc_e",
+];
+
 const FALLBACK_HTML5_FORMATS = [
   Html5QrcodeSupportedFormats.CODE_128,
   Html5QrcodeSupportedFormats.CODE_39,
@@ -46,11 +60,24 @@ const FALLBACK_HTML5_FORMATS = [
   Html5QrcodeSupportedFormats.QR_CODE,
 ];
 
+const FALLBACK_HTML5_BARCODE_ONLY_FORMATS = [
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.CODE_93,
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+];
+
 export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   onScan,
   onClose,
   isThai = true,
   placeholderText,
+  barcodeOnly = false,
 }) => {
   const containerId = useRef(`barcode-reader-${Math.random().toString(36).substring(2, 9)}`).current;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -180,9 +207,21 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
           ctx.drawImage(video, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
           const barcodes = await detector.detect(canvas);
           if (barcodes && barcodes.length > 0) {
-            const raw = barcodes[0].rawValue;
-            if (raw) {
-              handleDetectedCode(raw);
+            const matchedBarcode = barcodeOnly
+              ? barcodes.find((b) => {
+                  const fmt = (b.format || "").toLowerCase();
+                  return (
+                    Boolean(b.rawValue) &&
+                    fmt !== "qr_code" &&
+                    fmt !== "aztec" &&
+                    fmt !== "data_matrix" &&
+                    fmt !== "pdf417" &&
+                    (fmt === "" || LINEAR_BARCODE_ONLY_FORMATS.includes(fmt))
+                  );
+                })
+              : barcodes.find((b) => Boolean(b.rawValue));
+            if (matchedBarcode?.rawValue) {
+              handleDetectedCode(matchedBarcode.rawValue);
             }
           }
         }
@@ -192,7 +231,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
     } finally {
       isDecodingRef.current = false;
     }
-  }, [handleDetectedCode]);
+  }, [barcodeOnly, handleDetectedCode]);
 
   // Main RAF scheduling loop throttled to ~12 FPS for decode to prevent main-thread lag
   const startNativeScanLoop = useCallback(() => {
@@ -223,14 +262,15 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
 
       if (supportsNative) {
         try {
-          let activeFormats = WAREHOUSE_BARCODE_FORMATS;
+          const targetFormats = barcodeOnly ? LINEAR_BARCODE_ONLY_FORMATS : WAREHOUSE_BARCODE_FORMATS;
+          let activeFormats = targetFormats;
           if (typeof (window as any).BarcodeDetector.getSupportedFormats === "function") {
             try {
               const supported: string[] = await (window as any).BarcodeDetector.getSupportedFormats();
-              activeFormats = WAREHOUSE_BARCODE_FORMATS.filter((f) => supported.includes(f));
+              activeFormats = targetFormats.filter((f) => supported.includes(f));
             } catch {}
           }
-          if (activeFormats.length === 0) activeFormats = WAREHOUSE_BARCODE_FORMATS;
+          if (activeFormats.length === 0) activeFormats = targetFormats;
 
           nativeDetectorRef.current = new (window as any).BarcodeDetector({ formats: activeFormats });
 
@@ -304,7 +344,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
       try {
         setIsNativeMode(false);
         const qrCode = new Html5Qrcode(containerId, {
-          formatsToSupport: FALLBACK_HTML5_FORMATS,
+          formatsToSupport: barcodeOnly ? FALLBACK_HTML5_BARCODE_ONLY_FORMATS : FALLBACK_HTML5_FORMATS,
           verbose: false,
         });
         html5QrCodeRef.current = qrCode;
@@ -329,7 +369,22 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         await qrCode.start(
           cameraConfig,
           config,
-          (decoded) => handleDetectedCode(decoded),
+          (decoded, decodedResult) => {
+            if (barcodeOnly) {
+              const formatEnum = decodedResult?.result?.format?.format;
+              const formatName = (decodedResult?.result?.format?.formatName || "").toUpperCase();
+              if (
+                formatEnum === Html5QrcodeSupportedFormats.QR_CODE ||
+                formatEnum === Html5QrcodeSupportedFormats.AZTEC ||
+                formatEnum === Html5QrcodeSupportedFormats.DATA_MATRIX ||
+                formatEnum === Html5QrcodeSupportedFormats.PDF_417 ||
+                formatName.includes("QR")
+              ) {
+                return;
+              }
+            }
+            handleDetectedCode(decoded);
+          },
           () => {}
         );
 
@@ -371,7 +426,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         setIsScanning(false);
       }
     },
-    [containerId, isThai, handleDetectedCode, startNativeScanLoop, stopScanner]
+    [barcodeOnly, containerId, isThai, handleDetectedCode, startNativeScanLoop, stopScanner]
   );
 
   // Initial camera discovery and launch
