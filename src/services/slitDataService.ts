@@ -70,14 +70,13 @@ async function runFirestoreWriteWithQuotaGuard(
   }
   try {
     const timeoutPromise = new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), 2500)
+      setTimeout(() => resolve("timeout"), 10000)
     );
     const result = await Promise.race([
       writeFn().then(() => "ok" as const),
       timeoutPromise,
     ]);
     if (result === "timeout") {
-      markFirestoreWriteExhausted();
       return false;
     }
     return true;
@@ -755,6 +754,82 @@ export function subscribeToSlitOutbound(
   };
 }
 
+function getPickListVerifiedScore(order: PickListOrder): number {
+  const items = Array.isArray(order.items) ? order.items : [];
+  let score = order.status === "completed" ? 10000 : order.status === "in_progress" ? 100 : 0;
+  for (const item of items) {
+    if (item.machineIssued) score += 10;
+    else if (item.status === "verified") score += 2;
+  }
+  return score;
+}
+
+function dedupeAndSortPickLists(rawOrders: PickListOrder[]): PickListOrder[] {
+  const byOrderNo = new Map<string, PickListOrder>();
+  for (const ord of rawOrders) {
+    if (!ord) continue;
+    const key = (ord.orderNo || ord.id || "").trim().toUpperCase();
+    if (!key) continue;
+    const existing = byOrderNo.get(key);
+    if (!existing) {
+      byOrderNo.set(key, ord);
+      continue;
+    }
+    const existingUpdated = String((existing as PickListOrder & { updatedAt?: string }).updatedAt || "");
+    const incomingUpdated = String((ord as PickListOrder & { updatedAt?: string }).updatedAt || "");
+    if (incomingUpdated && existingUpdated) {
+      if (incomingUpdated > existingUpdated) {
+        byOrderNo.set(key, ord);
+      } else if (
+        incomingUpdated === existingUpdated &&
+        getPickListVerifiedScore(ord) > getPickListVerifiedScore(existing)
+      ) {
+        byOrderNo.set(key, ord);
+      }
+    } else if (incomingUpdated && !existingUpdated) {
+      byOrderNo.set(key, ord);
+    } else if (getPickListVerifiedScore(ord) >= getPickListVerifiedScore(existing)) {
+      byOrderNo.set(key, ord);
+    }
+  }
+  return Array.from(byOrderNo.values()).sort((a, b) => {
+    const timeA = `${a.createdDate || ""} ${a.createdAt || ""}`;
+    const timeB = `${b.createdDate || ""} ${b.createdAt || ""}`;
+    return timeB.localeCompare(timeA);
+  });
+}
+
+function mergePickListOrdersPreferringFresher(
+  primaryOrders: PickListOrder[],
+  incomingOrders: PickListOrder[]
+): PickListOrder[] {
+  const mergedMap = new Map<string, PickListOrder>();
+  for (const ord of primaryOrders) {
+    const key = (ord.orderNo || ord.id || "").trim().toUpperCase();
+    if (key) mergedMap.set(key, ord);
+  }
+  for (const inc of incomingOrders) {
+    const key = (inc.orderNo || inc.id || "").trim().toUpperCase();
+    if (!key) continue;
+    const existing = mergedMap.get(key);
+    if (!existing) {
+      mergedMap.set(key, inc);
+      continue;
+    }
+    const existingUpdated = String((existing as PickListOrder & { updatedAt?: string }).updatedAt || "");
+    const incomingUpdated = String((inc as PickListOrder & { updatedAt?: string }).updatedAt || "");
+    if (incomingUpdated > existingUpdated) {
+      mergedMap.set(key, inc);
+    } else if (
+      incomingUpdated === existingUpdated &&
+      getPickListVerifiedScore(inc) > getPickListVerifiedScore(existing)
+    ) {
+      mergedMap.set(key, inc);
+    }
+  }
+  return dedupeAndSortPickLists(Array.from(mergedMap.values()));
+}
+
 /**
  * Real-time listener (or one-time getDocs when Cloud Real-time is OFF) for Slit Pick Lists
  * Supports query filtering by selected date
@@ -765,7 +840,8 @@ export function subscribeToSlitPickLists(
   options?: SlitQueryOptions
 ): () => void {
   let isDisposed = false;
-  let hasServerState = false;
+  let hasFirestoreServerSnapshot = false;
+  let latestFirestoreOrders: PickListOrder[] = [];
   let lastSerialized = "";
 
   const applyClientFilterSafety = (rawOrders: PickListOrder[]): PickListOrder[] => {
@@ -783,11 +859,7 @@ export function subscribeToSlitPickLists(
   const emitSorted = (rawOrders: PickListOrder[]) => {
     if (isDisposed) return;
     const filtered = applyClientFilterSafety(rawOrders);
-    const sorted = [...filtered].sort((a, b) => {
-      const timeA = `${a.createdDate || ""} ${a.createdAt || ""}`;
-      const timeB = `${b.createdDate || ""} ${b.createdAt || ""}`;
-      return timeB.localeCompare(timeA);
-    });
+    const sorted = dedupeAndSortPickLists(filtered);
     const serialized = JSON.stringify(sorted);
     if (serialized !== lastSerialized) {
       lastSerialized = serialized;
@@ -798,8 +870,13 @@ export function subscribeToSlitPickLists(
   const unsubSse = cloudRealtimeEnabled
     ? subscribeSharedSse("slit_picklists", (payload) => {
         if (payload && Array.isArray(payload.orders)) {
-          hasServerState = true;
-          emitSorted(payload.orders as PickListOrder[]);
+          const sseOrders = payload.orders as PickListOrder[];
+          if (hasFirestoreServerSnapshot) {
+            // Merge so stale 3s server-state polling never overwrites fresher Firestore prepared/issued status
+            emitSorted(mergePickListOrdersPreferringFresher(latestFirestoreOrders, sseOrders));
+          } else {
+            emitSorted(sseOrders);
+          }
         }
       })
     : () => {};
@@ -815,7 +892,9 @@ export function subscribeToSlitPickLists(
         snapshot.forEach((d) => {
           orders.push(d.data() as PickListOrder);
         });
-        emitSorted(orders);
+        latestFirestoreOrders = dedupeAndSortPickLists(orders);
+        hasFirestoreServerSnapshot = true;
+        emitSorted(latestFirestoreOrders);
       })
       .catch((error) => {
         if (isDisposed) return;
@@ -839,16 +918,20 @@ export function subscribeToSlitPickLists(
         snapshot.forEach((d) => {
           orders.push(d.data() as PickListOrder);
         });
-        if (orders.length > 0 && !options?.dateFilter && typeof window !== "undefined") {
+        const deduped = dedupeAndSortPickLists(orders);
+        latestFirestoreOrders = deduped;
+        if (!snapshot.metadata.fromCache || deduped.length > 0) {
+          hasFirestoreServerSnapshot = true;
+        }
+        if (deduped.length > 0 && !options?.dateFilter && typeof window !== "undefined") {
           fetch("/api/slit-picklists", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orders, seedOnly: true }),
+            body: JSON.stringify({ orders: deduped, seedOnly: true }),
           }).catch(() => {});
         }
-        if (!hasServerState || options?.dateFilter) {
-          emitSorted(orders);
-        }
+        // Always propagate live Firestore updates (never suppress with hasServerState)
+        emitSorted(deduped);
       },
       (error) => {
         if (isDisposed) return;
@@ -1084,7 +1167,7 @@ function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unkn
 
   const payload: Record<string, unknown> = {
     id: docId,
-    orderNo: String(order.orderNo || "").trim(),
+    orderNo: String(order.orderNo || "").trim().slice(0, 64),
     machineId: String(order.machineId || "TM01").trim(),
     machineType: order.machineType || "pipe",
     createdAt: String(order.createdAt || ""),
@@ -1094,6 +1177,9 @@ function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unkn
     operatorDismissed: Boolean(order.operatorDismissed),
     updatedAt: new Date().toISOString(),
   };
+
+  if (order.isTemporary !== undefined) payload.isTemporary = Boolean(order.isTemporary);
+  if (order.matchedOrderNo) payload.matchedOrderNo = String(order.matchedOrderNo).slice(0, 64);
 
   return stripUndefinedDeep(payload);
 }
