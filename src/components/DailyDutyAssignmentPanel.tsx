@@ -22,8 +22,10 @@ import {
   Plus,
   MapPin,
   RotateCcw,
+  FileText,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
+import { ForkliftTractorOperationReportModal } from "./ForkliftTractorOperationReportModal";
 import {
   MH_TEAMS,
   MH_SHIFTS,
@@ -164,6 +166,7 @@ export function DailyDutyAssignmentPanel({
   const [newWorkAreaText, setNewWorkAreaText] = useState<string>("");
   const [isManageWorkAreasOpen, setIsManageWorkAreasOpen] = useState<boolean>(false);
   const [headerNewWorkAreaText, setHeaderNewWorkAreaText] = useState<string>("");
+  const [isOperationReportOpen, setIsOperationReportOpen] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -634,15 +637,15 @@ export function DailyDutyAssignmentPanel({
     circleCircumference - (assignedPercent / 100) * circleCircumference;
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[#1d4ed8]/45 bg-gradient-to-br from-[#040d21] via-[#071636] to-[#040b1d] p-3 text-slate-100 shadow-[0_20px_50px_rgba(2,8,23,0.75)] sm:p-5">
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 dark:border-[#1d4ed8]/45 bg-gradient-to-br from-slate-50 via-white to-sky-50/40 dark:from-[#040d21] dark:via-[#071636] dark:to-[#040b1d] p-3 text-slate-800 dark:text-slate-100 shadow-lg dark:shadow-[0_20px_50px_rgba(2,8,23,0.75)] sm:p-5 transition-colors">
       {/* Subtle Ambient Blue Glow */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/4 h-72 w-96 rounded-full bg-cyan-500/10 blur-3xl"
+        className="pointer-events-none absolute -top-24 left-1/4 h-72 w-96 rounded-full bg-cyan-500/5 dark:bg-cyan-500/10 blur-3xl"
       />
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -bottom-24 right-1/4 h-72 w-96 rounded-full bg-blue-600/10 blur-3xl"
+        className="pointer-events-none absolute -bottom-24 right-1/4 h-72 w-96 rounded-full bg-blue-600/5 dark:bg-blue-600/10 blur-3xl"
       />
 
       <div className="relative z-10 space-y-4">
@@ -652,22 +655,22 @@ export function DailyDutyAssignmentPanel({
             role="alert"
             className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-xs font-semibold backdrop-blur-md transition ${
               feedback.type === "error"
-                ? "border-rose-500/50 bg-rose-950/80 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.25)]"
-                : "border-emerald-500/50 bg-emerald-950/80 text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
+                ? "border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-950/80 dark:text-rose-100 shadow-sm dark:shadow-[0_0_20px_rgba(244,63,94,0.25)]"
+                : "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-500/50 dark:bg-emerald-950/80 dark:text-emerald-100 shadow-sm dark:shadow-[0_0_20px_rgba(16,185,129,0.25)]"
             }`}
           >
             <div className="flex items-center gap-2.5">
               {feedback.type === "error" ? (
-                <AlertTriangle size={16} className="shrink-0 text-rose-400" />
+                <AlertTriangle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
               ) : (
-                <CheckCircle2 size={16} className="shrink-0 text-emerald-400" />
+                <CheckCircle2 size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
               )}
               <span>{feedback.text}</span>
             </div>
             <button
               type="button"
               onClick={() => setFeedback(null)}
-              className="rounded-md p-1 text-slate-300 hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1 text-slate-500 hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
               aria-label="ปิดการแจ้งเตือน"
             >
               <X size={14} />
@@ -678,21 +681,21 @@ export function DailyDutyAssignmentPanel({
         {/* =====================================================================
             SECTION 1: ENTERPRISE HEADER BANNER & CONTROL BAR
         ===================================================================== */}
-        <div className="overflow-hidden rounded-2xl border border-sky-400/30 bg-gradient-to-r from-[#071a42] via-[#0c2966] to-[#081d4a] shadow-[0_8px_30px_rgba(3,12,38,0.65)]">
+        <div className="overflow-hidden rounded-2xl border border-sky-200 dark:border-sky-400/30 bg-gradient-to-r from-sky-50 via-white to-blue-50 dark:from-[#071a42] dark:via-[#0c2966] dark:to-[#081d4a] shadow-sm dark:shadow-[0_8px_30px_rgba(3,12,38,0.65)]">
           {/* Top Hero Banner with Industrial Warehouse Silhouette & Team Emblem */}
           {!compact && (
-            <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden border-b border-sky-400/25 px-5 py-4 sm:px-6 sm:py-5">
+            <div className="relative flex flex-wrap items-center justify-between gap-4 overflow-hidden border-b border-sky-200/80 dark:border-sky-400/25 px-5 py-4 sm:px-6 sm:py-5">
               {/* Subtle Industrial Warehouse Ceiling Trusses & Perspective Grid Pattern */}
               <svg
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 h-full w-full opacity-20"
+                className="pointer-events-none absolute inset-0 h-full w-full opacity-15 dark:opacity-20"
                 preserveAspectRatio="none"
                 viewBox="0 0 1200 160"
               >
                 <defs>
                   <linearGradient id="whGridGrad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.05" />
-                    <stop offset="65%" stopColor="#38bdf8" stopOpacity="0.35" />
+                    <stop offset="0%" stopColor="#0284c7" stopOpacity="0.05" />
+                    <stop offset="65%" stopColor="#0284c7" stopOpacity="0.35" />
                     <stop offset="100%" stopColor="#0284c7" stopOpacity="0.15" />
                   </linearGradient>
                 </defs>
@@ -716,14 +719,14 @@ export function DailyDutyAssignmentPanel({
 
               {/* Left Brand & Title */}
               <div className="relative z-10 flex items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/40 bg-gradient-to-br from-sky-400/30 via-blue-600/40 to-indigo-900/60 text-white shadow-[0_0_25px_rgba(56,189,248,0.35)]">
-                  <Users size={28} className="text-cyan-200" />
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-sky-300 dark:border-cyan-300/40 bg-gradient-to-br from-sky-500 to-blue-700 dark:from-sky-400/30 dark:via-blue-600/40 dark:to-indigo-900/60 text-white shadow-md dark:shadow-[0_0_25px_rgba(56,189,248,0.35)]">
+                  <Users size={28} className="text-white dark:text-cyan-200" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+                  <h1 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-2xl">
                     วางแผนกำลังคน
                   </h1>
-                  <p className="mt-0.5 text-xs font-medium text-sky-200/90 sm:text-sm">
+                  <p className="mt-0.5 text-xs font-medium text-slate-600 dark:text-sky-200/90 sm:text-sm">
                     กำหนดหน้าที่รับผิดชอบพนักงานประจำวันในตารางได้ทันที: 1.กะทำงาน 2.รถที่ขึ้นขับ 3.พื้นที่รับผิดชอบ 4.ทีม A/B/C และ 5.เวลาเลิกงาน
                   </p>
                 </div>
@@ -736,7 +739,7 @@ export function DailyDutyAssignmentPanel({
                   height="68"
                   viewBox="0 0 126 68"
                   fill="none"
-                  className="text-sky-200/80 drop-shadow-[0_0_12px_rgba(56,189,248,0.35)]"
+                  className="text-sky-600/75 dark:text-sky-200/80 drop-shadow-sm dark:drop-shadow-[0_0_12px_rgba(56,189,248,0.35)]"
                 >
                   <circle cx="28" cy="24" r="10" stroke="currentColor" strokeWidth="2.5" />
                   <path
@@ -756,14 +759,12 @@ export function DailyDutyAssignmentPanel({
                     cx="63"
                     cy="19"
                     r="12"
-                    fill="#09214f"
-                    stroke="#7dd3fc"
+                    className="fill-sky-100 stroke-sky-600 dark:fill-[#09214f] dark:stroke-[#7dd3fc]"
                     strokeWidth="2.8"
                   />
                   <path
                     d="M40 60C40 46.7452 50.2975 37 63 37C75.7025 37 86 46.7452 86 60"
-                    fill="#09214f"
-                    stroke="#7dd3fc"
+                    className="fill-sky-100 stroke-sky-600 dark:fill-[#09214f] dark:stroke-[#7dd3fc]"
                     strokeWidth="2.8"
                     strokeLinecap="round"
                   />
@@ -773,15 +774,15 @@ export function DailyDutyAssignmentPanel({
           )}
 
           {/* Control Bar Below Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-[#061536]/90 px-4 py-3 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white/90 dark:bg-[#061536]/90 px-4 py-3 sm:px-6">
             <div className="flex flex-wrap items-center gap-3 sm:gap-5">
               {/* Working Date Picker */}
               <div className="flex items-center gap-2.5">
                 <label
                   htmlFor="duty-working-date"
-                  className="flex items-center gap-2 text-xs font-bold text-sky-100 whitespace-nowrap"
+                  className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-sky-100 whitespace-nowrap"
                 >
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-500/15 text-cyan-300">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg border border-sky-300 dark:border-cyan-400/30 bg-sky-100 dark:bg-cyan-500/15 text-sky-700 dark:text-cyan-300">
                     <Calendar size={14} />
                   </div>
                   <span>วันที่ปฏิบัติงาน</span>
@@ -791,13 +792,13 @@ export function DailyDutyAssignmentPanel({
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-9 rounded-lg border border-sky-400/35 bg-[#041029] px-3 font-mono text-xs font-bold text-white tabular-nums shadow-inner focus:border-cyan-400 focus:outline-none [color-scheme:dark]"
+                  className="h-9 rounded-lg border border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#041029] px-3 font-mono text-xs font-bold text-slate-900 dark:text-white tabular-nums shadow-xs focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none dark:[color-scheme:dark]"
                 />
                 {selectedDate !== getTodayYmd() && (
                   <button
                     type="button"
                     onClick={() => setSelectedDate(getTodayYmd())}
-                    className="h-9 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-3 text-xs font-bold text-cyan-200 whitespace-nowrap transition hover:bg-cyan-500/25"
+                    className="h-9 rounded-lg border border-sky-300 dark:border-cyan-400/40 bg-sky-100 dark:bg-cyan-500/15 px-3 text-xs font-bold text-sky-800 dark:text-cyan-200 whitespace-nowrap transition hover:bg-sky-200 dark:hover:bg-cyan-500/25"
                   >
                     วันนี้
                   </button>
@@ -811,26 +812,26 @@ export function DailyDutyAssignmentPanel({
                   onClick={() =>
                     setFilterShift((prev) => (prev === "กะเช้า" ? "All" : "กะเช้า"))
                   }
-                  className="group inline-flex items-center gap-2 text-slate-200 transition hover:text-white"
+                  className="group inline-flex items-center gap-2 text-slate-700 dark:text-slate-200 transition hover:text-sky-700 dark:hover:text-white"
                   title="คลิกเพื่อกรองตารางเฉพาะกะเช้า"
                 >
                   <span
                     className={`flex h-4 w-4 items-center justify-center rounded-full border ${
                       filterShift === "กะเช้า" || filterShift === "All"
-                        ? "border-cyan-400 bg-cyan-500/20 shadow-[0_0_8px_rgba(34,211,238,0.6)]"
-                        : "border-slate-500 bg-transparent"
+                        ? "border-sky-500 dark:border-cyan-400 bg-sky-500/15 dark:bg-cyan-500/20 shadow-[0_0_8px_rgba(14,165,233,0.4)]"
+                        : "border-slate-400 dark:border-slate-500 bg-transparent"
                     }`}
                   >
                     <span
                       className={`h-2 w-2 rounded-full ${
                         filterShift === "กะเช้า" || filterShift === "All"
-                          ? "bg-cyan-400"
-                          : "bg-slate-500"
+                          ? "bg-sky-600 dark:bg-cyan-400"
+                          : "bg-slate-400 dark:bg-slate-500"
                       }`}
                     />
                   </span>
                   <span className="tabular-nums">
-                    กะเช้า <strong className="font-mono text-white">{shiftCounts["กะเช้า"] || 0}</strong> คน
+                    กะเช้า <strong className="font-mono text-slate-900 dark:text-white">{shiftCounts["กะเช้า"] || 0}</strong> คน
                   </span>
                 </button>
 
@@ -839,29 +840,39 @@ export function DailyDutyAssignmentPanel({
                   onClick={() =>
                     setFilterShift((prev) => (prev === "กะดึก" ? "All" : "กะดึก"))
                   }
-                  className="group inline-flex items-center gap-2 text-slate-200 transition hover:text-white"
+                  className="group inline-flex items-center gap-2 text-slate-700 dark:text-slate-200 transition hover:text-sky-700 dark:hover:text-white"
                   title="คลิกเพื่อกรองตารางเฉพาะกะดึก"
                 >
                   <span
                     className={`flex h-4 w-4 items-center justify-center rounded-full border ${
                       filterShift === "กะดึก"
-                        ? "border-cyan-400 bg-cyan-500/20 shadow-[0_0_8px_rgba(34,211,238,0.6)]"
+                        ? "border-sky-500 dark:border-cyan-400 bg-sky-500/15 dark:bg-cyan-500/20 shadow-[0_0_8px_rgba(14,165,233,0.4)]"
                         : "border-slate-400 bg-transparent"
                     }`}
                   >
                     {filterShift === "กะดึก" && (
-                      <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                      <span className="h-2 w-2 rounded-full bg-sky-600 dark:bg-cyan-400" />
                     )}
                   </span>
                   <span className="tabular-nums">
-                    กะดึก <strong className="font-mono text-white">{shiftCounts["กะดึก"] || 0}</strong> คน
+                    กะดึก <strong className="font-mono text-slate-900 dark:text-white">{shiftCounts["กะดึก"] || 0}</strong> คน
                   </span>
                 </button>
               </div>
             </div>
 
-            {/* Right Action Buttons: Copy Previous Day & Refresh */}
+            {/* Right Action Buttons: Open Operation Report, Copy Previous Day & Refresh */}
             <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsOperationReportOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-400/70 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 px-3.5 text-xs font-extrabold text-white whitespace-nowrap shrink-0 shadow-sm dark:shadow-[0_0_18px_rgba(245,158,11,0.35)] transition hover:brightness-110 active:scale-[0.98]"
+                title="เปิดหน้ารายงานการปฏิบัติงานรถยกและรถลาก (Dashboard / Sheet พร้อมพิมพ์ PDF)"
+              >
+                <FileText size={15} className="text-white" />
+                <span>รายงานการปฏิบัติงานรถยกและรถลาก</span>
+              </button>
+
               <button
                 type="button"
                 onClick={handleCopyPreviousDay}
@@ -871,12 +882,12 @@ export function DailyDutyAssignmentPanel({
                     ? `คัดลอกข้อมูลจากวันที่ ${previousCopySource.date} (${previousCopySource.rows.length} คน)`
                     : "ยังไม่มีข้อมูลวันก่อนหน้าให้คัดลอก"
                 }
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-sky-400/40 bg-gradient-to-r from-[#0c2759] to-[#0f3473] px-3.5 text-xs font-bold text-sky-100 whitespace-nowrap shrink-0 shadow-[0_0_15px_rgba(14,165,233,0.2)] transition hover:border-cyan-300 hover:from-[#103370] hover:to-[#15428f] disabled:cursor-not-allowed disabled:opacity-45"
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-sky-300 dark:border-sky-400/40 bg-sky-50 dark:bg-gradient-to-r dark:from-[#0c2759] dark:to-[#0f3473] px-3.5 text-xs font-bold text-sky-800 dark:text-sky-100 whitespace-nowrap shrink-0 shadow-xs dark:shadow-[0_0_15px_rgba(14,165,233,0.2)] transition hover:border-sky-500 hover:bg-sky-100 dark:hover:border-cyan-300 dark:hover:from-[#103370] dark:hover:to-[#15428f] disabled:cursor-not-allowed disabled:opacity-45"
               >
-                <Copy size={14} className="text-cyan-300" />
+                <Copy size={14} className="text-sky-600 dark:text-cyan-300" />
                 <span>คัดลอกวันก่อนหน้า</span>
                 {previousCopySource && (
-                  <span className="font-mono text-[11px] text-sky-200/80 tabular-nums">
+                  <span className="font-mono text-[11px] text-sky-700/80 dark:text-sky-200/80 tabular-nums">
                     ({previousCopySource.date})
                   </span>
                 )}
@@ -886,9 +897,9 @@ export function DailyDutyAssignmentPanel({
                 type="button"
                 onClick={handleRefreshCloud}
                 disabled={isRefreshing}
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-sky-400/40 bg-[#0b214d] px-3.5 text-xs font-bold text-sky-100 whitespace-nowrap shrink-0 transition hover:border-cyan-300 hover:bg-[#11306b] disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 dark:border-sky-400/40 bg-white dark:bg-[#0b214d] px-3.5 text-xs font-bold text-slate-700 dark:text-sky-100 whitespace-nowrap shrink-0 transition hover:border-sky-500 hover:bg-slate-50 dark:hover:border-cyan-300 dark:hover:bg-[#11306b] disabled:opacity-50"
               >
-                <RefreshCw size={14} className={`text-cyan-300 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw size={14} className={`text-sky-600 dark:text-cyan-300 ${isRefreshing ? "animate-spin" : ""}`} />
                 <span>รีเฟรช</span>
               </button>
             </div>
@@ -909,23 +920,23 @@ export function DailyDutyAssignmentPanel({
             }}
             className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition ${
               filterStatus === "assigned"
-                ? "border-cyan-300 bg-gradient-to-br from-[#0284c7]/55 via-[#0c2d6b] to-[#07193d] shadow-[0_0_25px_rgba(34,211,238,0.35)]"
-                : "border-cyan-400/40 bg-gradient-to-br from-[#0284c7]/40 via-[#0c2d6b]/80 to-[#07193d] shadow-[0_8px_25px_rgba(2,132,199,0.22)] hover:border-cyan-300/70"
+                ? "border-sky-500 bg-gradient-to-br from-sky-100 via-sky-50 to-white dark:border-cyan-300 dark:from-[#0284c7]/55 dark:via-[#0c2d6b] dark:to-[#07193d] shadow-md dark:shadow-[0_0_25px_rgba(34,211,238,0.35)]"
+                : "border-sky-200 bg-gradient-to-br from-white via-sky-50/70 to-sky-100/50 dark:border-cyan-400/40 dark:from-[#0284c7]/40 dark:via-[#0c2d6b]/80 dark:to-[#07193d] shadow-sm dark:shadow-[0_8px_25px_rgba(2,132,199,0.22)] hover:border-sky-400 dark:hover:border-cyan-300/70"
             }`}
           >
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-300/40 bg-cyan-500/20 text-cyan-200 shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-sky-300 dark:border-cyan-300/40 bg-sky-500/15 dark:bg-cyan-500/20 text-sky-700 dark:text-cyan-200 shadow-xs dark:shadow-[0_0_15px_rgba(34,211,238,0.3)]">
                 <Users size={24} />
               </div>
               <div>
-                <div className="text-xs font-bold text-sky-100">
+                <div className="text-xs font-bold text-slate-600 dark:text-sky-100">
                   มอบหมายงานแล้ว {filterStatus === "assigned" ? "(กรอง)" : ""}
                 </div>
                 <div className="mt-1 flex items-baseline gap-1 tabular-nums">
-                  <span className="font-mono text-2xl font-extrabold text-white">
+                  <span className="font-mono text-2xl font-extrabold text-slate-900 dark:text-white">
                     {assignedCount}
                   </span>
-                  <span className="text-xs font-semibold text-sky-200/80">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-sky-200/80">
                     / {totalEmployeeCount} คน
                   </span>
                 </div>
@@ -939,7 +950,7 @@ export function DailyDutyAssignmentPanel({
                   cx="28"
                   cy="28"
                   r={circleRadius}
-                  stroke="rgba(148,163,184,0.25)"
+                  stroke="rgba(148,163,184,0.28)"
                   strokeWidth="4.5"
                   fill="none"
                 />
@@ -947,7 +958,8 @@ export function DailyDutyAssignmentPanel({
                   cx="28"
                   cy="28"
                   r={circleRadius}
-                  stroke="#38bdf8"
+                  stroke="#0284c7"
+                  className="dark:stroke-[#38bdf8]"
                   strokeWidth="4.5"
                   strokeDasharray={circleCircumference}
                   strokeDashoffset={circleStrokeDashoffset}
@@ -955,7 +967,7 @@ export function DailyDutyAssignmentPanel({
                   fill="none"
                 />
               </svg>
-              <span className="absolute font-mono text-xs font-extrabold text-white tabular-nums">
+              <span className="absolute font-mono text-xs font-extrabold text-sky-800 dark:text-white tabular-nums">
                 {assignedPercent}%
               </span>
             </div>
@@ -971,30 +983,30 @@ export function DailyDutyAssignmentPanel({
             }}
             className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition ${
               filterStatus === "unassigned"
-                ? "border-amber-300 bg-gradient-to-br from-amber-500/50 via-[#4a2e12] to-[#1f1619] shadow-[0_0_25px_rgba(245,158,11,0.4)]"
-                : "border-amber-400/45 bg-gradient-to-br from-amber-500/35 via-[#3d2610]/85 to-[#1f1619] shadow-[0_8px_25px_rgba(245,158,11,0.2)] hover:border-amber-300/80"
+                ? "border-amber-500 bg-gradient-to-br from-amber-100 via-amber-50 to-white dark:border-amber-300 dark:from-amber-500/50 dark:via-[#4a2e12] dark:to-[#1f1619] shadow-md dark:shadow-[0_0_25px_rgba(245,158,11,0.4)]"
+                : "border-amber-200 bg-gradient-to-br from-white via-amber-50/70 to-amber-100/40 dark:border-amber-400/45 dark:from-amber-500/35 dark:via-[#3d2610]/85 dark:to-[#1f1619] shadow-sm dark:shadow-[0_8px_25px_rgba(245,158,11,0.2)] hover:border-amber-400 dark:hover:border-amber-300/80"
             }`}
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-amber-300/60 bg-gradient-to-br from-amber-400 to-orange-600 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.5)]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-amber-300/80 dark:border-amber-300/60 bg-gradient-to-br from-amber-400 to-orange-600 text-slate-950 shadow-sm dark:shadow-[0_0_20px_rgba(245,158,11,0.5)]">
                 <Clock size={22} strokeWidth={2.5} />
               </div>
               <div>
-                <div className="text-xs font-bold text-amber-100">
+                <div className="text-xs font-bold text-amber-900 dark:text-amber-100">
                   ยังไม่ได้จัดทีม {filterStatus === "unassigned" ? "(กรอง)" : ""}
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5 tabular-nums">
-                  <span className="font-mono text-2xl font-extrabold text-amber-300">
+                  <span className="font-mono text-2xl font-extrabold text-amber-600 dark:text-amber-300">
                     {unassignedCount}
                   </span>
-                  <span className="text-xs font-semibold text-amber-100/80">คน</span>
+                  <span className="text-xs font-semibold text-amber-800/80 dark:text-amber-100/80">คน</span>
                 </div>
               </div>
             </div>
             <Users
               size={40}
               aria-hidden="true"
-              className="pointer-events-none text-amber-200/15"
+              className="pointer-events-none text-amber-500/15 dark:text-amber-200/15"
             />
           </button>
 
@@ -1007,23 +1019,23 @@ export function DailyDutyAssignmentPanel({
             }}
             className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition ${
               filterTeam === "ทีม A"
-                ? "border-cyan-300 bg-gradient-to-br from-sky-500/45 via-[#0e347a] to-[#081c45] shadow-[0_0_25px_rgba(56,189,248,0.4)]"
-                : "border-sky-400/40 bg-gradient-to-br from-sky-500/30 via-[#0b2963]/85 to-[#071739] shadow-[0_8px_25px_rgba(14,165,233,0.18)] hover:border-sky-300/70"
+                ? "border-sky-500 bg-gradient-to-br from-sky-100 via-sky-50 to-white dark:border-cyan-300 dark:from-sky-500/45 dark:via-[#0e347a] dark:to-[#081c45] shadow-md dark:shadow-[0_0_25px_rgba(56,189,248,0.4)]"
+                : "border-sky-200 bg-gradient-to-br from-white via-sky-50/70 to-sky-100/40 dark:border-sky-400/40 dark:from-sky-500/30 dark:via-[#0b2963]/85 dark:to-[#071739] shadow-sm dark:shadow-[0_8px_25px_rgba(14,165,233,0.18)] hover:border-sky-400 dark:hover:border-sky-300/70"
             }`}
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-cyan-300/70 bg-gradient-to-br from-cyan-400 to-blue-600 font-mono text-xl font-black text-white shadow-[0_0_20px_rgba(56,189,248,0.55)]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-cyan-300/80 dark:border-cyan-300/70 bg-gradient-to-br from-cyan-400 to-blue-600 font-mono text-xl font-black text-white shadow-sm dark:shadow-[0_0_20px_rgba(56,189,248,0.55)]">
                 A
               </div>
               <div>
-                <div className="text-xs font-bold text-sky-100">
+                <div className="text-xs font-bold text-sky-900 dark:text-sky-100">
                   ทีม A {filterTeam === "ทีม A" ? "(กรอง)" : ""}
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5 tabular-nums">
-                  <span className="font-mono text-2xl font-extrabold text-cyan-300">
+                  <span className="font-mono text-2xl font-extrabold text-sky-600 dark:text-cyan-300">
                     {teamCounts["ทีม A"] || 0}
                   </span>
-                  <span className="text-xs font-semibold text-sky-100/80">คน</span>
+                  <span className="text-xs font-semibold text-sky-800/80 dark:text-sky-100/80">คน</span>
                 </div>
               </div>
             </div>
@@ -1038,23 +1050,23 @@ export function DailyDutyAssignmentPanel({
             }}
             className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition ${
               filterTeam === "ทีม B"
-                ? "border-purple-300 bg-gradient-to-br from-purple-500/45 via-[#2e1c63] to-[#171136] shadow-[0_0_25px_rgba(168,85,247,0.4)]"
-                : "border-purple-400/40 bg-gradient-to-br from-purple-500/30 via-[#251752]/85 to-[#120e2e] shadow-[0_8px_25px_rgba(168,85,247,0.2)] hover:border-purple-300/70"
+                ? "border-purple-500 bg-gradient-to-br from-purple-100 via-purple-50 to-white dark:border-purple-300 dark:from-purple-500/45 dark:via-[#2e1c63] dark:to-[#171136] shadow-md dark:shadow-[0_0_25px_rgba(168,85,247,0.4)]"
+                : "border-purple-200 bg-gradient-to-br from-white via-purple-50/70 to-purple-100/40 dark:border-purple-400/40 dark:from-purple-500/30 dark:via-[#251752]/85 dark:to-[#120e2e] shadow-sm dark:shadow-[0_8px_25px_rgba(168,85,247,0.2)] hover:border-purple-400 dark:hover:border-purple-300/70"
             }`}
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-purple-300/70 bg-gradient-to-br from-purple-400 to-indigo-600 font-mono text-xl font-black text-white shadow-[0_0_20px_rgba(168,85,247,0.55)]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-purple-300/80 dark:border-purple-300/70 bg-gradient-to-br from-purple-400 to-indigo-600 font-mono text-xl font-black text-white shadow-sm dark:shadow-[0_0_20px_rgba(168,85,247,0.55)]">
                 B
               </div>
               <div>
-                <div className="text-xs font-bold text-purple-100">
+                <div className="text-xs font-bold text-purple-900 dark:text-purple-100">
                   ทีม B {filterTeam === "ทีม B" ? "(กรอง)" : ""}
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5 tabular-nums">
-                  <span className="font-mono text-2xl font-extrabold text-white">
+                  <span className="font-mono text-2xl font-extrabold text-purple-700 dark:text-white">
                     {teamCounts["ทีม B"] || 0}
                   </span>
-                  <span className="text-xs font-semibold text-purple-200/80">คน</span>
+                  <span className="text-xs font-semibold text-purple-800/80 dark:text-purple-200/80">คน</span>
                 </div>
               </div>
             </div>
@@ -1069,23 +1081,23 @@ export function DailyDutyAssignmentPanel({
             }}
             className={`group relative flex items-center justify-between overflow-hidden rounded-2xl border px-4 py-3.5 text-left transition ${
               filterTeam === "ทีม C"
-                ? "border-emerald-300 bg-gradient-to-br from-emerald-500/45 via-[#0c3b38] to-[#071f24] shadow-[0_0_25px_rgba(16,185,129,0.4)]"
-                : "border-emerald-400/40 bg-gradient-to-br from-emerald-500/30 via-[#0a3030]/85 to-[#061820] shadow-[0_8px_25px_rgba(16,185,129,0.2)] hover:border-emerald-300/70"
+                ? "border-emerald-500 bg-gradient-to-br from-emerald-100 via-emerald-50 to-white dark:border-emerald-300 dark:from-emerald-500/45 dark:via-[#0c3b38] dark:to-[#071f24] shadow-md dark:shadow-[0_0_25px_rgba(16,185,129,0.4)]"
+                : "border-emerald-200 bg-gradient-to-br from-white via-emerald-50/70 to-emerald-100/40 dark:border-emerald-400/40 dark:from-emerald-500/30 dark:via-[#0a3030]/85 dark:to-[#061820] shadow-sm dark:shadow-[0_8px_25px_rgba(16,185,129,0.2)] hover:border-emerald-400 dark:hover:border-emerald-300/70"
             }`}
           >
             <div className="flex items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-emerald-300/70 bg-gradient-to-br from-emerald-400 to-teal-600 font-mono text-xl font-black text-white shadow-[0_0_20px_rgba(16,185,129,0.55)]">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-emerald-300/80 dark:border-emerald-300/70 bg-gradient-to-br from-emerald-400 to-teal-600 font-mono text-xl font-black text-white shadow-sm dark:shadow-[0_0_20px_rgba(16,185,129,0.55)]">
                 C
               </div>
               <div>
-                <div className="text-xs font-bold text-emerald-100">
+                <div className="text-xs font-bold text-emerald-900 dark:text-emerald-100">
                   ทีม C {filterTeam === "ทีม C" ? "(กรอง)" : ""}
                 </div>
                 <div className="mt-1 flex items-baseline gap-1.5 tabular-nums">
-                  <span className="font-mono text-2xl font-extrabold text-amber-300">
+                  <span className="font-mono text-2xl font-extrabold text-emerald-600 dark:text-amber-300">
                     {teamCounts["ทีม C"] || 0}
                   </span>
-                  <span className="text-xs font-semibold text-emerald-100/80">คน</span>
+                  <span className="text-xs font-semibold text-emerald-800/80 dark:text-emerald-100/80">คน</span>
                 </div>
               </div>
             </div>
@@ -1095,22 +1107,22 @@ export function DailyDutyAssignmentPanel({
         {/* =====================================================================
             SECTION 3: FULL ROSTER & DAILY DUTY ASSIGNMENT TABLE
         ===================================================================== */}
-        <div className="overflow-hidden rounded-2xl border border-sky-400/30 bg-[#071739]/95 shadow-[0_12px_35px_rgba(2,10,30,0.6)]">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-sky-400/25 bg-[#09204f]/80 px-5 py-3.5">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-sky-400/30 bg-white dark:bg-[#071739]/95 shadow-sm dark:shadow-[0_12px_35px_rgba(2,10,30,0.6)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-sky-400/25 bg-slate-50 dark:bg-[#09204f]/80 px-5 py-3.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-extrabold text-white sm:text-base">
+              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white sm:text-base">
                 ตารางมอบหมายงานประจำวัน
               </h3>
-              <span className="text-xs text-sky-400/60" aria-hidden="true">
+              <span className="text-xs text-slate-400 dark:text-sky-400/60" aria-hidden="true">
                 ·
               </span>
-              <span className="font-mono text-xs font-bold text-cyan-300 tabular-nums">
+              <span className="font-mono text-xs font-bold text-sky-600 dark:text-cyan-300 tabular-nums">
                 {selectedDate}
               </span>
-              <span className="text-xs text-sky-400/60" aria-hidden="true">
+              <span className="text-xs text-slate-400 dark:text-sky-400/60" aria-hidden="true">
                 ·
               </span>
-              <span className="text-xs font-semibold text-sky-200 tabular-nums">
+              <span className="text-xs font-semibold text-slate-600 dark:text-sky-200 tabular-nums">
                 แสดง {filteredRosterRows.length} / {totalEmployeeCount} คน
               </span>
 
@@ -1119,7 +1131,7 @@ export function DailyDutyAssignmentPanel({
                   type="button"
                   onClick={handleAssignAllUnassigned}
                   disabled={isSaving}
-                  className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-lg border border-cyan-300/50 bg-gradient-to-r from-[#0284c7] to-[#2563eb] px-2.5 text-[11px] font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
+                  className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-lg border border-sky-500/40 dark:border-cyan-300/50 bg-gradient-to-r from-[#0284c7] to-[#2563eb] px-2.5 text-[11px] font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
                   title="กดเพื่อบันทึกมอบหมายงานตามค่าเริ่มต้นให้พนักงานที่ยังไม่ได้จัดทีมทั้งหมดทันที"
                 >
                   <Check size={12} strokeWidth={3} />
@@ -1130,14 +1142,14 @@ export function DailyDutyAssignmentPanel({
 
             <div className="flex flex-wrap items-center gap-2">
               {/* Status Filter Segmented Control */}
-              <div className="inline-flex h-[35px] items-center rounded-lg border border-sky-400/30 bg-[#041029] p-0.5">
+              <div className="inline-flex h-[35px] items-center rounded-lg border border-slate-300 dark:border-sky-400/30 bg-slate-100 dark:bg-[#041029] p-0.5">
                 <button
                   type="button"
                   onClick={() => setFilterStatus("all")}
                   className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
                     filterStatus === "all"
-                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white"
-                      : "text-slate-300 hover:text-white"
+                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   }`}
                 >
                   ทั้งหมด ({totalEmployeeCount})
@@ -1147,8 +1159,8 @@ export function DailyDutyAssignmentPanel({
                   onClick={() => setFilterStatus("assigned")}
                   className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
                     filterStatus === "assigned"
-                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white"
-                      : "text-slate-300 hover:text-white"
+                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   }`}
                 >
                   มอบหมายแล้ว ({assignedCount})
@@ -1158,8 +1170,8 @@ export function DailyDutyAssignmentPanel({
                   onClick={() => setFilterStatus("unassigned")}
                   className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
                     filterStatus === "unassigned"
-                      ? "bg-amber-500 text-slate-950"
-                      : "text-slate-300 hover:text-white"
+                      ? "bg-amber-500 text-slate-950 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   }`}
                 >
                   ยังไม่จัดทีม ({unassignedCount})
@@ -1167,14 +1179,14 @@ export function DailyDutyAssignmentPanel({
               </div>
 
               {/* Segmented Team Filter */}
-              <div className="inline-flex h-[35px] items-center rounded-lg border border-sky-400/30 bg-[#041029] p-0.5">
+              <div className="inline-flex h-[35px] items-center rounded-lg border border-slate-300 dark:border-sky-400/30 bg-slate-100 dark:bg-[#041029] p-0.5">
                 <button
                   type="button"
                   onClick={() => setFilterTeam("All")}
                   className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
                     filterTeam === "All"
-                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white"
-                      : "text-slate-300 hover:text-white"
+                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
+                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   }`}
                 >
                   ทุกทีม
@@ -1186,8 +1198,8 @@ export function DailyDutyAssignmentPanel({
                     onClick={() => setFilterTeam(tOpt)}
                     className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
                       filterTeam === tOpt
-                        ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white"
-                        : "text-slate-300 hover:text-white"
+                        ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                     }`}
                   >
                     {tOpt}
@@ -1199,7 +1211,7 @@ export function DailyDutyAssignmentPanel({
                 value={filterShift}
                 onChange={(e) => setFilterShift(e.target.value)}
                 aria-label="กรองตามกะทำงาน"
-                className="h-[35px] rounded-lg border border-sky-400/30 bg-[#041029] px-2.5 text-xs text-white focus:border-cyan-400 focus:outline-none"
+                className="h-[35px] rounded-lg border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] px-2.5 text-xs font-semibold text-slate-800 dark:text-white focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
               >
                 <option value="All">ทุกกะทำงาน</option>
                 {MH_SHIFTS.map((sOpt) => (
@@ -1212,21 +1224,21 @@ export function DailyDutyAssignmentPanel({
               <div className="relative">
                 <Search
                   size={13}
-                  className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-sky-300/70"
+                  className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400 dark:text-sky-300/70"
                 />
                 <input
                   type="text"
                   placeholder="ค้นหาชื่อพนักงาน, รถ, พื้นที่..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-[35px] w-48 rounded-lg border border-sky-400/30 bg-[#041029] pr-7 pl-8 text-xs text-white placeholder:text-slate-400 focus:border-cyan-400 focus:outline-none"
+                  className="h-[35px] w-48 rounded-lg border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] pr-7 pl-8 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
                     aria-label="ล้างคำค้นหา"
-                    className="absolute top-1/2 right-2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    className="absolute top-1/2 right-2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white"
                   >
                     <X size={12} />
                   </button>
@@ -1237,17 +1249,17 @@ export function DailyDutyAssignmentPanel({
 
           {/* Expandable Work Area Management Bar (เพิ่ม / ลบ พื้นที่รับผิดชอบ) */}
           {isManageWorkAreasOpen && (
-            <div className="border-b border-sky-400/25 bg-[#05122e]/95 px-5 py-3">
+            <div className="border-b border-slate-200 dark:border-sky-400/25 bg-sky-50/70 dark:bg-[#05122e]/95 px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-cyan-200">
-                  <MapPin size={14} className="text-cyan-300" />
+                <div className="flex items-center gap-2 text-xs font-bold text-sky-800 dark:text-cyan-200">
+                  <MapPin size={14} className="text-sky-600 dark:text-cyan-300" />
                   <span>จัดการรายการพื้นที่รับผิดชอบ (เพิ่ม / ลบ ตัวเลือกในตาราง)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={handleRestoreDefaultWorkAreas}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-400/30 bg-[#081d47] px-2.5 text-[11px] font-bold text-sky-200 transition hover:border-cyan-300 hover:text-white"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-300 dark:border-sky-400/30 bg-white dark:bg-[#081d47] px-2.5 text-[11px] font-bold text-sky-700 dark:text-sky-200 transition hover:border-sky-500 dark:hover:border-cyan-300 dark:hover:text-white"
                     title="คืนค่ารายการพื้นที่เริ่มต้น"
                   >
                     <RotateCcw size={11} />
@@ -1256,7 +1268,7 @@ export function DailyDutyAssignmentPanel({
                   <button
                     type="button"
                     onClick={() => setIsManageWorkAreasOpen(false)}
-                    className="inline-flex h-7 items-center justify-center rounded-lg border border-slate-600/60 bg-slate-800/70 px-2 text-[11px] font-bold text-slate-300 hover:text-white"
+                    className="inline-flex h-7 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600/60 bg-white dark:bg-slate-800/70 px-2 text-[11px] font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   >
                     ปิด
                   </button>
@@ -1267,13 +1279,13 @@ export function DailyDutyAssignmentPanel({
                 {workAreaOptions.map((area) => (
                   <span
                     key={`mgr-area-${area}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-400/35 bg-[#09204f] px-2.5 py-1 text-xs font-bold text-white"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 dark:border-sky-400/35 bg-white dark:bg-[#09204f] px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-white shadow-2xs"
                   >
                     <span>{area}</span>
                     <button
                       type="button"
                       onClick={() => void handleDeleteWorkAreaOption(area)}
-                      className="rounded p-0.5 text-rose-300 transition hover:bg-rose-500/25 hover:text-rose-100"
+                      className="rounded p-0.5 text-rose-500 dark:text-rose-300 transition hover:bg-rose-100 dark:hover:bg-rose-500/25 dark:hover:text-rose-100"
                       title={`ลบพื้นที่ "${area}"`}
                       aria-label={`ลบพื้นที่ ${area}`}
                     >
@@ -1294,12 +1306,12 @@ export function DailyDutyAssignmentPanel({
                       }
                     }}
                     placeholder="พิมพ์ชื่อพื้นที่ใหม่..."
-                    className="h-7 w-40 rounded-lg border border-cyan-400/40 bg-[#041029] px-2.5 text-xs text-white placeholder:text-slate-400 focus:border-cyan-300 focus:outline-none"
+                    className="h-7 w-40 rounded-lg border border-sky-300 dark:border-cyan-400/40 bg-white dark:bg-[#041029] px-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-sky-500 dark:focus:border-cyan-300 focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => void handleAddWorkAreaOption(headerNewWorkAreaText)}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg bg-cyan-500 px-2.5 text-[11px] font-extrabold text-slate-950 transition hover:bg-cyan-400"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg bg-sky-600 dark:bg-cyan-500 px-2.5 text-[11px] font-extrabold text-white dark:text-slate-950 transition hover:bg-sky-500 dark:hover:bg-cyan-400"
                   >
                     <Plus size={12} strokeWidth={3} />
                     <span>เพิ่มพื้นที่</span>
@@ -1312,7 +1324,7 @@ export function DailyDutyAssignmentPanel({
           <div className={`overflow-x-auto ${compact ? "max-h-96 overflow-y-auto" : ""}`}>
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="border-b border-sky-400/20 bg-[#041029]/90 text-[11px] font-bold text-sky-200">
+                <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-100 dark:bg-[#041029]/90 text-[11px] font-bold text-slate-700 dark:text-sky-200">
                   <th className="w-10 px-4 py-3 text-center">#</th>
                   <th className="px-4 py-3 whitespace-nowrap">พนักงาน</th>
                   <th className="px-4 py-3 whitespace-nowrap">1. กะทำงาน</th>
@@ -1323,7 +1335,7 @@ export function DailyDutyAssignmentPanel({
                       <button
                         type="button"
                         onClick={() => setIsManageWorkAreasOpen((prev) => !prev)}
-                        className="inline-flex items-center gap-1 rounded-md border border-cyan-400/40 bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200 transition hover:bg-cyan-500/30 hover:text-white"
+                        className="inline-flex items-center gap-1 rounded-md border border-sky-300 dark:border-cyan-400/40 bg-sky-100 dark:bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-bold text-sky-700 dark:text-cyan-200 transition hover:bg-sky-200 dark:hover:bg-cyan-500/30 dark:hover:text-white"
                         title="เพิ่มหรือลบรายการพื้นที่รับผิดชอบ"
                       >
                         <Plus size={10} strokeWidth={3} />
@@ -1337,12 +1349,12 @@ export function DailyDutyAssignmentPanel({
                   <th className="px-4 py-3 text-right whitespace-nowrap">จัดการ</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-sky-400/15">
+              <tbody className="divide-y divide-slate-200 dark:divide-sky-400/15">
                 {filteredRosterRows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={9}
-                      className="px-5 py-10 text-center text-xs text-slate-300"
+                      className="px-5 py-10 text-center text-xs text-slate-500 dark:text-slate-300"
                     >
                       ไม่พบรายชื่อพนักงานที่ตรงกับเงื่อนไขการค้นหาหรือตัวกรอง
                     </td>
@@ -1358,11 +1370,11 @@ export function DailyDutyAssignmentPanel({
                       return (
                         <tr
                           key={row.rowKey}
-                          className={`transition hover:bg-sky-400/10 ${
-                            row.isAssigned ? "bg-sky-500/[0.03]" : ""
+                          className={`transition hover:bg-sky-50/80 dark:hover:bg-sky-400/10 ${
+                            row.isAssigned ? "bg-white dark:bg-sky-500/[0.03]" : "bg-slate-50/40 dark:bg-transparent"
                           }`}
                         >
-                          <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-400 tabular-nums">
+                          <td className="px-4 py-2.5 text-center font-mono text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
                             {indexInGroup}
                           </td>
 
@@ -1372,14 +1384,14 @@ export function DailyDutyAssignmentPanel({
                               <span
                                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
                                   row.isAssigned
-                                    ? "border-emerald-400/50 bg-emerald-500/20 text-emerald-300"
-                                    : "border-amber-400/40 bg-amber-500/15 text-amber-300"
+                                    ? "border-emerald-300 bg-emerald-100 text-emerald-700 dark:border-emerald-400/50 dark:bg-emerald-500/20 dark:text-emerald-300"
+                                    : "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-400/40 dark:bg-amber-500/15 dark:text-amber-300"
                                 }`}
                                 title={row.isAssigned ? "มอบหมายงานแล้ว" : "ยังไม่ได้จัดทีม"}
                               >
                                 <User size={13} />
                               </span>
-                              <span className="font-bold text-white whitespace-nowrap">
+                              <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
                                 {row.employeeName}
                               </span>
                             </div>
@@ -1387,7 +1399,7 @@ export function DailyDutyAssignmentPanel({
 
                           {/* 1. กะทำงาน */}
                           <td className="px-4 py-2.5">
-                            <div className="inline-flex rounded-lg border border-sky-400/25 bg-[#041029] p-0.5">
+                            <div className="inline-flex rounded-lg border border-slate-300 dark:border-sky-400/25 bg-slate-100 dark:bg-[#041029] p-0.5">
                               {MH_SHIFTS.map((sOpt) => {
                                 const isMorning = sOpt === "กะเช้า";
                                 const active = row.isAssigned && row.shift === sOpt;
@@ -1403,8 +1415,8 @@ export function DailyDutyAssignmentPanel({
                                     }
                                     className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-bold whitespace-nowrap transition ${
                                       active
-                                        ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-[0_0_10px_rgba(14,165,233,0.4)]"
-                                        : "text-slate-400 hover:text-white"
+                                        ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs dark:shadow-[0_0_10px_rgba(14,165,233,0.4)]"
+                                        : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                                     }`}
                                   >
                                     {isMorning ? <Sun size={11} /> : <Moon size={11} />}
@@ -1423,10 +1435,10 @@ export function DailyDutyAssignmentPanel({
                                 handleUpsertRosterRow(row, { vehicleNumber: e.target.value })
                               }
                               aria-label={`รถที่ขึ้นขับของ ${row.employeeName}`}
-                              className={`h-8 rounded-lg border bg-[#041029] px-2.5 font-mono text-xs font-bold focus:border-cyan-400 focus:outline-none ${
+                              className={`h-8 rounded-lg border bg-white dark:bg-[#041029] px-2.5 font-mono text-xs font-bold focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none ${
                                 row.isAssigned
-                                  ? "border-sky-400/40 text-cyan-200"
-                                  : "border-sky-400/25 text-slate-300"
+                                  ? "border-sky-300 dark:border-sky-400/40 text-sky-700 dark:text-cyan-200"
+                                  : "border-slate-300 dark:border-sky-400/25 text-slate-600 dark:text-slate-300"
                               }`}
                             >
                               <option value="-">-- ไม่ระบุรถ --</option>
@@ -1457,12 +1469,12 @@ export function DailyDutyAssignmentPanel({
                                   }}
                                   placeholder="ระบุพื้นที่ใหม่..."
                                   autoFocus
-                                  className="h-8 w-32 rounded-lg border border-cyan-400 bg-[#041029] px-2 text-xs text-white placeholder:text-slate-400 focus:outline-none"
+                                  className="h-8 w-32 rounded-lg border border-sky-500 dark:border-cyan-400 bg-white dark:bg-[#041029] px-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => void handleAddWorkAreaOption(newWorkAreaText, row)}
-                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500 text-slate-950 transition hover:bg-cyan-400"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 dark:bg-cyan-500 text-white dark:text-slate-950 transition hover:bg-sky-500 dark:hover:bg-cyan-400"
                                   title="บันทึกพื้นที่ใหม่"
                                 >
                                   <Check size={13} strokeWidth={3} />
@@ -1473,7 +1485,7 @@ export function DailyDutyAssignmentPanel({
                                     setAddingWorkAreaForRow(null);
                                     setNewWorkAreaText("");
                                   }}
-                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 text-slate-300 transition hover:text-white"
+                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition hover:text-slate-900 dark:hover:text-white"
                                   title="ยกเลิก"
                                 >
                                   <X size={13} />
@@ -1487,10 +1499,10 @@ export function DailyDutyAssignmentPanel({
                                     handleUpsertRosterRow(row, { workArea: e.target.value })
                                   }
                                   aria-label={`พื้นที่รับผิดชอบของ ${row.employeeName}`}
-                                  className={`h-8 rounded-lg border bg-[#041029] px-2.5 text-xs font-semibold focus:border-cyan-400 focus:outline-none ${
+                                  className={`h-8 rounded-lg border bg-white dark:bg-[#041029] px-2.5 text-xs font-semibold focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none ${
                                     row.isAssigned
-                                      ? "border-sky-400/40 text-white"
-                                      : "border-sky-400/25 text-slate-300"
+                                      ? "border-sky-300 dark:border-sky-400/40 text-slate-900 dark:text-white"
+                                      : "border-slate-300 dark:border-sky-400/25 text-slate-600 dark:text-slate-300"
                                   }`}
                                 >
                                   <option value="-">-- ไม่ระบุพื้นที่ --</option>
@@ -1512,7 +1524,7 @@ export function DailyDutyAssignmentPanel({
                                     setAddingWorkAreaForRow(row.rowKey);
                                     setNewWorkAreaText("");
                                   }}
-                                  className="inline-flex h-8 w-7 shrink-0 items-center justify-center rounded-lg border border-cyan-400/35 bg-cyan-500/15 text-cyan-200 transition hover:border-cyan-300 hover:bg-cyan-500/30 hover:text-white"
+                                  className="inline-flex h-8 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-300 dark:border-cyan-400/35 bg-sky-100 dark:bg-cyan-500/15 text-sky-700 dark:text-cyan-200 transition hover:border-sky-500 hover:bg-sky-200 dark:hover:border-cyan-300 dark:hover:bg-cyan-500/30 dark:hover:text-white"
                                   title="เพิ่มพื้นที่รับผิดชอบใหม่"
                                   aria-label={`เพิ่มพื้นที่รับผิดชอบใหม่ให้ ${row.employeeName}`}
                                 >
@@ -1525,7 +1537,7 @@ export function DailyDutyAssignmentPanel({
                                     onClick={() =>
                                       void handleDeleteWorkAreaOption(row.workArea, row)
                                     }
-                                    className="inline-flex h-8 w-7 shrink-0 items-center justify-center rounded-lg border border-rose-500/35 bg-[#041029] text-rose-400 transition hover:bg-rose-500/20 hover:text-rose-200"
+                                    className="inline-flex h-8 w-7 shrink-0 items-center justify-center rounded-lg border border-rose-300 dark:border-rose-500/35 bg-rose-50 dark:bg-[#041029] text-rose-600 dark:text-rose-400 transition hover:bg-rose-100 dark:hover:bg-rose-500/20 dark:hover:text-rose-200"
                                     title={`ลบพื้นที่ "${row.workArea}"`}
                                     aria-label={`ลบพื้นที่ ${row.workArea}`}
                                   >
@@ -1538,22 +1550,22 @@ export function DailyDutyAssignmentPanel({
 
                           {/* 4. ทีม A / B / C */}
                           <td className="px-4 py-2.5">
-                            <div className="inline-flex rounded-lg border border-sky-400/25 bg-[#041029] p-0.5">
+                            <div className="inline-flex rounded-lg border border-slate-300 dark:border-sky-400/25 bg-slate-100 dark:bg-[#041029] p-0.5">
                               {MH_TEAMS.map((tOpt) => {
                                 const active = row.isAssigned && row.team === tOpt;
                                 const badgeColor =
                                   tOpt === "ทีม A"
-                                    ? "bg-sky-500 text-white shadow-[0_0_10px_rgba(14,165,233,0.4)]"
+                                    ? "bg-sky-500 text-white shadow-xs dark:shadow-[0_0_10px_rgba(14,165,233,0.4)]"
                                     : tOpt === "ทีม B"
-                                    ? "bg-purple-600 text-white shadow-[0_0_10px_rgba(147,51,234,0.4)]"
-                                    : "bg-emerald-600 text-white shadow-[0_0_10px_rgba(5,150,105,0.4)]";
+                                    ? "bg-purple-600 text-white shadow-xs dark:shadow-[0_0_10px_rgba(147,51,234,0.4)]"
+                                    : "bg-emerald-600 text-white shadow-xs dark:shadow-[0_0_10px_rgba(5,150,105,0.4)]";
                                 return (
                                   <button
                                     key={`${row.rowKey}-${tOpt}`}
                                     type="button"
                                     onClick={() => handleUpsertRosterRow(row, { team: tOpt })}
                                     className={`rounded-md px-2.5 py-1 text-[11px] font-bold whitespace-nowrap transition ${
-                                      active ? badgeColor : "text-slate-400 hover:text-white"
+                                      active ? badgeColor : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                                     }`}
                                   >
                                     {tOpt}
@@ -1575,10 +1587,10 @@ export function DailyDutyAssignmentPanel({
                                 handleUpsertRosterRow(row, { endTime: e.target.value })
                               }
                               aria-label={`เวลาเลิกงานของ ${row.employeeName}`}
-                              className={`h-8 rounded-lg border bg-[#041029] px-2.5 font-mono text-xs font-bold focus:border-cyan-400 focus:outline-none ${
+                              className={`h-8 rounded-lg border bg-white dark:bg-[#041029] px-2.5 font-mono text-xs font-bold focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none ${
                                 row.isAssigned
-                                  ? "border-sky-400/40 text-amber-300"
-                                  : "border-sky-400/25 text-slate-300"
+                                  ? "border-sky-300 dark:border-sky-400/40 text-amber-700 dark:text-amber-300"
+                                  : "border-slate-300 dark:border-sky-400/25 text-slate-600 dark:text-slate-300"
                               }`}
                             >
                               {row.endTime &&
@@ -1622,7 +1634,7 @@ export function DailyDutyAssignmentPanel({
                                   (e.currentTarget as HTMLInputElement).blur();
                                 }
                               }}
-                              className="h-8 w-full rounded-lg border border-sky-400/25 bg-[#041029] px-2.5 text-xs text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                              className="h-8 w-full rounded-lg border border-slate-300 dark:border-sky-400/25 bg-white dark:bg-[#041029] px-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
                             />
                           </td>
 
@@ -1630,7 +1642,7 @@ export function DailyDutyAssignmentPanel({
                           <td className="px-4 py-2.5 text-right whitespace-nowrap">
                             {row.isAssigned ? (
                               <div className="inline-flex items-center gap-1.5">
-                                <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-400/40 bg-emerald-500/15 px-2 text-[11px] font-bold text-emerald-300">
+                                <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-300 dark:border-emerald-400/40 bg-emerald-50 dark:bg-emerald-500/15 px-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
                                   <Check size={12} strokeWidth={2.5} />
                                   <span>จัดทีมแล้ว</span>
                                 </span>
@@ -1647,7 +1659,7 @@ export function DailyDutyAssignmentPanel({
                                   <button
                                     type="button"
                                     onClick={() => setConfirmDeleteId(row.dutyId)}
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-500/35 bg-[#041029] text-rose-400 transition hover:bg-rose-500/20 hover:text-rose-200"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-300 dark:border-rose-500/35 bg-rose-50 dark:bg-[#041029] text-rose-600 dark:text-rose-400 transition hover:bg-rose-100 dark:hover:bg-rose-500/20 dark:hover:text-rose-200"
                                     title="ยกเลิกการมอบหมายงานของพนักงานคนนี้"
                                     aria-label={`ยกเลิกงานของ ${row.employeeName}`}
                                   >
@@ -1659,7 +1671,7 @@ export function DailyDutyAssignmentPanel({
                               <button
                                 type="button"
                                 onClick={() => handleUpsertRosterRow(row, {})}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-cyan-400/45 bg-cyan-500/15 px-2.5 text-[11px] font-bold text-cyan-200 transition hover:bg-cyan-500/30 hover:text-white"
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-300 dark:border-cyan-400/45 bg-sky-100 dark:bg-cyan-500/15 px-2.5 text-[11px] font-bold text-sky-700 dark:text-cyan-200 transition hover:bg-sky-200 dark:hover:bg-cyan-500/30 dark:hover:text-white"
                                 title="กดเพื่อยืนยันการมอบหมายงานตามค่าในแถวนี้"
                               >
                                 <Check size={12} strokeWidth={2.5} />
@@ -1699,8 +1711,8 @@ export function DailyDutyAssignmentPanel({
                               <tr
                                 className={
                                   isMorning
-                                    ? "border-y border-cyan-400/35 bg-gradient-to-r from-[#0c316e] via-[#092454] to-[#06183b]"
-                                    : "border-y border-indigo-400/35 bg-gradient-to-r from-[#17286e] via-[#111f54] to-[#081338]"
+                                    ? "border-y border-sky-200 dark:border-cyan-400/35 bg-gradient-to-r from-sky-100 via-sky-50 to-white dark:from-[#0c316e] dark:via-[#092454] dark:to-[#06183b]"
+                                    : "border-y border-indigo-200 dark:border-indigo-400/35 bg-gradient-to-r from-indigo-100 via-indigo-50 to-white dark:from-[#17286e] dark:via-[#111f54] dark:to-[#081338]"
                                 }
                               >
                                 <td colSpan={9} className="px-4 py-2.5">
@@ -1709,16 +1721,16 @@ export function DailyDutyAssignmentPanel({
                                       <span
                                         className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
                                           isMorning
-                                            ? "border-amber-300/50 bg-amber-400/20 text-amber-300"
-                                            : "border-cyan-300/50 bg-cyan-400/20 text-cyan-200"
+                                            ? "border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-300/50 dark:bg-amber-400/20 dark:text-amber-300"
+                                            : "border-indigo-300 bg-indigo-100 text-indigo-700 dark:border-cyan-300/50 dark:bg-cyan-400/20 dark:text-cyan-200"
                                         }`}
                                       >
                                         {isMorning ? <Sun size={15} /> : <Moon size={15} />}
                                       </span>
-                                      <span className="text-xs font-extrabold tracking-wide text-white sm:text-sm">
+                                      <span className="text-xs font-extrabold tracking-wide text-slate-900 dark:text-white sm:text-sm">
                                         กลุ่มกะทำงาน: {sg.shiftName}
                                       </span>
-                                      <span className="rounded-md border border-cyan-300/40 bg-cyan-500/20 px-2 py-0.5 font-mono text-[11px] font-extrabold text-cyan-200 tabular-nums">
+                                      <span className="rounded-md border border-sky-300 dark:border-cyan-300/40 bg-sky-100 dark:bg-cyan-500/20 px-2 py-0.5 font-mono text-[11px] font-extrabold text-sky-800 dark:text-cyan-200 tabular-nums">
                                         รวม {sg.totalInShift} คน
                                       </span>
                                     </div>
@@ -1727,10 +1739,10 @@ export function DailyDutyAssignmentPanel({
                                       {sg.teamSubgroups.map((tg) => {
                                         const pillClass =
                                           tg.teamName === "ทีม A"
-                                            ? "border-sky-400/40 bg-sky-500/20 text-sky-200"
+                                            ? "border-sky-300 bg-sky-100 text-sky-800 dark:border-sky-400/40 dark:bg-sky-500/20 dark:text-sky-200"
                                             : tg.teamName === "ทีม B"
-                                            ? "border-purple-400/40 bg-purple-500/20 text-purple-200"
-                                            : "border-emerald-400/40 bg-emerald-500/20 text-emerald-200";
+                                            ? "border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-400/40 dark:bg-purple-500/20 dark:text-purple-200"
+                                            : "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200";
                                         return (
                                           <span
                                             key={`summary-${sg.shiftName}-${tg.teamName}`}
@@ -1751,29 +1763,29 @@ export function DailyDutyAssignmentPanel({
                                 const subHeaderStyle =
                                   tg.teamName === "ทีม A"
                                     ? {
-                                        rowBg: "bg-[#071d47]/90 border-y border-sky-400/25",
+                                        rowBg: "bg-sky-50/90 dark:bg-[#071d47]/90 border-y border-sky-200 dark:border-sky-400/25",
                                         badge:
                                           "border-cyan-300/60 bg-gradient-to-br from-cyan-400 to-blue-600 text-white",
-                                        text: "text-cyan-200",
+                                        text: "text-sky-800 dark:text-cyan-200",
                                         countBadge:
-                                          "border-sky-400/35 bg-sky-500/15 text-sky-200",
+                                          "border-sky-300 bg-white text-sky-700 dark:border-sky-400/35 dark:bg-sky-500/15 dark:text-sky-200",
                                       }
                                     : tg.teamName === "ทีม B"
                                     ? {
-                                        rowBg: "bg-[#14143d]/90 border-y border-purple-400/25",
+                                        rowBg: "bg-purple-50/90 dark:bg-[#14143d]/90 border-y border-purple-200 dark:border-purple-400/25",
                                         badge:
                                           "border-purple-300/60 bg-gradient-to-br from-purple-400 to-indigo-600 text-white",
-                                        text: "text-purple-200",
+                                        text: "text-purple-800 dark:text-purple-200",
                                         countBadge:
-                                          "border-purple-400/35 bg-purple-500/15 text-purple-200",
+                                          "border-purple-300 bg-white text-purple-700 dark:border-purple-400/35 dark:bg-purple-500/15 dark:text-purple-200",
                                       }
                                     : {
-                                        rowBg: "bg-[#06242c]/90 border-y border-emerald-400/25",
+                                        rowBg: "bg-emerald-50/90 dark:bg-[#06242c]/90 border-y border-emerald-200 dark:border-emerald-400/25",
                                         badge:
                                           "border-emerald-300/60 bg-gradient-to-br from-emerald-400 to-teal-600 text-white",
-                                        text: "text-emerald-200",
+                                        text: "text-emerald-800 dark:text-emerald-200",
                                         countBadge:
-                                          "border-emerald-400/35 bg-emerald-500/15 text-emerald-200",
+                                          "border-emerald-300 bg-white text-emerald-700 dark:border-emerald-400/35 dark:bg-emerald-500/15 dark:text-emerald-200",
                                       };
 
                                 return (
@@ -1815,21 +1827,21 @@ export function DailyDutyAssignmentPanel({
                         {/* 2. กลุ่มพนักงานที่ยังไม่ได้จัดทีม / รอมอบหมายงาน */}
                         {unassignedRows.length > 0 && (
                           <React.Fragment key="unassigned-group">
-                            <tr className="border-y border-amber-400/35 bg-gradient-to-r from-amber-500/20 via-[#2b1f14] to-[#0a1736]">
+                            <tr className="border-y border-amber-200 dark:border-amber-400/35 bg-gradient-to-r from-amber-100/80 via-amber-50 to-white dark:from-amber-500/20 dark:via-[#2b1f14] dark:to-[#0a1736]">
                               <td colSpan={9} className="px-4 py-2.5">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <div className="flex items-center gap-2.5">
-                                    <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-300/50 bg-amber-400/20 text-amber-300">
+                                    <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-amber-300 bg-amber-100 text-amber-700 dark:border-amber-300/50 dark:bg-amber-400/20 dark:text-amber-300">
                                       <Clock size={15} />
                                     </span>
-                                    <span className="text-xs font-extrabold tracking-wide text-amber-100 sm:text-sm">
+                                    <span className="text-xs font-extrabold tracking-wide text-amber-900 dark:text-amber-100 sm:text-sm">
                                       ยังไม่ได้จัดทีม / รอมอบหมายงาน
                                     </span>
-                                    <span className="rounded-md border border-amber-400/40 bg-amber-500/20 px-2 py-0.5 font-mono text-[11px] font-extrabold text-amber-200 tabular-nums">
+                                    <span className="rounded-md border border-amber-300 dark:border-amber-400/40 bg-amber-100 dark:bg-amber-500/20 px-2 py-0.5 font-mono text-[11px] font-extrabold text-amber-800 dark:text-amber-200 tabular-nums">
                                       {unassignedRows.length} คน
                                     </span>
                                   </div>
-                                  <span className="text-[11px] font-medium text-amber-200/80">
+                                  <span className="text-[11px] font-medium text-amber-800/80 dark:text-amber-200/80">
                                     คลิกเลือกกะทำงาน หรือ ทีม A / B / C ในแถวเพื่อจัดเข้ากลุ่มทันที
                                   </span>
                                 </div>
@@ -1850,6 +1862,17 @@ export function DailyDutyAssignmentPanel({
           </div>
         </div>
       </div>
+
+      {/* Modal: หน้ารายงานการปฏิบัติงานรถยกและรถลาก */}
+      <ForkliftTractorOperationReportModal
+        isOpen={isOperationReportOpen}
+        onClose={() => setIsOperationReportOpen(false)}
+        selectedDate={selectedDate}
+        initialShift={filterShift === "กะดึก" ? "กะดึก" : "กะเช้า"}
+        dutiesForDate={dutiesForDate}
+        allEmployees={activeEmployees}
+        vehicles={vehicles}
+      />
     </div>
   );
 }

@@ -396,15 +396,15 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
       {/* ========================================================================= */}
       {/* On-Screen Modal Dialog (Minimal Field UI) */}
       {/* ========================================================================= */}
-      <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
-        <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-fade-in font-sans">
+      <div className="fixed inset-0 z-50 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-fade-in font-sans">
           {/* Modal Header */}
-          <div className="bg-slate-950 p-3.5 sm:px-5 border-b border-slate-800 flex items-center justify-between gap-3">
+          <div className="bg-slate-50 dark:bg-slate-950 p-3.5 sm:px-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-500/20 border border-amber-300 dark:border-amber-500/40 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
                 <Scale size={18} />
               </div>
-              <h3 className="text-sm sm:text-base font-bold text-white">
+              <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-white">
                 พิมพ์บัตรชั่งน้ำหนัก (แยกตาม DO)
               </h3>
             </div>
@@ -413,7 +413,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="ปิดหน้าต่าง"
-              className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-lg bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-colors"
             >
               <X size={18} />
             </button>
@@ -423,20 +423,20 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
           <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 space-y-3.5">
             {/* Vehicle Selector */}
             {allVehicles.length === 0 ? (
-              <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-300 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2">
                 <AlertCircle size={15} />
                 <span>ยังไม่มีข้อมูลทะเบียนรถในระบบ กรุณานำเข้าข้อมูล SAP ในหน้าออฟฟิศก่อน</span>
               </div>
             ) : (
-              <div className="flex items-center gap-2.5 bg-slate-950/70 p-2.5 rounded-xl border border-slate-800">
-                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
-                  <Truck size={14} className="text-cyan-400" />
+              <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-950/70 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 shrink-0">
+                  <Truck size={14} className="text-cyan-600 dark:text-cyan-400" />
                   <span>ทะเบียนรถ</span>
                 </label>
                 <select
                   value={selectedVehicleId}
                   onChange={(e) => setSelectedVehicleId(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition-all"
+                  className="flex-1 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-white font-mono font-bold focus:outline-none focus:border-cyan-500 transition-all"
                 >
                   {allVehicles.map((v) => (
                     <option key={v.vehicleId} value={v.vehicleId}>
@@ -448,8 +448,8 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
             )}
 
             {validationError && (
-              <div className="p-2.5 rounded-lg bg-rose-950/50 border border-rose-700/70 text-rose-200 text-xs flex items-center gap-2">
-                <AlertCircle size={14} className="shrink-0 text-rose-400" />
+              <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-700/70 text-rose-700 dark:text-rose-200 text-xs flex items-center gap-2">
+                <AlertCircle size={14} className="shrink-0 text-rose-600 dark:text-rose-400" />
                 <span>{validationError}</span>
               </div>
             )}
@@ -462,12 +462,12 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                     key={ticket.doNo}
                     className={`p-3.5 rounded-xl border transition-all space-y-3 ${
                       ticket.selectedForPrint
-                        ? "bg-slate-950/75 border-cyan-800/80 shadow-xs"
-                        : "bg-slate-950/35 border-slate-800 opacity-70"
+                        ? "bg-slate-50/90 dark:bg-slate-950/75 border-cyan-400 dark:border-cyan-800/80 shadow-xs"
+                        : "bg-slate-50/40 dark:bg-slate-950/35 border-slate-200 dark:border-slate-800 opacity-70"
                     }`}
                   >
                     {/* Top Row: Selection Checkbox + ทะเบียนรถ + เลขที่ DO + ชื่อลูกค้า + ปุ่มพิมพ์ใบนี้ */}
-                    <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-800/80 pb-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 dark:border-slate-800/80 pb-2.5">
                       <label className="flex flex-wrap items-center gap-x-3 gap-y-1 cursor-pointer select-none flex-1 min-w-0">
                         <input
                           type="checkbox"
@@ -475,15 +475,15 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                           onChange={(e) =>
                             handleUpdateTicketField(idx, "selectedForPrint", e.target.checked)
                           }
-                          className="w-4 h-4 rounded text-cyan-500 bg-slate-900 border-slate-700 focus:ring-0 cursor-pointer shrink-0"
+                          className="w-4 h-4 rounded text-cyan-500 bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus:ring-0 cursor-pointer shrink-0"
                         />
-                        <span className="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/70 border border-cyan-800/70 px-2 py-0.5 rounded">
+                        <span className="text-xs font-mono font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/70 border border-cyan-300 dark:border-cyan-800/70 px-2 py-0.5 rounded">
                           {ticket.vehicleId}
                         </span>
-                        <span className="font-mono font-bold text-white text-xs sm:text-sm">
+                        <span className="font-mono font-bold text-slate-800 dark:text-white text-xs sm:text-sm">
                           DO NO. {ticket.doNo}
                         </span>
-                        <span className="text-xs text-slate-300 font-medium truncate">
+                        <span className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate">
                           {ticket.customerName}
                         </span>
                       </label>
@@ -491,7 +491,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleExecutePrint([ticket])}
-                        className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shrink-0 cursor-pointer"
+                        className="px-3 py-1.5 bg-amber-50 dark:bg-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all active:scale-95 shrink-0 cursor-pointer"
                       >
                         <Printer size={13} />
                         <span>พิมพ์ใบนี้</span>
@@ -501,7 +501,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                     {/* Editable Inputs: น้ำหนักสุทธิ (กก.) * และ สินค้า */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       <div className="space-y-1">
-                        <label className="block text-slate-300 font-medium">
+                        <label className="block text-slate-600 dark:text-slate-300 font-medium">
                           น้ำหนักสุทธิ (กก.) *
                         </label>
                         <input
@@ -510,12 +510,12 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                           onChange={(e) =>
                             handleUpdateTicketField(idx, "netWeightKg", Number(e.target.value) || 0)
                           }
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-amber-600 dark:text-amber-300 font-mono font-bold focus:outline-none focus:border-amber-500"
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="block text-slate-300 font-medium">
+                        <label className="block text-slate-600 dark:text-slate-300 font-medium">
                           สินค้า
                         </label>
                         <input
@@ -524,7 +524,7 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
                           onChange={(e) =>
                             handleUpdateTicketField(idx, "productName", e.target.value)
                           }
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-800 dark:text-white focus:outline-none focus:border-cyan-500"
                         />
                       </div>
                     </div>
@@ -535,11 +535,11 @@ export const WeightTicketModal: React.FC<WeightTicketModalProps> = ({
           </div>
 
           {/* Modal Footer Bar */}
-          <div className="bg-slate-950 p-3.5 sm:px-5 border-t border-slate-800 flex items-center justify-end gap-2">
+          <div className="bg-slate-50 dark:bg-slate-950 p-3.5 sm:px-5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold transition-colors"
+              className="px-4 py-2 bg-slate-200/80 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-xl text-xs font-semibold transition-colors"
             >
               ปิดหน้าต่าง
             </button>

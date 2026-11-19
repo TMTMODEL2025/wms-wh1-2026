@@ -725,26 +725,26 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       {/* ============================================================================ */}
       {/* Header Bar & Tab Switcher (Compact Mobile Layout) */}
       {/* ============================================================================ */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-2.5 sm:p-3 shadow-md">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 sm:p-3 shadow-sm dark:shadow-md transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-cyan-50 dark:bg-cyan-500/20 border border-cyan-200 dark:border-cyan-500/40 flex items-center justify-center text-cyan-600 dark:text-cyan-400 shrink-0">
               <ShieldCheck size={18} />
             </div>
-            <h2 className="text-base font-bold text-white tracking-wide">
+            <h2 className="text-base font-bold text-slate-800 dark:text-white tracking-wide">
               TMT Recheck
             </h2>
           </div>
 
           {/* 3 Main Tabs (Single row grid layout for mobile - no horizontal scroll) */}
-          <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 w-full sm:w-auto">
+          <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-lg border border-slate-200 dark:border-slate-800 w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setActiveTab("officer")}
               className={`px-1 sm:px-2.5 py-1.5 text-[10.5px] sm:text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1 min-w-0 ${
                 activeTab === "officer"
                   ? "bg-cyan-500 text-slate-950 font-bold shadow-xs"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <FileSpreadsheet size={13} className="shrink-0" />
@@ -757,7 +757,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               className={`px-1 sm:px-2.5 py-1.5 text-[10.5px] sm:text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1 min-w-0 ${
                 activeTab === "inspector"
                   ? "bg-cyan-500 text-slate-950 font-bold shadow-xs"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <Truck size={13} className="shrink-0" />
@@ -775,7 +775,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               className={`px-1 sm:px-2.5 py-1.5 text-[10.5px] sm:text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1 min-w-0 ${
                 activeTab === "report"
                   ? "bg-cyan-500 text-slate-950 font-bold shadow-xs"
-                  : "text-slate-400 hover:text-slate-200"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
               }`}
             >
               <FileText size={13} className="shrink-0" />
@@ -791,11 +791,11 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       {activeTab === "officer" && (
         <div className="space-y-3">
           {/* Hidden on mobile (hidden md:block), visible only on Desktop */}
-          <div className="hidden md:block bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 shadow-xs space-y-3 transition-colors">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="text-cyan-400" size={16} />
-                <h3 className="text-xs font-bold text-slate-200">
+                <FileSpreadsheet className="text-cyan-600 dark:text-cyan-400" size={16} />
+                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
                   นำเข้าข้อมูลคิวขึ้นสินค้าจาก SAP (TSV 18 คอลัมน์)
                 </h3>
               </div>
@@ -806,15 +806,15 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               value={rawSapInput}
               onChange={(e) => setRawSapInput(e.target.value)}
               placeholder="คัดลอกตารางจาก SAP 18 คอลัมน์แล้ววางลงที่นี่..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500 transition-all resize-y"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 rounded-lg p-2.5 text-xs text-slate-800 dark:text-slate-200 font-mono focus:outline-none focus:border-cyan-500 transition-all resize-y"
             />
 
             {importStatusMessage && (
               <div
                 className={`text-xs p-2.5 rounded-lg border flex items-center gap-2 ${
                   importStatusMessage.includes("สำเร็จ")
-                    ? "bg-emerald-950/40 border-emerald-800/60 text-emerald-300"
-                    : "bg-amber-950/40 border-amber-800/60 text-amber-300"
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300"
+                    : "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800/60 text-amber-700 dark:text-amber-300"
                 }`}
               >
                 <CheckCircle2 size={14} />
@@ -826,7 +826,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               <button
                 type="button"
                 onClick={() => handleParseAndImportSap(rawSapInput)}
-                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition-all active:scale-[0.98]"
+                className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white dark:text-slate-950 font-bold text-xs rounded-lg shadow-xs flex items-center gap-1.5 transition-all active:scale-[0.98]"
               >
                 <Upload size={14} />
                 <span>นำเข้าข้อมูลคิวขึ้นสินค้า</span>
@@ -835,11 +835,11 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
           </div>
 
           {/* Active Vehicles Queue Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 shadow-xs space-y-3 transition-colors">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
               <div className="flex items-center gap-2">
-                <Truck className="text-cyan-400" size={16} />
-                <h3 className="text-xs font-bold text-slate-200">
+                <Truck className="text-cyan-600 dark:text-cyan-400" size={16} />
+                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
                   รายการทะเบียนรถในคิว ({activeVehicles.length} คัน)
                 </h3>
               </div>
@@ -862,8 +862,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left text-slate-300">
-                  <thead className="bg-slate-950 text-slate-400 uppercase font-semibold text-[10.5px] border-b border-slate-800">
+                <table className="w-full text-xs text-left text-slate-700 dark:text-slate-300">
+                  <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase font-semibold text-[10.5px] border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="py-2.5 px-3">ทะเบียนรถ</th>
                       <th className="py-2.5 px-3">ชื่อลูกค้า</th>
@@ -874,36 +874,36 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                       <th className="py-2.5 px-3 text-right">การจัดการ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
                     {activeVehicles.map((v) => {
                       const reqCount = v.items.filter((i) => i.requiresScan).length;
                       const scannedCount = v.items.filter((i) => i.requiresScan && i.scanned).length;
 
                       return (
-                        <tr key={v.vehicleId} className="hover:bg-slate-800/40 transition-colors">
-                          <td className="py-2.5 px-3 font-mono font-bold text-cyan-400">
+                        <tr key={v.vehicleId} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="py-2.5 px-3 font-mono font-bold text-cyan-600 dark:text-cyan-400">
                             {v.vehicleId}
                           </td>
-                          <td className="py-2.5 px-3 font-medium text-slate-100">
+                          <td className="py-2.5 px-3 font-medium text-slate-800 dark:text-slate-100">
                             {v.customerNames.join(", ")}
                           </td>
-                          <td className="py-2.5 px-3 font-mono text-slate-400">
+                          <td className="py-2.5 px-3 font-mono text-slate-500 dark:text-slate-400">
                             {v.doNumbers.join(", ")}
                           </td>
-                          <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-200">
+                          <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-200">
                             {scannedCount} / {reqCount}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-200">
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800 dark:text-slate-200">
                             {v.totalGrossWeight.toLocaleString()} kg
                           </td>
                           <td className="py-2.5 px-3 text-center">
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                 v.status === "ready_to_inspect"
-                                  ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                  ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/40"
                                   : v.status === "scanning"
-                                  ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40"
-                                  : "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                  ? "bg-cyan-50 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/40"
+                                  : "bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/40"
                               }`}
                             >
                               {v.status === "ready_to_inspect" ? "พร้อมตรวจสอบ" : v.status === "scanning" ? "กำลังสแกน" : "รอตรวจสอบ"}
@@ -913,7 +913,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                             <button
                               type="button"
                               onClick={() => handleOpenWeightTicketModal(v.vehicleId)}
-                              className="px-2 py-1 bg-amber-950/80 text-amber-300 hover:bg-amber-900 border border-amber-800/60 rounded text-[11px] font-medium transition-colors"
+                              className="px-2 py-1 bg-amber-50 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900 border border-amber-300 dark:border-amber-800/60 rounded text-[11px] font-medium transition-colors"
                               title="พิมพ์บัตรชั่งของคันนี้"
                             >
                               <Scale size={12} className="inline mr-1" />
@@ -925,14 +925,14 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                                 setSelectedVehicleId(v.vehicleId);
                                 setActiveTab("inspector");
                               }}
-                              className="px-2.5 py-1 bg-cyan-950 text-cyan-400 hover:bg-cyan-900 border border-cyan-800/60 rounded text-[11px] font-medium transition-colors"
+                              className="px-2.5 py-1 bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-900 border border-cyan-300 dark:border-cyan-800/60 rounded text-[11px] font-medium transition-colors"
                             >
                               ตรวจสอบ
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteActiveVehicle(v.vehicleId)}
-                              className="px-2 py-1 bg-red-950/60 text-red-400 hover:bg-red-900 border border-red-800/60 rounded text-[11px] transition-colors"
+                              className="px-2 py-1 bg-red-50 dark:bg-red-950/60 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 border border-red-300 dark:border-red-800/60 rounded text-[11px] transition-colors"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -956,19 +956,19 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
           {!selectedVehicle ? (
             /* Step 1: Truck Selection List */
             <div className="space-y-3">
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-xs flex items-center justify-between">
-                <h3 className="text-xs font-bold text-white">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-xs flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-800 dark:text-white">
                   เลือกทะเบียนรถเพื่อสแกนทวนสอบ
                 </h3>
-                <span className="text-xs text-slate-400 font-mono">
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
                   ({activeVehicles.length} คัน)
                 </span>
               </div>
 
               {activeVehicles.length === 0 ? (
-                <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-8 text-center space-y-2">
-                  <Truck size={36} className="mx-auto text-slate-600" />
-                  <p className="text-xs font-medium text-slate-300">ยังไม่มีทะเบียนรถในคิวรอตรวจสอบ</p>
+                <div className="bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center space-y-2">
+                  <Truck size={36} className="mx-auto text-slate-400 dark:text-slate-600" />
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-300">ยังไม่มีทะเบียนรถในคิวรอตรวจสอบ</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
@@ -981,38 +981,38 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                         key={v.vehicleId}
                         type="button"
                         onClick={() => setSelectedVehicleId(v.vehicleId)}
-                        className="bg-slate-900 border border-slate-800 hover:border-cyan-500/60 rounded-xl p-3 text-left space-y-2 transition-all active:scale-[0.99] shadow-xs"
+                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-cyan-500/60 rounded-xl p-3 text-left space-y-2 transition-all active:scale-[0.99] shadow-xs"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="text-base font-mono font-bold text-cyan-400">
+                          <span className="text-base font-mono font-bold text-cyan-600 dark:text-cyan-400">
                             {v.vehicleId}
                           </span>
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                               v.status === "ready_to_inspect"
-                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                ? "bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-500/40"
                                 : v.status === "scanning"
-                                ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/40"
-                                : "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                                ? "bg-cyan-50 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border border-cyan-300 dark:border-cyan-500/40"
+                                : "bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/40"
                             }`}
                           >
                             {v.status === "ready_to_inspect" ? "พร้อมตรวจสอบ" : v.status === "scanning" ? "กำลังสแกน" : "รอตรวจสอบ"}
                           </span>
                         </div>
 
-                        <p className="text-xs font-semibold text-slate-200 line-clamp-1">
+                        <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 line-clamp-1">
                           {v.customerNames.join(", ")}
                         </p>
 
-                        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] font-mono">
-                          <span className="text-slate-400">
-                            ม้วน: <strong className="text-slate-200">{scannedCount}/{reqCount}</strong>
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            ม้วน: <strong className="text-slate-800 dark:text-slate-200">{scannedCount}/{reqCount}</strong>
                           </span>
-                          <span className={v.photos.length > 0 ? "text-emerald-400" : "text-amber-400"}>
+                          <span className={v.photos.length > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>
                             รูป: <strong>{v.photos.length}</strong>
                           </span>
-                          <span className="text-slate-400">
-                            น้ำหนัก: <strong className="text-slate-200">{v.totalGrossWeight.toLocaleString()} kg</strong>
+                          <span className="text-slate-500 dark:text-slate-400">
+                            น้ำหนัก: <strong className="text-slate-800 dark:text-slate-200">{v.totalGrossWeight.toLocaleString()} kg</strong>
                           </span>
                         </div>
                       </button>
@@ -1025,7 +1025,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
             /* Selected Vehicle Inspection View (Top-most Scanner Layout) */
             <div className="space-y-3">
               {/* 1. TOP-MOST BARCODE SCANNER & CAMERA SECTION */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2 shadow-md">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 space-y-2 shadow-sm dark:shadow-md">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -1039,7 +1039,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                     value={scanInputText}
                     onChange={(e) => setScanInputText(e.target.value)}
                     placeholder="ยิงบาร์โค้ด Bluetooth หรือพิมพ์ Batch..."
-                    className="flex-1 min-h-[44px] bg-slate-950 border border-cyan-500/60 rounded-xl px-3 text-xs font-mono font-bold text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+                    className="flex-1 min-h-[44px] bg-slate-50 dark:bg-slate-950 border border-cyan-500/60 rounded-xl px-3 text-xs font-mono font-bold text-cyan-700 dark:text-cyan-300 focus:outline-none focus:ring-1 focus:ring-cyan-400"
                   />
                   <button
                     type="submit"
@@ -1051,7 +1051,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
 
                 {/* Clean Camera Scanner Modal / View */}
                 {showCameraScanner && (
-                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
                     <CameraBarcodeScanner
                       onScan={(text) => {
                         setShowCameraScanner(false);
@@ -1064,13 +1064,13 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               </div>
 
               {/* 2. TOP ACTION BUTTONS & SUMMARY CARD */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-sm space-y-2.5">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 shadow-sm space-y-2.5">
                 {/* Top Action Row: Left -> Select Other Truck, Right -> Attach Photo */}
                 <div className="flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => setSelectedVehicleId(null)}
-                    className="text-xs text-slate-300 hover:text-white flex items-center gap-1 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 font-semibold"
+                    className="text-xs text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 font-semibold"
                   >
                     ← เลือกทะเบียนอื่น
                   </button>
@@ -1078,8 +1078,8 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                   <label
                     className={`min-h-[36px] px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all active:scale-[0.98] shrink-0 border ${
                       selectedVehicle.photos.length === 0
-                        ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/60 shadow-xs"
-                        : "bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border-emerald-700/70"
+                        ? "bg-amber-50 dark:bg-amber-500/20 hover:bg-amber-100 dark:hover:bg-amber-500/30 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/60 shadow-xs"
+                        : "bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/70"
                     }`}
                   >
                     <Camera size={15} />
@@ -1100,39 +1100,39 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                 </div>
 
                 {/* Vehicle Info Summary Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-slate-800/80 pt-2 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-slate-200 dark:border-slate-800/80 pt-2 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-extrabold text-cyan-400 text-base">
+                    <span className="font-mono font-extrabold text-cyan-600 dark:text-cyan-400 text-base">
                       {selectedVehicle.vehicleId}
                     </span>
-                    <span className="font-semibold text-slate-200 line-clamp-1 max-w-[220px]">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 line-clamp-1 max-w-[220px]">
                       {selectedVehicle.customerNames.join(", ")}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 font-mono text-xs text-slate-300">
+                  <div className="flex items-center gap-3 font-mono text-xs text-slate-600 dark:text-slate-300">
                     <span>
-                      สแกน: <strong className="text-cyan-400">{selectedVehicle.items.filter((i) => i.requiresScan && i.scanned).length}/{selectedVehicle.items.filter((i) => i.requiresScan).length}</strong>
+                      สแกน: <strong className="text-cyan-600 dark:text-cyan-400">{selectedVehicle.items.filter((i) => i.requiresScan && i.scanned).length}/{selectedVehicle.items.filter((i) => i.requiresScan).length}</strong>
                     </span>
                     <span>
-                      รูปภาพ: <strong className={selectedVehicle.photos.length > 0 ? "text-emerald-400" : "text-amber-400"}>{selectedVehicle.photos.length}</strong>
+                      รูปภาพ: <strong className={selectedVehicle.photos.length > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}>{selectedVehicle.photos.length}</strong>
                     </span>
                     <span>
-                      น้ำหนัก: <strong className="text-slate-100">{selectedVehicle.totalGrossWeight.toLocaleString()} kg</strong>
+                      น้ำหนัก: <strong className="text-slate-900 dark:text-slate-100">{selectedVehicle.totalGrossWeight.toLocaleString()} kg</strong>
                     </span>
                   </div>
                 </div>
 
                 {/* Mandatory Photo Warning or Inline Thumbnail Previews */}
                 {selectedVehicle.photos.length === 0 ? (
-                  <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-950/40 border border-amber-700/60 text-amber-300 text-[11px] font-medium">
-                    <AlertTriangle size={14} className="shrink-0 text-amber-400" />
+                  <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-[11px] font-medium">
+                    <AlertTriangle size={14} className="shrink-0 text-amber-600 dark:text-amber-400" />
                     <span>บังคับแนบรูปภาพหลักฐานอย่างน้อย 1 รูป ก่อนกดปุ่มยืนยันข้อมูล</span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-800/60">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-200 dark:border-slate-800/60">
                     {selectedVehicle.photos.map((photo) => (
-                      <div key={photo.id} className="relative w-10 h-10 rounded border border-slate-700 overflow-hidden shrink-0">
+                      <div key={photo.id} className="relative w-10 h-10 rounded border border-slate-300 dark:border-slate-700 overflow-hidden shrink-0">
                         <img src={photo.url} alt="Thumbnail" className="w-full h-full object-cover" />
                         <button
                           type="button"
@@ -1148,11 +1148,11 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
               </div>
 
               {/* 3. CHECKLIST TABLE & BOTTOM ACTIONS */}
-              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-3 shadow-md">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 space-y-3 shadow-sm dark:shadow-md">
                 {/* 6-Column Checklist Table (Clean Headers without numbering or license plate column) */}
-                <div className="overflow-x-auto rounded-lg border border-slate-800">
-                  <table className="w-full text-[11px] text-left text-slate-300">
-                    <thead className="bg-slate-950 text-slate-400 font-bold uppercase text-[10px]">
+                <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+                  <table className="w-full text-[11px] text-left text-slate-700 dark:text-slate-300">
+                    <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px]">
                       <tr>
                         <th className="py-2 px-2.5">สถานะ</th>
                         <th className="py-2 px-2.5">ชื่อลูกค้า</th>
@@ -1163,43 +1163,43 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                         <th className="py-2 px-2.5 font-mono">DO</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/80 bg-slate-900">
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80 bg-white dark:bg-slate-900">
                       {selectedVehicle.items.map((item, idx) => (
                         <tr
                           key={item.id || idx}
                           className={
                             item.scanned
-                              ? "bg-emerald-950/30 text-emerald-300 font-medium"
+                              ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 font-medium"
                               : !item.requiresScan
-                              ? "bg-slate-950/40 text-slate-400"
-                              : "hover:bg-slate-800/40"
+                              ? "bg-slate-50 dark:bg-slate-950/40 text-slate-500 dark:text-slate-400"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-800/40"
                           }
                         >
                           <td className="py-2 px-2.5 whitespace-nowrap">
                             {item.scanned ? (
-                              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                              <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                                 <CheckCircle2 size={14} /> สแกนแล้ว
                               </span>
                             ) : !item.requiresScan ? (
-                              <span className="text-amber-400 text-[9.5px] bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800/60">
+                              <span className="text-amber-700 dark:text-amber-400 text-[9.5px] bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-300 dark:border-amber-800/60">
                                 เศษ (ไม่ต้องสแกน)
                               </span>
                             ) : (
                               <span className="text-slate-500 font-mono">รอสแกน</span>
                             )}
                           </td>
-                          <td className="py-2 px-2.5 font-medium text-slate-100 whitespace-nowrap">{item.customerName}</td>
-                          <td className="py-2 px-2.5 font-mono font-bold text-cyan-300 whitespace-nowrap">
+                          <td className="py-2 px-2.5 font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap">{item.customerName}</td>
+                          <td className="py-2 px-2.5 font-mono font-bold text-cyan-600 dark:text-cyan-300 whitespace-nowrap">
                             {item.batch || "-"}
                           </td>
-                          <td className="py-2 px-2.5 text-slate-300 max-w-[180px] truncate">
+                          <td className="py-2 px-2.5 text-slate-600 dark:text-slate-300 max-w-[180px] truncate">
                             {item.description}
                           </td>
-                          <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-100 whitespace-nowrap">
+                          <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
                             {item.grossWeight.toLocaleString()}
                           </td>
-                          <td className="py-2 px-2.5 font-mono text-slate-400 whitespace-nowrap">{item.soNo}</td>
-                          <td className="py-2 px-2.5 font-mono text-slate-400 whitespace-nowrap">{item.doNo}</td>
+                          <td className="py-2 px-2.5 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{item.soNo}</td>
+                          <td className="py-2 px-2.5 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">{item.doNo}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1221,7 +1221,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                       <button
                         type="button"
                         onClick={handleSaveDraftStatus}
-                        className="min-h-[44px] px-3.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all active:scale-[0.97]"
+                        className="min-h-[44px] px-3.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-emerald-700 dark:text-emerald-400 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all active:scale-[0.97]"
                       >
                         <Save size={14} />
                         <span>บันทึกไว้ก่อน</span>
@@ -1234,7 +1234,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
                         className={`flex-1 min-h-[44px] rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all ${
                           isReadyToConfirm
                             ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 active:scale-[0.98]"
-                            : "bg-slate-800 text-slate-400 border border-slate-700 opacity-75 cursor-not-allowed"
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 opacity-75 cursor-not-allowed"
                         }`}
                       >
                         <CheckCircle2 size={16} />
@@ -1310,17 +1310,17 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
       {/* Photo Gallery Modal */}
       {/* ============================================================================ */}
       {viewingPhotoModalGroup && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 max-w-2xl w-full space-y-3 max-h-[85vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
-                <ImageIcon size={16} className="text-cyan-400" />
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 max-w-2xl w-full space-y-3 max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
+              <h3 className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
+                <ImageIcon size={16} className="text-cyan-600 dark:text-cyan-400" />
                 <span>ภาพถ่ายหลักฐาน - ทะเบียนรถ: {viewingPhotoModalGroup.vehicleId}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setViewingPhotoModalGroup(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               >
                 <X size={16} />
               </button>
@@ -1328,9 +1328,9 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
 
             <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2">
               {viewingPhotoModalGroup.photos.map((photo) => (
-                <div key={photo.id} className="rounded-lg overflow-hidden border border-slate-800 bg-slate-950 p-1 space-y-1">
+                <div key={photo.id} className="rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-1 space-y-1">
                   <img src={photo.url} alt="Proof" className="w-full aspect-square object-cover rounded" />
-                  <p className="text-[10px] text-slate-400 text-center font-mono">{photo.timestamp}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 text-center font-mono">{photo.timestamp}</p>
                 </div>
               ))}
             </div>
@@ -1338,7 +1338,7 @@ export function TmtRecheckView({ defaultTab = "officer" }: TmtRecheckViewProps) 
             <button
               type="button"
               onClick={() => setViewingPhotoModalGroup(null)}
-              className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl"
+              className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-bold text-xs rounded-xl"
             >
               ปิดหน้าต่าง
             </button>
