@@ -2440,46 +2440,51 @@ export function DailyReportView({
 
               {/* Inbound Bars */}
               {smInboundChartData.map((d, idx) => {
-                const groupWidth = 435 / smInboundChartData.length;
+                const groupWidth = 435 / Math.max(1, smInboundChartData.length);
                 const xCenter = 55 + idx * groupWidth + groupWidth / 2;
                 const barWidth = smInboundChartData.length > 4 ? 26 : 32;
 
+                const inboundKg = Number(d.inboundKg) || 0;
+                const coilCount = Number(d.coilCount) || 0;
+                const hasInboundValue = inboundKg > 0 || coilCount > 0;
                 const inboundHeight =
-                  d.inboundKg > 0
-                    ? (d.inboundKg / maxSmInboundKg) * 130
-                    : d.coilCount > 0
-                    ? (d.coilCount / maxSmInboundCoils) * 130
+                  inboundKg > 0 && maxSmInboundKg > 0
+                    ? (inboundKg / maxSmInboundKg) * 130
+                    : coilCount > 0 && maxSmInboundCoils > 0
+                    ? (coilCount / maxSmInboundCoils) * 130
                     : 0;
                 const xInbound = xCenter - barWidth / 2;
                 const yInbound = 160 - inboundHeight;
                 const isExt = d.machineKey === "EXTERNAL";
 
                 return (
-                  <g key={d.machineKey || d.machine} className="group cursor-pointer">
-                    <rect
-                      x={xInbound}
-                      y={yInbound}
-                      width={barWidth}
-                      height={Math.max(3, inboundHeight)}
-                      rx="4"
-                      fill={isExt ? "url(#gradientExternalInbound)" : "url(#gradientPureInbound)"}
-                      className="transition-all duration-300 hover:opacity-80"
-                    />
+                  <g key={d.machineKey || d.machine} className={hasInboundValue ? "group cursor-pointer" : "group"}>
+                    {hasInboundValue && (
+                      <>
+                        <rect
+                          x={xInbound}
+                          y={yInbound}
+                          width={barWidth}
+                          height={Math.max(3, inboundHeight)}
+                          rx="4"
+                          fill={isExt ? "url(#gradientExternalInbound)" : "url(#gradientPureInbound)"}
+                          className="transition-all duration-300 hover:opacity-80"
+                        />
 
-                    {(d.inboundKg > 0 || d.coilCount > 0) && (
-                      <text
-                        x={xCenter}
-                        y={yInbound - 6}
-                        textAnchor="middle"
-                        fontSize="8.5"
-                        fontWeight="bold"
-                        fill={isExt ? "#a855f7" : "#0284c7"}
-                        className="font-mono"
-                      >
-                        {d.inboundKg > 0
-                          ? `${d.inboundKg >= 1000 ? `${(d.inboundKg / 1000).toFixed(1)}k` : d.inboundKg.toLocaleString()} kg (${d.coilCount})`
-                          : `${d.coilCount} ${isThai ? "ม้วน" : "coils"}`}
-                      </text>
+                        <text
+                          x={xCenter}
+                          y={yInbound - 6}
+                          textAnchor="middle"
+                          fontSize="8.5"
+                          fontWeight="bold"
+                          fill={isExt ? "#a855f7" : "#0284c7"}
+                          className="font-mono"
+                        >
+                          {inboundKg > 0
+                            ? `${inboundKg >= 1000 ? `${(inboundKg / 1000).toFixed(1)}k` : inboundKg.toLocaleString()} kg (${coilCount})`
+                            : `${coilCount} ${isThai ? "ม้วน" : "coils"}`}
+                        </text>
+                      </>
                     )}
 
                     <text
@@ -2543,38 +2548,42 @@ export function DailyReportView({
 
               {/* Dispensed Bars */}
               {machineDispensingChartData.map((d, idx) => {
-                const groupWidth = 435 / machineDispensingChartData.length;
+                const groupWidth = 435 / Math.max(1, machineDispensingChartData.length);
                 const xCenter = 55 + idx * groupWidth + groupWidth / 2;
                 const barWidth = 32;
 
-                const dispensedHeight = (d.dispensedKg / maxDispensingKg) * 130;
+                const dispensedKg = Number(d.dispensedKg) || 0;
+                const hasDispensedValue = dispensedKg > 0;
+                const dispensedHeight = hasDispensedValue && maxDispensingKg > 0 ? (dispensedKg / maxDispensingKg) * 130 : 0;
                 const xDispensed = xCenter - barWidth / 2;
                 const yDispensed = 160 - dispensedHeight;
 
                 return (
-                  <g key={d.machine} className="group cursor-pointer">
-                    <rect
-                      x={xDispensed}
-                      y={yDispensed}
-                      width={barWidth}
-                      height={Math.max(3, dispensedHeight)}
-                      rx="4"
-                      fill="url(#gradientPureDispensed)"
-                      className="transition-all duration-300 hover:opacity-80"
-                    />
+                  <g key={d.machine} className={hasDispensedValue ? "group cursor-pointer" : "group"}>
+                    {hasDispensedValue && (
+                      <>
+                        <rect
+                          x={xDispensed}
+                          y={yDispensed}
+                          width={barWidth}
+                          height={Math.max(3, dispensedHeight)}
+                          rx="4"
+                          fill="url(#gradientPureDispensed)"
+                          className="transition-all duration-300 hover:opacity-80"
+                        />
 
-                    {d.dispensedKg > 0 && (
-                      <text
-                        x={xCenter}
-                        y={yDispensed - 6}
-                        textAnchor="middle"
-                        fontSize="9"
-                        fontWeight="bold"
-                        fill="#f59e0b"
-                        className="font-mono"
-                      >
-                        {(d.dispensedKg / 1000).toFixed(1)}k kg
-                      </text>
+                        <text
+                          x={xCenter}
+                          y={yDispensed - 6}
+                          textAnchor="middle"
+                          fontSize="9"
+                          fontWeight="bold"
+                          fill="#f59e0b"
+                          className="font-mono"
+                        >
+                          {(dispensedKg / 1000).toFixed(1)}k kg
+                        </text>
+                      </>
                     )}
 
                     <text

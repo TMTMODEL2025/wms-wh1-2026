@@ -61,7 +61,7 @@ import {
   showWarningAlert,
   showConfirmDialog,
 } from "../utils/swalUtils";
-import type { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
+import { sanitizeWeightKg, type SlitBarcodeRecord, type PickListOrder, type SapMasterItem } from "./SlitFilmManagement";
 import {
   subscribeToSlitInbound,
   subscribeToSlitOutbound,
@@ -918,6 +918,76 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
     };
   }, [buildingTabSummaries]);
 
+  // Calculate current SAP stock weight (tons) matching "Stock คงคลัง" SAP uploaded records (excluding dispatched batches)
+  const sapCurrentStockSummary = useMemo(() => {
+    const dispatchedBatchSet = new Set<string>();
+
+    effectiveInbound.forEach((r) => {
+      if (!r?.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      const loc = (r.location || "").trim();
+      const upperLoc = loc.toUpperCase();
+      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
+        dispatchedBatchSet.add(bKey);
+      }
+    });
+
+    effectiveOutbound.forEach((r) => {
+      if (!r?.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      const isTempEmergency = Boolean((r.isTemporaryOrder || r.orderNo?.startsWith("TEMP-")) && !r.matchedOrderNo);
+      const loc = (r.location || "").trim();
+      const upperLoc = loc.toUpperCase();
+      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
+        if (!isTempEmergency) {
+          dispatchedBatchSet.add(bKey);
+        }
+      }
+    });
+
+    effectivePickLists.forEach((pl) => {
+      const isPlTemp = Boolean((pl.isTemporary || pl.orderNo?.startsWith("TEMP-")) && !pl.matchedOrderNo && !pl.operatorDismissed);
+      (pl.items || []).forEach((item) => {
+        if (!item?.batch) return;
+        const bKey = item.batch.trim().toUpperCase();
+        if (item.machineIssued && !isPlTemp) {
+          dispatchedBatchSet.add(bKey);
+        }
+      });
+    });
+
+    let totalWeightKg = 0;
+    let itemCount = 0;
+
+    effectiveSapMasterMap.forEach((sapItem, batchKey) => {
+      const cleanKey = String(batchKey || sapItem?.batch || "").trim().toUpperCase();
+      if (!cleanKey || dispatchedBatchSet.has(cleanKey)) return;
+      const safeWeightKg = sanitizeWeightKg(sapItem?.weightKg, sapItem?.unrestricted);
+      if (safeWeightKg <= 0) return;
+      totalWeightKg += safeWeightKg;
+      itemCount += 1;
+    });
+
+    const totalTons = Number((totalWeightKg / 1000).toFixed(3));
+    const capacityPercent =
+      allStorageAreasSummary.totalMaxCapacityTons > 0
+        ? Math.round((totalTons / allStorageAreasSummary.totalMaxCapacityTons) * 100)
+        : 0;
+
+    return {
+      totalWeightKg,
+      totalTons,
+      itemCount,
+      capacityPercent,
+    };
+  }, [
+    effectiveInbound,
+    effectiveOutbound,
+    effectivePickLists,
+    effectiveSapMasterMap,
+    allStorageAreasSummary.totalMaxCapacityTons,
+  ]);
+
   // Keep real-time summary metrics (พื้นที่จัดเก็บทั้งหมด, พื้นที่ใช้ไป, พื้นที่คงเหลือ, จำนวนตะกร้า, จำนวนแถบ) synced in Cloud Firestore
   useEffect(() => {
     if (!isSpaceConfigLoaded) return;
@@ -1435,7 +1505,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       ) : (
         <>
           {/* Top Header & All Storage Areas Combined Summary Card */}
-          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 p-3 sm:p-6 md:p-8 text-white shadow-xl border border-cyan-500/30">
+          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-3 sm:p-6 md:p-8 text-white shadow-xl border border-cyan-500/30 dark:border-cyan-500/40">
             <div className="absolute -right-12 -bottom-12 opacity-10 pointer-events-none hidden sm:block">
               <Boxes size={280} />
             </div>
@@ -1452,7 +1522,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </div>
             </div>
 
-            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-3 mt-2.5 pt-2.5 sm:mt-6 sm:pt-6 border-t border-white/10">
+            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-3 mt-2.5 pt-2.5 sm:mt-6 sm:pt-6 border-t border-white/10">
               {/* 1. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
               <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
                 <div>
@@ -1594,6 +1664,45 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                             : Math.max(0, 100 - allStorageAreasSummary.spacePercent)
                         }%`,
                       }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. สต๊อกปัจจุบันSAP */}
+              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
+                      สต๊อกปัจจุบันSAP
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-violet-200 dark:text-violet-300 bg-violet-500/25 px-1.5 py-0.2 rounded border border-violet-400/35 shrink-0">
+                      {sapCurrentStockSummary.capacityPercent}%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-violet-200 dark:text-violet-300 tabular-nums leading-tight">
+                    {sapCurrentStockSummary.totalTons.toLocaleString(undefined, {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">ตัน</span>
+                  </div>
+                </div>
+
+                {/* Progress Bar & SAP Record Count */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between gap-1 text-[9.5px] sm:text-[10px] font-bold text-violet-200 dark:text-violet-300">
+                    <span className="truncate">
+                      {sapCurrentStockSummary.itemCount > 0
+                        ? `SAP (${sapCurrentStockSummary.itemCount.toLocaleString()} รายการ)`
+                        : "ยังไม่มีข้อมูล SAP"}
+                    </span>
+                    <span className="shrink-0">{sapCurrentStockSummary.capacityPercent}%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-violet-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, sapCurrentStockSummary.capacityPercent)}%` }}
                     />
                   </div>
                 </div>
