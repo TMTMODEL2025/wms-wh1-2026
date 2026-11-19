@@ -9045,7 +9045,53 @@ export function SlitFilmManagement({
 
       {/* 5. Relocate Layout View */}
       {activeMode === "relocate_layout" && (
-        <div className="space-y-2 sm:space-y-2.5 animate-fade-in">
+        <div className="flex flex-col space-y-2 sm:space-y-2.5 animate-fade-in">
+          {/* Top-Most Primary Camera Viewfinder for Batch or Destination Layout (1D Barcode Only) */}
+          {relocateCameraTarget !== null && (
+            <div className="w-full flex flex-col">
+              <CameraBarcodeScanner
+                isThai={isThai}
+                barcodeOnly
+                fullHeight
+                onScan={(decoded) => {
+                  if (relocateCameraTarget === "batch") {
+                    const cleaned = cleanBarcode(decoded);
+                    if (!cleaned) return;
+                    setRelocateBarcodeInput(cleaned);
+                    setRelocateCameraTarget(null);
+                    if (soundEnabled) playScanSound(true);
+                    setTimeout(() => {
+                      relocateInputRef.current?.focus();
+                    }, 100);
+                  } else {
+                    const cleaned = cleanBarcode(decoded)
+                      .replace(/[\r\n\t\0\x02\x03\x04]+/g, "")
+                      .replace(/^\*+|\*+$/g, "")
+                      .toUpperCase();
+                    if (!cleaned) return;
+                    setDestinationLayout(cleaned);
+                    setRelocateCameraTarget(null);
+                    if (soundEnabled) playScanSound(true);
+                    setTimeout(() => {
+                      destinationLayoutInputRef.current?.focus();
+                    }, 100);
+                  }
+                }}
+                onClose={() => {
+                  const target = relocateCameraTarget;
+                  setRelocateCameraTarget(null);
+                  setTimeout(() => {
+                    if (target === "destination") {
+                      destinationLayoutInputRef.current?.focus();
+                    } else {
+                      relocateInputRef.current?.focus();
+                    }
+                  }, 100);
+                }}
+              />
+            </div>
+          )}
+
           {/* Grid Layout: Scan Form & Destination Input */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-2 sm:gap-2.5">
             {/* Column 1: Batch Scanner Input & Accumulation Table */}
@@ -9128,37 +9174,6 @@ export function SlitFilmManagement({
                   </button>
                 </div>
               </form>
-
-              {/* Inline Camera Barcode Scanner for Batch (1D Barcode Only) */}
-              {relocateCameraTarget === "batch" && (
-                <div className="pt-1">
-                  <CameraBarcodeScanner
-                    isThai={isThai}
-                    barcodeOnly
-                    placeholderText={
-                      isThai
-                        ? "เล็งกล้องไปที่บาร์โค้ด Batch (รองรับเฉพาะ Barcode 1D)"
-                        : "Aim at Batch barcode (1D Barcode only)"
-                    }
-                    onScan={(decoded) => {
-                      const cleaned = cleanBarcode(decoded);
-                      if (!cleaned) return;
-                      setRelocateBarcodeInput(cleaned);
-                      setRelocateCameraTarget(null);
-                      if (soundEnabled) playScanSound(true);
-                      setTimeout(() => {
-                        relocateInputRef.current?.focus();
-                      }, 100);
-                    }}
-                    onClose={() => {
-                      setRelocateCameraTarget(null);
-                      setTimeout(() => {
-                        relocateInputRef.current?.focus();
-                      }, 100);
-                    }}
-                  />
-                </div>
-              )}
 
               {/* Accumulation Table */}
               <div className="space-y-1.5 pt-1.5 border-t border-slate-100 dark:border-[#1e3a5f]/60">
@@ -9295,40 +9310,6 @@ export function SlitFilmManagement({
                       </span>
                     </button>
                   </div>
-
-                  {/* Inline Camera Barcode Scanner for Destination Layout (1D Barcode Only) */}
-                  {relocateCameraTarget === "destination" && (
-                    <div className="mt-2">
-                      <CameraBarcodeScanner
-                        isThai={isThai}
-                        barcodeOnly
-                        placeholderText={
-                          isThai
-                            ? "เล็งกล้องไปที่บาร์โค้ด Layout ปลายทาง (เฉพาะ Barcode 1D)"
-                            : "Aim at Destination Layout barcode (1D Barcode only)"
-                        }
-                        onScan={(decoded) => {
-                          const cleaned = cleanBarcode(decoded)
-                            .replace(/[\r\n\t\0\x02\x03\x04]+/g, "")
-                            .replace(/^\*+|\*+$/g, "")
-                            .toUpperCase();
-                          if (!cleaned) return;
-                          setDestinationLayout(cleaned);
-                          setRelocateCameraTarget(null);
-                          if (soundEnabled) playScanSound(true);
-                          setTimeout(() => {
-                            destinationLayoutInputRef.current?.focus();
-                          }, 100);
-                        }}
-                        onClose={() => {
-                          setRelocateCameraTarget(null);
-                          setTimeout(() => {
-                            destinationLayoutInputRef.current?.focus();
-                          }, 100);
-                        }}
-                      />
-                    </div>
-                  )}
                 </div>
 
                 {/* Relocation Summary Box */}
@@ -9781,7 +9762,34 @@ export function SlitFilmManagement({
 
       {/* 5. Return to Warehouse (คืนคลัง) View */}
       {activeMode === "return_warehouse" && (
-        <section className="space-y-2 sm:space-y-3 font-sans">
+        <section className="flex flex-col space-y-2 sm:space-y-3 font-sans">
+          {/* Top-Most Primary Camera Viewfinder when scanning Batch (1D Barcode Only) */}
+          {isReturnCameraActive && (
+            <div className="w-full flex flex-col">
+              <CameraBarcodeScanner
+                isThai={isThai}
+                barcodeOnly
+                fullHeight
+                onScan={(decoded) => {
+                  const cleaned = cleanBarcode(decoded);
+                  if (!cleaned) return;
+                  setReturnBarcodeInput(cleaned);
+                  setIsReturnCameraActive(false);
+                  if (soundEnabled) playScanSound(true);
+                  setTimeout(() => {
+                    returnBarcodeInputRef.current?.focus();
+                  }, 100);
+                }}
+                onClose={() => {
+                  setIsReturnCameraActive(false);
+                  setTimeout(() => {
+                    returnBarcodeInputRef.current?.focus();
+                  }, 100);
+                }}
+              />
+            </div>
+          )}
+
           {/* Header Banner & Stats */}
           <div className="p-2.5 sm:p-3.5 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -9967,37 +9975,6 @@ export function SlitFilmManagement({
                   <span>{isThai ? "เลือก" : "Select"}</span>
                 </button>
               </form>
-
-              {/* Inline Camera Barcode Scanner (1D Barcode Only - No QR Code) */}
-              {isReturnCameraActive && (
-                <div className="mt-2">
-                  <CameraBarcodeScanner
-                    isThai={isThai}
-                    barcodeOnly
-                    placeholderText={
-                      isThai
-                        ? "เล็งกล้องไปที่บาร์โค้ด Batch (รองรับเฉพาะ Barcode)"
-                        : "Aim at Batch barcode (1D Barcode only)"
-                    }
-                    onScan={(decoded) => {
-                      const cleaned = cleanBarcode(decoded);
-                      if (!cleaned) return;
-                      setReturnBarcodeInput(cleaned);
-                      setIsReturnCameraActive(false);
-                      if (soundEnabled) playScanSound(true);
-                      setTimeout(() => {
-                        returnBarcodeInputRef.current?.focus();
-                      }, 100);
-                    }}
-                    onClose={() => {
-                      setIsReturnCameraActive(false);
-                      setTimeout(() => {
-                        returnBarcodeInputRef.current?.focus();
-                      }, 100);
-                    }}
-                  />
-                </div>
-              )}
             </div>
 
             {/* 2. Filter Bar: Machine, Order No., Keyword (Single Row on Mobile & Desktop) */}

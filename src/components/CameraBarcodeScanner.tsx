@@ -26,6 +26,10 @@ export interface CameraBarcodeScannerProps {
   isThai?: boolean;
   placeholderText?: string;
   barcodeOnly?: boolean;
+  statusPlacement?: "overlay" | "below";
+  titleText?: string;
+  descriptionText?: string;
+  fullHeight?: boolean;
 }
 
 // 1D and 2D barcode formats strictly used in industrial warehouse operations
@@ -76,8 +80,8 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   onScan,
   onClose,
   isThai = true,
-  placeholderText,
   barcodeOnly = false,
+  fullHeight = false,
 }) => {
   const containerId = useRef(`barcode-reader-${Math.random().toString(36).substring(2, 9)}`).current;
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -503,7 +507,11 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
   };
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden bg-[#0c1930] border border-slate-700/80 shadow-xl flex flex-col">
+    <div
+      className={`relative w-full rounded-2xl overflow-hidden bg-[#0c1930] border border-slate-700/80 shadow-xl flex flex-col ${
+        fullHeight ? "h-full min-h-[360px] sm:min-h-[420px]" : ""
+      }`}
+    >
       {/* Suppress html5-qrcode internal shaded region border to prevent double-bracket clutter */}
       <style>{`
         #${containerId} #qr-shaded-region {
@@ -513,12 +521,17 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
         #${containerId} video {
           object-fit: cover !important;
           width: 100% !important;
+          height: 100% !important;
           border-radius: 1rem 1rem 0 0 !important;
         }
       `}</style>
 
-      {/* Video Viewfinder Container */}
-      <div className="relative w-full h-[280px] sm:h-[330px] bg-black flex items-center justify-center overflow-hidden">
+      {/* Video Viewfinder Container (Top Primary Area) */}
+      <div
+        className={`relative w-full bg-black flex items-center justify-center overflow-hidden ${
+          fullHeight ? "flex-1 min-h-[280px] sm:min-h-[340px]" : "h-[280px] sm:h-[330px]"
+        }`}
+      >
         {/* Hardware-accelerated Native Video Element */}
         <video
           ref={videoRef}
@@ -562,13 +575,6 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
               {/* Thin Horizontal Red Aiming Laser Line */}
               <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 h-[1.5px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.95)] animate-pulse" />
             </div>
-
-            {/* Bottom Dark Semi-Transparent Badge Overlay */}
-            <div className="absolute bottom-2.5 inset-x-0 flex justify-center pointer-events-none px-2">
-              <span className="text-[11px] font-medium text-slate-100 bg-black/65 backdrop-blur-md px-3 py-1 rounded-full border border-white/15 shadow-md truncate max-w-full">
-                {placeholderText || (isThai ? "เล็งกล้องไปที่บาร์โค้ด Batch 10 หลัก" : "Aim at the 10-digit Batch barcode")}
-              </span>
-            </div>
           </div>
         )}
 
@@ -590,7 +596,7 @@ export const CameraBarcodeScanner: React.FC<CameraBarcodeScannerProps> = ({
       </div>
 
       {/* Camera Action Buttons Bar: Compact balanced mobile layout */}
-      <div className="w-full px-3 py-2 bg-[#0a1526] border-t border-slate-800/80 flex items-center justify-between gap-2">
+      <div className="w-full px-3 py-2 bg-[#0a1526] border-t border-slate-800/80 flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-1.5">
           {/* Switch Camera Button (Icon Only) */}
           <button
