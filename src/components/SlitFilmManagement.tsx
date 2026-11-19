@@ -2961,26 +2961,9 @@ export function SlitFilmManagement({
       ) || activePickListOrder;
     if (!latestTargetOrder) return;
 
-    // RULE: Check if Batch exists in Stock Balance (Stock คงคลัง) or current Pick List
-    const existsInStock =
-      stockList.some((item) => item.batch.trim().toUpperCase() === trimmed) ||
-      sapMasterMap.has(trimmed) ||
-      inboundList.some((i) => i.batch.trim().toUpperCase() === trimmed) ||
-      latestTargetOrder.items.some((i) => i.batch.trim().toUpperCase() === trimmed);
-
-    if (!existsInStock) {
-      if (soundEnabled) playScanSound(false);
-      setOutboundScanStatus({
-        type: "error",
-        message: isThai
-          ? `ปฏิเสธ: ไม่พบ Batch [${trimmed}] ใน Stock คงคลัง! ต้องทำการสแกนรับเข้าคลังก่อนสแกนเตรียมเบิก`
-          : `Rejected: Batch [${trimmed}] not found in Stock Balance! Must scan inbound first.`,
-      });
-      setOutboundBarcodeInput("");
-      outboundScannerInputRef.current?.focus();
-      return;
-    }
-
+    // Allow outbound Pick List scanning for any Batch listed in the Pick List
+    // regardless of whether it already has a warehouse Location or Stock/Inbound record.
+    // (Location validation remains strictly enforced at Machine Issue / จ่ายหน้าเครื่อง.)
     // Check if trimmed barcode is in current pick list items
     const matchingItemIndex = latestTargetOrder.items.findIndex(
       (item) => item.batch && item.batch.trim().toUpperCase() === trimmed
