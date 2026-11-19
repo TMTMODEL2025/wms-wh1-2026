@@ -8147,79 +8147,7 @@ export function SlitFilmManagement({
 
             {/* Modal Scrollable Body */}
             <div className="p-3.5 sm:p-4 space-y-3 overflow-y-auto flex-1 bg-white dark:bg-[#0c1930]">
-              {/* Destination Rack Selector for Operator Receive (if applicable) */}
-              {activeMode === "operator_receive" && (
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#0a1526]/80 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs gap-2">
-                    <span className="font-semibold dark:font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5 min-w-0">
-                      <Scale size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
-                      <span className="truncate">{isThai ? `ระบุแคร่ปลายทางเครื่อง [${selectedOutboundMachine}]:` : `Destination Rack for [${selectedOutboundMachine}]:`}</span>
-                      <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold flex-shrink-0">* ({isThai ? "บังคับระบุ" : "Required"})</span>
-                    </span>
-                    {destinationRacks.find((r) => r.rackId === selectedDestinationRackId) && (
-                      <span className="text-[11px] font-mono text-cyan-700 dark:text-cyan-400 font-semibold dark:font-medium flex-shrink-0">
-                        {isThai ? "แคร่: " : "Rack: "}
-                        {destinationRacks.find((r) => r.rackId === selectedDestinationRackId)?.rackNameTh}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-                    {destinationRacks.map((rack, rIdx) => {
-                      const isSelected = selectedDestinationRackId === rack.rackId;
-                      const isMaintenance = rack.status === "maintenance";
-                      const accWidth = calculateAccumulatedWidthMm(rack.coils);
-                      const remainingMm = Math.max(0, rack.maxCapacityMm - accWidth);
-                      const percent = Math.min(100, Math.round((accWidth / rack.maxCapacityMm) * 100));
-
-                      return (
-                        <button
-                          key={`${rack.rackId}-${rIdx}`}
-                          type="button"
-                          disabled={isMaintenance}
-                          onClick={() => setSelectedDestinationRackId(rack.rackId)}
-                          className={`p-1.5 sm:p-2 rounded-lg border text-left transition-all relative ${
-                            isMaintenance
-                              ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800"
-                              : isSelected
-                              ? "bg-blue-600 text-white border-blue-600 dark:border-blue-500 shadow-sm ring-2 ring-blue-400/50"
-                              : "bg-white dark:bg-[#111e38] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-slate-700 hover:bg-blue-50/60 dark:hover:bg-[#16294a]"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="font-mono font-bold text-[11px] sm:text-xs truncate flex items-center gap-1 min-w-0">
-                              {isSelected && (
-                                <span className="p-0.5 rounded-full bg-white text-blue-600 inline-flex items-center justify-center flex-shrink-0 shadow-xs">
-                                  <Check size={8} className="stroke-[3]" />
-                                </span>
-                              )}
-                              <span className="truncate">{rack.rackNameTh}</span>
-                            </span>
-                            {!isMaintenance && (
-                              <span className={`text-[9px] font-mono font-bold flex-shrink-0 ${isSelected ? "text-blue-100" : "text-slate-500 dark:text-slate-400"}`}>
-                                {percent}%
-                              </span>
-                            )}
-                          </div>
-                          <div className={`text-[9.5px] sm:text-[10px] mt-0.5 flex items-center justify-between ${isSelected ? "text-blue-100" : "text-slate-500 dark:text-slate-400"}`}>
-                            {isMaintenance ? (
-                              <span className="text-amber-600 dark:text-amber-400 font-bold text-[9px]">ซ่อมบำรุง</span>
-                            ) : (
-                              <>
-                                <span className="opacity-80">ว่าง:</span>
-                                <span className={`font-mono font-bold ${isSelected ? "text-white" : remainingMm === 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
-                                  {remainingMm.toLocaleString()} mm
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* 2. & 3. Camera Viewfinder Section */}
+              {/* 1. Camera Viewfinder Section (Top-most) */}
               {isCameraActive ? (
                 <div className="w-full">
                   <CameraBarcodeScanner
@@ -8528,6 +8456,78 @@ export function SlitFilmManagement({
                     </div>
                   )}
                 </>
+              )}
+
+              {/* Destination Rack Selector for Operator Receive (Bottom Section below Camera / Checklist) */}
+              {activeMode === "operator_receive" && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#0a1526]/80 border border-slate-200 dark:border-slate-800/80 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs gap-2">
+                    <span className="font-semibold dark:font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5 min-w-0">
+                      <Scale size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      <span className="truncate">{isThai ? `ระบุแคร่ปลายทางเครื่อง [${selectedOutboundMachine}]:` : `Destination Rack for [${selectedOutboundMachine}]:`}</span>
+                      <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold flex-shrink-0">* ({isThai ? "บังคับระบุ" : "Required"})</span>
+                    </span>
+                    {destinationRacks.find((r) => r.rackId === selectedDestinationRackId) && (
+                      <span className="text-[11px] font-mono text-cyan-700 dark:text-cyan-400 font-semibold dark:font-medium flex-shrink-0">
+                        {isThai ? "แคร่: " : "Rack: "}
+                        {destinationRacks.find((r) => r.rackId === selectedDestinationRackId)?.rackNameTh}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+                    {destinationRacks.map((rack, rIdx) => {
+                      const isSelected = selectedDestinationRackId === rack.rackId;
+                      const isMaintenance = rack.status === "maintenance";
+                      const accWidth = calculateAccumulatedWidthMm(rack.coils);
+                      const remainingMm = Math.max(0, rack.maxCapacityMm - accWidth);
+                      const percent = Math.min(100, Math.round((accWidth / rack.maxCapacityMm) * 100));
+
+                      return (
+                        <button
+                          key={`${rack.rackId}-${rIdx}`}
+                          type="button"
+                          disabled={isMaintenance}
+                          onClick={() => setSelectedDestinationRackId(rack.rackId)}
+                          className={`p-1.5 sm:p-2 rounded-lg border text-left transition-all relative ${
+                            isMaintenance
+                              ? "opacity-50 cursor-not-allowed bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800"
+                              : isSelected
+                              ? "bg-blue-600 text-white border-blue-600 dark:border-blue-500 shadow-sm ring-2 ring-blue-400/50"
+                              : "bg-white dark:bg-[#111e38] text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-slate-700 hover:bg-blue-50/60 dark:hover:bg-[#16294a]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-mono font-bold text-[11px] sm:text-xs truncate flex items-center gap-1 min-w-0">
+                              {isSelected && (
+                                <span className="p-0.5 rounded-full bg-white text-blue-600 inline-flex items-center justify-center flex-shrink-0 shadow-xs">
+                                  <Check size={8} className="stroke-[3]" />
+                                </span>
+                              )}
+                              <span className="truncate">{rack.rackNameTh}</span>
+                            </span>
+                            {!isMaintenance && (
+                              <span className={`text-[9px] font-mono font-bold flex-shrink-0 ${isSelected ? "text-blue-100" : "text-slate-500 dark:text-slate-400"}`}>
+                                {percent}%
+                              </span>
+                            )}
+                          </div>
+                          <div className={`text-[9.5px] sm:text-[10px] mt-0.5 flex items-center justify-between ${isSelected ? "text-blue-100" : "text-slate-500 dark:text-slate-400"}`}>
+                            {isMaintenance ? (
+                              <span className="text-amber-600 dark:text-amber-400 font-bold text-[9px]">ซ่อมบำรุง</span>
+                            ) : (
+                              <>
+                                <span className="opacity-80">ว่าง:</span>
+                                <span className={`font-mono font-bold ${isSelected ? "text-white" : remainingMm === 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                                  {remainingMm.toLocaleString()} mm
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </div>
 
