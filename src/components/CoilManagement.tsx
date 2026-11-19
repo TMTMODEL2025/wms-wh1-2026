@@ -34,6 +34,17 @@ import {
   Info,
   Loader2,
   Clock,
+  Zap,
+  Save,
+  ShieldCheck,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ScanLine,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
@@ -57,6 +68,7 @@ import {
   saveCoilInboundToCloud,
   batchSaveCoilInboundToCloud,
   saveCoilStagingOrderToCloud,
+  batchSaveCoilStagingOrdersToCloud,
   deleteCoilStagingOrderFromCloud,
   issueCoilToMachineInCloud,
   relocateCoilsInCloud,
@@ -93,6 +105,158 @@ const SLITTING_MACHINES = [
   "SM03",
   "SM04",
 ];
+
+const COIL_MACHINE_CATEGORIES: Array<{
+  id: string;
+  label: string;
+  machines: string[];
+}> = [
+  { id: "ALL", label: "ทั้งหมด (10 เครื่อง)", machines: SLITTING_MACHINES },
+  {
+    id: "CL",
+    label: "CL (CL01-CL06)",
+    machines: SLITTING_MACHINES.filter((m) => m.startsWith("CL")),
+  },
+  {
+    id: "SM",
+    label: "SM (SM01-SM04)",
+    machines: SLITTING_MACHINES.filter((m) => m.startsWith("SM")),
+  },
+];
+
+interface ParsedCoilPickListItem {
+  orderNo?: string;
+  bomItem: string;
+  material: string;
+  materialDescription: string;
+  requirementQty: number;
+  unit: string;
+  storageLocation: string;
+  batch: string;
+}
+
+function parseRawCoilPickListText(text: string): ParsedCoilPickListItem[] {
+  if (!text || !text.trim()) return [];
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const items: ParsedCoilPickListItem[] = [];
+  const seenOrderBatch = new Set<string>();
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (
+      lower.includes("sales document") ||
+      lower.includes("material description") ||
+      lower.includes("requirement quantity") ||
+      lower.includes("หนา certificated") ||
+      (lower.includes("storage location") && lower.includes("batch")) ||
+      lower.startsWith("bom item") ||
+      (lower.startsWith("order") && lower.includes("batch"))
+    ) {
+      continue;
+    }
+
+    let cols = line.split("\t").map((c) => c.trim());
+    if (cols.length < 2) {
+      cols = line.trim().split(/[\s,;]+/).map((c) => c.trim());
+    }
+    if (cols.length === 0) continue;
+
+    // Detect if col[0] is a 7-12 digit SAP Order number when there are multiple columns
+    let rowOrderNo: string | undefined = undefined;
+    let startOffset = 0;
+    if (
+      cols.length >= 6 &&
+      /^\d{7,12}$/.test(cols[0].replace(/^["']|["']$/g, "").trim()) &&
+      /^\d{2,4}$/.test(cols[1].replace(/^["']|["']$/g, "").trim())
+    ) {
+      rowOrderNo = cols[0].replace(/^["']|["']$/g, "").trim();
+      startOffset = 1;
+    }
+
+    // 1. Find 10-character alphanumeric Batch code
+    let B = -1;
+    for (let i = startOffset; i < cols.length; i++) {
+      const token = cols[i].replace(/^["']|["']$/g, "").trim();
+      if (/^[A-Za-z0-9]{10}$/.test(token) && !/^\d{10}$/.test(token)) {
+        B = i;
+        break;
+      }
+    }
+    if (B === -1) {
+      for (let i = startOffset; i < cols.length; i++) {
+        const token = cols[i].replace(/^["']|["']$/g, "").trim();
+        if (/^[A-Za-z0-9]{10}$/.test(token)) {
+          B = i;
+          break;
+        }
+      }
+    }
+
+    if (B === -1) continue;
+
+    const batch = cols[B].replace(/^["']|["']$/g, "").trim().toUpperCase();
+    const dedupeKey = `${rowOrderNo || "DEFAULT"}_${batch}`;
+    if (!batch || seenOrderBatch.has(dedupeKey)) continue;
+    seenOrderBatch.add(dedupeKey);
+
+    let bomItem = String((items.length + 1) * 10).padStart(4, "0");
+    let material = "-";
+    let materialDescription = "-";
+    let requirementQty = 0;
+    let unit = "KG";
+    let storageLocation = "1101";
+
+    const workCols = startOffset > 0 ? cols.slice(startOffset) : cols;
+    const workB = B - startOffset;
+
+    if (workCols.length >= 11 && workB === 10) {
+      bomItem = workCols[0] || bomItem;
+      material = workCols[1] || "-";
+      materialDescription = workCols[2] || "-";
+      requirementQty = parseFloat((workCols[3] || "0").replace(/,/g, "")) || 0;
+      unit = workCols[4] || "KG";
+      storageLocation = workCols[9] || "1101";
+    } else if (workCols.length >= 7 && workB >= 4) {
+      bomItem = /^\d{2,4}$/.test(workCols[0]) ? workCols[0] : bomItem;
+      material = workCols[1] || "-";
+      materialDescription = workCols[2] || "-";
+      requirementQty = parseFloat((workCols[3] || "0").replace(/,/g, "")) || 0;
+      unit = workCols[4] && /^[A-Za-z]{1,4}$/.test(workCols[4]) ? workCols[4].toUpperCase() : "KG";
+      storageLocation =
+        workCols.find(
+          (c, idx) => idx !== workB && (/^[0-9][A-Z0-9]{3}$/i.test(c) || /^2E/i.test(c))
+        ) || "1101";
+    } else {
+      material = workCols[0] !== batch ? workCols[0] : workCols[1] || "-";
+      materialDescription = workCols.find((c) => c !== batch && c.length > 10) || "-";
+      storageLocation =
+        workCols.find((c) => /^[0-9][A-Z0-9]{2,4}$/i.test(c) || /^2E/i.test(c)) || "1101";
+      for (let i = 0; i < workCols.length; i++) {
+        if (i !== workB) {
+          const num = parseFloat(workCols[i].replace(/,/g, ""));
+          if (!isNaN(num) && num > 0 && num < 1000000) {
+            requirementQty = num;
+            break;
+          }
+        }
+      }
+    }
+
+    items.push({
+      orderNo: rowOrderNo,
+      bomItem,
+      material,
+      materialDescription,
+      requirementQty: isNaN(requirementQty) ? 0 : requirementQty,
+      unit: unit || "KG",
+      storageLocation: storageLocation || "1101",
+      batch,
+    });
+  }
+
+  return items;
+}
+
 const COMMON_GRADES = ["SS400", "SPCC", "SGCC", "SAPH440", "SPHC", "STKR400"];
 const COMMON_MANUFACTURERS = ["SSI", "GJ", "POSCO", "JFE", "NIPPON", "SYS", "CSC"];
 const INBOUND_BUILDINGS = ["E7", "E8", "H7", "H8", "05", "21"];
@@ -576,7 +740,6 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     return "1";
   });
   const [inboundSearch, setInboundSearch] = useState<string>("");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inboundBatchInputRef = useRef<HTMLInputElement | null>(null);
 
   const focusInboundBatchInput = () => {
@@ -639,19 +802,76 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   };
 
   // ============================================================================
-  // Tab 2 State: จ่ายออก (Issue / Operator Receive)
+  // Shared Machine & Order State for Tab 3 (เตรียมเบิก) and Tab 2 (จ่ายออก)
   // ============================================================================
-  const [issueMachineId, setIssueMachineId] = useState<string>("CL01");
-  const [issueScanInput, setIssueScanInput] = useState<string>("");
-  const [issueOrderFilter, setIssueOrderFilter] = useState<string>("ALL");
+  const [activeMachineCategory, setActiveMachineCategory] = useState<string>("ALL");
+  const [selectedMachineId, setSelectedMachineId] = useState<string>("CL01");
+  const [selectedOrderNo, setSelectedOrderNo] = useState<string>("");
+  const [expandedOrderNos, setExpandedOrderNos] = useState<string[]>([]);
+  const [pickListItemPages, setPickListItemPages] = useState<Record<string, number>>({});
+  const [pickListItemPageSize, setPickListItemPageSize] = useState<number>(10);
+  const [operatorItemPages, setOperatorItemPages] = useState<Record<string, number>>({});
+  const [operatorItemPageSize, setOperatorItemPageSize] = useState<number>(10);
 
-  // ============================================================================
-  // Tab 3 State: -เตรียมเบิก (Staging / PickList Prep)
-  // ============================================================================
+  // Outbound Pick List Scanner Modal State (เตรียมเบิก)
+  const [isOutboundScannerOpen, setIsOutboundScannerOpen] = useState<boolean>(false);
+  const [isOutboundCameraActive, setIsOutboundCameraActive] = useState<boolean>(false);
+  const [outboundBarcodeInput, setOutboundBarcodeInput] = useState<string>("");
+  const [outboundScanStatus, setOutboundScanStatus] = useState<{
+    type: "idle" | "success" | "error" | "warning";
+    message: string;
+    scannedBatch?: string;
+  }>({ type: "idle", message: "พร้อมสแกนบาร์โค้ด Batch เหล็กม้วน (10 หลัก)" });
+  const outboundScannerInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Officer Import Pick List Modal State (+ เพิ่มใบสั่งเบิก)
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [importOrderNo, setImportOrderNo] = useState<string>("");
+  const [importMachineId, setImportMachineId] = useState<string>("CL01");
+  const [rawTableText, setRawTableText] = useState<string>("");
+  const [importError, setImportError] = useState<string>("");
+
+  // Emergency Pre-Staging Modal State (เบิกฉุกเฉิน (TEMP) - เตรียมเบิกก่อนมี Order)
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false);
+  const [emergencyMachineId, setEmergencyMachineId] = useState<string>("CL01");
+  const [emergencyTempOrderNo, setEmergencyTempOrderNo] = useState<string>("");
+  const [emergencyBarcodeInput, setEmergencyBarcodeInput] = useState<string>("");
+  const [emergencyScannedBatches, setEmergencyScannedBatches] = useState<
+    Array<{
+      batch: string;
+      coilNo: string;
+      grade: string;
+      thickness: string;
+      width: string;
+      weightKg: number;
+      sourceLocation: string;
+      description: string;
+      inStock: boolean;
+    }>
+  >([]);
+  const [isEmergencyCameraActive, setIsEmergencyCameraActive] = useState<boolean>(false);
+  const emergencyBarcodeRef = useRef<HTMLInputElement | null>(null);
+
+  // Operator Receive / Machine Issue Scanner Modal State (จ่ายออก)
+  const [isOperatorScannerOpen, setIsOperatorScannerOpen] = useState<boolean>(false);
+  const [isOperatorCameraActive, setIsOperatorCameraActive] = useState<boolean>(false);
+  const [operatorBarcodeInput, setOperatorBarcodeInput] = useState<string>("");
+  const [operatorScanStatus, setOperatorScanStatus] = useState<{
+    type: "idle" | "success" | "error" | "warning";
+    message: string;
+    scannedBatch?: string;
+  }>({ type: "idle", message: "พร้อมสแกนบาร์โค้ด Batch รับงานเข้าเครื่องจักร" });
+  const operatorScannerInputRef = useRef<HTMLInputElement | null>(null);
+  const [operatorWarningModal, setOperatorWarningModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    detail?: string;
+  }>({ isOpen: false, title: "", message: "" });
+  const [deleteModalOrderNo, setDeleteModalOrderNo] = useState<string | null>(null);
+  const [dismissedOperatorOrders, setDismissedOperatorOrders] = useState<string[]>([]);
+  const [issueMachineId, setIssueMachineId] = useState<string>("CL01");
   const [stagingMachineId, setStagingMachineId] = useState<string>("CL01");
-  const [stagingOrderNoInput, setStagingOrderNoInput] = useState<string>("");
-  const [stagingScanInput, setStagingScanInput] = useState<string>("");
-  const [selectedCoilIdsForStaging, setSelectedCoilIdsForStaging] = useState<string[]>([]);
 
   // ============================================================================
   // Tab 4 State: ย้าย Layout (Relocate Layout)
@@ -878,227 +1098,978 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     focusInboundBatchInput();
   };
 
-  const handleExcelImportInbound = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      await handleSapFileUpload(file);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
+  // ============================================================================
+  // Derived Lists & Helpers for Tab 3 (-เตรียมเบิก) and Tab 2 (จ่ายออก)
+  // ============================================================================
+  const machineFilteredOrders = useMemo(
+    () => stagingOrders.filter((o) => o.machineId === selectedMachineId),
+    [stagingOrders, selectedMachineId]
+  );
+
+  // Sync selectedOrderNo when machine changes or orders update
+  useEffect(() => {
+    const ordersForMachine = stagingOrders.filter((o) => o.machineId === selectedMachineId);
+    if (ordersForMachine.length === 0) {
+      if (selectedOrderNo !== "") setSelectedOrderNo("");
+    } else if (!ordersForMachine.some((o) => o.orderNo === selectedOrderNo)) {
+      setSelectedOrderNo(ordersForMachine[0].orderNo);
     }
+  }, [selectedMachineId, stagingOrders, selectedOrderNo]);
+
+  const activeOrder = useMemo(
+    () =>
+      machineFilteredOrders.find((o) => o.orderNo === selectedOrderNo) ||
+      machineFilteredOrders[0] ||
+      null,
+    [machineFilteredOrders, selectedOrderNo]
+  );
+
+  const toggleOrderExpand = (orderNo: string) => {
+    setExpandedOrderNos((prev) =>
+      prev.includes(orderNo) ? prev.filter((no) => no !== orderNo) : [...prev, orderNo]
+    );
+  };
+
+  const parsedPreviewItems = useMemo(() => {
+    return parseRawCoilPickListText(rawTableText);
+  }, [rawTableText]);
+
+  // Auto-focus scanner inputs when modals open
+  useEffect(() => {
+    if (isOutboundScannerOpen) {
+      const t = setTimeout(() => outboundScannerInputRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [isOutboundScannerOpen]);
+
+  useEffect(() => {
+    if (isOperatorScannerOpen) {
+      const t = setTimeout(() => operatorScannerInputRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [isOperatorScannerOpen]);
+
+  useEffect(() => {
+    if (isEmergencyModalOpen) {
+      const t = setTimeout(() => emergencyBarcodeRef.current?.focus(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [isEmergencyModalOpen]);
+
+  const enrichBatchFromCoilStockOrSap = (batchCode: string) => {
+    const clean = batchCode.trim().toUpperCase();
+    const stockRec = coilStock.find((c) => c.batch.toUpperCase() === clean);
+    const sapRec = coilSapMap.get(clean);
+    const hasRealLocation =
+      stockRec &&
+      stockRec.location &&
+      stockRec.location.trim() !== "" &&
+      stockRec.location.trim() !== "-" &&
+      !stockRec.location.includes("รอระบุ") &&
+      !stockRec.location.includes("รอสแกน");
+
+    return {
+      stockRec,
+      sapRec,
+      coilNo: stockRec?.coilNo && stockRec.coilNo !== "-" ? stockRec.coilNo : sapRec?.coilNo || "-",
+      grade: stockRec?.grade && stockRec.grade !== "-" ? stockRec.grade : sapRec?.grade || "-",
+      thickness:
+        stockRec?.certThickness && stockRec.certThickness !== "-"
+          ? stockRec.certThickness
+          : sapRec?.certThickness || "-",
+      width: stockRec?.width && stockRec.width !== "-" ? stockRec.width : sapRec?.width || "-",
+      weightKg:
+        stockRec && Number(stockRec.weightKg) > 0
+          ? Number(stockRec.weightKg)
+          : sapRec && Number(sapRec.weightKg) > 0
+          ? Number(sapRec.weightKg)
+          : 0,
+      sourceLocation: hasRealLocation ? stockRec!.location : "-",
+      description: stockRec?.description || sapRec?.description || "",
+      materialNo: stockRec?.materialNo || sapRec?.materialNo || "-",
+      storageLocation: stockRec?.storageLocation || sapRec?.storageLocation || "1101",
+    };
   };
 
   // ============================================================================
-  // Handlers for Tab 3: -เตรียมเบิก (Staging / PickList Prep)
+  // Handlers for Tab 3: -เตรียมเบิก (Pick List Staging & Emergency TEMP)
   // ============================================================================
-  const handleStageByScan = async (e?: React.FormEvent, overrideCode?: string) => {
-    e?.preventDefault();
-    const code = cleanBarcode(overrideCode ?? stagingScanInput).toUpperCase();
-    if (!code) return;
+  const processOutboundBarcodeScan = async (rawCode: string) => {
+    const cleanCode = cleanBarcode(rawCode).toUpperCase();
+    if (!cleanCode) return;
 
-    const matchedCoil = activeStockCoils.find(
-      (c) => c.batch.toUpperCase() === code || c.coilNo.toUpperCase() === code
-    );
-    if (!matchedCoil) {
+    if (!/^[A-Z0-9]{10}$/.test(cleanCode)) {
       playBeep("error");
-      showToast(
-        isThai ? `ไม่พบเหล็กม้วนรหัส ${code} ในสต๊อกพร้อมเบิก` : `Coil ${code} not found in active stock`,
-        "error"
-      );
+      setOutboundScanStatus({
+        type: "error",
+        message: isThai
+          ? `ปฏิเสธ: รหัส "${cleanCode}" (${cleanCode.length} หลัก) ไม่ใช่รหัส Batch 10 หลัก`
+          : `Invalid 10-digit Batch code: "${cleanCode}"`,
+        scannedBatch: cleanCode,
+      });
+      setOutboundBarcodeInput("");
+      setTimeout(() => outboundScannerInputRef.current?.focus(), 60);
       return;
     }
 
-    const { dateYmd, timeHms, timestamp } = formatNowTimestamp();
-    const orderNo =
-      stagingOrderNoInput.trim().toUpperCase() ||
-      `STG-${stagingMachineId}-${dateYmd.replace(/-/g, "")}`;
+    if (!activeOrder) {
+      playBeep("error");
+      setOutboundScanStatus({
+        type: "error",
+        message: isThai ? "กรุณาเลือกใบสั่งเบิก (Order) ก่อนทำการสแกน" : "Please select a Pick List Order first",
+      });
+      setOutboundBarcodeInput("");
+      return;
+    }
 
-    const existingOrder = stagingOrders.find(
-      (o) => o.orderNo.toUpperCase() === orderNo && o.status !== "completed"
+    const targetItem = activeOrder.items.find(
+      (item) => item.batch.toUpperCase() === cleanCode
     );
 
-    const newItem: CoilStagingItem = {
-      id: `CSI-${orderNo}-${matchedCoil.batch}`,
-      batch: matchedCoil.batch,
-      coilNo: matchedCoil.coilNo,
-      grade: matchedCoil.grade,
-      thickness: matchedCoil.certThickness,
-      width: matchedCoil.width,
-      weightKg: matchedCoil.weightKg,
-      sourceLocation: matchedCoil.location,
-      status: "staged",
-      stagedAt: timestamp,
-      description: matchedCoil.description,
+    if (!targetItem) {
+      playBeep("error");
+      setOutboundScanStatus({
+        type: "error",
+        message: isThai
+          ? `ไม่พบรหัส Batch [${cleanCode}] ในใบสั่งเบิก Order ${activeOrder.orderNo} (เครื่อง ${activeOrder.machineId})!`
+          : `Batch [${cleanCode}] is not in Order ${activeOrder.orderNo}!`,
+        scannedBatch: cleanCode,
+      });
+      setOutboundBarcodeInput("");
+      setTimeout(() => outboundScannerInputRef.current?.focus(), 60);
+      return;
+    }
+
+    if (targetItem.status === "staged" || targetItem.status === "issued") {
+      playBeep("warning");
+      setOutboundScanStatus({
+        type: "warning",
+        message: isThai
+          ? `แจ้งเตือน: รหัส Batch [${cleanCode}] ถูกสแกนเตรียมเบิกไปแล้ว (${
+              targetItem.status === "issued" ? "จ่ายแล้ว" : "เตรียมแล้ว"
+            })`
+          : `Batch [${cleanCode}] was already scanned (${targetItem.status})`,
+        scannedBatch: cleanCode,
+      });
+      setOutboundBarcodeInput("");
+      setTimeout(() => outboundScannerInputRef.current?.focus(), 60);
+      return;
+    }
+
+    // Enrich with latest stock location/weight if available, without blocking if location is not yet scanned
+    const enriched = enrichBatchFromCoilStockOrSap(cleanCode);
+    const { timestamp } = formatNowTimestamp();
+
+    const updatedItems: CoilStagingItem[] = activeOrder.items.map((itm) =>
+      itm.batch.toUpperCase() === cleanCode
+        ? {
+            ...itm,
+            status: "staged",
+            stagedAt: timestamp,
+            coilNo: itm.coilNo && itm.coilNo !== "-" ? itm.coilNo : enriched.coilNo,
+            grade: itm.grade && itm.grade !== "-" ? itm.grade : enriched.grade,
+            thickness: itm.thickness && itm.thickness !== "-" ? itm.thickness : enriched.thickness,
+            width: itm.width && itm.width !== "-" ? itm.width : enriched.width,
+            weightKg: Number(itm.weightKg) > 0 ? Number(itm.weightKg) : enriched.weightKg,
+            sourceLocation:
+              enriched.sourceLocation !== "-" ? enriched.sourceLocation : itm.sourceLocation || "-",
+            description: itm.description || enriched.description,
+          }
+        : itm
+    );
+
+    const updatedOrder: CoilStagingOrder = {
+      ...activeOrder,
+      status: "in_progress",
+      items: updatedItems,
+      updatedAt: new Date().toISOString(),
     };
 
-    const items = existingOrder
-      ? [
-          ...existingOrder.items.filter(
-            (i) => i.batch.toUpperCase() !== matchedCoil.batch.toUpperCase()
-          ),
-          newItem,
-        ]
-      : [newItem];
+    // Expand this order table so user sees the updated status
+    setExpandedOrderNos((prev) =>
+      prev.includes(activeOrder.orderNo) ? prev : [...prev, activeOrder.orderNo]
+    );
 
-    await saveCoilStagingOrderToCloud({
-      id: existingOrder?.id || `CSTG-${orderNo}`,
-      orderNo,
-      machineId: stagingMachineId,
-      createdDate: existingOrder?.createdDate || dateYmd,
-      createdAt: existingOrder?.createdAt || timeHms,
-      status: "in_progress",
-      items,
-      updatedAt: new Date().toISOString(),
-    });
-
-    setStagingScanInput("");
+    const remainingCount = updatedItems.filter((i) => i.status === "pending").length;
     playBeep("success");
+    setOutboundScanStatus({
+      type: "success",
+      message: isThai
+        ? `สแกนสำเร็จ! Batch [${cleanCode}] -> เปลี่ยนสถานะเป็น "เตรียมแล้ว" (เหลือรอเตรียมอีก ${remainingCount} รายการ)`
+        : `Scanned Batch [${cleanCode}] -> Staged (${remainingCount} remaining)`,
+      scannedBatch: cleanCode,
+    });
+    setOutboundBarcodeInput("");
+    setTimeout(() => outboundScannerInputRef.current?.focus(), 60);
+
+    await saveCoilStagingOrderToCloud(updatedOrder);
+    onLogTransaction?.(
+      `Prepared Coil PickList Batch ${cleanCode} for Order ${activeOrder.orderNo} (${activeOrder.machineId})`,
+      cleanCode,
+      "Completed"
+    );
+  };
+
+  const handleOutboundBarcodeScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    processOutboundBarcodeScan(outboundBarcodeInput);
+  };
+
+  const handleFinishOutboundScan = () => {
+    setIsOutboundCameraActive(false);
+    setIsOutboundScannerOpen(false);
+    if (!activeOrder) return;
+    const preparedCount = activeOrder.items.filter(
+      (i) => i.status === "staged" || i.status === "issued"
+    ).length;
     showToast(
       isThai
-        ? `เตรียมเบิกม้วน ${matchedCoil.batch} สำหรับเครื่อง ${stagingMachineId} (ใบเบิก ${orderNo}) สำเร็จ`
-        : `Staged coil ${matchedCoil.batch} for ${stagingMachineId}`,
+        ? `บันทึกการสแกนเตรียมเบิก Order ${activeOrder.orderNo} เรียบร้อย (${preparedCount}/${activeOrder.items.length} รายการ)`
+        : `Saved Pick List scan progress (${preparedCount}/${activeOrder.items.length})`,
       "success"
     );
   };
 
-  const handleCreateStagingFromSelection = async () => {
-    const selectedCoils = availableCoils.filter((c) =>
-      selectedCoilIdsForStaging.includes(c.id)
+  const handleSaveOutboundDraft = async (orderNo: string) => {
+    const targetOrd = stagingOrders.find((o) => o.orderNo === orderNo);
+    if (!targetOrd) return;
+    const preparedCount = targetOrd.items.filter(
+      (i) => i.status === "staged" || i.status === "issued"
+    ).length;
+    await saveCoilStagingOrderToCloud({
+      ...targetOrd,
+      status: "in_progress",
+      updatedAt: new Date().toISOString(),
+    });
+    playBeep("success");
+    showToast(
+      isThai
+        ? `บันทึกใบสั่งเบิก Order ${orderNo} สำเร็จ (เตรียมแล้ว ${preparedCount}/${targetOrd.items.length} รายการ) สามารถกลับมาสแกนต่อได้`
+        : `Saved Draft Order ${orderNo} (${preparedCount}/${targetOrd.items.length} items)`,
+      "success"
     );
-    if (selectedCoils.length === 0) {
+  };
+
+  const handleConfirmOutboundFinal = async (orderNo: string) => {
+    const targetOrd = stagingOrders.find((o) => o.orderNo === orderNo);
+    if (!targetOrd) return;
+    const preparedCount = targetOrd.items.filter(
+      (i) => i.status === "staged" || i.status === "issued"
+    ).length;
+    const totalCount = targetOrd.items.length;
+
+    await saveCoilStagingOrderToCloud({
+      ...targetOrd,
+      status: "in_progress",
+      updatedAt: new Date().toISOString(),
+    });
+    playBeep("success");
+    onLogTransaction?.(
+      `Confirmed Coil Outbound Order ${orderNo} (${preparedCount}/${totalCount} items) for ${targetOrd.machineId}`,
+      orderNo,
+      "Completed"
+    );
+
+    await Swal.fire({
+      icon: "success",
+      title: isThai ? "ยืนยันการเตรียมเบิกสำเร็จ!" : "Staging Confirmed!",
+      html: isThai
+        ? `<div class="text-xs text-left space-y-1">
+            <div><b>เลขที่ใบสั่งเบิก (Order):</b> ${orderNo}</div>
+            <div><b>เครื่องจักร (Machine):</b> ${targetOrd.machineId}</div>
+            <div><b>รายการที่เตรียมแล้ว:</b> <span class="text-emerald-600 font-bold">${preparedCount} / ${totalCount} รายการ</span></div>
+            <div class="text-slate-500 pt-1">ส่งข้อมูลไปยังหน้า "จ่ายออก" ของเครื่อง ${targetOrd.machineId} เรียบร้อยแล้ว</div>
+          </div>`
+        : `Order ${orderNo} confirmed (${preparedCount}/${totalCount} items) for ${targetOrd.machineId}.`,
+      confirmButtonColor: "#10b981",
+      confirmButtonText: isThai ? "รับทราบ" : "OK",
+    });
+  };
+
+  // Save Imported Pick List Order(s) (+ เพิ่มใบสั่งเบิก) with Automatic Retroactive TEMP Matching
+  const handleSaveImportedPickList = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setImportError("");
+
+    const defaultOrderNo = importOrderNo.trim().toUpperCase();
+    const hasPerRowOrders =
+      parsedPreviewItems.length > 0 &&
+      parsedPreviewItems.every((item) => Boolean(item.orderNo && item.orderNo.trim()));
+
+    if (!defaultOrderNo && !hasPerRowOrders) {
+      setImportError(
+        isThai
+          ? "กรุณาระบุหมายเลขใบสั่งเบิก (Order No.) หรือวางข้อมูลตารางที่มีคอลัมน์ Order"
+          : "Please enter Order No. or paste table containing Order column"
+      );
+      return;
+    }
+
+    if (parsedPreviewItems.length === 0) {
+      setImportError(
+        isThai
+          ? "ไม่พบข้อมูลรายการ Batch 10 หลักในตารางที่วาง กรุณาตรวจสอบข้อมูลอีกครั้ง"
+          : "No valid 10-digit Batch rows found in the pasted table"
+      );
+      return;
+    }
+
+    const groupedByOrder = new Map<string, ParsedCoilPickListItem[]>();
+    parsedPreviewItems.forEach((item) => {
+      const ordKey = (item.orderNo?.trim() || defaultOrderNo).toUpperCase();
+      if (!ordKey) return;
+      if (!groupedByOrder.has(ordKey)) {
+        groupedByOrder.set(ordKey, []);
+      }
+      groupedByOrder.get(ordKey)!.push(item);
+    });
+
+    if (groupedByOrder.size === 0) {
+      setImportError(isThai ? "ไม่สามารถระบุหมายเลข Order ได้" : "Could not determine Order No.");
+      return;
+    }
+
+    const duplicateOrderNos = Array.from(groupedByOrder.keys()).filter((ordNo) =>
+      stagingOrders.some((o) => o.orderNo.toUpperCase() === ordNo.toUpperCase())
+    );
+    if (duplicateOrderNos.length > 0) {
+      setImportError(
+        isThai
+          ? `หมายเลข Order [${duplicateOrderNos.join(", ")}] มีอยู่ในระบบแล้ว กรุณาใช้หมายเลขอื่น หรือลบใบเดิมก่อน`
+          : `Order [${duplicateOrderNos.join(", ")}] already exists.`
+      );
+      return;
+    }
+
+    // Build lookup of emergency TEMP pre-staged batches for this machine
+    const tempOrderItemsByBatch = new Map<
+      string,
+      { tempOrderNo: string; item: CoilStagingItem }
+    >();
+    stagingOrders
+      .filter((o) => o.isTemporary && o.machineId === importMachineId)
+      .forEach((tempOrd) => {
+        tempOrd.items.forEach((itm) => {
+          tempOrderItemsByBatch.set(itm.batch.toUpperCase(), {
+            tempOrderNo: tempOrd.orderNo,
+            item: itm,
+          });
+        });
+      });
+
+    let autoMatchedBatchCount = 0;
+    const matchedTempOrderNos = new Set<string>();
+    const newOrdersToAdd: CoilStagingOrder[] = [];
+    const { dateYmd, timeHms, timestamp } = formatNowTimestamp();
+
+    groupedByOrder.forEach((itemsForOrder, ordNo) => {
+      const stagingItems: CoilStagingItem[] = itemsForOrder.map((parsed, idx) => {
+        const cleanB = parsed.batch.trim().toUpperCase();
+        const preStagedMatch = tempOrderItemsByBatch.get(cleanB);
+        const enriched = enrichBatchFromCoilStockOrSap(cleanB);
+
+        if (preStagedMatch) {
+          autoMatchedBatchCount++;
+          matchedTempOrderNos.add(preStagedMatch.tempOrderNo);
+        }
+
+        const resolvedWeight =
+          Number(parsed.requirementQty) > 0
+            ? Number(parsed.requirementQty)
+            : enriched.weightKg > 0
+            ? enriched.weightKg
+            : preStagedMatch?.item.weightKg || 0;
+
+        return {
+          id: `CSI-${ordNo}-${cleanB}-${idx + 1}`,
+          batch: cleanB,
+          coilNo: enriched.coilNo,
+          grade: enriched.grade,
+          thickness: enriched.thickness,
+          width: enriched.width,
+          weightKg: resolvedWeight,
+          sourceLocation:
+            preStagedMatch?.item.sourceLocation && preStagedMatch.item.sourceLocation !== "-"
+              ? preStagedMatch.item.sourceLocation
+              : enriched.sourceLocation,
+          status: preStagedMatch
+            ? preStagedMatch.item.status === "issued"
+              ? "issued"
+              : "staged"
+            : "pending",
+          stagedAt: preStagedMatch?.item.stagedAt || (preStagedMatch ? timestamp : undefined),
+          issuedAt: preStagedMatch?.item.issuedAt,
+          description:
+            parsed.materialDescription && parsed.materialDescription !== "-"
+              ? parsed.materialDescription
+              : enriched.description,
+          material:
+            parsed.material && parsed.material !== "-" ? parsed.material : enriched.materialNo,
+          bomItem: parsed.bomItem || String((idx + 1) * 10).padStart(4, "0"),
+          unit: parsed.unit || "KG",
+          storageLocation: parsed.storageLocation || enriched.storageLocation || "1101",
+          tempOrderRef: preStagedMatch ? preStagedMatch.tempOrderNo : undefined,
+        };
+      });
+
+      const allIssued = stagingItems.length > 0 && stagingItems.every((i) => i.status === "issued");
+      newOrdersToAdd.push({
+        id: `CSTG-${ordNo}`,
+        orderNo: ordNo,
+        machineId: importMachineId,
+        createdDate: dateYmd,
+        createdAt: timeHms,
+        status: allIssued ? "completed" : "in_progress",
+        items: stagingItems,
+        updatedAt: new Date().toISOString(),
+      });
+    });
+
+    // If any TEMP orders had items matched into the newly imported real orders, update or remove the TEMP orders
+    const ordersToPersist: CoilStagingOrder[] = [...newOrdersToAdd];
+    const tempOrdersToDelete: CoilStagingOrder[] = [];
+
+    if (matchedTempOrderNos.size > 0) {
+      const firstNewOrderNo = newOrdersToAdd[0]?.orderNo || defaultOrderNo;
+      const importedBatchesSet = new Set(
+        parsedPreviewItems.map((p) => p.batch.trim().toUpperCase())
+      );
+
+      stagingOrders
+        .filter((o) => o.isTemporary && matchedTempOrderNos.has(o.orderNo))
+        .forEach((tempOrd) => {
+          const remainingUnmatched = tempOrd.items.filter(
+            (i) => !importedBatchesSet.has(i.batch.toUpperCase())
+          );
+          if (remainingUnmatched.length === 0) {
+            tempOrdersToDelete.push(tempOrd);
+          } else {
+            ordersToPersist.push({
+              ...tempOrd,
+              matchedOrderNo: firstNewOrderNo,
+              items: remainingUnmatched,
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        });
+    }
+
+    const firstImportedOrder = newOrdersToAdd[0];
+    setSelectedMachineId(importMachineId);
+    if (firstImportedOrder) {
+      setSelectedOrderNo(firstImportedOrder.orderNo);
+      setExpandedOrderNos((prev) =>
+        Array.from(new Set([...prev, ...newOrdersToAdd.map((o) => o.orderNo)]))
+      );
+    }
+
+    setIsImportModalOpen(false);
+    setImportOrderNo("");
+    setRawTableText("");
+
+    await batchSaveCoilStagingOrdersToCloud(ordersToPersist);
+    for (const delOrd of tempOrdersToDelete) {
+      await deleteCoilStagingOrderFromCloud(delOrd);
+    }
+
+    playBeep("success");
+    if (autoMatchedBatchCount > 0) {
       showToast(
-        isThai ? "กรุณาเลือกเหล็กม้วนที่ต้องการเตรียมเบิกอย่างน้อย 1 ม้วน" : "Select at least 1 coil to stage",
+        isThai
+          ? `นำเข้า ${newOrdersToAdd.length} Order สำเร็จ และจับคู่ Batch จากใบเบิกฉุกเฉินอัตโนมัติ ${autoMatchedBatchCount} ม้วน -> สถานะ "เตรียมแล้ว"`
+          : `Imported ${newOrdersToAdd.length} Order(s) & auto-matched ${autoMatchedBatchCount} TEMP batches!`,
+        "success"
+      );
+    } else {
+      showToast(
+        isThai
+          ? `นำเข้าใบสั่งเบิก ${newOrdersToAdd.map((o) => o.orderNo).join(", ")} (${parsedPreviewItems.length} รายการ) สำเร็จ`
+          : `Imported Pick List Order(s) (${parsedPreviewItems.length} items)`,
+        "success"
+      );
+    }
+
+    onLogTransaction?.(
+      `Imported Coil Pick List ${newOrdersToAdd.map((o) => o.orderNo).join(", ")} for ${importMachineId}`,
+      firstImportedOrder?.orderNo || "PICKLIST",
+      "Completed"
+    );
+  };
+
+  // Emergency Pre-Staging Handlers (เบิกฉุกเฉิน (TEMP))
+  const handleOpenEmergencyModal = () => {
+    const now = new Date();
+    const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+    const timePart = `${String(now.getHours()).padStart(2, "0")}${String(
+      now.getMinutes()
+    ).padStart(2, "0")}`;
+    setEmergencyMachineId(selectedMachineId);
+    setEmergencyTempOrderNo(`TEMP-${selectedMachineId}-${datePart}-${timePart}`);
+    setEmergencyBarcodeInput("");
+    setEmergencyScannedBatches([]);
+    setIsEmergencyCameraActive(false);
+    setIsEmergencyModalOpen(true);
+  };
+
+  const processEmergencyBatchCode = (rawInput: string) => {
+    const cleanB = cleanBarcode(rawInput).toUpperCase();
+    if (!cleanB) return;
+
+    if (!/^[A-Z0-9]{10}$/.test(cleanB)) {
+      playBeep("error");
+      showToast(
+        isThai
+          ? `รหัส "${cleanB}" (${cleanB.length} หลัก) ไม่ถูกต้อง — ต้องเป็นรหัส Batch 10 หลัก (A-Z, 0-9)`
+          : `Invalid 10-digit Batch code: "${cleanB}"`,
+        "error"
+      );
+      setEmergencyBarcodeInput("");
+      return;
+    }
+
+    if (emergencyScannedBatches.some((b) => b.batch === cleanB)) {
+      playBeep("warning");
+      showToast(
+        isThai ? `รหัส Batch [${cleanB}] ถูกสแกนอยู่ในรายการเบิกฉุกเฉินนี้แล้ว` : `Batch [${cleanB}] already scanned`,
+        "warning"
+      );
+      setEmergencyBarcodeInput("");
+      return;
+    }
+
+    const enriched = enrichBatchFromCoilStockOrSap(cleanB);
+    setEmergencyScannedBatches((prev) => [
+      ...prev,
+      {
+        batch: cleanB,
+        coilNo: enriched.coilNo,
+        grade: enriched.grade,
+        thickness: enriched.thickness,
+        width: enriched.width,
+        weightKg: enriched.weightKg,
+        sourceLocation: enriched.sourceLocation,
+        description:
+          enriched.description || "เบิกฉุกเฉิน (รอจับคู่ใบสั่งเบิก Order จริง)",
+        inStock: Boolean(enriched.stockRec || enriched.sapRec),
+      },
+    ]);
+    setEmergencyBarcodeInput("");
+    playBeep("success");
+    setTimeout(() => emergencyBarcodeRef.current?.focus(), 60);
+  };
+
+  const handleAddEmergencyBatch = (e: React.FormEvent) => {
+    e.preventDefault();
+    processEmergencyBatchCode(emergencyBarcodeInput);
+  };
+
+  const handleConfirmEmergencyStaging = async () => {
+    if (emergencyScannedBatches.length === 0) {
+      showToast(
+        isThai ? "กรุณาสแกนรหัส Batch อย่างน้อย 1 รายการ" : "Please scan at least 1 Batch",
         "warning"
       );
       return;
     }
 
+    const tempOrdNo =
+      emergencyTempOrderNo.trim().toUpperCase() ||
+      `TEMP-${emergencyMachineId}-${Date.now().toString().slice(-6)}`;
     const { dateYmd, timeHms, timestamp } = formatNowTimestamp();
-    const orderNo =
-      stagingOrderNoInput.trim().toUpperCase() ||
-      `STG-${stagingMachineId}-${dateYmd.slice(5).replace("-", "")}-${String(stagingOrders.length + 1).padStart(2, "0")}`;
 
-    const items: CoilStagingItem[] = selectedCoils.map((c) => ({
-      id: `CSI-${orderNo}-${c.batch}`,
-      batch: c.batch,
-      coilNo: c.coilNo,
-      grade: c.grade,
-      thickness: c.certThickness,
-      width: c.width,
-      weightKg: c.weightKg,
-      sourceLocation: c.location,
-      status: "staged",
-      stagedAt: timestamp,
-      description: c.description,
-    }));
-
-    await saveCoilStagingOrderToCloud({
-      id: `CSTG-${orderNo}`,
-      orderNo,
-      machineId: stagingMachineId,
+    const tempOrder: CoilStagingOrder = {
+      id: `CSTG-${tempOrdNo}`,
+      orderNo: tempOrdNo,
+      machineId: emergencyMachineId,
       createdDate: dateYmd,
       createdAt: timeHms,
       status: "in_progress",
-      items,
+      isTemporary: true,
+      items: emergencyScannedBatches.map((b, idx) => ({
+        id: `CSI-${tempOrdNo}-${b.batch}-${idx + 1}`,
+        batch: b.batch,
+        coilNo: b.coilNo,
+        grade: b.grade,
+        thickness: b.thickness,
+        width: b.width,
+        weightKg: b.weightKg,
+        sourceLocation: b.sourceLocation,
+        status: "staged",
+        stagedAt: timestamp,
+        description: b.description,
+        bomItem: String((idx + 1) * 10).padStart(4, "0"),
+        unit: "KG",
+        storageLocation: "1101",
+        isTemporary: true,
+        tempOrderRef: tempOrdNo,
+      })),
       updatedAt: new Date().toISOString(),
-    });
+    };
 
-    setSelectedCoilIdsForStaging([]);
-    setStagingOrderNoInput("");
+    setSelectedMachineId(emergencyMachineId);
+    setSelectedOrderNo(tempOrdNo);
+    setExpandedOrderNos((prev) => (prev.includes(tempOrdNo) ? prev : [...prev, tempOrdNo]));
+    setIsEmergencyCameraActive(false);
+    setIsEmergencyModalOpen(false);
+
+    await saveCoilStagingOrderToCloud(tempOrder);
     playBeep("success");
     showToast(
       isThai
-        ? `สร้างใบเตรียมเบิก ${orderNo} (${selectedCoils.length} ม้วน) เข้าเครื่อง ${stagingMachineId} เรียบร้อย`
-        : `Created staging order ${orderNo} (${selectedCoils.length} coils)`,
+        ? `สร้างใบเบิกฉุกเฉิน ${tempOrdNo} (${emergencyScannedBatches.length} ม้วน) สถานะ "เตรียมแล้ว" พร้อมจ่ายออกทันที!`
+        : `Created Emergency TEMP Order ${tempOrdNo} (${emergencyScannedBatches.length} coils)!`,
       "success"
     );
     onLogTransaction?.(
-      `Prepared Coil Staging Order ${orderNo} (${selectedCoils.length} coils) for ${stagingMachineId}`,
-      orderNo,
+      `Emergency Coil Pre-Staged ${tempOrdNo} (${emergencyScannedBatches.length} coils) for ${emergencyMachineId}`,
+      tempOrdNo,
       "Completed"
     );
   };
 
-  // ============================================================================
-  // Handlers for Tab 2: จ่ายออก (Issue / Operator Receive)
-  // ============================================================================
-  const handleIssueCoil = async (coil: CoilStockRecord, targetMachine?: string, stagingOrder?: CoilStagingOrder | null) => {
-    const machine = targetMachine || coil.stagedMachineId || issueMachineId || "SM01";
-    const orderNo = stagingOrder?.orderNo || coil.stagedOrderNo || `ISS-${machine}-${Date.now().toString().slice(-5)}`;
+  const handleManualMatchTempOrder = async (tempOrderNo: string) => {
+    const tempOrd = stagingOrders.find((o) => o.orderNo === tempOrderNo);
+    if (!tempOrd) return;
 
-    const { value: issueWeightStr, isConfirmed } = await Swal.fire({
-      title: isThai ? `ยืนยันจ่ายออกเหล็กม้วน ${coil.batch}` : `Confirm Issue Coil ${coil.batch}`,
-      html: `
-        <div style="text-align:left; font-size:13px; line-height:1.6;">
-          <div><b>Batch / Coil No:</b> ${coil.batch} (${coil.coilNo})</div>
-          <div><b>Spec:</b> ${coil.grade} • ${coil.certThickness} mm x ${coil.width} mm</div>
-          <div><b>Layout ปัจจุบัน:</b> ${coil.location}</div>
-          <div><b>จ่ายเข้าเครื่องสลิต:</b> <span style="color:#0284c7; font-weight:700;">${machine}</span></div>
-          <div style="margin-top:8px;"><b>ระบุน้ำหนักที่เบิกจ่ายจริง (kg):</b> (เต็มม้วน = ${coil.weightKg.toLocaleString()} kg)</div>
-        </div>
-      `,
-      input: "number",
-      inputValue: String(coil.weightKg),
-      inputAttributes: {
-        min: "1",
-        max: String(coil.weightKg),
-        step: "any",
-      },
+    const { value: realOrderInput, isConfirmed } = await Swal.fire({
+      title: isThai ? "ผูกเลขที่ Order จริง (Match Real Order)" : "Match Real Order No.",
+      html: isThai
+        ? `<div class="text-xs text-slate-600 text-left space-y-1">
+            <div>ใบเบิกฉุกเฉิน: <b class="font-mono text-amber-600">${tempOrderNo}</b> (${tempOrd.items.length} ม้วน)</div>
+            <div>เครื่องจักร: <b>${tempOrd.machineId}</b></div>
+            <div class="pt-1">กรอกเลขที่ใบสั่งเบิก (Order No.) จริงที่ได้รับจากวางแผน/SAP เพื่อเปลี่ยนรหัสใบเบิก หรือรวมเข้ากับ Order จริงที่มีอยู่แล้ว:</div>
+          </div>`
+        : `Enter real SAP Order No. for ${tempOrderNo}:`,
+      input: "text",
+      inputPlaceholder: isThai ? "เช่น 1020045890" : "e.g. 1020045890",
       showCancelButton: true,
-      confirmButtonColor: "#2563eb",
-      confirmButtonText: isThai ? "ยืนยันตัดจ่ายออก" : "Confirm Issue",
+      confirmButtonText: isThai ? "ยืนยันผูกเลข Order" : "Confirm Match",
       cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
+      confirmButtonColor: "#d97706",
     });
 
-    if (!isConfirmed) return;
-    const issueWeightKg = parseFloat(String(issueWeightStr || coil.weightKg));
-    if (isNaN(issueWeightKg) || issueWeightKg <= 0) return;
+    if (!isConfirmed || !realOrderInput || !String(realOrderInput).trim()) return;
+    const targetOrderNo = String(realOrderInput).trim().toUpperCase();
+    if (targetOrderNo === tempOrderNo) return;
 
-    await issueCoilToMachineInCloud({
-      stockRecord: coil,
-      machineId: machine,
-      orderNo,
-      issueWeightKg,
-      stagingOrder: stagingOrder || null,
-    });
+    const existingRealOrder = stagingOrders.find(
+      (o) => o.orderNo.toUpperCase() === targetOrderNo
+    );
 
+    if (existingRealOrder) {
+      // Merge temp items into existing real order
+      const tempByBatch = new Map<string, CoilStagingItem>();
+      tempOrd.items.forEach((i) => tempByBatch.set(i.batch.toUpperCase(), i));
+
+      const mergedItems = existingRealOrder.items.map((item) => {
+        const matched = tempByBatch.get(item.batch.toUpperCase());
+        if (matched) {
+          tempByBatch.delete(item.batch.toUpperCase());
+          return {
+            ...item,
+            status: matched.status === "issued" ? ("issued" as const) : ("staged" as const),
+            stagedAt: matched.stagedAt || item.stagedAt,
+            issuedAt: matched.issuedAt || item.issuedAt,
+            tempOrderRef: tempOrderNo,
+          };
+        }
+        return item;
+      });
+
+      const extraItems = Array.from(tempByBatch.values()).map((extra) => ({
+        ...extra,
+        isTemporary: false,
+        tempOrderRef: tempOrderNo,
+      }));
+
+      await saveCoilStagingOrderToCloud({
+        ...existingRealOrder,
+        items: [...mergedItems, ...extraItems],
+        updatedAt: new Date().toISOString(),
+      });
+      await deleteCoilStagingOrderFromCloud(tempOrd);
+    } else {
+      // Convert TEMP order into the real order number
+      const convertedOrder: CoilStagingOrder = {
+        ...tempOrd,
+        id: `CSTG-${targetOrderNo}`,
+        orderNo: targetOrderNo,
+        isTemporary: false,
+        matchedOrderNo: targetOrderNo,
+        items: tempOrd.items.map((i) => ({
+          ...i,
+          isTemporary: false,
+          tempOrderRef: tempOrderNo,
+        })),
+        updatedAt: new Date().toISOString(),
+      };
+      await saveCoilStagingOrderToCloud(convertedOrder);
+      await deleteCoilStagingOrderFromCloud(tempOrd);
+    }
+
+    setSelectedOrderNo(targetOrderNo);
     playBeep("success");
     showToast(
       isThai
-        ? `ตัดจ่ายเหล็กม้วน ${coil.batch} (${issueWeightKg.toLocaleString()} kg) เข้าเครื่อง ${machine} สำเร็จ`
-        : `Issued coil ${coil.batch} (${issueWeightKg.toLocaleString()} kg) to ${machine}`,
+        ? `ผูกใบเบิกฉุกเฉิน ${tempOrderNo} เข้ากับ Order จริง [${targetOrderNo}] สำเร็จ!`
+        : `Matched ${tempOrderNo} -> Order [${targetOrderNo}]!`,
       "success"
-    );
-    onLogTransaction?.(
-      `Issued Coil ${coil.batch} (${issueWeightKg.toLocaleString()} kg) to ${machine}`,
-      coil.batch,
-      "Completed"
     );
   };
 
-  const handleIssueByScan = async (e?: React.FormEvent, overrideCode?: string) => {
-    e?.preventDefault();
-    const code = cleanBarcode(overrideCode ?? issueScanInput).toUpperCase();
-    if (!code) return;
+  const handleConfirmDeleteOrder = async () => {
+    if (!deleteModalOrderNo) return;
+    const targetOrd = stagingOrders.find((o) => o.orderNo === deleteModalOrderNo);
+    setDeleteModalOrderNo(null);
+    if (!targetOrd) return;
 
-    const matchedCoil = activeStockCoils.find(
-      (c) => c.batch.toUpperCase() === code || c.coilNo.toUpperCase() === code
+    await deleteCoilStagingOrderFromCloud(targetOrd);
+    playBeep("warning");
+    showToast(
+      isThai
+        ? `ลบใบสั่งเบิก Order ${targetOrd.orderNo} เรียบร้อยแล้ว`
+        : `Deleted Pick List Order ${targetOrd.orderNo}`,
+      "info"
     );
-    if (!matchedCoil) {
+  };
+
+  // ============================================================================
+  // Handlers for Tab 2: จ่ายออก (Operator Receive / Machine Issue by Scan)
+  // ============================================================================
+  const processOperatorIssueScan = async (rawCode: string) => {
+    const cleanCode = cleanBarcode(rawCode).toUpperCase();
+    if (!cleanCode) return;
+
+    if (!/^[A-Z0-9]{10}$/.test(cleanCode)) {
       playBeep("error");
-      showToast(
-        isThai ? `ไม่พบเหล็กม้วน ${code} ในสต๊อกหรือถูกตัดจ่ายไปแล้ว` : `Coil ${code} not found in stock`,
-        "error"
-      );
+      setOperatorScanStatus({
+        type: "error",
+        message: isThai
+          ? `ปฏิเสธ: รหัส "${cleanCode}" (${cleanCode.length} หลัก) ไม่ใช่รหัส Batch 10 หลัก`
+          : `Invalid 10-digit Batch code: "${cleanCode}"`,
+        scannedBatch: cleanCode,
+      });
+      setOperatorBarcodeInput("");
+      setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
       return;
     }
 
-    const parentOrder = stagingOrders.find((o) =>
-      o.items.some((i) => i.batch.toUpperCase() === matchedCoil.batch.toUpperCase() && i.status !== "issued")
+    // Search in orders for the currently selected machine
+    let foundInCurrentMachineOrder: CoilStagingOrder | null = null;
+    let foundItem: CoilStagingItem | null = null;
+
+    for (const ord of machineFilteredOrders) {
+      const match = ord.items.find((i) => i.batch.toUpperCase() === cleanCode);
+      if (match) {
+        foundInCurrentMachineOrder = ord;
+        foundItem = match;
+        break;
+      }
+    }
+
+    // Check if Batch belongs to another machine's order
+    if (!foundInCurrentMachineOrder || !foundItem) {
+      const otherMachineOrder = stagingOrders.find(
+        (o) =>
+          o.machineId !== selectedMachineId &&
+          o.items.some((i) => i.batch.toUpperCase() === cleanCode)
+      );
+
+      playBeep("error");
+      if (otherMachineOrder) {
+        setOperatorScanStatus({
+          type: "error",
+          message: isThai
+            ? `ผิดเครื่องจักร! Batch [${cleanCode}] อยู่ในใบสั่งเบิก Order ${otherMachineOrder.orderNo} ของเครื่อง [${otherMachineOrder.machineId}] (ไม่ใช่เครื่อง ${selectedMachineId})`
+            : `Wrong Machine! Batch [${cleanCode}] belongs to ${otherMachineOrder.machineId} (Order ${otherMachineOrder.orderNo})`,
+          scannedBatch: cleanCode,
+        });
+        setOperatorWarningModal({
+          isOpen: true,
+          title: isThai ? "เตือนภัย: ผิดเครื่องจักร (Wrong Machine)" : "Warning: Wrong Machine",
+          message: isThai
+            ? `รหัส Batch [${cleanCode}] ถูกจัดเตรียมไว้สำหรับเครื่องจักร [${otherMachineOrder.machineId}] ในใบสั่งเบิก Order ${otherMachineOrder.orderNo}`
+            : `Batch [${cleanCode}] is assigned to Machine [${otherMachineOrder.machineId}] (Order ${otherMachineOrder.orderNo})`,
+          detail: isThai
+            ? `ขณะนี้คุณกำลังเลือกหน้าจอจ่ายออกของเครื่อง [${selectedMachineId}] กรุณาตรวจสอบม้วนเหล็กหรือสลับเครื่องจักรให้ถูกต้อง`
+            : `Current active machine is [${selectedMachineId}].`,
+        });
+      } else {
+        setOperatorScanStatus({
+          type: "error",
+          message: isThai
+            ? `ไม่พบรหัส Batch [${cleanCode}] ในใบสั่งเบิกใดๆ ของเครื่อง ${selectedMachineId}`
+            : `Batch [${cleanCode}] not found in any Pick List for ${selectedMachineId}`,
+          scannedBatch: cleanCode,
+        });
+      }
+      setOperatorBarcodeInput("");
+      setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
+      return;
+    }
+
+    if (foundItem.status === "issued") {
+      playBeep("warning");
+      setOperatorScanStatus({
+        type: "warning",
+        message: isThai
+          ? `แจ้งเตือน: รหัส Batch [${cleanCode}] ถูกสแกนจ่ายออกเข้าเครื่อง ${selectedMachineId} ไปเรียบร้อยแล้ว`
+          : `Batch [${cleanCode}] has already been issued to ${selectedMachineId}`,
+        scannedBatch: cleanCode,
+      });
+      setOperatorBarcodeInput("");
+      setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
+      return;
+    }
+
+    // Strict Rule 1: Must have a valid Location in Stock (unless it's a TEMP emergency order with known location or operator override)
+    const stockRecord = coilStock.find((c) => c.batch.toUpperCase() === cleanCode);
+    const currentLoc = (stockRecord?.location || foundItem.sourceLocation || "").trim();
+    const isMissingLocation =
+      !currentLoc ||
+      currentLoc === "-" ||
+      currentLoc.includes("รอระบุ") ||
+      currentLoc.includes("รอสแกน");
+
+    if (isMissingLocation && !foundInCurrentMachineOrder.isTemporary) {
+      playBeep("error");
+      const locErrMsg = isThai
+        ? `ไม่สามารถสแกนจ่าย Batch [${cleanCode}] ได้ เนื่องจากในหน้า "สต๊อก" ยังไม่ระบุ Location (รอสแกน Location)`
+        : `Cannot issue Batch [${cleanCode}]: Location is not yet assigned in Stock.`;
+      setOperatorScanStatus({
+        type: "error",
+        message: locErrMsg,
+        scannedBatch: cleanCode,
+      });
+      setOperatorWarningModal({
+        isOpen: true,
+        title: isThai
+          ? "Batch ยังไม่ถูกรับโอนย้ายเข้าระบบ (Missing Stock Location)"
+          : "Missing Stock Location",
+        message: locErrMsg,
+        detail: isThai
+          ? `กรุณานำ Batch [${cleanCode}] ไปสแกนระบุพื้นที่จัดเก็บ (Location) ในเมนู "+รับเข้า" หรือ "ย้าย Layout" ก่อน จึงจะสามารถสแกนจ่ายออกเข้าเครื่องจักรได้`
+          : `Please scan Batch [${cleanCode}] into a storage location before issuing.`,
+      });
+      setOperatorBarcodeInput("");
+      setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
+      return;
+    }
+
+    // Strict Rule 2: Must be prepared ('staged' = เตรียมแล้ว) in Outbound (เตรียมเบิก) before issuing
+    if (foundItem.status !== "staged") {
+      playBeep("error");
+      const notPreparedMsg = isThai
+        ? `ปฏิเสธ: Batch [${cleanCode}] ยังไม่ได้รับการเตรียมเบิก! Status ที่ตารางรายการใบสั่งเบิกที่หน้าเตรียมเบิกยังไม่เป็น "เตรียมแล้ว"`
+        : `Rejected: Batch [${cleanCode}] has not been staged in Outbound yet!`;
+      setOperatorScanStatus({
+        type: "error",
+        message: notPreparedMsg,
+        scannedBatch: cleanCode,
+      });
+      setOperatorWarningModal({
+        isOpen: true,
+        title: isThai
+          ? "ยังไม่ได้สแกนเตรียมเบิก (Not Staged Yet)"
+          : "Batch Not Staged Yet",
+        message: notPreparedMsg,
+        detail: isThai
+          ? `กรุณาให้เจ้าหน้าที่คลังสแกนบาร์โค้ด Batch [${cleanCode}] ในเมนู "-เตรียมเบิก" (Order: ${foundInCurrentMachineOrder.orderNo}) ให้สถานะเปลี่ยนเป็น "เตรียมแล้ว" ก่อนนำมาสแกนจ่ายออก`
+          : `Please scan Batch [${cleanCode}] in Outbound (Order ${foundInCurrentMachineOrder.orderNo}) first.`,
+      });
+      setOperatorBarcodeInput("");
+      setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
+      return;
+    }
+
+    // Passed all validations -> Issue to Machine and deduct from active stock
+    const { timestamp } = formatNowTimestamp();
+    const issueWeightKg =
+      Number(foundItem.weightKg) > 0
+        ? Number(foundItem.weightKg)
+        : Number(stockRecord?.weightKg) || 0;
+
+    const effectiveStockRecord: CoilStockRecord = stockRecord || {
+      id: `COIL-${cleanCode}`,
+      batch: cleanCode,
+      coilNo: foundItem.coilNo || "-",
+      location: currentLoc || "STAGE",
+      status: "staged",
+      weightKg: issueWeightKg,
+      initialWeightKg: issueWeightKg,
+      certThickness: foundItem.thickness || "-",
+      targetThickness: foundItem.thickness || "-",
+      width: foundItem.width || "-",
+      grade: foundItem.grade || "-",
+      manufacturer: "-",
+      supplier: "-",
+      machine: selectedMachineId,
+      inboundType: "external",
+      orderNo: foundInCurrentMachineOrder.orderNo,
+      description: foundItem.description || "",
+      scanTimestamp: timestamp,
+      updatedAt: new Date().toISOString(),
+    };
+
+    setExpandedOrderNos((prev) =>
+      prev.includes(foundInCurrentMachineOrder!.orderNo)
+        ? prev
+        : [...prev, foundInCurrentMachineOrder!.orderNo]
     );
 
-    setIssueScanInput("");
-    await handleIssueCoil(matchedCoil, parentOrder?.machineId || issueMachineId, parentOrder || null);
+    const remainingToIssue = foundInCurrentMachineOrder.items.filter(
+      (i) => i.batch.toUpperCase() !== cleanCode && i.status !== "issued"
+    ).length;
+
+    playBeep("success");
+    setOperatorScanStatus({
+      type: "success",
+      message: isThai
+        ? `จ่ายออกสำเร็จ! Batch [${cleanCode}] (${issueWeightKg.toLocaleString()} kg) เข้าเครื่อง ${selectedMachineId} • ตัดสต๊อกเรียบร้อย (เหลือรอรับอีก ${remainingToIssue} รายการ)`
+        : `Issued Batch [${cleanCode}] (${issueWeightKg.toLocaleString()} kg) to ${selectedMachineId} (${remainingToIssue} remaining)`,
+      scannedBatch: cleanCode,
+    });
+    setOperatorBarcodeInput("");
+    setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
+
+    await issueCoilToMachineInCloud({
+      stockRecord: effectiveStockRecord,
+      machineId: selectedMachineId,
+      orderNo: foundInCurrentMachineOrder.orderNo,
+      issueWeightKg,
+      stagingOrder: foundInCurrentMachineOrder,
+    });
+
+    onLogTransaction?.(
+      `Issued Coil ${cleanCode} (${issueWeightKg.toLocaleString()} kg) to ${selectedMachineId} (Order ${foundInCurrentMachineOrder.orderNo})`,
+      cleanCode,
+      "Completed"
+    );
+  };
+
+  const handleOperatorBarcodeScan = (e: React.FormEvent) => {
+    e.preventDefault();
+    processOperatorIssueScan(operatorBarcodeInput);
+  };
+
+  const handleDismissCompletedOrder = async (order: CoilStagingOrder) => {
+    setDismissedOperatorOrders((prev) =>
+      prev.includes(order.orderNo) ? prev : [...prev, order.orderNo]
+    );
+    await saveCoilStagingOrderToCloud({
+      ...order,
+      status: "completed",
+      operatorDismissed: true,
+      updatedAt: new Date().toISOString(),
+    });
+    showToast(
+      isThai
+        ? `ซ่อนใบสั่งเบิก Order ${order.orderNo} ที่จ่ายครบแล้วออกจากหน้าจอจ่ายออก`
+        : `Hidden completed Order ${order.orderNo} from Operator view`,
+      "info"
+    );
   };
 
   // ============================================================================
@@ -1638,22 +2609,6 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               </div>
 
               <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".xlsx,.xls,.csv"
-                  onChange={handleExcelImportInbound}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer"
-                >
-                  <Upload size={13} />
-                  <span>{isThai ? "นำเข้า Excel/CSV" : "Import Excel"}</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => setIsCameraOpen(true)}
@@ -1912,175 +2867,473 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
          ===================================================================== */}
       {activeMode === "operator_receive" && (
         <div className="space-y-3">
-          {/* Quick Barcode Scan to Issue Card */}
+          {/* Machine Selection Grid Card for Operator */}
           <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center text-blue-500">
-                  <Cpu size={18} />
-                </div>
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-extrabold flex items-center justify-center">
+                  1
+                </span>
                 <div>
-                  <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 m-0">
+                  <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
                     {isThai
-                      ? "จ่ายออกเหล็กม้วนเข้าเครื่องสลิต (Issue Coil to Machine)"
-                      : "Issue Steel Coil to Machine"}
-                  </h2>
+                      ? "เลือกเครื่องจักรของผู้ปฏิบัติงาน (Operator Machine Selection)"
+                      : "Operator Machine Selection"}
+                  </span>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0">
                     {isThai
-                      ? "สแกนบาร์โค้ดม้วนเหล็กที่เตรียมเบิกไว้ หรือเลือกกดจ่ายออกจากรายการด้านล่าง"
-                      : "Scan coil barcode to issue or confirm from staged coils below"}
+                      ? "เลือกเครื่องจักรเพื่อดูรายการใบสั่งเบิกที่เจ้าหน้าที่คลังเตรียมไว้ (สถานะ 'เตรียมแล้ว') และกดสแกนจ่ายออกเข้าเครื่อง"
+                      : "Select machine to view staged Pick Lists and scan to issue coils"}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {SLITTING_MACHINES.map((m) => (
+              {/* Machine Category Filter Buttons */}
+              <div className="flex flex-wrap gap-1.5">
+                {COIL_MACHINE_CATEGORIES.map((cat) => {
+                  const isActive = activeMachineCategory === cat.id;
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveMachineCategory(cat.id);
+                        if (!cat.machines.includes(selectedMachineId)) {
+                          setSelectedMachineId(cat.machines[0]);
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-indigo-600 text-white border-indigo-500 shadow-xs"
+                          : "bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Machine Cards Grid (CL01-CL06, SM01-SM04) */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5">
+              {(
+                COIL_MACHINE_CATEGORIES.find((c) => c.id === activeMachineCategory)?.machines ||
+                SLITTING_MACHINES
+              ).map((mId) => {
+                const isSelected = selectedMachineId === mId;
+                const mOrders = stagingOrders.filter((o) => o.machineId === mId);
+                const readyCount = mOrders.reduce(
+                  (acc, o) => acc + o.items.filter((i) => i.status === "staged").length,
+                  0
+                );
+                const issuedCount = mOrders.reduce(
+                  (acc, o) => acc + o.items.filter((i) => i.status === "issued").length,
+                  0
+                );
+                const totalCount = mOrders.reduce((acc, o) => acc + o.items.length, 0);
+
+                return (
                   <button
-                    key={m}
+                    key={mId}
                     type="button"
-                    onClick={() => setIssueMachineId(m)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-all ${
-                      issueMachineId === m
-                        ? "bg-blue-600 text-white border-blue-500 shadow-xs"
-                        : "bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                    onClick={() => setSelectedMachineId(mId)}
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer relative ${
+                      isSelected
+                        ? "bg-indigo-600/15 dark:bg-indigo-500/20 border-indigo-500 ring-2 ring-indigo-500/30"
+                        : "bg-slate-50/70 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] hover:border-indigo-400"
                     }`}
                   >
-                    {m}
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs font-extrabold font-mono ${
+                          isSelected
+                            ? "text-indigo-600 dark:text-indigo-300"
+                            : "text-slate-800 dark:text-slate-100"
+                        }`}
+                      >
+                        {mId}
+                      </span>
+                      {readyCount > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[9.5px] font-extrabold">
+                          {readyCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                      {totalCount > 0
+                        ? `${issuedCount}/${totalCount} ${isThai ? "จ่ายแล้ว" : "Issued"}`
+                        : isThai
+                        ? "ไม่มี Order"
+                        : "No Order"}
+                    </div>
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
-
-            <form onSubmit={(e) => handleIssueByScan(e)} className="flex flex-wrap gap-2">
-              <div className="relative flex-1 min-w-[220px]">
-                <Barcode size={15} className="absolute left-3 top-2.5 text-blue-500" />
-                <input
-                  type="text"
-                  value={issueScanInput}
-                  onChange={(e) => setIssueScanInput(e.target.value)}
-                  placeholder={
-                    isThai
-                      ? `สแกนบาร์โค้ดเหล็กม้วนเพื่อตัดจ่ายเข้าเครื่อง ${issueMachineId}...`
-                      : `Scan coil barcode to issue to ${issueMachineId}...`
-                  }
-                  className="w-full pl-9 pr-3 py-2 rounded-lg text-xs font-mono font-bold border border-blue-400 dark:border-blue-700 bg-white dark:bg-[#0c1930]"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCameraOpen(true)}
-                className="px-3 py-2 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1.5 cursor-pointer"
-              >
-                <Camera size={14} />
-                <span>{isThai ? "กล้องสแกน" : "Camera"}</span>
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 rounded-lg text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white flex items-center gap-1.5 cursor-pointer"
-              >
-                <CheckCircle2 size={14} />
-                <span>{isThai ? `ตัดจ่ายเข้า ${issueMachineId}` : `Issue to ${issueMachineId}`}</span>
-              </button>
-            </form>
           </div>
 
-          {/* Staged Coils Waiting for Issue */}
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-            <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                {isThai
-                  ? `รายการเหล็กม้วนที่เตรียมเบิกรอจ่ายออก (${stagedCoils.length} ม้วน)`
-                  : `Staged Coils Ready for Issue (${stagedCoils.length})`}
-              </span>
-              <select
-                value={issueOrderFilter}
-                onChange={(e) => setIssueOrderFilter(e.target.value)}
-                className="field rounded-md font-normal border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-blue-500"
-                style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+          {/* Operator Scan to Issue & Machine Orders Table */}
+          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-extrabold flex items-center justify-center">
+                  2
+                </span>
+                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                  {isThai
+                    ? `รายการใบสั่งเบิกที่เตรียมไว้สำหรับเครื่อง:`
+                    : `Staged Pick Lists for Machine:`}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-lg bg-indigo-500/20 border border-indigo-500/40 text-indigo-600 dark:text-indigo-300 font-mono font-extrabold text-xs">
+                  {selectedMachineId}
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  ({machineFilteredOrders.length} {isThai ? "ใบสั่งเบิก" : "Orders"})
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOperatorBarcodeInput("");
+                  setOperatorScanStatus({
+                    type: "idle",
+                    message: isThai
+                      ? `พร้อมสแกนบาร์โค้ด Batch (10 หลัก) เพื่อจ่ายออกเข้าเครื่อง ${selectedMachineId}`
+                      : `Ready to scan 10-digit Batch for ${selectedMachineId}`,
+                  });
+                  setIsOperatorCameraActive(true);
+                  setIsOperatorScannerOpen(true);
+                }}
+                disabled={machineFilteredOrders.length === 0}
+                className={`px-3.5 py-2 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                  machineFilteredOrders.length > 0
+                    ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs cursor-pointer"
+                    : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                }`}
               >
-                <option value="ALL">{isThai ? "ทุกเครื่องจักร (All Machines)" : "All Machines"}</option>
-                {SLITTING_MACHINES.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
+                <ScanLine size={15} />
+                <span>
+                  {isThai
+                    ? `สแกนจ่ายเข้าเครื่อง ${selectedMachineId}`
+                    : `Scan Issue to ${selectedMachineId}`}
+                </span>
+              </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>{isThai ? "ใบเตรียมเบิก" : "Staging Order"}</th>
-                    <th>{isThai ? "เครื่องจักร" : "Machine"}</th>
-                    <th>Batch / Coil No.</th>
-                    <th>{isThai ? "เกรด & ขนาด" : "Spec"}</th>
-                    <th>{isThai ? "น้ำหนัก (kg)" : "Weight"}</th>
-                    <th>{isThai ? "จาก Layout" : "Layout"}</th>
-                    <th>{isThai ? "ยืนยันจ่ายออก" : "Action"}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(stagedCoils.length > 0 ? stagedCoils : availableCoils.slice(0, 10))
-                    .filter((c) =>
-                      issueOrderFilter === "ALL"
-                        ? true
-                        : (c.stagedMachineId || issueMachineId) === issueOrderFilter
-                    )
-                    .map((c) => {
-                      const parentOrd = stagingOrders.find((o) =>
-                        o.items.some((i) => i.batch.toUpperCase() === c.batch.toUpperCase())
-                      );
-                      return (
-                        <tr key={c.id}>
-                          <td className="font-mono font-bold text-amber-400">
-                            {c.stagedOrderNo || parentOrd?.orderNo || (isThai ? "เบิกด่วน (Direct)" : "Direct")}
-                          </td>
-                          <td className="font-bold text-sky-400">
-                            {c.stagedMachineId || parentOrd?.machineId || issueMachineId}
-                          </td>
-                          <td>
-                            <span className="code font-mono font-bold">{c.batch}</span>
-                            <div className="text-[10px] text-slate-400">{c.coilNo}</div>
-                          </td>
-                          <td>
-                            <span className="font-bold">{c.grade}</span> • {c.certThickness} x {c.width} mm
-                          </td>
-                          <td className="font-mono font-bold">
-                            {Number(c.weightKg).toLocaleString()} kg
-                          </td>
-                          <td className="font-mono">{c.location}</td>
-                          <td>
+            {(() => {
+              const visibleOperatorOrders = machineFilteredOrders.filter(
+                (ord) =>
+                  !ord.operatorDismissed && !dismissedOperatorOrders.includes(ord.orderNo)
+              );
+
+              if (machineFilteredOrders.length === 0) {
+                return (
+                  <div className="py-10 text-center space-y-1.5">
+                    <Cpu size={28} className="mx-auto text-slate-400 opacity-50" />
+                    <div className="text-xs font-bold text-slate-500 dark:text-slate-300">
+                      {isThai
+                        ? `ยังไม่มีใบสั่งเบิกที่เตรียมไว้สำหรับเครื่องจักร ${selectedMachineId}`
+                        : `No Pick List orders prepared for Machine ${selectedMachineId}`}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {isThai
+                        ? "กรุณาให้เจ้าหน้าที่คลังเพิ่มใบสั่งเบิกและสแกนเตรียมเบิกในเมนู '-เตรียมเบิก' ก่อน"
+                        : "Please prepare a Pick List order in '-Outbound' first."}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (visibleOperatorOrders.length === 0) {
+                return (
+                  <div className="py-8 text-center space-y-2">
+                    <CheckCircle2 size={28} className="mx-auto text-emerald-500" />
+                    <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {isThai
+                        ? `ใบสั่งเบิกของเครื่อง ${selectedMachineId} ถูกจ่ายออกครบและซ่อนไว้แล้ว`
+                        : `All completed orders for ${selectedMachineId} are hidden`}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDismissedOperatorOrders([])}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-700 dark:text-slate-200 cursor-pointer"
+                    >
+                      {isThai ? "แสดงใบสั่งเบิกทั้งหมดอีกครั้ง" : "Show All Orders"}
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-4">
+                  {visibleOperatorOrders.map((ord) => {
+                    const readyToReceiveCount = ord.items.filter(
+                      (i) => i.status === "staged"
+                    ).length;
+                    const issuedCount = ord.items.filter(
+                      (i) => i.status === "issued"
+                    ).length;
+                    const pendingPrepCount = ord.items.filter(
+                      (i) => i.status === "pending"
+                    ).length;
+                    const isAllIssued =
+                      ord.items.length > 0 && issuedCount === ord.items.length;
+                    const isExpanded = expandedOrderNos.includes(ord.orderNo);
+
+                    return (
+                      <div
+                        key={ord.orderNo}
+                        className="rounded-xl border border-slate-200 dark:border-[#1e3a5f] overflow-hidden"
+                      >
+                        <div
+                          onClick={() => toggleOrderExpand(ord.orderNo)}
+                          className="px-3.5 py-2.5 bg-slate-100/80 dark:bg-[#0c1930] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2 cursor-pointer hover:bg-slate-200/60 dark:hover:bg-[#132647] transition-colors"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
                             <button
                               type="button"
-                              onClick={() =>
-                                handleIssueCoil(
-                                  c,
-                                  c.stagedMachineId || parentOrd?.machineId || issueMachineId,
-                                  parentOrd || null
-                                )
-                              }
-                              className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] inline-flex items-center gap-1 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleOrderExpand(ord.orderNo);
+                              }}
+                              className="w-6 h-6 rounded-md bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] flex items-center justify-center text-slate-600 dark:text-slate-300 cursor-pointer"
                             >
-                              <Check size={12} />
-                              <span>{isThai ? "ยืนยันจ่ายออก" : "Confirm Issue"}</span>
+                              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  {stagedCoils.length === 0 && availableCoils.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-400">
-                        {isThai
-                          ? "ไม่มีม้วนเหล็กที่รอจ่ายออก"
-                          : "No staged or available coils to issue."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                              Order:
+                            </span>
+                            <span className="font-mono font-extrabold text-xs text-indigo-600 dark:text-indigo-300">
+                              {ord.orderNo}
+                            </span>
+                            {ord.isTemporary && (
+                              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-600 dark:text-amber-300 text-[10px] font-extrabold">
+                                {isThai ? "เบิกฉุกเฉิน (TEMP)" : "TEMP"}
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 text-[10.5px] font-bold">
+                              Machine: {ord.machineId}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              ({ord.createdDate} {ord.createdAt})
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {pendingPrepCount > 0 && (
+                              <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-slate-500/15 text-slate-500 dark:text-slate-400">
+                                {isThai
+                                  ? `คลังยังไม่ได้เตรียม: ${pendingPrepCount}`
+                                  : `Unprepared: ${pendingPrepCount}`}
+                              </span>
+                            )}
+                            <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                              {isThai
+                                ? `เตรียมแล้ว (รอสแกนจ่าย): ${readyToReceiveCount}`
+                                : `Ready to Issue: ${readyToReceiveCount}`}
+                            </span>
+                            <span
+                              className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-extrabold ${
+                                isAllIssued
+                                  ? "bg-emerald-500/20 text-emerald-500"
+                                  : "bg-indigo-500/20 text-indigo-500"
+                              }`}
+                            >
+                              {isThai
+                                ? `จ่ายแล้ว ${issuedCount} / ${ord.items.length} รายการ`
+                                : `Issued ${issuedCount} / ${ord.items.length}`}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedOrderNo(ord.orderNo);
+                                setOperatorBarcodeInput("");
+                                setOperatorScanStatus({
+                                  type: "idle",
+                                  message: isThai
+                                    ? `พร้อมสแกนบาร์โค้ด Batch จ่ายออก Order ${ord.orderNo} เข้าเครื่อง ${selectedMachineId}`
+                                    : `Ready to scan Batch for Order ${ord.orderNo}`,
+                                });
+                                setIsOperatorCameraActive(true);
+                                setIsOperatorScannerOpen(true);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer"
+                            >
+                              <ScanLine size={12} />
+                              <span>{isThai ? "สแกนจ่าย" : "Scan Issue"}</span>
+                            </button>
+
+                            {isAllIssued && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDismissCompletedOrder(ord);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-extrabold inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <CheckCircle2 size={12} />
+                                <span>{isThai ? "เสร็จสิ้น (ซ่อนใบเบิก)" : "Complete"}</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {isExpanded &&
+                          (() => {
+                            const totalItems = ord.items.length;
+                            const totalPages = Math.max(
+                              1,
+                              Math.ceil(totalItems / operatorItemPageSize)
+                            );
+                            const currentPage = Math.min(
+                              operatorItemPages[ord.orderNo] || 1,
+                              totalPages
+                            );
+                            const pagedItems = ord.items.slice(
+                              (currentPage - 1) * operatorItemPageSize,
+                              currentPage * operatorItemPageSize
+                            );
+
+                            return (
+                              <>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr>
+                                        <th>Order</th>
+                                        <th>Item</th>
+                                        <th>Material</th>
+                                        <th>Material Description</th>
+                                        <th>Req. Qty</th>
+                                        <th>Unit</th>
+                                        <th>Batch (10 หลัก)</th>
+                                        <th>Location</th>
+                                        <th>Status</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {pagedItems.map((item, idx) => {
+                                        const stockMatch = coilStock.find(
+                                          (s) =>
+                                            s.batch.toUpperCase() === item.batch.toUpperCase()
+                                        );
+                                        const locText =
+                                          stockMatch?.location && stockMatch.location !== "-"
+                                            ? stockMatch.location
+                                            : item.sourceLocation || "-";
+                                        return (
+                                          <tr
+                                            key={`${ord.orderNo}-${item.batch}-${idx}`}
+                                            className={
+                                              item.status === "issued"
+                                                ? "bg-indigo-500/10 dark:bg-indigo-950/30"
+                                                : item.status === "staged"
+                                                ? "bg-amber-500/5 dark:bg-amber-950/15"
+                                                : ""
+                                            }
+                                          >
+                                            <td className="font-mono font-bold">{ord.orderNo}</td>
+                                            <td className="font-mono">
+                                              {item.bomItem ||
+                                                String((idx + 1) * 10).padStart(4, "0")}
+                                            </td>
+                                            <td className="font-mono text-sky-600 dark:text-sky-400">
+                                              {item.material || stockMatch?.materialNo || "-"}
+                                            </td>
+                                            <td className="max-w-[240px] truncate">
+                                              {item.description ||
+                                                `${item.grade} (${item.thickness}x${item.width})`}
+                                            </td>
+                                            <td className="font-mono font-bold text-right">
+                                              {Number(item.weightKg || 0).toLocaleString()}
+                                            </td>
+                                            <td className="font-mono">{item.unit || "KG"}</td>
+                                            <td>
+                                              <span className="code font-mono font-extrabold text-indigo-600 dark:text-indigo-300">
+                                                {item.batch}
+                                              </span>
+                                            </td>
+                                            <td className="font-mono font-bold text-sky-500">
+                                              {locText}
+                                            </td>
+                                            <td>
+                                              {item.status === "issued" ? (
+                                                <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 inline-flex items-center gap-1">
+                                                  <CheckCircle2 size={11} />
+                                                  {isThai ? "จ่ายแล้ว" : "Issued"}
+                                                </span>
+                                              ) : item.status === "staged" ? (
+                                                <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-amber-500/20 text-amber-600 dark:text-amber-400">
+                                                  {isThai
+                                                    ? "เตรียมแล้ว (รอสแกนจ่าย)"
+                                                    : "Staged (Ready)"}
+                                                </span>
+                                              ) : (
+                                                <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-slate-500/15 text-slate-500 dark:text-slate-400">
+                                                  {isThai
+                                                    ? "รอคลังเตรียมเบิก"
+                                                    : "Waiting Prep"}
+                                                </span>
+                                              )}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+
+                                {totalItems > operatorItemPageSize && (
+                                  <div className="px-3.5 py-2 border-t border-slate-200 dark:border-[#1e3a5f] flex items-center justify-between text-[11px] text-slate-500">
+                                    <span>
+                                      {isThai
+                                        ? `หน้า ${currentPage} / ${totalPages} (ทั้งหมด ${totalItems} รายการ)`
+                                        : `Page ${currentPage} / ${totalPages}`}
+                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={currentPage <= 1}
+                                        onClick={() =>
+                                          setOperatorItemPages((p) => ({
+                                            ...p,
+                                            [ord.orderNo]: Math.max(1, currentPage - 1),
+                                          }))
+                                        }
+                                        className="p-1 rounded border border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 cursor-pointer"
+                                      >
+                                        <ChevronLeft size={13} />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={currentPage >= totalPages}
+                                        onClick={() =>
+                                          setOperatorItemPages((p) => ({
+                                            ...p,
+                                            [ord.orderNo]: Math.min(totalPages, currentPage + 1),
+                                          }))
+                                        }
+                                        className="p-1 rounded border border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 cursor-pointer"
+                                      >
+                                        <ChevronRight size={13} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Issue History Table */}
@@ -2139,251 +3392,578 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
          ===================================================================== */}
       {activeMode === "outbound" && (
         <div className="space-y-3">
+          {/* Step 1: Machine Selection & Officer Import / Emergency TEMP Actions */}
           <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500">
-                  <ArrowUpRight size={18} />
-                </div>
+                <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 text-xs font-extrabold flex items-center justify-center">
+                  1
+                </span>
                 <div>
-                  <h2 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 m-0">
+                  <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
                     {isThai
-                      ? "เตรียมเบิกเหล็กม้วน (-เตรียมเบิก / Coil Staging)"
-                      : "Prepare / Stage Steel Coils (-Staging)"}
-                  </h2>
+                      ? "เลือกเครื่องจักรที่จะนำใบสั่งเบิกไปใช้ (Target Machine Selection)"
+                      : "Select Target Machine for Pick List"}
+                  </span>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0">
                     {isThai
-                      ? "บันทึกใบเตรียมเบิกลง Collection: coil_staging และล็อกสถานะม้วนเป็น Staged"
-                      : "Saves staging orders to coil_staging collection"}
+                      ? "เพิ่มใบสั่งเบิกจากตาราง SAP หรือเบิกฉุกเฉิน (TEMP) แล้วสแกนบาร์โค้ด Batch เพื่อเปลี่ยนสถานะเป็น 'เตรียมแล้ว'"
+                      : "Import SAP Pick List or Emergency TEMP staging, then scan Batches to mark as Staged"}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {SLITTING_MACHINES.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setStagingMachineId(m)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border cursor-pointer transition-all ${
-                      stagingMachineId === m
-                        ? "bg-amber-600 text-white border-amber-500 shadow-xs"
-                        : "bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <form onSubmit={(e) => handleStageByScan(e)} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  {isThai ? "เลขที่ใบสั่งเตรียมเบิก (Order No.)" : "Staging Order No."}
-                </label>
-                <input
-                  type="text"
-                  value={stagingOrderNoInput}
-                  onChange={(e) => setStagingOrderNoInput(e.target.value)}
-                  placeholder={`เช่น ORD-${stagingMachineId}-001 (เว้นว่างสร้างอัตโนมัติ)`}
-                  className="w-full px-3 py-2 rounded-lg text-xs font-mono border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                  {isThai ? "สแกนบาร์โค้ดม้วนเหล็กเพื่อเตรียมเบิกด่วน" : "Scan Coil Barcode to Stage"}
-                </label>
-                <input
-                  type="text"
-                  value={stagingScanInput}
-                  onChange={(e) => setStagingScanInput(e.target.value)}
-                  placeholder={isThai ? "สแกนรหัส Batch..." : "Scan Batch..."}
-                  className="w-full px-3 py-2 rounded-lg text-xs font-mono font-bold border border-amber-400 dark:border-amber-700 bg-white dark:bg-[#0c1930]"
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <button
-                  type="submit"
-                  className="flex-1 py-2 px-3 rounded-lg text-xs font-extrabold bg-amber-600 hover:bg-amber-500 text-white cursor-pointer"
-                >
-                  {isThai ? "สแกนเข้าเตรียมเบิก" : "Stage Scanned Coil"}
-                </button>
-                {selectedCoilIdsForStaging.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleCreateStagingFromSelection}
-                    className="py-2 px-3 rounded-lg text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
-                  >
-                    {isThai
-                      ? `ยืนยันเตรียมเบิกที่เลือก (${selectedCoilIdsForStaging.length})`
-                      : `Stage Selected (${selectedCoilIdsForStaging.length})`}
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>
-
-          {/* Select Available Coils to Stage */}
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-            <div className="px-4 py-3 border-b border-slate-200 dark:border-[#1e3a5f] flex items-center justify-between">
-              <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                {isThai
-                  ? `เลือกเหล็กม้วนพร้อมใช้จากสต๊อกเพื่อเตรียมเบิก (${availableCoils.length} ม้วน)`
-                  : `Available Coils in Stock (${availableCoils.length})`}
-              </span>
-              {selectedCoilIdsForStaging.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleCreateStagingFromSelection}
-                  className="px-3 py-1 rounded-lg bg-amber-600 text-white text-xs font-bold cursor-pointer"
-                >
-                  {isThai
-                    ? `+ สร้างใบเตรียมเบิก (${selectedCoilIdsForStaging.length} ม้วน)`
-                    : `+ Stage (${selectedCoilIdsForStaging.length})`}
-                </button>
-              )}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr>
-                    <th className="w-10 text-center">เลือก</th>
-                    <th>Batch / Barcode</th>
-                    <th>Coil No.</th>
-                    <th>{isThai ? "เกรด & ขนาด" : "Spec"}</th>
-                    <th>{isThai ? "น้ำหนัก (kg)" : "Weight"}</th>
-                    <th>Layout</th>
-                    <th>{isThai ? "เตรียมเบิกทันที" : "Quick Stage"}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {availableCoils.slice(0, 30).map((c) => {
-                    const checked = selectedCoilIdsForStaging.includes(c.id);
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Machine Category Filter Buttons */}
+                <div className="flex flex-wrap gap-1.5">
+                  {COIL_MACHINE_CATEGORIES.map((cat) => {
+                    const isActive = activeMachineCategory === cat.id;
                     return (
-                      <tr key={c.id}>
-                        <td className="text-center">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() =>
-                              setSelectedCoilIdsForStaging((prev) =>
-                                checked ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                              )
-                            }
-                          />
-                        </td>
-                        <td>
-                          <span className="code font-mono font-bold">{c.batch}</span>
-                        </td>
-                        <td className="font-mono">{c.coilNo}</td>
-                        <td>
-                          <span className="font-bold">{c.grade}</span> • {c.certThickness} x {c.width} mm
-                        </td>
-                        <td className="font-mono font-bold">
-                          {Number(c.weightKg).toLocaleString()} kg
-                        </td>
-                        <td className="font-mono font-bold text-sky-400">{c.location}</td>
-                        <td>
-                          <button
-                            type="button"
-                            onClick={() => handleStageByScan(undefined, c.batch)}
-                            className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 font-bold text-[11px] cursor-pointer"
-                          >
-                            {isThai ? `เตรียมเบิก -> ${stagingMachineId}` : `Stage -> ${stagingMachineId}`}
-                          </button>
-                        </td>
-                      </tr>
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveMachineCategory(cat.id);
+                          if (!cat.machines.includes(selectedMachineId)) {
+                            setSelectedMachineId(cat.machines[0]);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-blue-600 text-white border-blue-500 shadow-xs"
+                            : "bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
                     );
                   })}
-                  {availableCoils.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="text-center py-6 text-slate-400">
-                        {isThai ? "ไม่มีเหล็กม้วนสถานะพร้อมเบิกในสต๊อก" : "No available coils in stock."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Emergency Pre-Staging Button (เบิกฉุกเฉินก่อนมี Order) */}
+                <button
+                  type="button"
+                  onClick={handleOpenEmergencyModal}
+                  className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-amber-600 hover:bg-amber-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                  title={
+                    isThai
+                      ? "เตรียมเบิกฉุกเฉินก่อนได้รับเลข Order จากวางแผน (ระบบจะจับคู่ให้อัตโนมัติเมื่อนำเข้าใบสั่งเบิกภายหลัง)"
+                      : "Emergency Pre-Staging before receiving SAP Order"
+                  }
+                >
+                  <Zap size={14} />
+                  <span>{isThai ? "เบิกฉุกเฉิน (TEMP)" : "Emergency (TEMP)"}</span>
+                </button>
+
+                {/* Officer Button: Import Pick List Table */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportMachineId(selectedMachineId);
+                    setImportOrderNo("");
+                    setRawTableText("");
+                    setImportError("");
+                    setIsImportModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <FileSpreadsheet size={14} />
+                  <span>
+                    {isThai
+                      ? "+ เพิ่มใบสั่งเบิก (สำหรับเจ้าหน้าที่)"
+                      : "+ Import Pick List (Officer)"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Machine Cards Grid (CL01-CL06, SM01-SM04) */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-1.5">
+              {(
+                COIL_MACHINE_CATEGORIES.find((c) => c.id === activeMachineCategory)?.machines ||
+                SLITTING_MACHINES
+              ).map((mId) => {
+                const isSelected = selectedMachineId === mId;
+                const mOrders = stagingOrders.filter((o) => o.machineId === mId);
+                const pendingCount = mOrders.reduce(
+                  (acc, o) => acc + o.items.filter((i) => i.status === "pending").length,
+                  0
+                );
+                const stagedCount = mOrders.reduce(
+                  (acc, o) =>
+                    acc +
+                    o.items.filter((i) => i.status === "staged" || i.status === "issued").length,
+                  0
+                );
+
+                return (
+                  <button
+                    key={mId}
+                    type="button"
+                    onClick={() => setSelectedMachineId(mId)}
+                    className={`p-2 rounded-xl border text-left transition-all cursor-pointer relative ${
+                      isSelected
+                        ? "bg-blue-600/15 dark:bg-blue-500/20 border-blue-500 ring-2 ring-blue-500/30"
+                        : "bg-slate-50/70 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] hover:border-blue-400"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-xs font-extrabold font-mono ${
+                          isSelected
+                            ? "text-blue-600 dark:text-blue-300"
+                            : "text-slate-800 dark:text-slate-100"
+                        }`}
+                      >
+                        {mId}
+                      </span>
+                      {mOrders.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-500 dark:text-blue-300 text-[9.5px] font-extrabold">
+                          {mOrders.length} {isThai ? "ใบ" : "Ord"}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
+                      {mOrders.length > 0
+                        ? `${stagedCount}/${stagedCount + pendingCount} ${
+                            isThai ? "เตรียมแล้ว" : "Staged"
+                          }`
+                        : isThai
+                        ? "ว่าง"
+                        : "Empty"}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Active Staging Orders List */}
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-2.5">
-            <h3 className="text-xs font-extrabold text-slate-800 dark:text-slate-100 m-0">
-              {isThai
-                ? `ใบเตรียมเบิกเหล็กม้วนทั้งหมด (${stagingOrders.length} ใบ)`
-                : `Coil Staging Orders (${stagingOrders.length})`}
-            </h3>
-            {stagingOrders.length === 0 ? (
-              <div className="text-center py-6 text-xs text-slate-400">
-                {isThai ? "ยังไม่มีใบเตรียมเบิกเหล็กม้วน" : "No staging orders created yet."}
+          {/* Step 2: Order Selection & Pick List Table for Selected Machine */}
+          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 text-xs font-extrabold flex items-center justify-center">
+                  2
+                </span>
+                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                  {isThai ? "รายการใบสั่งเบิก (Pick List) ของเครื่อง:" : "Pick List Orders for Machine:"}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-500 dark:text-blue-300 font-mono font-extrabold text-xs">
+                  {selectedMachineId}
+                </span>
+              </div>
+
+              {/* Order Tabs & Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2">
+                {machineFilteredOrders.map((ord) => {
+                  const isOrdSelected = activeOrder?.orderNo === ord.orderNo;
+                  const doneCount = ord.items.filter(
+                    (i) => i.status === "staged" || i.status === "issued"
+                  ).length;
+                  return (
+                    <button
+                      key={ord.orderNo}
+                      type="button"
+                      onClick={() => setSelectedOrderNo(ord.orderNo)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                        isOrdSelected
+                          ? ord.isTemporary
+                            ? "bg-amber-600 text-white border-amber-500 shadow-xs"
+                            : "bg-blue-600 text-white border-blue-500 shadow-xs"
+                          : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                      }`}
+                    >
+                      {ord.isTemporary && <Zap size={12} />}
+                      <span>Order: {ord.orderNo}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] ${
+                          isOrdSelected
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-200 dark:bg-slate-800 text-slate-500"
+                        }`}
+                      >
+                        {doneCount}/{ord.items.length}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOutboundBarcodeInput("");
+                    setOutboundScanStatus({
+                      type: "idle",
+                      message: isThai
+                        ? "พร้อมสแกนบาร์โค้ด Batch (10 หลัก) เพื่อยืนยันการเตรียมเบิก"
+                        : "Ready to scan 10-digit Batch barcode",
+                    });
+                    setIsOutboundCameraActive(true);
+                    setIsOutboundScannerOpen(true);
+                  }}
+                  disabled={!activeOrder}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all ${
+                    activeOrder
+                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-xs cursor-pointer"
+                      : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                  }`}
+                >
+                  <ScanLine size={15} />
+                  <span>{isThai ? "สแกนบาร์โค้ด" : "Scan Barcode"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Active Pick List Table */}
+            {!activeOrder ? (
+              <div className="py-10 text-center space-y-2">
+                <ClipboardList size={28} className="mx-auto text-slate-400 opacity-50" />
+                <div className="text-xs font-bold text-slate-500 dark:text-slate-300">
+                  {isThai
+                    ? `ยังไม่มีใบสั่งเบิกสำหรับเครื่องจักร ${selectedMachineId}`
+                    : `No Pick List Order for Machine ${selectedMachineId}`}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {isThai
+                    ? "กดปุ่ม '+ เพิ่มใบสั่งเบิก (สำหรับเจ้าหน้าที่)' เพื่อวางตาราง SAP หรือกด 'เบิกฉุกเฉิน (TEMP)' ด้านบน"
+                    : "Click '+ Import Pick List (Officer)' or 'Emergency (TEMP)' above to start."}
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                {stagingOrders.map((ord) => (
-                  <div
-                    key={ord.id}
-                    className="p-3 rounded-xl border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/60 dark:bg-[#0c1930] space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-mono font-extrabold text-xs text-amber-400">
-                          {ord.orderNo}
-                        </span>
-                        <span className="ml-2 px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10.5px] font-bold">
-                          {ord.machineId}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
+              <div className="space-y-2">
+                {/* Summary Header of Active Order */}
+                {(() => {
+                  const isOrderExpanded = expandedOrderNos.includes(activeOrder.orderNo);
+                  const doneCount = activeOrder.items.filter(
+                    (i) => i.status === "staged" || i.status === "issued"
+                  ).length;
+                  return (
+                    <div
+                      onClick={() => toggleOrderExpand(activeOrder.orderNo)}
+                      className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200/80 dark:border-[#1e3a5f] text-xs cursor-pointer hover:bg-slate-100 dark:hover:bg-[#132647] transition-colors"
+                    >
+                      <div className="flex flex-wrap items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => setActiveMode("operator_receive")}
-                          className="px-2 py-1 rounded bg-blue-600 text-white text-[10.5px] font-bold cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleOrderExpand(activeOrder.orderNo);
+                          }}
+                          className="w-6 h-6 rounded-md bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] flex items-center justify-center text-slate-600 dark:text-slate-300 cursor-pointer"
                         >
-                          {isThai ? "ไปหน้าจ่ายออก" : "Go to Issue"}
+                          {isOrderExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteCoilStagingOrderFromCloud(ord)}
-                          className="p-1 rounded hover:bg-red-500/20 text-red-400 cursor-pointer"
-                          title={isThai ? "ยกเลิกใบเตรียมเบิก" : "Delete Staging Order"}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      {ord.createdDate} {ord.createdAt} • {ord.items.length} {isThai ? "ม้วน" : "coils"}
-                    </div>
-                    <div className="space-y-1">
-                      {ord.items.map((itm) => (
-                        <div
-                          key={itm.id}
-                          className="flex items-center justify-between text-[11px] py-1 px-2 rounded bg-white dark:bg-[#111e38] border border-slate-200/60 dark:border-[#1e3a5f]"
-                        >
-                          <span className="font-mono font-bold text-sky-400">{itm.batch}</span>
-                          <span>
-                            {itm.grade} ({itm.thickness}x{itm.width}) • {Number(itm.weightKg).toLocaleString()} kg
+                        <span>
+                          <strong className="text-slate-500 dark:text-slate-400">Order:</strong>{" "}
+                          <span className="font-mono font-extrabold text-blue-600 dark:text-blue-300">
+                            {activeOrder.orderNo}
                           </span>
-                          <span
-                            className={`font-bold ${
-                              itm.status === "issued" ? "text-emerald-400" : "text-amber-400"
-                            }`}
+                        </span>
+                        {activeOrder.isTemporary && (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-600 dark:text-amber-300 text-[10.5px] font-extrabold flex items-center gap-1">
+                            <Zap size={11} />
+                            <span>
+                              {isThai
+                                ? "ใบเบิกฉุกเฉิน (รอจับคู่ Order จริง)"
+                                : "TEMP Emergency Order"}
+                            </span>
+                          </span>
+                        )}
+                        {activeOrder.matchedOrderNo && (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-[10.5px] font-bold">
+                            Matched: {activeOrder.matchedOrderNo}
+                          </span>
+                        )}
+                        <span>
+                          <strong className="text-slate-500 dark:text-slate-400">Machine:</strong>{" "}
+                          <span className="font-extrabold text-amber-500">
+                            {activeOrder.machineId}
+                          </span>
+                        </span>
+                        <span className="text-slate-400 text-[11px]">
+                          {isThai ? "สร้างเมื่อ:" : "Created:"} {activeOrder.createdDate}{" "}
+                          {activeOrder.createdAt}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {activeOrder.isTemporary && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleManualMatchTempOrder(activeOrder.orderNo);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-700 dark:text-amber-300 font-extrabold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
                           >
-                            {itm.status === "issued"
-                              ? isThai
-                                ? "จ่ายออกแล้ว"
-                                : "Issued"
-                              : isThai
-                              ? "พร้อมจ่าย"
-                              : "Staged"}
-                          </span>
-                        </div>
-                      ))}
+                            <CheckCircle2 size={12} />
+                            <span>
+                              {isThai ? "ผูกเลข Order จริง" : "Match Real Order"}
+                            </span>
+                          </button>
+                        )}
+                        <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                          {isThai ? "ความคืบหน้าการเตรียมเบิก:" : "Progress:"}
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-500/20 text-emerald-500">
+                          {doneCount} / {activeOrder.items.length}{" "}
+                          {isThai ? "รายการ" : "Items"}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteModalOrderNo(activeOrder.orderNo);
+                          }}
+                          className="px-2 py-1 rounded-lg text-[11px] font-bold border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-300 flex items-center gap-1 cursor-pointer transition-all"
+                        >
+                          <Trash2 size={12} />
+                          <span>{isThai ? "ลบใบสั่งเบิก" : "Delete"}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })()}
+
+                {/* Collapsible Table Body */}
+                {expandedOrderNos.includes(activeOrder.orderNo) &&
+                  (() => {
+                    const totalItems = activeOrder.items.length;
+                    const totalPages = Math.max(
+                      1,
+                      Math.ceil(totalItems / pickListItemPageSize)
+                    );
+                    const currentPage = Math.min(
+                      pickListItemPages[activeOrder.orderNo] || 1,
+                      totalPages
+                    );
+                    const pagedItems = activeOrder.items.slice(
+                      (currentPage - 1) * pickListItemPageSize,
+                      currentPage * pickListItemPageSize
+                    );
+
+                    return (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr>
+                                <th>Order</th>
+                                <th>Item</th>
+                                <th>Material</th>
+                                <th>Material Description</th>
+                                <th>Requirement Qty</th>
+                                <th>Unit</th>
+                                <th>Batch (10 หลัก)</th>
+                                <th>Location</th>
+                                <th>SLoc</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pagedItems.map((item, idx) => {
+                                const stockMatch = coilStock.find(
+                                  (s) => s.batch.toUpperCase() === item.batch.toUpperCase()
+                                );
+                                const locText =
+                                  stockMatch?.location && stockMatch.location !== "-"
+                                    ? stockMatch.location
+                                    : item.sourceLocation || "-";
+                                return (
+                                  <tr
+                                    key={`${activeOrder.orderNo}-${item.batch}-${idx}`}
+                                    className={
+                                      item.status === "staged"
+                                        ? "bg-emerald-500/5 dark:bg-emerald-950/20"
+                                        : item.status === "issued"
+                                        ? "bg-indigo-500/5 dark:bg-indigo-950/20"
+                                        : ""
+                                    }
+                                  >
+                                    <td className="font-mono font-bold">
+                                      {activeOrder.orderNo}
+                                    </td>
+                                    <td className="font-mono">
+                                      {item.bomItem ||
+                                        String((idx + 1) * 10).padStart(4, "0")}
+                                    </td>
+                                    <td className="font-mono text-sky-600 dark:text-sky-400">
+                                      {item.material || stockMatch?.materialNo || "-"}
+                                    </td>
+                                    <td className="max-w-[240px] truncate">
+                                      {item.description ||
+                                        `${item.grade} (${item.thickness}x${item.width})`}
+                                    </td>
+                                    <td className="font-mono font-bold text-right">
+                                      {Number(item.weightKg || 0).toLocaleString()}
+                                    </td>
+                                    <td className="font-mono">{item.unit || "KG"}</td>
+                                    <td>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="code font-mono font-extrabold text-blue-600 dark:text-blue-300">
+                                          {item.batch}
+                                        </span>
+                                        {item.tempOrderRef && (
+                                          <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-600 dark:text-amber-300 text-[9.5px] font-bold">
+                                            Auto-Matched
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="font-mono font-bold text-sky-500">
+                                      {locText}
+                                    </td>
+                                    <td className="font-mono">
+                                      {item.storageLocation || "1101"}
+                                    </td>
+                                    <td>
+                                      {item.status === "issued" ? (
+                                        <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-indigo-500/20 text-indigo-500 inline-flex items-center gap-1">
+                                          <CheckCircle2 size={11} />
+                                          {isThai ? "จ่ายแล้ว" : "Issued"}
+                                        </span>
+                                      ) : item.status === "staged" ? (
+                                        <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-emerald-500/20 text-emerald-500 inline-flex items-center gap-1">
+                                          <CheckCircle2 size={11} />
+                                          {isThai ? "เตรียมแล้ว" : "Staged"}
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-500/20 text-amber-500">
+                                          {isThai ? "รอเตรียม" : "Pending"}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Pagination Bar */}
+                        {totalItems > pickListItemPageSize && (
+                          <div className="px-3 py-2 border-t border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                            <div className="flex items-center gap-1.5">
+                              <span>{isThai ? "แสดงต่อหน้า:" : "Rows:"}</span>
+                              <select
+                                value={pickListItemPageSize}
+                                onChange={(e) => {
+                                  setPickListItemPageSize(Number(e.target.value));
+                                  setPickListItemPages((p) => ({
+                                    ...p,
+                                    [activeOrder.orderNo]: 1,
+                                  }));
+                                }}
+                                className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs"
+                              >
+                                {[10, 20, 50, 100].map((sz) => (
+                                  <option key={sz} value={sz}>
+                                    {sz}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                disabled={currentPage <= 1}
+                                onClick={() =>
+                                  setPickListItemPages((p) => ({
+                                    ...p,
+                                    [activeOrder.orderNo]: 1,
+                                  }))
+                                }
+                                className="p-1 rounded border border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 cursor-pointer"
+                              >
+                                <ChevronsLeft size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={currentPage <= 1}
+                                onClick={() =>
+                                  setPickListItemPages((p) => ({
+                                    ...p,
+                                    [activeOrder.orderNo]: Math.max(1, currentPage - 1),
+                                  }))
+                                }
+                                className="p-1 rounded border border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 cursor-pointer"
+                              >
+                                <ChevronLeft size={13} />
+                              </button>
+                              <span className="px-2 font-bold">
+                                {currentPage} / {totalPages}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={currentPage >= totalPages}
+                                onClick={() =>
+                                  setPickListItemPages((p) => ({
+                                    ...p,
+                                    [activeOrder.orderNo]: Math.min(
+                                      totalPages,
+                                      currentPage + 1
+                                    ),
+                                  }))
+                                }
+                                className="p-1 rounded border border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 cursor-pointer"
+                              >
+                                <ChevronRight size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={currentPage >= totalPages}
+                                onClick={() =>
+                                  setPickListItemPages((p) => ({
+                                    ...p,
+                                    [activeOrder.orderNo]: totalPages,
+                                  }))
+                                }
+                                className="p-1 rounded border border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 cursor-pointer"
+                              >
+                                <ChevronsRight size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Action Bar: Save Draft vs Confirm Outbound Preparation */}
+                        <div className="mt-2 pt-3 border-t border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {isThai
+                              ? "สามารถกด 'บันทึกใบสั่งเบิก (พักไว้สแกนต่อ)' เพื่อกลับมาสแกนต่อภายหลัง หรือกด 'ยืนยันการเตรียมเบิก' เมื่อเตรียมเสร็จสิ้น"
+                              : "Save draft to continue scanning later, or confirm outbound preparation when finished."}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveOutboundDraft(activeOrder.orderNo)}
+                              className="px-3.5 py-2 rounded-lg text-xs font-extrabold bg-slate-100 hover:bg-slate-200 dark:bg-[#0c1930] dark:hover:bg-[#162a4a] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] flex items-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <Save size={14} className="text-blue-500" />
+                              <span>
+                                {isThai
+                                  ? "บันทึกใบสั่งเบิก (พักไว้สแกนต่อ)"
+                                  : "Save Pick List (Resume Later)"}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmOutboundFinal(activeOrder.orderNo)}
+                              className="px-4 py-2 rounded-lg text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>
+                                {isThai
+                                  ? "ยืนยันการเตรียมเบิก"
+                                  : "Confirm Outbound Preparation"}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
               </div>
             )}
           </div>
@@ -2746,7 +4326,6 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     <th>{isThai ? "น้ำหนักคงเหลือ (kg)" : "Weight (kg)"}</th>
                     <th>Layout</th>
                     <th>{isThai ? "สถานะ" : "Status"}</th>
-                    <th>{isThai ? "จัดการด่วน" : "Actions"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2811,51 +4390,12 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                             : "Issued"}
                         </span>
                       </td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          {c.status === "available" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => handleStageByScan(undefined, c.batch)}
-                                className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold text-[10.5px] cursor-pointer"
-                              >
-                                {isThai ? "-เตรียมเบิก" : "Stage"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleIssueCoil(c)}
-                                className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold text-[10.5px] cursor-pointer"
-                              >
-                                {isThai ? "จ่ายออก" : "Issue"}
-                              </button>
-                            </>
-                          )}
-                          {c.status !== "available" && (
-                            <button
-                              type="button"
-                              onClick={() => returnCoilToStockInCloud(c)}
-                              className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold text-[10.5px] cursor-pointer inline-flex items-center gap-1"
-                            >
-                              <RotateCcw size={11} />
-                              <span>{isThai ? "คืนสต๊อก" : "Return"}</span>
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => deleteCoilStockFromCloud(c.id)}
-                            className="p-1 rounded hover:bg-red-500/20 text-red-400 cursor-pointer"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                     );
                   })}
                   {filteredStockRows.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="text-center py-8 text-slate-400">
+                      <td colSpan={8} className="text-center py-8 text-slate-400">
                         {isThai ? "ไม่พบรายการสต๊อกเหล็กม้วนที่ค้นหา" : "No matching coil stock records."}
                       </td>
                     </tr>
@@ -3224,7 +4764,802 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
         </div>
       )}
 
-      {/* Camera Barcode Scanner Modal */}
+      {/* =====================================================================
+          MODAL 1: OUTBOUND PICK LIST BARCODE SCANNER (-เตรียมเบิก)
+         ===================================================================== */}
+      {isOutboundScannerOpen && activeOrder && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-blue-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ScanLine size={18} />
+                <div>
+                  <h3 className="text-sm font-extrabold m-0">
+                    {isThai
+                      ? `สแกนบาร์โค้ดเตรียมเบิกเหล็กม้วน (Order: ${activeOrder.orderNo})`
+                      : `Scan Batch to Stage (Order: ${activeOrder.orderNo})`}
+                  </h3>
+                  <p className="text-[11px] text-blue-100 m-0">
+                    {isThai
+                      ? `เครื่องจักรเป้าหมาย: ${activeOrder.machineId} • เตรียมแล้ว ${
+                          activeOrder.items.filter(
+                            (i) => i.status === "staged" || i.status === "issued"
+                          ).length
+                        }/${activeOrder.items.length} รายการ`
+                      : `Target Machine: ${activeOrder.machineId}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleFinishOutboundScan}
+                className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[82vh] overflow-y-auto">
+              {/* Camera Scanner Toggle */}
+              {isOutboundCameraActive && (
+                <div className="rounded-xl overflow-hidden border border-blue-500/40">
+                  <CameraBarcodeScanner
+                    isThai={isThai}
+                    barcodeOnly={true}
+                    onClose={() => setIsOutboundCameraActive(false)}
+                    onScan={(code) => processOutboundBarcodeScan(code)}
+                  />
+                </div>
+              )}
+
+              <form onSubmit={handleOutboundBarcodeScan} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                    {isThai
+                      ? "สแกนหรือกรอกรหัส Batch 10 หลัก (10-Digit Batch Code):"
+                      : "Scan or enter 10-Digit Batch Code:"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsOutboundCameraActive((v) => !v)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Camera size={13} />
+                    <span>
+                      {isOutboundCameraActive
+                        ? isThai
+                          ? "ปิดกล้องสแกน"
+                          : "Close Camera"
+                        : isThai
+                        ? "เปิดกล้องสแกน"
+                        : "Open Camera"}
+                    </span>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    ref={outboundScannerInputRef}
+                    type="text"
+                    maxLength={10}
+                    value={outboundBarcodeInput}
+                    onChange={(e) => setOutboundBarcodeInput(e.target.value.toUpperCase())}
+                    placeholder={isThai ? "เช่น 23A0967518" : "e.g. 23A0967518"}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl text-sm font-mono font-extrabold border-2 border-blue-500 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    {isThai ? "ยืนยันสแกน" : "Submit"}
+                  </button>
+                </div>
+              </form>
+
+              {/* Scan Status Feedback Banner */}
+              <div
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                  outboundScanStatus.type === "success"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300"
+                    : outboundScanStatus.type === "error"
+                    ? "bg-red-500/15 border-red-500/40 text-red-600 dark:text-red-300"
+                    : outboundScanStatus.type === "warning"
+                    ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300"
+                    : "bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {outboundScanStatus.type === "success" ? (
+                  <CheckCircle2 size={16} className="shrink-0" />
+                ) : outboundScanStatus.type === "error" ||
+                  outboundScanStatus.type === "warning" ? (
+                  <AlertTriangle size={16} className="shrink-0" />
+                ) : (
+                  <Barcode size={16} className="shrink-0" />
+                )}
+                <span>{outboundScanStatus.message}</span>
+              </div>
+
+              {/* Quick Checklist of Batches in Active Order */}
+              <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden">
+                <div className="px-3 py-2 bg-slate-50 dark:bg-[#0c1930] border-b border-slate-200 dark:border-[#1e3a5f] flex items-center justify-between text-[11px] font-extrabold text-slate-700 dark:text-slate-200">
+                  <span>
+                    {isThai
+                      ? `รายการ Batch ในใบสั่งเบิก (${activeOrder.items.length} รายการ)`
+                      : `Batches in Order (${activeOrder.items.length})`}
+                  </span>
+                  <span className="text-emerald-500">
+                    {isThai ? "เตรียมแล้ว:" : "Staged:"}{" "}
+                    {
+                      activeOrder.items.filter(
+                        (i) => i.status === "staged" || i.status === "issued"
+                      ).length
+                    }{" "}
+                    / {activeOrder.items.length}
+                  </span>
+                </div>
+                <div className="max-h-48 overflow-y-auto divide-y divide-slate-200/70 dark:divide-[#1e3a5f]">
+                  {activeOrder.items.map((itm, i) => (
+                    <div
+                      key={`${itm.batch}-${i}`}
+                      className="px-3 py-2 flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-extrabold text-blue-600 dark:text-blue-300">
+                          {itm.batch}
+                        </span>
+                        <span className="text-[11px] text-slate-500 truncate max-w-[210px]">
+                          {itm.description || `${itm.grade} (${itm.thickness}x${itm.width})`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] text-slate-500">
+                          {Number(itm.weightKg || 0).toLocaleString()} {itm.unit || "KG"}
+                        </span>
+                        {itm.status === "staged" || itm.status === "issued" ? (
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-500 text-[10.5px] font-extrabold">
+                            {itm.status === "issued"
+                              ? isThai
+                                ? "จ่ายแล้ว"
+                                : "Issued"
+                              : isThai
+                              ? "เตรียมแล้ว"
+                              : "Staged"}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 text-[10.5px] font-bold">
+                            {isThai ? "รอเตรียม" : "Pending"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={handleFinishOutboundScan}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold cursor-pointer"
+                >
+                  {isThai ? "เสร็จสิ้นการสแกน" : "Done"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL 2: OFFICER IMPORT PICK LIST MODAL (+ เพิ่มใบสั่งเบิก)
+         ===================================================================== */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-emerald-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet size={18} />
+                <div>
+                  <h3 className="text-sm font-extrabold m-0">
+                    {isThai
+                      ? "เพิ่มใบสั่งเบิกเหล็กม้วน (Import SAP Pick List Table)"
+                      : "Import Coil Pick List Table"}
+                  </h3>
+                  <p className="text-[11px] text-emerald-100 m-0">
+                    {isThai
+                      ? "คัดลอกตารางจาก SAP / Excel แล้ววางลงในช่องด้านล่าง ระบบจะแยก Order และ Batch 10 หลักให้อัตโนมัติ"
+                      : "Paste SAP / Excel Pick List table below"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form
+              onSubmit={handleSaveImportedPickList}
+              className="p-5 space-y-4 max-h-[84vh] overflow-y-auto"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                    {isThai
+                      ? "1. เลือกเครื่องจักรเป้าหมาย (Target Machine):"
+                      : "1. Target Machine:"}
+                  </label>
+                  <select
+                    value={importMachineId}
+                    onChange={(e) => setImportMachineId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl text-xs font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
+                  >
+                    {SLITTING_MACHINES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                    {isThai
+                      ? "2. เลขที่ใบสั่งเบิก (Order No.) [เว้นว่างได้ถ้าในตารางมีคอลัมน์ Order]:"
+                      : "2. Order No. (Optional if table has Order column):"}
+                  </label>
+                  <input
+                    type="text"
+                    value={importOrderNo}
+                    onChange={(e) => setImportOrderNo(e.target.value.toUpperCase())}
+                    placeholder={
+                      isThai
+                        ? "เช่น 1020045890 (หรือดึงจากคอลัมน์แรกของตารางอัตโนมัติ)"
+                        : "e.g. 1020045890"
+                    }
+                    className="w-full px-3 py-2 rounded-xl text-xs font-mono font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                  {isThai
+                    ? "3. วางข้อมูลตารางใบสั่งเบิกจาก SAP / Excel (Order | Item | Material | Description | Req Qty | Unit | Batch | SLoc):"
+                    : "3. Paste SAP / Excel Pick List Table:"}
+                </label>
+                <textarea
+                  rows={6}
+                  value={rawTableText}
+                  onChange={(e) => setRawTableText(e.target.value)}
+                  placeholder={
+                    isThai
+                      ? "วางข้อมูลตารางจาก SAP / Excel ที่นี่...\nตัวอย่าง:\n1020045890\t0010\t111000234\tCOIL GI 0.45x1219\t5,420\tKG\t23A0967518\t1101"
+                      : "Paste table rows here..."
+                  }
+                  className="w-full p-3 rounded-xl text-xs font-mono border border-slate-300 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              {importError && (
+                <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-600 dark:text-red-300 text-xs font-bold flex items-center gap-2">
+                  <AlertTriangle size={15} />
+                  <span>{importError}</span>
+                </div>
+              )}
+
+              {/* Live Preview Table */}
+              <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden">
+                <div className="px-3.5 py-2 bg-slate-100 dark:bg-[#0c1930] border-b border-slate-200 dark:border-[#1e3a5f] flex items-center justify-between text-xs font-extrabold">
+                  <span>
+                    {isThai
+                      ? `ตัวอย่างรายการที่ตรวจพบ (${parsedPreviewItems.length} รายการ)`
+                      : `Detected Pick List Items (${parsedPreviewItems.length})`}
+                  </span>
+                  <span className="text-emerald-600 dark:text-emerald-400">
+                    Machine: {importMachineId}
+                  </span>
+                </div>
+                <div className="max-h-48 overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th>Order</th>
+                        <th>Item</th>
+                        <th>Material</th>
+                        <th>Description</th>
+                        <th>Req. Qty</th>
+                        <th>Unit</th>
+                        <th>Batch</th>
+                        <th>SLoc</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedPreviewItems.slice(0, 50).map((itm, idx) => (
+                        <tr key={`${itm.batch}-${idx}`}>
+                          <td className="font-mono font-bold">
+                            {itm.orderNo || importOrderNo || "-"}
+                          </td>
+                          <td className="font-mono">{itm.bomItem}</td>
+                          <td className="font-mono">{itm.material}</td>
+                          <td className="max-w-[200px] truncate">{itm.materialDescription}</td>
+                          <td className="font-mono font-bold text-right">
+                            {Number(itm.requirementQty || 0).toLocaleString()}
+                          </td>
+                          <td className="font-mono">{itm.unit}</td>
+                          <td className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                            {itm.batch}
+                          </td>
+                          <td className="font-mono">{itm.storageLocation}</td>
+                        </tr>
+                      ))}
+                      {parsedPreviewItems.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="text-center py-6 text-slate-400">
+                            {isThai
+                              ? "วางข้อมูลตารางด้านบนเพื่อดูตัวอย่างรายการก่อนบันทึก"
+                              : "Paste table data above to preview items"}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  {isThai ? "ยกเลิก" : "Cancel"}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>
+                    {isThai
+                      ? `บันทึกใบสั่งเบิก (${parsedPreviewItems.length} รายการ)`
+                      : `Save Pick List (${parsedPreviewItems.length})`}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL 3: EMERGENCY PRE-STAGING MODAL (เบิกฉุกเฉิน TEMP ก่อนมี Order)
+         ===================================================================== */}
+      {isEmergencyModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-amber-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap size={18} />
+                <div>
+                  <h3 className="text-sm font-extrabold m-0">
+                    {isThai
+                      ? "เบิกฉุกเฉิน (Emergency Pre-Staging / TEMP Order)"
+                      : "Emergency Pre-Staging (TEMP Order)"}
+                  </h3>
+                  <p className="text-[11px] text-amber-100 m-0">
+                    {isThai
+                      ? "สแกนเตรียมเบิกเหล็กม้วนล่วงหน้าก่อนได้รับเลข Order จริง (ระบบจะจับคู่ให้อัตโนมัติเมื่อนำเข้าใบสั่งเบิกภายหลัง)"
+                      : "Pre-stage coils before receiving a real SAP Order No."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEmergencyCameraActive(false);
+                  setIsEmergencyModalOpen(false);
+                }}
+                className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[82vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                    {isThai ? "1. เลือกเครื่องจักร (Machine):" : "1. Target Machine:"}
+                  </label>
+                  <select
+                    value={emergencyMachineId}
+                    onChange={(e) => {
+                      const nextM = e.target.value;
+                      setEmergencyMachineId(nextM);
+                      setEmergencyTempOrderNo((prev) =>
+                        prev.replace(/^TEMP-[A-Z0-9]+-/, `TEMP-${nextM}-`)
+                      );
+                    }}
+                    className="w-full px-3 py-2 rounded-xl text-xs font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
+                  >
+                    {SLITTING_MACHINES.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                    {isThai ? "2. รหัสใบเบิกชั่วคราว (TEMP Order No.):" : "2. TEMP Order No.:"}
+                  </label>
+                  <input
+                    type="text"
+                    value={emergencyTempOrderNo}
+                    onChange={(e) => setEmergencyTempOrderNo(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 rounded-xl text-xs font-mono font-bold border border-amber-400 dark:border-amber-700 bg-amber-50/40 dark:bg-[#0c1930] text-amber-700 dark:text-amber-300"
+                  />
+                </div>
+              </div>
+
+              {isEmergencyCameraActive && (
+                <div className="rounded-xl overflow-hidden border border-amber-500/40">
+                  <CameraBarcodeScanner
+                    isThai={isThai}
+                    barcodeOnly={true}
+                    onClose={() => setIsEmergencyCameraActive(false)}
+                    onScan={(code) => processEmergencyBatchCode(code)}
+                  />
+                </div>
+              )}
+
+              <form onSubmit={handleAddEmergencyBatch} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                    {isThai
+                      ? "3. สแกนบาร์โค้ด Batch 10 หลัก ที่ต้องการเบิกฉุกเฉิน:"
+                      : "3. Scan 10-Digit Batch Barcode:"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsEmergencyCameraActive((v) => !v)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Camera size={13} />
+                    <span>
+                      {isEmergencyCameraActive
+                        ? isThai
+                          ? "ปิดกล้องสแกน"
+                          : "Close Camera"
+                        : isThai
+                        ? "เปิดกล้องสแกน"
+                        : "Open Camera"}
+                    </span>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    ref={emergencyBarcodeRef}
+                    type="text"
+                    maxLength={10}
+                    value={emergencyBarcodeInput}
+                    onChange={(e) => setEmergencyBarcodeInput(e.target.value.toUpperCase())}
+                    placeholder={isThai ? "สแกนรหัส Batch 10 หลัก..." : "Scan 10-digit Batch..."}
+                    className="flex-1 px-3.5 py-2 rounded-xl text-sm font-mono font-extrabold border-2 border-amber-500 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    {isThai ? "+ เพิ่ม Batch" : "+ Add Batch"}
+                  </button>
+                </div>
+              </form>
+
+              {/* Scanned Emergency Batches List */}
+              <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden">
+                <div className="px-3.5 py-2 bg-slate-100 dark:bg-[#0c1930] border-b border-slate-200 dark:border-[#1e3a5f] flex items-center justify-between text-xs font-extrabold">
+                  <span>
+                    {isThai
+                      ? `รายการ Batch ที่สแกนเบิกฉุกเฉิน (${emergencyScannedBatches.length} ม้วน)`
+                      : `Scanned Emergency Batches (${emergencyScannedBatches.length})`}
+                  </span>
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Batch</th>
+                        <th>Spec / Description</th>
+                        <th>Weight (KG)</th>
+                        <th>Location</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {emergencyScannedBatches.map((b, idx) => (
+                        <tr key={b.batch}>
+                          <td className="font-mono">{idx + 1}</td>
+                          <td className="font-mono font-extrabold text-amber-600 dark:text-amber-400">
+                            {b.batch}
+                          </td>
+                          <td className="max-w-[200px] truncate">
+                            {b.description || `${b.grade} (${b.thickness}x${b.width})`}
+                          </td>
+                          <td className="font-mono font-bold">
+                            {Number(b.weightKg || 0).toLocaleString()}
+                          </td>
+                          <td className="font-mono">{b.sourceLocation}</td>
+                          <td className="text-right">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEmergencyScannedBatches((prev) =>
+                                  prev.filter((x) => x.batch !== b.batch)
+                                )
+                              }
+                              className="p-1 text-red-500 hover:bg-red-500/10 rounded cursor-pointer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {emergencyScannedBatches.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="text-center py-6 text-slate-400">
+                            {isThai
+                              ? "ยังไม่มีรายการที่สแกน กรุณาสแกนบาร์โค้ด Batch ด้านบน"
+                              : "No batches scanned yet"}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEmergencyCameraActive(false);
+                    setIsEmergencyModalOpen(false);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  {isThai ? "ยกเลิก" : "Cancel"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmEmergencyStaging}
+                  disabled={emergencyScannedBatches.length === 0}
+                  className={`px-5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 ${
+                    emergencyScannedBatches.length > 0
+                      ? "bg-amber-600 hover:bg-amber-500 text-white cursor-pointer shadow-xs"
+                      : "bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+                  }`}
+                >
+                  <CheckCircle2 size={14} />
+                  <span>
+                    {isThai
+                      ? `ยืนยันสร้างใบเบิกฉุกเฉิน (${emergencyScannedBatches.length} ม้วน)`
+                      : `Confirm Emergency Staging (${emergencyScannedBatches.length})`}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL 4: OPERATOR RECEIVE / MACHINE ISSUE BARCODE SCANNER (จ่ายออก)
+         ===================================================================== */}
+      {isOperatorScannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-indigo-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ScanLine size={18} />
+                <div>
+                  <h3 className="text-sm font-extrabold m-0">
+                    {isThai
+                      ? `สแกนบาร์โค้ดจ่ายออกเหล็กม้วนเข้าเครื่อง [${selectedMachineId}]`
+                      : `Scan Batch to Issue to Machine [${selectedMachineId}]`}
+                  </h3>
+                  <p className="text-[11px] text-indigo-100 m-0">
+                    {isThai
+                      ? "สแกนได้เฉพาะรายการที่สถานะเป็น 'เตรียมแล้ว' และมี Location ในสต๊อก"
+                      : "Only staged items with a valid Stock Location can be issued"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOperatorCameraActive(false);
+                  setIsOperatorScannerOpen(false);
+                }}
+                className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 max-h-[82vh] overflow-y-auto">
+              {isOperatorCameraActive && (
+                <div className="rounded-xl overflow-hidden border border-indigo-500/40">
+                  <CameraBarcodeScanner
+                    isThai={isThai}
+                    barcodeOnly={true}
+                    onClose={() => setIsOperatorCameraActive(false)}
+                    onScan={(code) => processOperatorIssueScan(code)}
+                  />
+                </div>
+              )}
+
+              <form onSubmit={handleOperatorBarcodeScan} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                    {isThai
+                      ? "สแกนหรือกรอกรหัส Batch 10 หลัก เพื่อจ่ายออกและตัดสต๊อก:"
+                      : "Scan or enter 10-Digit Batch Code to Issue:"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsOperatorCameraActive((v) => !v)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    <Camera size={13} />
+                    <span>
+                      {isOperatorCameraActive
+                        ? isThai
+                          ? "ปิดกล้องสแกน"
+                          : "Close Camera"
+                        : isThai
+                        ? "เปิดกล้องสแกน"
+                        : "Open Camera"}
+                    </span>
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    ref={operatorScannerInputRef}
+                    type="text"
+                    maxLength={10}
+                    value={operatorBarcodeInput}
+                    onChange={(e) => setOperatorBarcodeInput(e.target.value.toUpperCase())}
+                    placeholder={isThai ? "เช่น 23A0967518" : "e.g. 23A0967518"}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl text-sm font-mono font-extrabold border-2 border-indigo-500 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-extrabold cursor-pointer"
+                  >
+                    {isThai ? "ยืนยันจ่ายออก" : "Issue"}
+                  </button>
+                </div>
+              </form>
+
+              <div
+                className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                  operatorScanStatus.type === "success"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300"
+                    : operatorScanStatus.type === "error"
+                    ? "bg-red-500/15 border-red-500/40 text-red-600 dark:text-red-300"
+                    : operatorScanStatus.type === "warning"
+                    ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-300"
+                    : "bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300"
+                }`}
+              >
+                {operatorScanStatus.type === "success" ? (
+                  <CheckCircle2 size={16} className="shrink-0" />
+                ) : operatorScanStatus.type === "error" ||
+                  operatorScanStatus.type === "warning" ? (
+                  <AlertTriangle size={16} className="shrink-0" />
+                ) : (
+                  <Barcode size={16} className="shrink-0" />
+                )}
+                <span>{operatorScanStatus.message}</span>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOperatorCameraActive(false);
+                    setIsOperatorScannerOpen(false);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-extrabold cursor-pointer"
+                >
+                  {isThai ? "ปิดหน้าต่างสแกน" : "Close"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL 5: OPERATOR WARNING MODAL (Wrong Machine / Missing Location / Not Staged)
+         ===================================================================== */}
+      {operatorWarningModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-[#111e38] border-2 border-red-500 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-3.5 bg-red-600 text-white flex items-center gap-2">
+              <AlertTriangle size={20} />
+              <h3 className="text-sm font-extrabold m-0">{operatorWarningModal.title}</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs font-extrabold text-red-600 dark:text-red-400 m-0 leading-relaxed">
+                {operatorWarningModal.message}
+              </p>
+              {operatorWarningModal.detail && (
+                <p className="text-xs text-slate-600 dark:text-slate-300 m-0 leading-relaxed bg-slate-100 dark:bg-[#0c1930] p-3 rounded-xl border border-slate-200 dark:border-[#1e3a5f]">
+                  {operatorWarningModal.detail}
+                </p>
+              )}
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOperatorWarningModal({ isOpen: false, title: "", message: "" });
+                    setTimeout(() => operatorScannerInputRef.current?.focus(), 60);
+                  }}
+                  className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-extrabold cursor-pointer"
+                >
+                  {isThai ? "รับทราบ" : "Acknowledge"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================================
+          MODAL 6: DELETE PICK LIST ORDER CONFIRMATION MODAL
+         ===================================================================== */}
+      {deleteModalOrderNo && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-2xl shadow-2xl overflow-hidden p-5 space-y-4">
+            <div className="flex items-center gap-2.5 text-red-600 dark:text-red-400">
+              <Trash2 size={20} />
+              <h3 className="text-sm font-extrabold m-0">
+                {isThai ? "ยืนยันการลบใบสั่งเบิก" : "Confirm Delete Pick List Order"}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300 m-0 leading-relaxed">
+              {isThai
+                ? `คุณต้องการลบใบสั่งเบิก Order [${deleteModalOrderNo}] ออกจากระบบใช่หรือไม่? (รายการที่ยังไม่จ่ายออกจะถูกปลดล็อกกลับเป็นสถานะพร้อมใช้)`
+                : `Are you sure you want to delete Order [${deleteModalOrderNo}]?`}
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteModalOrderNo(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 cursor-pointer"
+              >
+                {isThai ? "ยกเลิก" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOrder}
+                className="px-4 py-2 rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-500 text-white cursor-pointer"
+              >
+                {isThai ? "ยืนยันลบใบสั่งเบิก" : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* General Camera Barcode Scanner Modal (Inbound / Relocate / Stock Search) */}
       {isCameraOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md">
@@ -3244,11 +5579,9 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 const code = cleanBarcode(decodedText).toUpperCase();
                 if (!code) return;
                 if (activeMode === "operator_receive") {
-                  setIssueScanInput(code);
-                  handleIssueByScan(undefined, code);
+                  processOperatorIssueScan(code);
                 } else if (activeMode === "outbound") {
-                  setStagingScanInput(code);
-                  handleStageByScan(undefined, code);
+                  processOutboundBarcodeScan(code);
                 } else if (activeMode === "relocate_layout") {
                   setRelocateScanInput(code);
                   handleRelocateScanAdd(undefined, code);

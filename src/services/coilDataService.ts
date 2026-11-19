@@ -103,17 +103,26 @@ export interface CoilStagingItem {
   stagedAt?: string;
   issuedAt?: string;
   description?: string;
+  material?: string;
+  bomItem?: string;
+  unit?: string;
+  storageLocation?: string;
+  isTemporary?: boolean;
+  tempOrderRef?: string;
 }
 
 export interface CoilStagingOrder {
   id: string;
   orderNo: string;
-  machineId: string; // e.g. SM01, SM02, SM03, SM04
+  machineId: string; // e.g. CL01-CL06, SM01-SM04
   createdDate: string; // YYYY-MM-DD
   createdAt: string; // HH:mm:ss
   status: "pending" | "in_progress" | "completed";
   items: CoilStagingItem[];
   remark?: string;
+  isTemporary?: boolean;
+  matchedOrderNo?: string;
+  operatorDismissed?: boolean;
   updatedAt: string;
 }
 
@@ -512,11 +521,17 @@ function sanitizeCoilStagingPayload(order: CoilStagingOrder): CoilStagingOrder {
     thickness: String(itm.thickness || "-").trim().slice(0, 32),
     width: String(itm.width || "-").trim().slice(0, 32),
     weightKg: typeof itm.weightKg === "number" && !isNaN(itm.weightKg) ? itm.weightKg : 0,
-    sourceLocation: String(itm.sourceLocation || "E7/1").trim().slice(0, 64),
+    sourceLocation: String(itm.sourceLocation || "-").trim().slice(0, 64),
     status: itm.status === "issued" ? "issued" : itm.status === "staged" ? "staged" : "pending",
     stagedAt: String(itm.stagedAt || ""),
     issuedAt: String(itm.issuedAt || ""),
     description: String(itm.description || ""),
+    material: itm.material ? String(itm.material).trim().slice(0, 64) : undefined,
+    bomItem: itm.bomItem ? String(itm.bomItem).trim().slice(0, 32) : undefined,
+    unit: itm.unit ? String(itm.unit).trim().slice(0, 16) : undefined,
+    storageLocation: itm.storageLocation ? String(itm.storageLocation).trim().slice(0, 64) : undefined,
+    isTemporary: Boolean(itm.isTemporary),
+    tempOrderRef: itm.tempOrderRef ? String(itm.tempOrderRef).trim().slice(0, 64) : undefined,
   }));
 
   const allIssued = cleanItems.length > 0 && cleanItems.every((i) => i.status === "issued");
@@ -532,12 +547,15 @@ function sanitizeCoilStagingPayload(order: CoilStagingOrder): CoilStagingOrder {
   return stripUndefinedDeep({
     id: docId,
     orderNo: cleanOrderNo,
-    machineId: String(order.machineId || "SM01").trim().toUpperCase().slice(0, 32),
+    machineId: String(order.machineId || "CL01").trim().toUpperCase().slice(0, 32),
     createdDate: String(order.createdDate || dateYmd).slice(0, 32),
     createdAt: String(order.createdAt || timeHms).slice(0, 64),
     status: resolvedStatus,
     items: cleanItems,
     remark: String(order.remark || "").slice(0, 256),
+    isTemporary: Boolean(order.isTemporary || cleanOrderNo.startsWith("TEMP-")),
+    matchedOrderNo: order.matchedOrderNo ? String(order.matchedOrderNo).trim().slice(0, 64) : undefined,
+    operatorDismissed: Boolean(order.operatorDismissed),
     updatedAt: new Date().toISOString(),
   });
 }
@@ -909,18 +927,21 @@ export async function saveCoilStagingOrderToCloud(
         for (const item of cleanOrder.items) {
           if (item.status === "staged") {
             const stockDocId = sanitizeDocId(`COIL-${item.batch}`);
+            const stockUpdate: Record<string, unknown> = {
+              id: stockDocId,
+              batch: item.batch,
+              status: "staged",
+              stagedOrderNo: cleanOrder.orderNo,
+              stagedMachineId: cleanOrder.machineId,
+              stagedAt: item.stagedAt || timestamp,
+              updatedAt: new Date().toISOString(),
+            };
+            if (item.sourceLocation && item.sourceLocation !== "-" && !item.sourceLocation.includes("รอสแกน")) {
+              stockUpdate.location = item.sourceLocation;
+            }
             batch.set(
               doc(dbCoil, COIL_STOCK_COLLECTION, stockDocId),
-              {
-                id: stockDocId,
-                batch: item.batch,
-                location: item.sourceLocation || "STG-SM01",
-                status: "staged",
-                stagedOrderNo: cleanOrder.orderNo,
-                stagedMachineId: cleanOrder.machineId,
-                stagedAt: item.stagedAt || timestamp,
-                updatedAt: new Date().toISOString(),
-              },
+              stockUpdate,
               { merge: true }
             );
 
@@ -930,7 +951,7 @@ export async function saveCoilStagingOrderToCloud(
               batch: item.batch,
               coilNo: item.coilNo,
               weightKg: item.weightKg,
-              fromLocation: item.sourceLocation,
+              fromLocation: item.sourceLocation || "-",
               toLocation: `STAGING (${cleanOrder.machineId})`,
               machineId: cleanOrder.machineId,
               orderNo: cleanOrder.orderNo,
@@ -954,6 +975,25 @@ export async function saveCoilStagingOrderToCloud(
   return cleanOrder;
 }
 
+export async function batchSaveCoilStagingOrdersToCloud(
+  orders: CoilStagingOrder[]
+): Promise<CoilStagingOrder[]> {
+  if (!orders || orders.length === 0) return [];
+  const cleaned = orders.map((o) => sanitizeCoilStagingPayload(o));
+  await runCoilFirestoreWriteWithGuard(
+    async () => {
+      const batch = writeBatch(dbCoil);
+      for (const ord of cleaned) {
+        batch.set(doc(dbCoil, COIL_STAGING_COLLECTION, ord.id), ord, { merge: true });
+      }
+      await batch.commit();
+    },
+    OperationType.WRITE,
+    COIL_STAGING_COLLECTION
+  );
+  return cleaned;
+}
+
 export async function deleteCoilStagingOrderFromCloud(
   order: CoilStagingOrder
 ): Promise<void> {
@@ -966,18 +1006,21 @@ export async function deleteCoilStagingOrderFromCloud(
       for (const item of order.items || []) {
         if (item.status === "staged") {
           const stockDocId = sanitizeDocId(`COIL-${item.batch}`);
+          const resetUpdate: Record<string, unknown> = {
+            id: stockDocId,
+            batch: item.batch,
+            status: "available",
+            stagedOrderNo: "",
+            stagedMachineId: "",
+            stagedAt: "",
+            updatedAt: new Date().toISOString(),
+          };
+          if (item.sourceLocation && item.sourceLocation !== "-" && !item.sourceLocation.includes("รอสแกน")) {
+            resetUpdate.location = item.sourceLocation;
+          }
           batch.set(
             doc(dbCoil, COIL_STOCK_COLLECTION, stockDocId),
-            {
-              id: stockDocId,
-              batch: item.batch,
-              location: item.sourceLocation || "CL1-A01",
-              status: "available",
-              stagedOrderNo: "",
-              stagedMachineId: "",
-              stagedAt: "",
-              updatedAt: new Date().toISOString(),
-            },
+            resetUpdate,
             { merge: true }
           );
         }
