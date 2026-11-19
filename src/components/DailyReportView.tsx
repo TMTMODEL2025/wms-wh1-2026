@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { toCanvas } from "html-to-image";
 import {
   FileText,
   Calendar,
@@ -27,6 +28,15 @@ import {
   Boxes,
   Building2,
   Truck,
+  Camera,
+  Share2,
+  MessageCircle,
+  Copy,
+  Check,
+  X,
+  ExternalLink,
+  Loader2,
+  Image as ImageIcon,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -156,6 +166,23 @@ export function DailyReportView({
   // Section 1: SM01-SM04 Inbound Report Table Pagination State
   const [smInboundPage, setSmInboundPage] = useState<number>(1);
   const [smInboundPageSize, setSmInboundPageSize] = useState<number>(10);
+
+  // Screenshot Capture & LINE Share States (Scoped from Total Inbound KPI Card through Chart 4)
+  const dailySummaryCaptureRef = useRef<HTMLDivElement | null>(null);
+  const [isCapturingSummary, setIsCapturingSummary] = useState<boolean>(false);
+  const [shareModalMode, setShareModalMode] = useState<"capture" | "line" | null>(null);
+  const [capturedSummary, setCapturedSummary] = useState<{
+    dataUrl: string;
+    blob: Blob | null;
+    fileName: string;
+  } | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+  const [captureFeedback, setCaptureFeedback] = useState<{
+    type: "success" | "info" | "error";
+    text: string;
+  } | null>(null);
+  const [customLineMessage, setCustomLineMessage] = useState<string>("");
+  const [isLineMessageEdited, setIsLineMessageEdited] = useState<boolean>(false);
 
   useEffect(() => {
     setSmInboundPage(1);
@@ -2126,6 +2153,355 @@ export function DailyReportView({
     XLSX.writeFile(wb, `WMS_Storage_Space_Report_${todayStr}.xlsx`);
   };
 
+  // Format YYYY-MM-DD as DD/MM/YYYY for manager LINE summary
+  const formattedSelectedDateLabel = useMemo(() => {
+    const parts = selectedDate.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return selectedDate;
+  }, [selectedDate]);
+
+  // Generate Daily Report summary text for sharing to Manager via LINE
+  const generatedLineSummaryMessage = useMemo(() => {
+    const shiftLabel =
+      selectedShift === "day"
+        ? isThai
+          ? "กะเช้า (08:00 - 20:00 น.)"
+          : "Day Shift (08:00 - 20:00)"
+        : isThai
+        ? "กะดึก (20:00 - 08:00 น.)"
+        : "Night Shift (20:00 - 08:00)";
+    const netDeltaKg = totalSmInboundWeightKg - totalDispensedWeightKg;
+    const netDeltaPrefix = netDeltaKg >= 0 ? "+" : "";
+
+    const activeInboundLines = smInboundChartData
+      .filter((d) => (Number(d.inboundKg) || 0) > 0 || (Number(d.coilCount) || 0) > 0)
+      .map(
+        (d) =>
+          `  • ${d.machine}: ${d.inboundKg.toLocaleString()} kg (${d.coilCount} ${isThai ? "รายการ" : "coils"})`
+      );
+
+    const activeDispensedLines = machineDispensingChartData
+      .filter((d) => (Number(d.dispensedKg) || 0) > 0)
+      .map(
+        (d) =>
+          `  • ${d.machine}: ${d.dispensedKg.toLocaleString()} kg (${(d.dispensedKg / 1000).toFixed(3)} TON)`
+      );
+
+    const lines: string[] = [
+      isThai
+        ? `📊 รายงานประจำวัน (Daily Report) — เหล็กสลิต / ฟิล์ม`
+        : `📊 Daily Production & Material Report — Slit Steel / Film`,
+      isThai
+        ? `📅 วันที่: ${formattedSelectedDateLabel} | 🕒 ${shiftLabel}`
+        : `📅 Date: ${formattedSelectedDateLabel} | 🕒 ${shiftLabel}`,
+      `────────────────────`,
+      isThai
+        ? `📥 รับเข้าคลังรวม (เครื่อง & ภายนอก): ${totalSmInboundWeightKg.toLocaleString()} kg (${(totalSmInboundWeightKg / 1000).toFixed(3)} TON / ${smInboundRecords.length} รายการ)`
+        : `📥 Total Inbound: ${totalSmInboundWeightKg.toLocaleString()} kg (${(totalSmInboundWeightKg / 1000).toFixed(3)} TON / ${smInboundRecords.length} coils)`,
+      isThai
+        ? `🚚 รับเข้าภายนอก (ซื้อลูกค้า): ${totalExternalInboundWeightKg.toLocaleString()} kg (${(totalExternalInboundWeightKg / 1000).toFixed(3)} TON / ${externalInboundRecords.length} รายการ)`
+        : `🚚 External Inbound: ${totalExternalInboundWeightKg.toLocaleString()} kg (${(totalExternalInboundWeightKg / 1000).toFixed(3)} TON / ${externalInboundRecords.length} coils)`,
+      isThai
+        ? `📤 เบิกจ่ายหน้าเครื่อง: ${totalDispensedWeightKg.toLocaleString()} kg (${(totalDispensedWeightKg / 1000).toFixed(3)} TON / ${machineDispensingRecords.length} รายการ)`
+        : `📤 Machine Dispensed: ${totalDispensedWeightKg.toLocaleString()} kg (${(totalDispensedWeightKg / 1000).toFixed(3)} TON / ${machineDispensingRecords.length} coils)`,
+      isThai
+        ? `⚖️ ดุลเคลื่อนไหวสุทธิ: ${netDeltaPrefix}${netDeltaKg.toLocaleString()} kg`
+        : `⚖️ Net Movement Delta: ${netDeltaPrefix}${netDeltaKg.toLocaleString()} kg`,
+    ];
+
+    if (activeInboundLines.length > 0) {
+      lines.push(``);
+      lines.push(isThai ? `🔹 สรุปรับเข้าแยกเครื่อง:` : `🔹 Inbound Breakdown:`);
+      lines.push(...activeInboundLines);
+    }
+
+    if (activeDispensedLines.length > 0) {
+      lines.push(``);
+      lines.push(isThai ? `🔸 สรุปเบิกจ่ายรายเครื่องจักร:` : `🔸 Dispensing Breakdown:`);
+      lines.push(...activeDispensedLines);
+    }
+
+    lines.push(``);
+    lines.push(
+      isThai
+        ? `🔄 ยอดรวมทั้ง 2 กะ (กะเช้า+กะดึก): ${(bothShiftsSummary.grandTotalKg / 1000).toFixed(1)} TON (${bothShiftsSummary.grandTotalCoils} ม้วน)`
+        : `🔄 Combined 2 Shifts Total: ${(bothShiftsSummary.grandTotalKg / 1000).toFixed(1)} TON (${bothShiftsSummary.grandTotalCoils} coils)`
+    );
+
+    return lines.join("\n");
+  }, [
+    selectedShift,
+    isThai,
+    formattedSelectedDateLabel,
+    totalSmInboundWeightKg,
+    totalExternalInboundWeightKg,
+    totalDispensedWeightKg,
+    smInboundRecords.length,
+    externalInboundRecords.length,
+    machineDispensingRecords.length,
+    smInboundChartData,
+    machineDispensingChartData,
+    bothShiftsSummary.grandTotalKg,
+    bothShiftsSummary.grandTotalCoils,
+  ]);
+
+  useEffect(() => {
+    if (!isLineMessageEdited) {
+      setCustomLineMessage(generatedLineSummaryMessage);
+    }
+  }, [generatedLineSummaryMessage, isLineMessageEdited]);
+
+  const activeLineMessage = isLineMessageEdited ? customLineMessage : generatedLineSummaryMessage;
+  const lineShareHref = `https://line.me/R/share?text=${encodeURIComponent(activeLineMessage)}`;
+
+  const showTransientCaptureFeedback = useCallback(
+    (type: "success" | "info" | "error", text: string) => {
+      setCaptureFeedback({ type, text });
+    },
+    []
+  );
+
+  // Trigger PNG download helper
+  const triggerImageDownload = useCallback((dataUrl: string, fileName: string) => {
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, []);
+
+  // Capture DOM range strictly from Total Inbound KPI card through Chart 4
+  const captureDailySummaryRange = useCallback(async () => {
+    const targetEl = dailySummaryCaptureRef.current;
+    if (!targetEl) {
+      setCaptureError(
+        isThai
+          ? "ไม่พบส่วนกราฟและสรุปรายงานประจำวันบนหน้าจอ"
+          : "Daily report summary section not found on screen."
+      );
+      return null;
+    }
+
+    setIsCapturingSummary(true);
+    setCaptureError(null);
+
+    try {
+      const isDark =
+        typeof document !== "undefined" &&
+        document.documentElement.classList.contains("dark");
+      const bgColor = isDark ? "#0b1426" : "#f8fafc";
+      const pixelRatio = 2;
+
+      let rawCanvas: HTMLCanvasElement;
+      try {
+        rawCanvas = await toCanvas(targetEl, {
+          pixelRatio,
+          cacheBust: true,
+          backgroundColor: bgColor,
+        });
+      } catch {
+        // Fallback retry without embedding cross-origin font stylesheets
+        rawCanvas = await toCanvas(targetEl, {
+          pixelRatio,
+          cacheBust: true,
+          backgroundColor: bgColor,
+          skipFonts: true,
+        });
+      }
+
+      const paddingPx = 16 * pixelRatio;
+      const paddedCanvas = document.createElement("canvas");
+      paddedCanvas.width = rawCanvas.width + paddingPx * 2;
+      paddedCanvas.height = rawCanvas.height + paddingPx * 2;
+      const ctx = paddedCanvas.getContext("2d");
+
+      let finalCanvas = rawCanvas;
+      if (ctx) {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, paddedCanvas.width, paddedCanvas.height);
+        ctx.drawImage(rawCanvas, paddingPx, paddingPx);
+        finalCanvas = paddedCanvas;
+      }
+
+      const dataUrl = finalCanvas.toDataURL("image/png");
+      const blob = await new Promise<Blob | null>((resolve) =>
+        finalCanvas.toBlob((b) => resolve(b), "image/png")
+      );
+      const shiftTag = selectedShift === "day" ? "Day" : "Night";
+      const fileName = `Daily-Report-Slit_${selectedDate}_${shiftTag}.png`;
+
+      const result = { dataUrl, blob, fileName };
+      setCapturedSummary(result);
+      return result;
+    } catch (err) {
+      console.error("Failed to capture daily report summary:", err);
+      setCaptureError(
+        isThai
+          ? "ไม่สามารถสร้างภาพแคปหน้าจอได้ กรุณาลองใหม่อีกครั้ง"
+          : "Unable to capture screenshot. Please try again."
+      );
+      return null;
+    } finally {
+      setIsCapturingSummary(false);
+    }
+  }, [isThai, selectedDate, selectedShift]);
+
+  // Action 1: แคปหน้าจอ (Captures exact range, downloads PNG immediately, and shows preview modal)
+  const handleCaptureScreenshotClick = useCallback(async () => {
+    setCaptureFeedback(null);
+    const result = await captureDailySummaryRange();
+    setShareModalMode("capture");
+    if (result) {
+      triggerImageDownload(result.dataUrl, result.fileName);
+      showTransientCaptureFeedback(
+        "success",
+        isThai
+          ? `บันทึกรูปภาพ ${result.fileName} เรียบร้อยแล้ว — สามารถกดคัดลอกรูปเพื่อวางใน LINE ได้ทันที`
+          : `Saved ${result.fileName} — you can also copy the image to paste directly in LINE.`
+      );
+    }
+  }, [captureDailySummaryRange, triggerImageDownload, showTransientCaptureFeedback, isThai]);
+
+  // Action 2: แชร์ส่ง LINE (Captures exact range + prepares manager summary text and opens LINE Share Modal)
+  const handleOpenLineShareClick = useCallback(async () => {
+    setCaptureFeedback(null);
+    setIsLineMessageEdited(false);
+    setCustomLineMessage(generatedLineSummaryMessage);
+    setShareModalMode("line");
+    await captureDailySummaryRange();
+  }, [captureDailySummaryRange, generatedLineSummaryMessage]);
+
+  // Copy captured PNG image to clipboard (for instant Ctrl+V into LINE PC / mobile)
+  const handleCopyCapturedImage = useCallback(async () => {
+    if (!capturedSummary?.blob) return;
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard &&
+        typeof navigator.clipboard.write === "function" &&
+        typeof ClipboardItem !== "undefined"
+      ) {
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": capturedSummary.blob }),
+        ]);
+        showTransientCaptureFeedback(
+          "success",
+          isThai
+            ? "คัดลอกรูปภาพสำเร็จ! กดวาง (Ctrl+V หรือ Paste) ในแชท LINE ผู้จัดการได้เลย"
+            : "Image copied! Paste directly into LINE chat."
+        );
+        return;
+      }
+      showTransientCaptureFeedback(
+        "info",
+        isThai
+          ? "เบราว์เซอร์ไม่รองรับการคัดลอกรูปโดยตรง กรุณากด 'บันทึกรูปภาพ (.PNG)' แล้วส่งเข้า LINE"
+          : "Direct image copy is not supported in this browser. Please download the PNG instead."
+      );
+    } catch {
+      showTransientCaptureFeedback(
+        "info",
+        isThai
+          ? "เบราว์เซอร์จำกัดสิทธิ์การคัดลอกรูป กรุณากด 'บันทึกรูปภาพ (.PNG)' แล้วแนบส่งใน LINE"
+          : "Browser restricted image clipboard access. Please download the PNG file to share."
+      );
+    }
+  }, [capturedSummary, showTransientCaptureFeedback, isThai]);
+
+  // Copy text summary to clipboard with execCommand fallback
+  const handleCopyLineText = useCallback(async () => {
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(activeLineMessage);
+        showTransientCaptureFeedback(
+          "success",
+          isThai
+            ? "คัดลอกข้อความสรุปแล้ว! กดวางส่งในแชท LINE ผู้จัดการได้เลย"
+            : "Summary text copied for LINE!"
+        );
+        return;
+      }
+    } catch {
+      // Fallback below
+    }
+
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = activeLineMessage;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (ok) {
+        showTransientCaptureFeedback(
+          "success",
+          isThai
+            ? "คัดลอกข้อความสรุปแล้ว! กดวางส่งในแชท LINE ผู้จัดการได้เลย"
+            : "Summary text copied for LINE!"
+        );
+        return;
+      }
+    } catch {
+      // Ignore
+    }
+
+    showTransientCaptureFeedback(
+      "error",
+      isThai
+        ? "ไม่สามารถคัดลอกอัตโนมัติได้ กรุณาเลือกข้อความด้านบนแล้วคัดลอกด้วยตนเอง"
+        : "Auto-copy unavailable. Please select and copy the text manually."
+    );
+  }, [activeLineMessage, showTransientCaptureFeedback, isThai]);
+
+  // Native Web Share API (shares actual PNG image file + summary text straight to LINE on mobile!)
+  const canUseNativeShare =
+    typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  const handleNativeShareWithImage = useCallback(async () => {
+    if (typeof navigator === "undefined" || typeof navigator.share !== "function") return;
+    try {
+      if (capturedSummary?.blob && typeof File !== "undefined") {
+        const pngFile = new File([capturedSummary.blob], capturedSummary.fileName, {
+          type: "image/png",
+        });
+        if (typeof navigator.canShare === "function" && navigator.canShare({ files: [pngFile] })) {
+          await navigator.share({
+            title: isThai
+              ? `รายงานประจำวัน เหล็กสลิต (${formattedSelectedDateLabel})`
+              : `Daily Slit Report (${formattedSelectedDateLabel})`,
+            text: activeLineMessage,
+            files: [pngFile],
+          });
+          showTransientCaptureFeedback(
+            "success",
+            isThai ? "เปิดหน้าต่างแชร์รูปภาพและข้อความเรียบร้อยแล้ว" : "Shared image & summary!"
+          );
+          return;
+        }
+      }
+
+      await navigator.share({
+        title: isThai
+          ? `รายงานประจำวัน เหล็กสลิต (${formattedSelectedDateLabel})`
+          : `Daily Slit Report (${formattedSelectedDateLabel})`,
+        text: activeLineMessage,
+      });
+    } catch (err: any) {
+      if (err?.name === "AbortError") return;
+      showTransientCaptureFeedback(
+        "info",
+        isThai
+          ? "ไม่สามารถแชร์ไฟล์โดยตรงบนอุปกรณ์นี้ได้ กรุณาใช้ปุ่ม 'บันทึกรูปภาพ (.PNG)' หรือ 'เปิด LINE แชร์ข้อความ'"
+          : "Direct file share is unavailable on this device. Please download the PNG or open LINE."
+      );
+    }
+  }, [capturedSummary, activeLineMessage, formattedSelectedDateLabel, isThai, showTransientCaptureFeedback]);
+
   return (
     <div className="space-y-3 sm:space-y-6 pb-8 sm:pb-12 animate-fade-in text-slate-800 dark:text-slate-100">
       {/* =========================================================================
@@ -2283,7 +2659,47 @@ export function DailyReportView({
             </span>
           </div>
 
-          {/* 3. Export Excel */}
+          {/* 3. Capture Screenshot (Scoped: Total Inbound Card -> Chart 4) */}
+          <button
+            type="button"
+            onClick={handleCaptureScreenshotClick}
+            disabled={isCapturingSummary}
+            title={
+              isThai
+                ? "แคปภาพเฉพาะส่วนสรุป (รับเข้าคลังรวม ถึง 4. กราฟแนวโน้มรายชั่วโมง)"
+                : "Capture summary dashboard (Total Inbound through Chart 4)"
+            }
+            className="flex h-[35px] px-2.5 sm:px-3 rounded-md text-xs font-bold bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+          >
+            {isCapturingSummary && shareModalMode !== "line" ? (
+              <Loader2 size={14} className="shrink-0 animate-spin" />
+            ) : (
+              <Camera size={14} className="shrink-0" />
+            )}
+            <span>{isThai ? "แคปหน้าจอ" : "Screenshot"}</span>
+          </button>
+
+          {/* 4. Share to LINE (Scoped Image + Summary Text for Manager) */}
+          <button
+            type="button"
+            onClick={handleOpenLineShareClick}
+            disabled={isCapturingSummary}
+            title={
+              isThai
+                ? "แชร์ภาพสรุปและข้อความแจ้งผู้จัดการผ่าน LINE"
+                : "Share summary image & message to Manager via LINE"
+            }
+            className="flex h-[35px] px-2.5 sm:px-3 rounded-md text-xs font-bold bg-[#06C755] hover:bg-[#05b34c] disabled:opacity-60 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+          >
+            {isCapturingSummary && shareModalMode === "line" ? (
+              <Loader2 size={14} className="shrink-0 animate-spin" />
+            ) : (
+              <MessageCircle size={14} className="shrink-0" />
+            )}
+            <span>{isThai ? "แชร์ส่ง LINE" : "Share LINE"}</span>
+          </button>
+
+          {/* 5. Export Excel */}
           <button
             type="button"
             onClick={exportToExcel}
@@ -2293,7 +2709,7 @@ export function DailyReportView({
             <span>{isThai ? "ส่งออก Excel" : "Export"}</span>
           </button>
 
-          {/* 4. Print Report */}
+          {/* 6. Print Report */}
           <button
             type="button"
             onClick={() => window.print()}
@@ -2305,6 +2721,12 @@ export function DailyReportView({
         </div>
       </div>
 
+      {/* =========================================================================
+          CAPTURE BOUNDARY WRAPPER:
+          Covers strictly from KPI Card "รับเข้าคลังรวม (เครื่อง & ภายนอก)"
+          through "4. กราฟแนวโน้มการรับเข้า-เบิกจ่าย รายชั่วโมงในกะ"
+          ========================================================================= */}
+      <div ref={dailySummaryCaptureRef} className="space-y-3 sm:space-y-6">
       {/* =========================================================================
           SECTION 3 KPI SUMMARY CARDS (Top Overview Dashboard)
           ========================================================================= */}
@@ -2911,6 +3333,7 @@ export function DailyReportView({
             </svg>
           </div>
         </div>
+      </div>
       </div>
 
       {/* =========================================================================
@@ -4839,6 +5262,269 @@ export function DailyReportView({
             </section>
           )}
         </>
+      )}
+
+      {/* =========================================================================
+          SCREENSHOT PREVIEW & LINE SHARE MODAL (Scoped: Total Inbound -> Chart 4)
+          ========================================================================= */}
+      {shareModalMode !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/65 backdrop-blur-xs p-3 sm:p-5"
+          onClick={() => setShareModalMode(null)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-[#0f1d36] border border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0b162b] flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={`p-2 rounded-xl shrink-0 ${
+                    shareModalMode === "line"
+                      ? "bg-[#06C755]/15 text-[#06C755] border border-[#06C755]/30"
+                      : "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30"
+                  }`}
+                >
+                  {shareModalMode === "line" ? <MessageCircle size={18} /> : <Camera size={18} />}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
+                    {shareModalMode === "line"
+                      ? isThai
+                        ? "แชร์รายงานประจำวันส่ง LINE แจ้งผู้จัดการ"
+                        : "Share Daily Report to Manager via LINE"
+                      : isThai
+                      ? "แคปหน้าจอสรุปรายงานประจำวัน (Daily Report)"
+                      : "Daily Report Summary Screenshot"}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                    {isThai
+                      ? `ขอบเขตภาพ: รับเข้าคลังรวม (เครื่อง & ภายนอก) ถึง 4. กราฟแนวโน้มรายชั่วโมง · วันที่ ${formattedSelectedDateLabel}`
+                      : `Scope: Total Inbound Card through 4. Hourly Throughput · ${formattedSelectedDateLabel}`}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShareModalMode(null)}
+                aria-label="Close"
+                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Mode Switcher Tabs */}
+            <div className="px-4 sm:px-5 pt-3 bg-white dark:bg-[#0f1d36] flex items-center gap-2 border-b border-slate-100 dark:border-[#1e3a5f]/70 pb-2.5">
+              <button
+                type="button"
+                onClick={() => setShareModalMode("capture")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  shareModalMode === "capture"
+                    ? "bg-sky-600 text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-[#162848] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#1e345c]"
+                }`}
+              >
+                <ImageIcon size={14} />
+                <span>{isThai ? "ภาพแคปหน้าจอ (.PNG)" : "Screenshot (.PNG)"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShareModalMode("line")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  shareModalMode === "line"
+                    ? "bg-[#06C755] text-white shadow-xs"
+                    : "bg-slate-100 dark:bg-[#162848] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#1e345c]"
+                }`}
+              >
+                <MessageCircle size={14} />
+                <span>{isThai ? "แชร์ส่ง LINE ผู้จัดการ" : "Share to LINE"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={captureDailySummaryRange}
+                disabled={isCapturingSummary}
+                className="ml-auto px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-[#162848] hover:bg-slate-200 dark:hover:bg-[#1e345c] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#244370] flex items-center gap-1 cursor-pointer disabled:opacity-50"
+              >
+                {isCapturingSummary ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Camera size={12} />
+                )}
+                <span>{isThai ? "แคปใหม่" : "Recapture"}</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {captureFeedback && (
+                <div
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border ${
+                    captureFeedback.type === "success"
+                      ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                      : captureFeedback.type === "error"
+                      ? "bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200"
+                      : "bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200"
+                  }`}
+                >
+                  <Check size={14} className="shrink-0" />
+                  <span>{captureFeedback.text}</span>
+                </div>
+              )}
+
+              {/* Captured Image Preview Box */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <ImageIcon size={14} className="text-sky-500" />
+                    <span>
+                      {isThai
+                        ? "ตัวอย่างภาพที่จะส่งให้ผู้จัดการ (เฉพาะ Card รับเข้าคลังรวม → กราฟที่ 4)"
+                        : "Captured Report Image (Total Inbound Card → Chart 4)"}
+                    </span>
+                  </span>
+                  {capturedSummary && (
+                    <span className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[220px]">
+                      {capturedSummary.fileName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#081020] p-2 sm:p-3 flex items-center justify-center min-h-[180px] max-h-[360px] overflow-auto">
+                  {isCapturingSummary ? (
+                    <div className="flex flex-col items-center justify-center gap-2 py-10 text-slate-500 dark:text-slate-400">
+                      <Loader2 size={28} className="animate-spin text-sky-500" />
+                      <span className="text-xs font-bold">
+                        {isThai ? "กำลังแคปภาพรายงานประจำวัน..." : "Capturing Daily Report..."}
+                      </span>
+                    </div>
+                  ) : captureError ? (
+                    <div className="text-xs font-semibold text-rose-600 dark:text-rose-400 text-center py-8">
+                      {captureError}
+                    </div>
+                  ) : capturedSummary ? (
+                    <img
+                      src={capturedSummary.dataUrl}
+                      alt={capturedSummary.fileName}
+                      className="w-full h-auto rounded-lg shadow-md border border-slate-200/80 dark:border-slate-700/80"
+                    />
+                  ) : (
+                    <div className="text-xs text-slate-400 py-8">
+                      {isThai ? "ยังไม่มีภาพแคปหน้าจอ" : "No screenshot captured yet."}
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Image Actions */}
+                {capturedSummary && !isCapturingSummary && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        triggerImageDownload(capturedSummary.dataUrl, capturedSummary.fileName)
+                      }
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-xs cursor-pointer transition-all active:scale-95"
+                    >
+                      <Download size={13} />
+                      <span>{isThai ? "บันทึกรูปภาพ (.PNG)" : "Download .PNG"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleCopyCapturedImage}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-[#162848] hover:bg-slate-100 dark:hover:bg-[#1e345c] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#244370] cursor-pointer transition-all active:scale-95"
+                    >
+                      <Copy size={13} />
+                      <span>{isThai ? "คัดลอกรูป (วางใน LINE)" : "Copy Image"}</span>
+                    </button>
+
+                    {canUseNativeShare && (
+                      <button
+                        type="button"
+                        onClick={handleNativeShareWithImage}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#06C755] hover:bg-[#05b34c] text-white shadow-xs cursor-pointer transition-all active:scale-95"
+                      >
+                        <Share2 size={13} />
+                        <span>{isThai ? "แชร์รูปเข้า LINE / แอป" : "Share Image via App"}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Editable LINE Summary Text (Shown prominently in LINE mode) */}
+              {shareModalMode === "line" && (
+                <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-[#1e3a5f]">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {isThai
+                        ? "ข้อความสรุปสำหรับส่งแจ้งผู้จัดการใน LINE (แก้ไขเพิ่มเติมได้)"
+                        : "Summary message for Manager in LINE (editable)"}
+                    </label>
+                    {isLineMessageEdited && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLineMessageEdited(false);
+                          setCustomLineMessage(generatedLineSummaryMessage);
+                        }}
+                        className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
+                      >
+                        {isThai ? "รีเซ็ตข้อความอัตโนมัติ" : "Reset text"}
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={activeLineMessage}
+                    onChange={(e) => {
+                      setCustomLineMessage(e.target.value);
+                      setIsLineMessageEdited(true);
+                    }}
+                    className="w-full rounded-xl border border-slate-300 dark:border-[#244370] bg-slate-50 dark:bg-[#0a1426] p-3 text-xs font-mono text-slate-900 dark:text-slate-100 leading-relaxed focus:outline-none focus:border-[#06C755]"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-4 sm:px-5 py-3 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0b162b] flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setShareModalMode(null)}
+                className="px-3.5 py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                {isThai ? "ปิดหน้าต่าง" : "Close"}
+              </button>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyLineText}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white cursor-pointer"
+                >
+                  <Copy size={13} />
+                  <span>{isThai ? "คัดลอกข้อความ" : "Copy Text"}</span>
+                </button>
+
+                <a
+                  href={lineShareHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white shadow-xs transition-opacity hover:opacity-95 bg-[#06C755]"
+                >
+                  <MessageCircle size={14} />
+                  <span>{isThai ? "เปิด LINE แชร์ให้ผู้จัดการ" : "Open LINE Share"}</span>
+                  <ExternalLink size={12} />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
