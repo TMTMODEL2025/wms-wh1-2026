@@ -635,28 +635,28 @@ export function TransferCarReport({
           </div>
 
           {/* Row 2: Action Tools - Month Picker, Machine Filter, Export Excel */}
-          <div className="flex flex-wrap items-center justify-between gap-2 w-full">
-            <div className="flex flex-wrap items-center gap-2 flex-1 sm:flex-initial">
+          <div className="flex flex-nowrap sm:flex-wrap items-center justify-between gap-1.5 sm:gap-2 w-full">
+            <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto sm:flex-initial min-w-0">
               {/* Month Selector */}
-              <div className="flex h-[35px] items-center gap-1.5 px-2.5 rounded-md border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
-                <Calendar size={14} className="text-amber-500 shrink-0" />
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
+              <div className="flex h-[32px] sm:h-[35px] items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 rounded-md border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] flex-1 min-w-0 sm:flex-initial sm:shrink-0">
+                <Calendar size={13} className="text-amber-500 shrink-0 sm:w-[14px] sm:h-[14px]" />
+                <label className="hidden sm:inline text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
                   {isThai ? "เดือน/ปี:" : "Month:"}
                 </label>
                 <input
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="h-[27px] px-2 rounded bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-xs"
+                  className="h-[24px] sm:h-[27px] w-full min-w-0 sm:w-auto px-1 sm:px-2 rounded bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-[10.5px] sm:text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-xs"
                 />
               </div>
 
               {/* Machine Filter Toggle Buttons */}
-              <div className="inline-flex h-[35px] flex-1 sm:flex-initial items-center rounded-md p-0.5 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] shrink-0">
+              <div className="inline-flex h-[32px] sm:h-[35px] shrink-0 items-center rounded-md p-0.5 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f]">
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("ALL")}
-                  className={`h-[29px] flex-1 sm:flex-initial px-2.5 sm:px-3 rounded text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`h-[26px] sm:h-[29px] px-1.5 sm:px-3 rounded text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     selectedMachineFilter === "ALL"
                       ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -668,7 +668,7 @@ export function TransferCarReport({
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("TM06")}
-                  className={`h-[29px] flex-1 sm:flex-initial px-2.5 sm:px-3 rounded text-xs font-bold transition-all cursor-pointer ${
+                  className={`h-[26px] sm:h-[29px] px-1.5 sm:px-3 rounded text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     selectedMachineFilter === "TM06"
                       ? "bg-amber-500 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -679,7 +679,7 @@ export function TransferCarReport({
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("TM07")}
-                  className={`h-[29px] flex-1 sm:flex-initial px-2.5 sm:px-3 rounded text-xs font-bold transition-all cursor-pointer ${
+                  className={`h-[26px] sm:h-[29px] px-1.5 sm:px-3 rounded text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     selectedMachineFilter === "TM07"
                       ? "bg-blue-600 text-white shadow-xs"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"

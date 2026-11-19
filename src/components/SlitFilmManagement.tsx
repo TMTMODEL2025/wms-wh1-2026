@@ -2053,17 +2053,19 @@ export function SlitFilmManagement({
     }
   }, [isEmergencyModalOpen, isEmergencyCameraActive]);
 
-  // Auto-focus scanner input when Outbound Scanner Modal opens
+  // Auto-focus scanner input only when camera is off, and deactivate camera when modal closes
   useEffect(() => {
-    if (isOutboundScannerOpen) {
-      setIsOutboundCameraActive(false);
+    if (isOutboundScannerOpen && !isOutboundCameraActive) {
       const timer = setTimeout(() => {
         outboundScannerInputRef.current?.focus();
         outboundScannerInputRef.current?.select();
       }, 120);
       return () => clearTimeout(timer);
     }
-  }, [isOutboundScannerOpen]);
+    if (!isOutboundScannerOpen) {
+      setIsOutboundCameraActive(false);
+    }
+  }, [isOutboundScannerOpen, isOutboundCameraActive]);
 
   // Set of batches/orders that have been scanned and issued at "จ่ายหน้าเครื่อง" (Operator Receive / Machine Issue)
   const outboundIssuedBatchSet = useMemo(() => {
@@ -7135,6 +7137,7 @@ export function SlitFilmManagement({
                                 setSelectedOrderNo(order.orderNo);
                                 setOutboundBarcodeInput("");
                                 setOutboundScanStatus(null);
+                                setIsOutboundCameraActive(true);
                                 setIsOutboundScannerOpen(true);
                               }}
                               className="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[9.5px] sm:text-[11px] font-bold leading-tight bg-amber-600 hover:bg-amber-700 text-white shadow-2xs inline-flex items-center gap-0.5 sm:gap-1 cursor-pointer active:scale-95 whitespace-nowrap"
@@ -11160,11 +11163,11 @@ export function SlitFilmManagement({
           onMouseDown={() => setIsOutboundScannerOpen(false)}
         >
           <div
-            className="w-full max-w-xl mt-0 rounded-b-2xl rounded-t-none border-t-0 border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
+            className="w-full max-w-xl max-h-[95vh] flex flex-col mt-0 rounded-b-2xl rounded-t-none border-t-0 border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Modal Header - Clean without subtext */}
-            <div className="p-3 border-b flex items-center justify-between bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+            <div className="p-3 border-b flex items-center justify-between bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f] shrink-0">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
                   <Barcode size={18} />
@@ -11183,7 +11186,7 @@ export function SlitFilmManagement({
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 space-y-3">
+            <div className="p-4 space-y-3 overflow-y-auto">
               {/* 1. Barcode Input Form (At Very Top) */}
               <form
                 onSubmit={(e) => {
