@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   Users,
   Plus,
@@ -29,6 +29,9 @@ import {
   ChevronRight,
   X,
   ClipboardList,
+  Camera,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import {
   Employee,
@@ -52,6 +55,55 @@ import {
   subscribeToMhDailyDuties,
 } from "../services/forkliftDataService";
 import { DailyDutyAssignmentPanel } from "./DailyDutyAssignmentPanel";
+
+/**
+ * บีบอัดรูปถ่ายพนักงานให้เป็นขนาดไม่เกิน 320x320 px (JPEG 82%)
+ * เพื่อความรวดเร็วในการบันทึกและซิงค์ขึ้น Cloud / localStorage
+ */
+async function compressEmployeePhoto(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("กรุณาเลือกไฟล์รูปภาพเท่านั้น (JPG, PNG, WEBP)");
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("ไม่สามารถอ่านไฟล์รูปภาพได้"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("ไฟล์รูปภาพไม่ถูกต้อง"));
+      img.onload = () => {
+        const maxSize = 320;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxSize) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(reader.result as string);
+          return;
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedDataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        resolve(compressedDataUrl);
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 interface EmployeeManagementProps {
   employees: Employee[];
@@ -94,6 +146,10 @@ export function EmployeeManagement({
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [viewingEmployee, setViewingEmployee] = useState<Employee | null>(null);
   const [assigningVehicleEmployee, setAssigningVehicleEmployee] = useState<Employee | null>(null);
+
+  // Quick photo upload from table row
+  const quickPhotoInputRef = useRef<HTMLInputElement | null>(null);
+  const [quickPhotoTargetEmp, setQuickPhotoTargetEmp] = useState<Employee | null>(null);
 
   // In-place confirmation state for Deactivation
   const [confirmingDeactivateId, setConfirmingDeactivateId] = useState<string | null>(null);
@@ -291,6 +347,7 @@ export function EmployeeManagement({
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
     allowedSections: WmsSectionId[];
+    photoUrl?: string;
     licenseType?: string;
     notes?: string;
   }) => {
@@ -341,6 +398,7 @@ export function EmployeeManagement({
       phoneNumber: cleanPhone,
       employmentStatus: form.employmentStatus,
       allowedSections: form.allowedSections,
+      photoUrl: form.photoUrl || undefined,
       licenseType: form.role === "Driver" ? form.licenseType?.trim() || "Class 2 Industrial Heavy Equipment" : undefined,
       notes: form.notes?.trim() || undefined,
       legacyDriverId: form.role === "Driver" ? trimmedId : undefined,
@@ -380,6 +438,7 @@ export function EmployeeManagement({
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
     allowedSections: WmsSectionId[];
+    photoUrl?: string;
     licenseType?: string;
     notes?: string;
   }) => {
@@ -433,6 +492,7 @@ export function EmployeeManagement({
           phoneNumber: cleanPhone,
           employmentStatus: form.employmentStatus,
           allowedSections: form.allowedSections,
+          photoUrl: form.photoUrl || undefined,
           licenseType: form.role === "Driver" ? form.licenseType?.trim() || emp.licenseType : undefined,
           notes: form.notes?.trim() || undefined,
           updatedAt: timestampStr,
@@ -452,6 +512,70 @@ export function EmployeeManagement({
     );
 
     return { success: true };
+  };
+
+  // HANDLER: QUICK PHOTO UPLOAD / UPDATE FOR AN EMPLOYEE
+  const handleUpdateEmployeePhoto = (targetEmployee: Employee, newPhotoUrl?: string) => {
+    const now = new Date();
+    const timestampStr =
+      now.toLocaleDateString("en-CA") +
+      " " +
+      now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+
+    const updatedList = employees.map((emp) => {
+      if (emp.employeeId === targetEmployee.employeeId) {
+        return {
+          ...emp,
+          photoUrl: newPhotoUrl || undefined,
+          updatedAt: timestampStr,
+        };
+      }
+      return emp;
+    });
+
+    onUpdateEmployees(updatedList);
+
+    if (viewingEmployee && viewingEmployee.employeeId === targetEmployee.employeeId) {
+      setViewingEmployee({
+        ...viewingEmployee,
+        photoUrl: newPhotoUrl || undefined,
+        updatedAt: timestampStr,
+      });
+    }
+
+    showToast(
+      newPhotoUrl
+        ? `อัปเดตรูปถ่ายของ ${targetEmployee.employeeName} (${targetEmployee.employeeId}) เรียบร้อยแล้ว`
+        : `ลบรูปถ่ายของ ${targetEmployee.employeeName} (${targetEmployee.employeeId}) เรียบร้อยแล้ว`
+    );
+
+    onLogTransaction?.(
+      `${newPhotoUrl ? "Uploaded" : "Removed"} employee photo for ${targetEmployee.employeeId} (${targetEmployee.employeeName})`,
+      targetEmployee.employeeId,
+      "Completed"
+    );
+  };
+
+  const handleTriggerQuickPhotoUpload = (targetEmployee: Employee) => {
+    setQuickPhotoTargetEmp(targetEmployee);
+    if (quickPhotoInputRef.current) {
+      quickPhotoInputRef.current.value = "";
+      quickPhotoInputRef.current.click();
+    }
+  };
+
+  const handleQuickPhotoFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !quickPhotoTargetEmp) return;
+    try {
+      const compressed = await compressEmployeePhoto(file);
+      handleUpdateEmployeePhoto(quickPhotoTargetEmp, compressed);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "อัปโหลดรูปภาพไม่สำเร็จ", "error");
+    } finally {
+      setQuickPhotoTargetEmp(null);
+      e.target.value = "";
+    }
   };
 
   // HANDLER: IN-PLACE ACTIVATE / DEACTIVATE
@@ -789,6 +913,15 @@ export function EmployeeManagement({
           </button>
         </div>
 
+        {/* Hidden File Input for Quick Photo Upload from Table */}
+        <input
+          ref={quickPhotoInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleQuickPhotoFileSelected}
+        />
+
         {/* Data Table */}
         <div className="table-wrap">
           <table>
@@ -808,7 +941,7 @@ export function EmployeeManagement({
                     className="sort-button"
                     onClick={() => handleSort("employeeName")}
                   >
-                    Employee Name {sortKey === "employeeName" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+                    Employee Name & Photo {sortKey === "employeeName" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
                   </button>
                 </th>
                 <th>
@@ -875,30 +1008,54 @@ export function EmployeeManagement({
                     </td>
 
                     <td>
-                      <div className="emp-name">{emp.employeeName}</div>
-                      {todayDuty && (
-                        <div style={{ fontSize: 10, color: "#0369a1", marginTop: 2, fontWeight: 600 }}>
-                          {todayDuty.team} · {todayDuty.shift} · {todayDuty.workArea}
-                          {todayDuty.vehicleNumber && todayDuty.vehicleNumber !== "-"
-                            ? ` · รถ ${todayDuty.vehicleNumber}`
-                            : ""}
-                        </div>
-                      )}
-                      {!todayDuty && emp.role === "Driver" && todayAssignment && (
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: "#0369a1",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 4,
-                            marginTop: 2,
-                          }}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleTriggerQuickPhotoUpload(emp)}
+                          title="คลิกเพื่ออัปโหลดหรือเปลี่ยนรูปถ่ายพนักงาน"
+                          className="group relative flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-sky-600 text-xs font-bold text-white shadow-xs transition hover:ring-2 hover:ring-sky-500 dark:border-slate-700"
                         >
-                          <Truck size={10} />
-                          On Duty Today: <strong>{todayAssignment.vehicleNumber}</strong> ({todayAssignment.status})
+                          {emp.photoUrl ? (
+                            <img
+                              src={emp.photoUrl}
+                              alt={emp.employeeName}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span>{emp.employeeName.trim().charAt(0).toUpperCase() || "E"}</span>
+                          )}
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Camera size={14} className="text-white" />
+                          </span>
+                        </button>
+
+                        <div className="min-w-0">
+                          <div className="emp-name">{emp.employeeName}</div>
+                          {todayDuty && (
+                            <div style={{ fontSize: 10, color: "#0369a1", marginTop: 2, fontWeight: 600 }}>
+                              {todayDuty.team} · {todayDuty.shift} · {todayDuty.workArea}
+                              {todayDuty.vehicleNumber && todayDuty.vehicleNumber !== "-"
+                                ? ` · รถ ${todayDuty.vehicleNumber}`
+                                : ""}
+                            </div>
+                          )}
+                          {!todayDuty && emp.role === "Driver" && todayAssignment && (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#0369a1",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 4,
+                                marginTop: 2,
+                              }}
+                            >
+                              <Truck size={10} />
+                              On Duty Today: <strong>{todayAssignment.vehicleNumber}</strong> ({todayAssignment.status})
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </td>
 
                     <td>
@@ -1156,6 +1313,7 @@ export function EmployeeManagement({
           activeAssignment={activeDriverAssignmentMap.get(viewingEmployee.employeeId)}
           assignmentCount={employeeAssignmentCountMap.get(viewingEmployee.employeeId) || 0}
           onClose={() => setViewingEmployee(null)}
+          onUpdatePhoto={(newPhotoUrl) => handleUpdateEmployeePhoto(viewingEmployee, newPhotoUrl)}
           onEdit={() => {
             const target = viewingEmployee;
             setViewingEmployee(null);
@@ -1205,6 +1363,99 @@ function EmploymentStatusBadge({ status }: { status: EmploymentStatus }) {
   );
 }
 
+// REUSABLE EMPLOYEE PHOTO PICKER COMPONENT
+function EmployeePhotoPicker({
+  photoUrl,
+  employeeName,
+  onChangePhoto,
+  onError,
+}: {
+  photoUrl?: string;
+  employeeName: string;
+  onChangePhoto: (newPhotoUrl?: string) => void;
+  onError?: (errText: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const compressed = await compressEmployeePhoto(file);
+      onChangePhoto(compressed);
+    } catch (err) {
+      onError?.(err instanceof Error ? err.message : "อัปโหลดรูปภาพไม่สำเร็จ");
+    } finally {
+      setIsUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
+      <div className="flex items-center gap-3.5">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          title="คลิกเพื่อเลือกรูปถ่ายพนักงาน"
+          className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-sky-500/50 bg-sky-600 text-lg font-bold text-white shadow-sm transition hover:border-sky-500"
+        >
+          {photoUrl ? (
+            <img src={photoUrl} alt={employeeName || "Employee"} className="h-full w-full object-cover" />
+          ) : (
+            <span>{(employeeName || "E").trim().charAt(0).toUpperCase() || "E"}</span>
+          )}
+          <span className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition-opacity group-hover:opacity-100">
+            <Camera size={18} className="text-white" />
+          </span>
+        </button>
+
+        <div>
+          <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
+            รูปถ่ายพนักงาน (Employee Photo)
+          </div>
+          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+            รองรับไฟล์ JPG, PNG, WEBP ระบบจะปรับขนาดอัตโนมัติ
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          className="inline-flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs transition hover:bg-sky-700 disabled:opacity-50"
+        >
+          <Upload size={13} />
+          <span>{isUploading ? "กำลังประมวลผล..." : photoUrl ? "เปลี่ยนรูปถ่าย" : "อัปโหลดรูปถ่าย"}</span>
+        </button>
+
+        {photoUrl && (
+          <button
+            type="button"
+            onClick={() => onChangePhoto(undefined)}
+            className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800/70 dark:bg-rose-950/40 dark:text-rose-300"
+            title="ลบรูปถ่ายพนักงาน"
+          >
+            <Trash2 size={13} />
+            <span>ลบรูป</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // MODAL: ADD EMPLOYEE
 function AddEmployeeModal({
   existingCount,
@@ -1224,6 +1475,7 @@ function AddEmployeeModal({
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
     allowedSections: WmsSectionId[];
+    photoUrl?: string;
     licenseType?: string;
     notes?: string;
   }) => { success: boolean; error?: string };
@@ -1240,6 +1492,7 @@ function AddEmployeeModal({
     getDefaultSectionsForRoleAndDept("Driver", defaultDept)
   );
   const [hasCustomizedSections, setHasCustomizedSections] = useState<boolean>(false);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
   const [licenseType, setLicenseType] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1277,6 +1530,7 @@ function AddEmployeeModal({
       phoneNumber: phoneNumber.trim(),
       employmentStatus,
       allowedSections,
+      photoUrl,
       licenseType: role === "Driver" ? licenseType : undefined,
       notes: notes.trim() || undefined,
     });
@@ -1322,6 +1576,14 @@ function AddEmployeeModal({
               </div>
             </div>
           )}
+
+          {/* Employee Photo Upload */}
+          <EmployeePhotoPicker
+            photoUrl={photoUrl}
+            employeeName={employeeName}
+            onChangePhoto={setPhotoUrl}
+            onError={setErrorMessage}
+          />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
             <label className="form-field">
@@ -1560,6 +1822,7 @@ function EditEmployeeModal({
     phoneNumber: string;
     employmentStatus: EmploymentStatus;
     allowedSections: WmsSectionId[];
+    photoUrl?: string;
     licenseType?: string;
     notes?: string;
   }) => { success: boolean; error?: string };
@@ -1573,6 +1836,7 @@ function EditEmployeeModal({
   const [allowedSections, setAllowedSections] = useState<WmsSectionId[]>(() =>
     resolveEmployeeAllowedSections(employee)
   );
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(employee.photoUrl);
   const [licenseType, setLicenseType] = useState<string>(employee.licenseType || "Class 2 Industrial Heavy Equipment");
   const [notes, setNotes] = useState<string>(employee.notes || "");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1604,6 +1868,7 @@ function EditEmployeeModal({
       phoneNumber: phoneNumber.trim(),
       employmentStatus,
       allowedSections,
+      photoUrl,
       licenseType: role === "Driver" ? licenseType : undefined,
       notes: notes.trim() || undefined,
     });
@@ -1650,6 +1915,14 @@ function EditEmployeeModal({
             </div>
           )}
 
+          {/* Employee Photo Upload */}
+          <EmployeePhotoPicker
+            photoUrl={photoUrl}
+            employeeName={employeeName}
+            onChangePhoto={setPhotoUrl}
+            onError={setErrorMessage}
+          />
+
           <div
             className="vehicle-info-box"
             style={{
@@ -1660,7 +1933,7 @@ function EditEmployeeModal({
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: 8,
-              marginBottom: 12,
+              marginBottom: 4,
             }}
           >
             <div>Employee ID: <strong>{employee.employeeId}</strong></div>
@@ -1829,14 +2102,31 @@ function ViewEmployeeDetailsModal({
   activeAssignment,
   assignmentCount,
   onClose,
+  onUpdatePhoto,
   onEdit,
 }: {
   employee: Employee;
   activeAssignment?: VehicleAssignment;
   assignmentCount: number;
   onClose: () => void;
+  onUpdatePhoto: (newPhotoUrl?: string) => void;
   onEdit: () => void;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressEmployeePhoto(file);
+      onUpdatePhoto(compressed);
+    } catch {
+      // handled by parent or ignored
+    } finally {
+      e.target.value = "";
+    }
+  };
+
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div
@@ -1874,31 +2164,63 @@ function ViewEmployeeDetailsModal({
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  background: "#087eaf",
-                  color: "#ffffff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: 700,
-                  fontSize: 16,
-                }}
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handleFileChange}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                title="คลิกเพื่ออัปโหลดหรือเปลี่ยนรูปถ่ายพนักงาน"
+                className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border-2 border-sky-500/60 bg-sky-600 text-lg font-bold text-white shadow-sm transition hover:border-sky-500"
               >
-                {employee.employeeName.charAt(0)}
-              </div>
+                {employee.photoUrl ? (
+                  <img
+                    src={employee.photoUrl}
+                    alt={employee.employeeName}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{employee.employeeName.charAt(0)}</span>
+                )}
+                <span className="absolute inset-0 flex items-center justify-center bg-black/55 opacity-0 transition-opacity group-hover:opacity-100">
+                  <Camera size={18} className="text-white" />
+                </span>
+              </button>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>
                   {employee.employeeName}
                 </div>
                 <div style={{ fontSize: 11, marginTop: 2 }}>
                   {employee.jobPosition ? `${employee.jobPosition} · ` : ""}ID: {employee.employeeId}
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1 rounded bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white transition hover:bg-sky-700"
+                  >
+                    <Camera size={11} />
+                    <span>{employee.photoUrl ? "เปลี่ยนรูปถ่าย" : "อัปโหลดรูปถ่าย"}</span>
+                  </button>
+                  {employee.photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => onUpdatePhoto(undefined)}
+                      className="inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] font-semibold text-rose-700 transition hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/50 dark:text-rose-300"
+                    >
+                      <Trash2 size={10} />
+                      <span>ลบรูป</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

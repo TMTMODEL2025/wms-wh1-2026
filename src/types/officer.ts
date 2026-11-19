@@ -70,6 +70,7 @@ export interface Employee {
   phoneNumber: string; // e.g. "081-456-7890"
   employmentStatus: EmploymentStatus; // "Active" | "Inactive"
   allowedSections?: WmsSectionId[]; // Sections this employee is permitted to access
+  photoUrl?: string; // Employee photo (compressed base64 Data URL or image URL)
   notes?: string;
   licenseType?: string; // Driver license class if role is Driver
   legacyDriverId?: string; // e.g. "DRV-001" for backwards compatibility with historical assignments
