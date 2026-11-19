@@ -976,6 +976,23 @@ export function SlitFilmManagement({
   const [externalBatchInput, setExternalBatchInput] = useState<string>("");
   const [externalBatchError, setExternalBatchError] = useState<string | null>(null);
   const [externalScannedSuccessToast, setExternalScannedSuccessToast] = useState<string | null>(null);
+  const [isExternalCameraActive, setIsExternalCameraActive] = useState<boolean>(false);
+  const externalBatchInputRef = useRef<HTMLInputElement>(null);
+  const externalCameraBoxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeMode !== "inbound" || inboundSourceType !== "external") {
+      setIsExternalCameraActive(false);
+    }
+  }, [activeMode, inboundSourceType]);
+
+  useEffect(() => {
+    if (isExternalCameraActive) {
+      setTimeout(() => {
+        externalCameraBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 60);
+    }
+  }, [isExternalCameraActive]);
 
   // Inbound Machines List (Default SM01-SM04, extensible by user and persisted in localStorage)
   const [inboundMachines, setInboundMachines] = useState<string[]>(() => {
@@ -6736,7 +6753,43 @@ export function SlitFilmManagement({
         </div>
       ) : (
             /* External Purchase Inbound Form Panel */
-            <div className="px-3 py-2.5 sm:px-[18px] sm:py-3 rounded-xl border bg-white dark:bg-[#111e38] border-purple-200 dark:border-purple-900/60 shadow-xs space-y-3">
+            <div className="space-y-2.5">
+              {/* Top-Most Primary Camera Viewfinder for External Inbound Batch (1D Barcode Only) */}
+              {isExternalCameraActive && (
+                <div
+                  ref={externalCameraBoxRef}
+                  className="w-full max-w-md mx-auto rounded-xl bg-white dark:bg-[#0c1930] border border-purple-200 dark:border-[#1e3a5f] p-2 shadow-sm"
+                >
+                  <CameraBarcodeScanner
+                    isThai={isThai}
+                    barcodeOnly
+                    placeholderText={
+                      isThai
+                        ? "เล็งกล้องไปที่บาร์โค้ด Batch 10 หลัก (1D)"
+                        : "Aim at the 10-digit Batch 1D barcode"
+                    }
+                    onScan={(decoded) => {
+                      const cleaned = cleanBarcode(decoded).toUpperCase();
+                      if (!cleaned) return;
+                      setExternalBatchInput(cleaned);
+                      if (externalBatchError) setExternalBatchError(null);
+                      setIsExternalCameraActive(false);
+                      if (soundEnabled) playScanSound(true);
+                      setTimeout(() => {
+                        externalBatchInputRef.current?.focus();
+                      }, 100);
+                    }}
+                    onClose={() => {
+                      setIsExternalCameraActive(false);
+                      setTimeout(() => {
+                        externalBatchInputRef.current?.focus();
+                      }, 100);
+                    }}
+                  />
+                </div>
+              )}
+
+              <div className="px-3 py-2.5 sm:px-[18px] sm:py-3 rounded-xl border bg-white dark:bg-[#111e38] border-purple-200 dark:border-purple-900/60 shadow-xs space-y-3">
               <div className="flex items-center justify-between border-b border-purple-100 dark:border-purple-900/40 pb-2">
                 <div className="flex items-center gap-2">
                   <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
@@ -6821,7 +6874,7 @@ export function SlitFilmManagement({
                         className="field w-full font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500"
                         style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
                       >
-                        {["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"].map((r) => (
+                        {["A", "B", "C", "D", "E"].map((r) => (
                           <option key={r} value={r}>
                             {isThai ? `แถว ${r}` : `Row ${r}`}
                           </option>
@@ -6848,12 +6901,23 @@ export function SlitFilmManagement({
                 </div>
 
                 {/* 2. Batch Barcode Input */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    {isThai ? "สแกนหรือกรอกรหัส Batch 10 หลัก (10-Digit Batch Code):" : "Scan/Enter 10-Digit Batch Code:"}
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {isThai ? (
+                      <>
+                        <span className="sm:hidden">สแกน Batch</span>
+                        <span className="hidden sm:inline">สแกนหรือกรอกรหัส Batch 10 หลัก (10-Digit Batch Code):</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="sm:hidden">Scan Batch</span>
+                        <span className="hidden sm:inline">Scan/Enter 10-Digit Batch Code:</span>
+                      </>
+                    )}
                   </label>
                   <div className="relative flex items-center gap-2">
                     <input
+                      ref={externalBatchInputRef}
                       type="text"
                       value={externalBatchInput}
                       onChange={(e) => {
@@ -6862,9 +6926,28 @@ export function SlitFilmManagement({
                       }}
                       placeholder={isThai ? "เช่น 26SL00189A หรือ CH00227080..." : "e.g. 26SL00189A..."}
                       maxLength={12}
-                      className="field w-full font-mono font-normal tracking-wider rounded-md bg-white dark:bg-[#0c1930] border border-purple-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-purple-600"
-                      style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                      className="field flex-1 min-w-0 h-[35px] min-h-[35px] px-2.5 text-xs font-mono font-normal tracking-wider rounded-md bg-white dark:bg-[#0c1930] border border-purple-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-purple-600"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setIsExternalCameraActive((prev) => !prev)}
+                      className={`h-[35px] px-3 rounded-md text-xs font-bold flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer transition-all active:scale-95 border shadow-xs ${
+                        isExternalCameraActive
+                          ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-950/60 dark:hover:bg-rose-900/70 dark:text-rose-300 dark:border-rose-700/80"
+                          : "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 dark:border-purple-500"
+                      }`}
+                    >
+                      <Camera size={14} className="shrink-0" />
+                      <span>
+                        {isExternalCameraActive
+                          ? isThai
+                            ? "ปิดกล้อง"
+                            : "Close"
+                          : isThai
+                          ? "สแกน Batch"
+                          : "Scan Batch"}
+                      </span>
+                    </button>
                   </div>
                 </div>
 
@@ -6908,6 +6991,7 @@ export function SlitFilmManagement({
                   <span>{isThai ? "บันทึกรับเข้าภายนอก" : "Confirm External Inbound"}</span>
                 </button>
               </form>
+              </div>
             </div>
           )}
         </section>
