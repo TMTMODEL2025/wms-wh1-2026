@@ -805,6 +805,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
   >("ALL");
   const [stockPage, setStockPage] = useState<number>(1);
   const [stockPageSize, setStockPageSize] = useState<number>(20);
+  const [internalBatchPage, setInternalBatchPage] = useState<number>(1);
+  const [internalBatchPageSize, setInternalBatchPageSize] = useState<number>(20);
   const [relocateTargetLoc, setRelocateTargetLoc] = useState<string>("");
   const [relocateScanInput, setRelocateScanInput] = useState<string>("");
   const [selectedRelocateIds, setSelectedRelocateIds] = useState<string[]>([]);
@@ -820,6 +822,10 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     stockSearch,
     stockPageSize,
   ]);
+
+  useEffect(() => {
+    setInternalBatchPage(1);
+  }, [inboundSearch, internalBatchPageSize]);
 
   // ============================================================================
   // Inbound Scan Handler (Unlimited Barcode Length for Batch & BAHCH HU)
@@ -1794,10 +1800,56 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
             {/* Machine Selector: CL03, CL04, CL05, CL06 + เพิ่มเครื่องจักรได้ */}
             {inboundCategory === "internal" && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 mr-0.5 shrink-0">
                     {isThai ? "เครื่องจักร:" : "Machine:"}
                   </span>
+
+                  {rmMachines.map((mId) => {
+                    const isSelected = inboundMachine === mId;
+                    const isCustomMachine = !(
+                      RM_INTERNAL_MACHINES as readonly string[]
+                    ).includes(mId);
+                    return (
+                      <div key={mId} className="relative group flex shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInboundMachine(mId);
+                            focusBarcodeInput();
+                          }}
+                          className={`min-w-[60px] sm:min-w-[68px] py-1.5 ${
+                            isCustomMachine ? "pl-2.5 pr-6" : "px-2.5"
+                          } rounded-lg border text-center font-mono font-extrabold text-xs transition-all cursor-pointer ${
+                            isSelected
+                              ? internalSubMode === "bundle"
+                                ? "bg-indigo-600 text-white border-indigo-500 shadow-xs"
+                                : "bg-emerald-600 text-white border-emerald-500 shadow-xs"
+                              : "bg-slate-50 dark:bg-[#0c1930] text-slate-800 dark:text-slate-100 border-slate-200 dark:border-[#1e3a5f]"
+                          }`}
+                        >
+                          {mId}
+                        </button>
+                        {isCustomMachine && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveMachine(mId);
+                            }}
+                            title={isThai ? `ลบ ${mId}` : `Remove ${mId}`}
+                            className={`absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "text-white/80 hover:text-white hover:bg-black/20"
+                                : "text-slate-400 hover:text-red-500 hover:bg-red-500/10"
+                            }`}
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   <button
                     type="button"
@@ -1805,7 +1857,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       setIsAddMachineOpen((v) => !v);
                       setTimeout(() => newMachineInputRef.current?.focus(), 60);
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border flex items-center gap-1 cursor-pointer transition-all ${
+                    className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold border flex items-center gap-1 cursor-pointer transition-all shrink-0 whitespace-nowrap ${
                       isAddMachineOpen
                         ? "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
                         : internalSubMode === "bundle"
@@ -1813,7 +1865,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                         : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30"
                     }`}
                   >
-                    <Plus size={12} />
+                    <Plus size={13} />
                     <span>{isThai ? "เพิ่มเครื่องจักร" : "Add Machine"}</span>
                   </button>
                 </div>
@@ -1863,54 +1915,6 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     </button>
                   </div>
                 )}
-
-                <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-1.5">
-                  {rmMachines.map((mId) => {
-                    const isSelected = inboundMachine === mId;
-                    const isCustomMachine = !(
-                      RM_INTERNAL_MACHINES as readonly string[]
-                    ).includes(mId);
-                    return (
-                      <div key={mId} className="relative group flex">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInboundMachine(mId);
-                            focusBarcodeInput();
-                          }}
-                          className={`w-full sm:w-auto sm:min-w-[74px] py-2 sm:py-1.5 ${
-                            isCustomMachine ? "pl-2.5 pr-6" : "px-2.5"
-                          } rounded-lg border text-center font-mono font-extrabold text-xs transition-all cursor-pointer ${
-                            isSelected
-                              ? internalSubMode === "bundle"
-                                ? "bg-indigo-600 text-white border-indigo-500 shadow-xs"
-                                : "bg-emerald-600 text-white border-emerald-500 shadow-xs"
-                              : "bg-slate-50 dark:bg-[#0c1930] text-slate-800 dark:text-slate-100 border-slate-200 dark:border-[#1e3a5f]"
-                          }`}
-                        >
-                          {mId}
-                        </button>
-                        {isCustomMachine && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveMachine(mId);
-                            }}
-                            title={isThai ? `ลบ ${mId}` : `Remove ${mId}`}
-                            className={`absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer ${
-                              isSelected
-                                ? "text-white/80 hover:text-white hover:bg-black/20"
-                                : "text-slate-400 hover:text-red-500 hover:bg-red-500/10"
-                            }`}
-                          >
-                            <X size={11} />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             )}
 
@@ -1949,111 +1953,97 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
             )}
 
             {/* Location, Barcode, Quantity & Weight Form */}
-            <form onSubmit={(e) => handleInboundSubmit(e)} className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-                {/* Location Input with inline scan button */}
-                <div className="md:col-span-4 space-y-1">
-                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
-                    <MapPin size={13} className="text-emerald-500" />
-                    <span>Location</span>
-                  </label>
+            <form onSubmit={(e) => handleInboundSubmit(e)} className="space-y-2.5">
+              {inboundCategory === "internal" && internalSubMode === "batch" ? (
+                /* Compact Balanced Layout for "รับภายใน Batch" (1 row on Desktop XL, 2 balanced rows on SM/LG, clean stack on Mobile) */
+                <div className="grid grid-cols-2 sm:grid-cols-12 xl:grid-cols-[minmax(190px,1.25fr)_minmax(245px,1.65fr)_minmax(96px,0.75fr)_minmax(115px,0.85fr)_auto] gap-2 items-end">
+                  {/* Location + สแกน */}
+                  <div className="col-span-2 sm:col-span-5 xl:col-span-1 space-y-1 min-w-0">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <MapPin size={13} className="text-emerald-500 shrink-0" />
+                      <span>Location</span>
+                    </label>
 
-                  <div className="flex items-center gap-1.5">
-                    <div className="relative flex-1 flex items-center">
-                      <input
-                        ref={locationInputRef}
-                        type="text"
-                        value={inboundLocation}
-                        onChange={(e) => setInboundLocation(e.target.value.toUpperCase())}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            if (inboundLocation.trim()) {
-                              playBeep("success");
-                              focusBarcodeInput();
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1 min-w-0 flex items-center">
+                        <input
+                          ref={locationInputRef}
+                          type="text"
+                          value={inboundLocation}
+                          onChange={(e) => setInboundLocation(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (inboundLocation.trim()) {
+                                playBeep("success");
+                                focusBarcodeInput();
+                              }
                             }
-                          }
+                          }}
+                          placeholder="Location"
+                          className="w-full h-[36px] pl-2.5 pr-7 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                        />
+                        {inboundLocation && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboundLocation("");
+                              locationInputRef.current?.focus();
+                            }}
+                            className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraScanTarget("location");
+                          setIsInboundCameraOpen((v) =>
+                            cameraScanTarget === "location" ? !v : true
+                          );
                         }}
-                        placeholder="Location"
-                        className="w-full pl-3 pr-8 py-2.5 sm:py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                      />
-                      {inboundLocation && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInboundLocation("");
-                            locationInputRef.current?.focus();
-                          }}
-                          className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
+                        className="h-[36px] px-2.5 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap transition-colors"
+                      >
+                        <Camera size={13} />
+                        <span>{isThai ? "สแกน" : "Scan"}</span>
+                      </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCameraScanTarget("location");
-                        setIsInboundCameraOpen((v) =>
-                          cameraScanTarget === "location" ? !v : true
-                        );
-                      }}
-                      className="px-2.5 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1 cursor-pointer shrink-0"
-                    >
-                      <Camera size={14} />
-                      <span>{isThai ? "สแกน" : "Scan"}</span>
-                    </button>
                   </div>
-                </div>
 
-                {/* Barcode Input + Action Buttons */}
-                <div className="md:col-span-8 space-y-1">
-                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
-                    <Barcode
-                      size={14}
-                      className={
-                        inboundCategory === "internal" && internalSubMode === "bundle"
-                          ? "text-indigo-500"
-                          : "text-emerald-500"
-                      }
-                    />
-                    <span>
-                      {inboundCategory === "internal" && internalSubMode === "bundle"
-                        ? "BAHCH HU"
-                        : "Batch"}
-                    </span>
-                  </label>
+                  {/* Batch + สแกน Batch */}
+                  <div className="col-span-2 sm:col-span-7 xl:col-span-1 space-y-1 min-w-0">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <Barcode size={14} className="text-emerald-500 shrink-0" />
+                      <span>Batch</span>
+                    </label>
 
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="relative flex-1 flex items-center">
-                      <input
-                        ref={barcodeInputRef}
-                        type="text"
-                        value={inboundBarcodeInput}
-                        onChange={(e) => setInboundBarcodeInput(e.target.value.toUpperCase())}
-                        placeholder={
-                          inboundCategory === "internal" && internalSubMode === "bundle"
-                            ? "BAHCH HU"
-                            : "Batch"
-                        }
-                        className="w-full pl-3 pr-8 py-2.5 sm:py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                      />
-                      {inboundBarcodeInput && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInboundBarcodeInput("");
-                            focusBarcodeInput();
-                          }}
-                          className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                        >
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1 min-w-0 flex items-center">
+                        <input
+                          ref={barcodeInputRef}
+                          type="text"
+                          value={inboundBarcodeInput}
+                          onChange={(e) => setInboundBarcodeInput(e.target.value.toUpperCase())}
+                          placeholder="Batch"
+                          className="w-full h-[36px] pl-2.5 pr-7 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                        />
+                        {inboundBarcodeInput && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboundBarcodeInput("");
+                              focusBarcodeInput();
+                            }}
+                            className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
 
-                    <div className="grid grid-cols-2 sm:flex gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -2062,49 +2052,213 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                             cameraScanTarget === "barcode" ? !v : true
                           );
                         }}
-                        className="px-3 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="h-[36px] px-2.5 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 flex items-center justify-center gap-1 cursor-pointer shrink-0 whitespace-nowrap transition-colors"
                       >
-                        <Camera size={14} />
-                        <span>
-                          {inboundCategory === "internal" && internalSubMode === "bundle"
-                            ? isThai
-                              ? "สแกน HU"
-                              : "Scan HU"
-                            : isThai
-                            ? "สแกน Batch"
-                            : "Scan Batch"}
-                        </span>
-                      </button>
-
-                      <button
-                        type="submit"
-                        className={`px-4 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold text-white shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
-                          inboundCategory === "external"
-                            ? "bg-blue-600 hover:bg-blue-500"
-                            : internalSubMode === "bundle"
-                            ? "bg-indigo-600 hover:bg-indigo-500"
-                            : "bg-emerald-600 hover:bg-emerald-500"
-                        }`}
-                      >
-                        <CheckCircle2 size={14} />
-                        <span>{isThai ? "บันทึก" : "Save"}</span>
+                        <Camera size={13} />
+                        <span>{isThai ? "สแกน Batch" : "Scan Batch"}</span>
                       </button>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {/* Internal Inbound Fields: จำนวน & น้ำหนัก (2 columns side-by-side even on mobile) */}
+                  {/* จำนวน (แผ่น) */}
+                  <div className="col-span-1 sm:col-span-4 xl:col-span-1 space-y-1 min-w-0">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                      {isThai ? "จำนวน (แผ่น)" : "Quantity"}
+                    </label>
+                    <input
+                      ref={qtyInputRef}
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={inboundQtyInput}
+                      onChange={(e) => setInboundQtyInput(e.target.value)}
+                      placeholder="1"
+                      className="w-full h-[36px] px-2.5 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {/* น้ำหนัก (KG) */}
+                  <div className="col-span-1 sm:col-span-5 xl:col-span-1 space-y-1 min-w-0">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                      {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={
+                        autoCalculatedInboundWeight > 0
+                          ? autoCalculatedInboundWeight.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 3,
+                            })
+                          : "0.00"
+                      }
+                      className="w-full h-[36px] px-2.5 rounded-lg text-xs font-mono font-extrabold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* ปุ่ม บันทึก */}
+                  <div className="col-span-2 sm:col-span-3 xl:col-span-1">
+                    <button
+                      type="submit"
+                      className="w-full xl:w-auto h-[36px] px-4 rounded-lg text-xs font-extrabold text-white bg-emerald-600 hover:bg-emerald-500 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>{isThai ? "บันทึก" : "Save"}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
+                  {/* Location Input with inline scan button */}
+                  <div className="md:col-span-4 space-y-1">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <MapPin size={13} className="text-emerald-500" />
+                      <span>Location</span>
+                    </label>
+
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1 flex items-center">
+                        <input
+                          ref={locationInputRef}
+                          type="text"
+                          value={inboundLocation}
+                          onChange={(e) => setInboundLocation(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (inboundLocation.trim()) {
+                                playBeep("success");
+                                focusBarcodeInput();
+                              }
+                            }
+                          }}
+                          placeholder="Location"
+                          className="w-full pl-3 pr-8 py-2.5 sm:py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                        />
+                        {inboundLocation && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboundLocation("");
+                              locationInputRef.current?.focus();
+                            }}
+                            className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraScanTarget("location");
+                          setIsInboundCameraOpen((v) =>
+                            cameraScanTarget === "location" ? !v : true
+                          );
+                        }}
+                        className="px-2.5 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <Camera size={14} />
+                        <span>{isThai ? "สแกน" : "Scan"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Barcode Input + Action Buttons */}
+                  <div className="md:col-span-8 space-y-1">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <Barcode
+                        size={14}
+                        className={
+                          inboundCategory === "internal" && internalSubMode === "bundle"
+                            ? "text-indigo-500"
+                            : "text-emerald-500"
+                        }
+                      />
+                      <span>
+                        {inboundCategory === "internal" && internalSubMode === "bundle"
+                          ? "BAHCH HU"
+                          : "Batch"}
+                      </span>
+                    </label>
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="relative flex-1 flex items-center">
+                        <input
+                          ref={barcodeInputRef}
+                          type="text"
+                          value={inboundBarcodeInput}
+                          onChange={(e) => setInboundBarcodeInput(e.target.value.toUpperCase())}
+                          placeholder={
+                            inboundCategory === "internal" && internalSubMode === "bundle"
+                              ? "BAHCH HU"
+                              : "Batch"
+                          }
+                          className="w-full pl-3 pr-8 py-2.5 sm:py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                        />
+                        {inboundBarcodeInput && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboundBarcodeInput("");
+                              focusBarcodeInput();
+                            }}
+                            className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:flex gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCameraScanTarget("barcode");
+                            setIsInboundCameraOpen((v) =>
+                              cameraScanTarget === "barcode" ? !v : true
+                            );
+                          }}
+                          className="px-3 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Camera size={14} />
+                          <span>
+                            {inboundCategory === "internal" && internalSubMode === "bundle"
+                              ? isThai
+                                ? "สแกน HU"
+                                : "Scan HU"
+                              : isThai
+                              ? "สแกน Batch"
+                              : "Scan Batch"}
+                          </span>
+                        </button>
+
+                        <button
+                          type="submit"
+                          className={`px-4 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold text-white shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
+                            inboundCategory === "external"
+                              ? "bg-blue-600 hover:bg-blue-500"
+                              : internalSubMode === "bundle"
+                              ? "bg-indigo-600 hover:bg-indigo-500"
+                              : "bg-emerald-600 hover:bg-emerald-500"
+                          }`}
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>{isThai ? "บันทึก" : "Save"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Internal Inbound Fields: Bundle Batch/จำนวน/น้ำหนัก + Spec/Stock Preview */}
               {inboundCategory === "internal" && (
                 <div className="space-y-2 pt-0.5">
-                  <div
-                    className={`grid ${
-                      internalSubMode === "bundle"
-                        ? "grid-cols-1 sm:grid-cols-3"
-                        : "grid-cols-2"
-                    } gap-2`}
-                  >
-                    {internalSubMode === "bundle" && (
+                  {internalSubMode === "bundle" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                       <div>
                         <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
                           Batch
@@ -2117,45 +2271,45 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                           className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
                         />
                       </div>
-                    )}
 
-                    <div>
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                        {isThai ? "จำนวน (แผ่น)" : "Quantity"}
-                      </label>
-                      <input
-                        ref={qtyInputRef}
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={inboundQtyInput}
-                        onChange={(e) => setInboundQtyInput(e.target.value)}
-                        placeholder="1"
-                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between gap-1 mb-1">
-                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
-                          {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                          {isThai ? "จำนวน (แผ่น)" : "Quantity"}
                         </label>
+                        <input
+                          ref={qtyInputRef}
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={inboundQtyInput}
+                          onChange={(e) => setInboundQtyInput(e.target.value)}
+                          placeholder="1"
+                          className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        readOnly
-                        value={
-                          autoCalculatedInboundWeight > 0
-                            ? autoCalculatedInboundWeight.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 3,
-                              })
-                            : "0.00"
-                        }
-                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-not-allowed"
-                      />
+
+                      <div>
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                            {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          readOnly
+                          value={
+                            autoCalculatedInboundWeight > 0
+                              ? autoCalculatedInboundWeight.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 3,
+                                })
+                              : "0.00"
+                          }
+                          className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-not-allowed"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* แสดงสูตรขนาดแผ่น (ถ้าพบข้อมูลใน SAP/สต๊อก) แบบกะทัดรัดไม่ล้นจอ */}
                   {Boolean(
@@ -2396,196 +2550,275 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
           {/* =================================================================
               INBOUND DATA TABLES (Mobile Card View + Desktop Table View)
              ================================================================= */}
-          {inboundCategory === "internal" && internalSubMode === "batch" && (
-            <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-              <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                  {isThai
-                    ? `รับภายใน Batch (${filteredInternalBatchRecords.length})`
-                    : `Internal Batch (${filteredInternalBatchRecords.length})`}
-                </span>
+          {inboundCategory === "internal" &&
+            internalSubMode === "batch" &&
+            (() => {
+              const totalItems = filteredInternalBatchRecords.length;
+              const totalPages = Math.max(1, Math.ceil(totalItems / internalBatchPageSize));
+              const currentPage = Math.min(internalBatchPage, totalPages);
+              const startIdx = (currentPage - 1) * internalBatchPageSize;
+              const paginatedRows = filteredInternalBatchRecords.slice(
+                startIdx,
+                startIdx + internalBatchPageSize
+              );
 
-                <div className="relative w-full sm:w-56">
-                  <Search
-                    size={13}
-                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-                  <input
-                    type="text"
-                    value={inboundSearch}
-                    onChange={(e) => setInboundSearch(e.target.value)}
-                    placeholder={isThai ? "ค้นหา Batch, Location..." : "Search..."}
-                    className="w-full pl-8 pr-3 py-1.5 sm:py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                  />
-                </div>
-              </div>
+              return (
+                <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
+                  <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
+                      {isThai
+                        ? `รับภายใน Batch (${totalItems.toLocaleString()})`
+                        : `Internal Batch (${totalItems.toLocaleString()})`}
+                    </span>
 
-              {/* โหมดมือถือ: แสดงเป็นระเบียบแบบ Card อ่านง่ายไม่ต้องเลื่อนซ้าย-ขวา */}
-              <div className="md:hidden divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-                {filteredInternalBatchRecords.slice(0, 50).map((r) => (
-                  <div key={r.id} className="p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-mono font-extrabold text-xs">
-                            {r.batch}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
-                            Loc: {r.location}
-                          </span>
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-mono font-bold text-[11px]">
-                            {r.machine}
-                          </span>
-                          {r.grade && r.grade !== "-" && (
-                            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono font-bold text-[11px]">
-                              {r.grade}
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium line-clamp-1">
-                          {r.materialNo !== "-" ? `${r.materialNo} • ` : ""}
-                          {r.description}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => deleteRmStockFromCloud(r.id)}
-                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-red-500 cursor-pointer shrink-0"
-                        title={isThai ? "ลบรายการ" : "Delete"}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px] font-mono">
-                      <div className="px-2 py-1 rounded bg-slate-50 dark:bg-[#0c1930] border border-slate-200/70 dark:border-[#1e3a5f]">
-                        <span className="block text-[10px] text-slate-400">
-                          {isThai ? "ขนาด (มม.)" : "Size"}
-                        </span>
-                        <span className="font-bold text-slate-700 dark:text-slate-200">
-                          {r.certThickness}×{r.width}×{r.length}
-                        </span>
-                      </div>
-
-                      <div className="px-2 py-1 rounded bg-sky-500/10 border border-sky-500/25 text-right">
-                        <span className="block text-[10px] text-sky-600 dark:text-sky-400">
-                          {isThai ? "จำนวน" : "Qty"}
-                        </span>
-                        <span className="font-extrabold text-sky-700 dark:text-sky-300">
-                          {Number(r.inboundQty || 1).toLocaleString()}{" "}
-                          {isThai ? "แผ่น" : "pcs"}
-                        </span>
-                      </div>
-
-                      <div className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-right">
-                        <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">
-                          {isThai ? "น้ำหนัก (KG)" : "Weight"}
-                        </span>
-                        <span className="font-extrabold text-emerald-700 dark:text-emerald-300">
-                          {Number(r.weightKg || 0).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
+                    <div className="relative w-full sm:w-56">
+                      <Search
+                        size={13}
+                        className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                      />
+                      <input
+                        type="text"
+                        value={inboundSearch}
+                        onChange={(e) => setInboundSearch(e.target.value)}
+                        placeholder={isThai ? "ค้นหา Batch, Location..." : "Search..."}
+                        className="w-full pl-8 pr-3 py-1.5 sm:py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                      />
                     </div>
                   </div>
-                ))}
-                {filteredInternalBatchRecords.length === 0 && (
-                  <div className="text-center py-8 text-xs text-slate-400">
-                    {isThai ? "ไม่มีข้อมูล" : "No records"}
-                  </div>
-                )}
-              </div>
 
-              {/* โหมดหน้าจอคอมพิวเตอร์ / แท็บเล็ตแนวนอน */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr>
-                      <th>{isThai ? "เครื่อง" : "Machine"}</th>
-                      <th>Location</th>
-                      <th>Storage Location</th>
-                      <th>Material No.</th>
-                      <th>Discription</th>
-                      <th>Batch</th>
-                      <th>หนา Certificated.</th>
-                      <th>กว้าง</th>
-                      <th>ยาว</th>
-                      <th>Grade</th>
-                      <th className="text-right">{isThai ? "จำนวน" : "Qty"}</th>
-                      <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
-                      <th className="text-right">Unrestr.</th>
-                      <th>ผู้ผลิต</th>
-                      <th className="text-center">{isThai ? "ลบ" : "Del"}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredInternalBatchRecords.slice(0, 100).map((r) => (
-                      <tr key={r.id}>
-                        <td>
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-mono font-extrabold text-[11px]">
-                            {r.machine}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
-                            {r.location}
-                          </span>
-                        </td>
-                        <td className="font-mono font-bold">{r.storageLocation}</td>
-                        <td className="font-mono text-sky-600 dark:text-sky-400">
-                          {r.materialNo}
-                        </td>
-                        <td className="max-w-[240px] truncate" title={r.description}>
-                          {r.description}
-                        </td>
-                        <td>
-                          <span className="code font-mono font-extrabold text-emerald-600 dark:text-emerald-300">
-                            {r.batch}
-                          </span>
-                        </td>
-                        <td className="font-mono tabular-nums">{r.certThickness}</td>
-                        <td className="font-mono tabular-nums">{r.width}</td>
-                        <td className="font-mono tabular-nums">{r.length}</td>
-                        <td className="font-bold">{r.grade}</td>
-                        <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
-                          {Number(r.inboundQty || 1).toLocaleString()}
-                        </td>
-                        <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
-                          {Number(r.weightKg || 0).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 3,
-                          })}
-                        </td>
-                        <td className="font-mono font-bold tabular-nums text-right">
-                          {r.unrestricted || "-"}
-                        </td>
-                        <td>{r.manufacturer}</td>
-                        <td className="text-center">
+                  {/* โหมดมือถือ: แสดงเป็นระเบียบแบบ Card อ่านง่ายไม่ต้องเลื่อนซ้าย-ขวา */}
+                  <div className="md:hidden divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                    {paginatedRows.map((r) => (
+                      <div key={r.id} className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-mono font-extrabold text-xs">
+                                {r.batch}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
+                                Loc: {r.location}
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-mono font-bold text-[11px]">
+                                {r.machine}
+                              </span>
+                              {r.grade && r.grade !== "-" && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono font-bold text-[11px]">
+                                  {r.grade}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium line-clamp-1">
+                              {r.materialNo !== "-" ? `${r.materialNo} • ` : ""}
+                              {r.description}
+                            </div>
+                          </div>
+
                           <button
                             type="button"
                             onClick={() => deleteRmStockFromCloud(r.id)}
-                            className="p-1 rounded hover:bg-red-500/15 text-red-500 cursor-pointer"
+                            className="p-1.5 rounded-lg hover:bg-red-500/15 text-red-500 cursor-pointer shrink-0"
+                            title={isThai ? "ลบรายการ" : "Delete"}
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={14} />
                           </button>
-                        </td>
-                      </tr>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px] font-mono">
+                          <div className="px-2 py-1 rounded bg-slate-50 dark:bg-[#0c1930] border border-slate-200/70 dark:border-[#1e3a5f]">
+                            <span className="block text-[10px] text-slate-400">
+                              {isThai ? "ขนาด (มม.)" : "Size"}
+                            </span>
+                            <span className="font-bold text-slate-700 dark:text-slate-200">
+                              {r.certThickness}×{r.width}×{r.length}
+                            </span>
+                          </div>
+
+                          <div className="px-2 py-1 rounded bg-sky-500/10 border border-sky-500/25 text-right">
+                            <span className="block text-[10px] text-sky-600 dark:text-sky-400">
+                              {isThai ? "จำนวน" : "Qty"}
+                            </span>
+                            <span className="font-extrabold text-sky-700 dark:text-sky-300">
+                              {Number(r.inboundQty || 1).toLocaleString()}{" "}
+                              {isThai ? "แผ่น" : "pcs"}
+                            </span>
+                          </div>
+
+                          <div className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-right">
+                            <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">
+                              {isThai ? "น้ำหนัก (KG)" : "Weight"}
+                            </span>
+                            <span className="font-extrabold text-emerald-700 dark:text-emerald-300">
+                              {Number(r.weightKg || 0).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                    {filteredInternalBatchRecords.length === 0 && (
-                      <tr>
-                        <td colSpan={15} className="text-center py-6 text-slate-400">
-                          {isThai ? "ไม่มีข้อมูล" : "No records"}
-                        </td>
-                      </tr>
+                    {totalItems === 0 && (
+                      <div className="text-center py-8 text-xs text-slate-400">
+                        {isThai ? "ไม่มีข้อมูล" : "No records"}
+                      </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+                  </div>
+
+                  {/* โหมดหน้าจอคอมพิวเตอร์ / แท็บเล็ตแนวนอน */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr>
+                          <th>{isThai ? "เครื่อง" : "Machine"}</th>
+                          <th>Location</th>
+                          <th>Storage Location</th>
+                          <th>Material No.</th>
+                          <th>Discription</th>
+                          <th>Batch</th>
+                          <th>หนา Certificated.</th>
+                          <th>กว้าง</th>
+                          <th>ยาว</th>
+                          <th>Grade</th>
+                          <th className="text-right">{isThai ? "จำนวน" : "Qty"}</th>
+                          <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
+                          <th className="text-right">Unrestr.</th>
+                          <th>ผู้ผลิต</th>
+                          <th className="text-center">{isThai ? "ลบ" : "Del"}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRows.map((r) => (
+                          <tr key={r.id}>
+                            <td>
+                              <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-mono font-extrabold text-[11px]">
+                                {r.machine}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
+                                {r.location}
+                              </span>
+                            </td>
+                            <td className="font-mono font-bold">{r.storageLocation}</td>
+                            <td className="font-mono text-sky-600 dark:text-sky-400">
+                              {r.materialNo}
+                            </td>
+                            <td className="max-w-[240px] truncate" title={r.description}>
+                              {r.description}
+                            </td>
+                            <td>
+                              <span className="code font-mono font-extrabold text-emerald-600 dark:text-emerald-300">
+                                {r.batch}
+                              </span>
+                            </td>
+                            <td className="font-mono tabular-nums">{r.certThickness}</td>
+                            <td className="font-mono tabular-nums">{r.width}</td>
+                            <td className="font-mono tabular-nums">{r.length}</td>
+                            <td className="font-bold">{r.grade}</td>
+                            <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
+                              {Number(r.inboundQty || 1).toLocaleString()}
+                            </td>
+                            <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
+                              {Number(r.weightKg || 0).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 3,
+                              })}
+                            </td>
+                            <td className="font-mono font-bold tabular-nums text-right">
+                              {r.unrestricted || "-"}
+                            </td>
+                            <td>{r.manufacturer}</td>
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                onClick={() => deleteRmStockFromCloud(r.id)}
+                                className="p-1 rounded hover:bg-red-500/15 text-red-500 cursor-pointer"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {totalItems === 0 && (
+                          <tr>
+                            <td colSpan={15} className="text-center py-6 text-slate-400">
+                              {isThai ? "ไม่มีข้อมูล" : "No records"}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Footer */}
+                  <div className="px-3.5 sm:px-4 py-2.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0c1930]/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300 font-bold">
+                      <span>
+                        {totalItems > 0
+                          ? isThai
+                            ? `แสดง ${(startIdx + 1).toLocaleString()} - ${Math.min(
+                                startIdx + internalBatchPageSize,
+                                totalItems
+                              ).toLocaleString()} จาก ${totalItems.toLocaleString()} รายการ`
+                            : `Showing ${startIdx + 1} - ${Math.min(
+                                startIdx + internalBatchPageSize,
+                                totalItems
+                              )} of ${totalItems}`
+                          : isThai
+                          ? "0 รายการ"
+                          : "0 items"}
+                      </span>
+                      <select
+                        value={internalBatchPageSize}
+                        onChange={(e) => setInternalBatchPageSize(Number(e.target.value) || 20)}
+                        className="px-2 py-1 rounded-lg text-xs font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-800 dark:text-slate-100 cursor-pointer"
+                      >
+                        {[10, 20, 50, 100].map((size) => (
+                          <option key={size} value={size}>
+                            {isThai ? `${size} รายการ/หน้า` : `${size} / page`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={currentPage <= 1}
+                        onClick={() => setInternalBatchPage((p) => Math.max(1, p - 1))}
+                        className={`px-3 py-1 rounded-lg text-xs font-extrabold border transition-all ${
+                          currentPage > 1
+                            ? "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#1a2d52] cursor-pointer"
+                            : "bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-[#1e3a5f]/50 cursor-not-allowed"
+                        }`}
+                      >
+                        {isThai ? "ก่อนหน้า" : "PREV"}
+                      </button>
+
+                      <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] font-mono font-extrabold text-slate-700 dark:text-slate-200">
+                        {isThai
+                          ? `หน้า ${currentPage} / ${totalPages}`
+                          : `Page ${currentPage} / ${totalPages}`}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setInternalBatchPage((p) => Math.min(totalPages, p + 1))}
+                        className={`px-3 py-1 rounded-lg text-xs font-extrabold border transition-all ${
+                          currentPage < totalPages
+                            ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-xs cursor-pointer"
+                            : "bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-[#1e3a5f]/50 cursor-not-allowed"
+                        }`}
+                      >
+                        {isThai ? "หน้าถัดไป (NEXT PAGE)" : "NEXT PAGE"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
           {inboundCategory === "internal" && internalSubMode === "bundle" && (
             <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
@@ -3000,31 +3233,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 </button>
               </div>
 
-              {/* SAP Upload Buttons */}
-              {stockTableType === "batch" ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {RM_SAP_BATCH_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => openSapUploadModal(cat)}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
-                    >
-                      <FileSpreadsheet size={13} />
-                      <span>
-                        {isThai
-                          ? `อัปโหลดสต๊อก SAP (${cat})`
-                          : `Upload SAP (${cat})`}
-                      </span>
-                      {sapCountByCategory[cat] > 0 && (
-                        <span className="px-1.5 py-0.2 rounded bg-white/20 text-[10.5px] font-mono">
-                          {sapCountByCategory[cat].toLocaleString()}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ) : (
+              {/* SAP Upload Button (Bundle only; Batch categories use main top-right SAP upload button) */}
+              {stockTableType === "bundle" && (
                 <div className="flex flex-wrap items-center gap-1.5">
                   <button
                     type="button"
@@ -3190,8 +3400,6 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                             {isThai ? "ความสูงของกอง (ม.)" : "Stack Height (m)"}
                           </th>
                           <th>ผู้ผลิต</th>
-                          <th>Sales Document</th>
-                          <th className="text-center">Item</th>
                           <th>Text สภาพสินค้า</th>
                         </tr>
                       </thead>
@@ -3263,14 +3471,12 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                                 : "0.000 ม."}
                             </td>
                             <td>{r.manufacturer}</td>
-                            <td className="font-mono">{r.salesDocument}</td>
-                            <td className="font-mono text-center">{r.salesItem}</td>
                             <td>{r.conditionText}</td>
                           </tr>
                         ))}
                         {totalItems === 0 && (
                           <tr>
-                            <td colSpan={18} className="text-center py-6 text-slate-400">
+                            <td colSpan={16} className="text-center py-6 text-slate-400">
                               {isThai ? "ไม่มีข้อมูล" : "No records"}
                             </td>
                           </tr>
