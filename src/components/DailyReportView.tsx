@@ -113,6 +113,129 @@ const REPORT_BUILDING_META: Array<{
   },
 ];
 
+const REPORT_MATERIAL_CATEGORIES: Array<{
+  key: string;
+  prefix: string | null;
+  prefixLabelTh: string;
+  prefixLabelEn: string;
+  nameTh: string;
+  nameEn: string;
+  dotClass: string;
+  barClass: string;
+  badgeClass: string;
+}> = [
+  {
+    key: "BP",
+    prefix: "BP",
+    prefixLabelTh: "BP",
+    prefixLabelEn: "BP",
+    nameTh: "เหล็กท่อกลมดำ",
+    nameEn: "Black Round Pipe (BP)",
+    dotClass: "bg-slate-600 dark:bg-slate-300",
+    barClass: "bg-slate-500 dark:bg-slate-400",
+    badgeClass: "bg-slate-500/15 text-slate-700 dark:text-slate-200 border-slate-400/30",
+  },
+  {
+    key: "SP",
+    prefix: "SP",
+    prefixLabelTh: "SP",
+    prefixLabelEn: "SP",
+    nameTh: "เหล็กท่อเหลี่ยม",
+    nameEn: "Square Pipe (SP)",
+    dotClass: "bg-cyan-500",
+    barClass: "bg-cyan-500",
+    badgeClass: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-500/30",
+  },
+  {
+    key: "RP",
+    prefix: "RP",
+    prefixLabelTh: "RP",
+    prefixLabelEn: "RP",
+    nameTh: "เหล็กแป๊บแบน",
+    nameEn: "Rectangular Pipe (RP)",
+    dotClass: "bg-blue-500",
+    barClass: "bg-blue-500",
+    badgeClass: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
+  },
+  {
+    key: "CH",
+    prefix: "CH",
+    prefixLabelTh: "CH",
+    prefixLabelEn: "CH",
+    nameTh: "เหล็กตัวซี",
+    nameEn: "C-Channel (CH)",
+    dotClass: "bg-indigo-500",
+    barClass: "bg-indigo-500",
+    badgeClass: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
+  },
+  {
+    key: "FB",
+    prefix: "FB",
+    prefixLabelTh: "FB",
+    prefixLabelEn: "FB",
+    nameTh: "เหล็กMINI",
+    nameEn: "Steel MINI (FB)",
+    dotClass: "bg-amber-500",
+    barClass: "bg-amber-500",
+    badgeClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+  },
+  {
+    key: "FS",
+    prefix: "FS",
+    prefixLabelTh: "FS",
+    prefixLabelEn: "FS",
+    nameTh: "เหล็กลูกค้า",
+    nameEn: "Customer Steel (FS)",
+    dotClass: "bg-emerald-500",
+    barClass: "bg-emerald-500",
+    badgeClass: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+  },
+  {
+    key: "ZF",
+    prefix: "ZF",
+    prefixLabelTh: "ZF",
+    prefixLabelEn: "ZF",
+    nameTh: "เหล็กZ",
+    nameEn: "Steel Z (ZF)",
+    dotClass: "bg-violet-500",
+    barClass: "bg-violet-500",
+    badgeClass: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30",
+  },
+  {
+    key: "VM",
+    prefix: "VM",
+    prefixLabelTh: "VM",
+    prefixLabelEn: "VM",
+    nameTh: "เหล็กVM",
+    nameEn: "Steel VM (VM)",
+    dotClass: "bg-rose-500",
+    barClass: "bg-rose-500",
+    badgeClass: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30",
+  },
+  {
+    key: "0S1",
+    prefix: "0S1",
+    prefixLabelTh: "0S1",
+    prefixLabelEn: "0S1",
+    nameTh: "เหล็กPrime",
+    nameEn: "Steel Prime (0S1)",
+    dotClass: "bg-teal-500",
+    barClass: "bg-teal-500",
+    badgeClass: "bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30",
+  },
+  {
+    key: "OTHER",
+    prefix: null,
+    prefixLabelTh: "อื่นๆ",
+    prefixLabelEn: "Other",
+    nameTh: "เหล็กOther",
+    nameEn: "Steel Other",
+    dotClass: "bg-orange-500",
+    barClass: "bg-orange-500",
+    badgeClass: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+  },
+];
+
 export function DailyReportView({
   inboundList,
   outboundList,
@@ -2268,6 +2391,69 @@ export function DailyReportView({
         })()
       : storageSpaceAnalytics.sapCurrentStockSummary;
 
+    // Raw Material Summary grouped by BATCH prefix (filtered in real time by selected building)
+    const materialAccMap: Record<
+      string,
+      { basketIds: Set<string>; coilCount: number; totalWeightKg: number }
+    > = {};
+    REPORT_MATERIAL_CATEGORIES.forEach((cat) => {
+      materialAccMap[cat.key] = {
+        basketIds: new Set<string>(),
+        coilCount: 0,
+        totalWeightKg: 0,
+      };
+    });
+
+    const uniqueMaterialBasketIds = new Set<string>();
+    const scopedBasketRows = selectedBuilding
+      ? storageSpaceAnalytics.allBasketRows.filter((row) => row.buildingId === selectedBuilding.buildingId)
+      : storageSpaceAnalytics.allBasketRows;
+
+    scopedBasketRows.forEach((row) => {
+      if (!row.coils || row.coils.length === 0) return;
+      row.coils.forEach((coil) => {
+        const normalizedBatch = String(coil.batch || "").trim().toUpperCase();
+        const matchedCategory =
+          REPORT_MATERIAL_CATEGORIES.find(
+            (cat) => cat.prefix !== null && normalizedBatch.startsWith(cat.prefix)
+          ) || REPORT_MATERIAL_CATEGORIES[REPORT_MATERIAL_CATEGORIES.length - 1];
+
+        const acc = materialAccMap[matchedCategory.key];
+        acc.basketIds.add(row.basketId);
+        acc.coilCount += 1;
+        acc.totalWeightKg += Number(coil.weightKg) || 0;
+        uniqueMaterialBasketIds.add(row.basketId);
+      });
+    });
+
+    const materialGrandTotalCoils = REPORT_MATERIAL_CATEGORIES.reduce(
+      (sum, cat) => sum + materialAccMap[cat.key].coilCount,
+      0
+    );
+    const materialGrandTotalWeightKg = REPORT_MATERIAL_CATEGORIES.reduce(
+      (sum, cat) => sum + materialAccMap[cat.key].totalWeightKg,
+      0
+    );
+    const materialGrandTotalTons = Number((materialGrandTotalWeightKg / 1000).toFixed(3));
+
+    const materialRows = REPORT_MATERIAL_CATEGORIES.map((cat) => {
+      const acc = materialAccMap[cat.key];
+      const totalWeightKg = Number(acc.totalWeightKg.toFixed(2));
+      const totalTons = Number((totalWeightKg / 1000).toFixed(3));
+      const weightPercent =
+        materialGrandTotalWeightKg > 0
+          ? Number(((totalWeightKg / materialGrandTotalWeightKg) * 100).toFixed(1))
+          : 0;
+      return {
+        ...cat,
+        basketCount: acc.basketIds.size,
+        coilCount: acc.coilCount,
+        totalWeightKg,
+        totalTons,
+        weightPercent,
+      };
+    });
+
     return {
       selectedBuilding,
       filteredBuildings,
@@ -2280,6 +2466,15 @@ export function DailyReportView({
         spacePercent,
       },
       sapCurrentStockSummary,
+      materialSummary: {
+        rows: materialRows,
+        totals: {
+          uniqueBasketCount: uniqueMaterialBasketIds.size,
+          coilCount: materialGrandTotalCoils,
+          totalWeightKg: Number(materialGrandTotalWeightKg.toFixed(2)),
+          totalTons: materialGrandTotalTons,
+        },
+      },
     };
   }, [storageSpaceAnalytics, spaceBuildingFilter]);
 
@@ -4967,52 +5162,7 @@ export function DailyReportView({
             )}
 
             <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-3">
-              {/* 1. สต๊อกปัจจุบันSAP */}
-              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
-                      {isThai ? "สต๊อกปัจจุบันSAP" : "Current SAP Stock"}
-                    </span>
-                    <span className="text-[10px] font-black font-mono tabular-nums text-violet-200 dark:text-violet-300 bg-violet-500/25 px-1.5 py-0.2 rounded border border-violet-400/35 shrink-0">
-                      {filteredSpaceData.sapCurrentStockSummary.capacityPercent}%
-                    </span>
-                  </div>
-                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-violet-200 dark:text-violet-300 tabular-nums leading-tight">
-                    {filteredSpaceData.sapCurrentStockSummary.totalTons.toLocaleString(undefined, {
-                      minimumFractionDigits: 3,
-                      maximumFractionDigits: 3,
-                    })}{" "}
-                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
-                      {isThai ? "ตัน" : "Tons"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress Bar & SAP Record Count */}
-                <div className="mt-2.5 space-y-1">
-                  <div className="flex justify-between gap-1 text-[9.5px] sm:text-[10px] font-bold text-violet-200 dark:text-violet-300">
-                    <span className="truncate">
-                      {filteredSpaceData.sapCurrentStockSummary.itemCount > 0
-                        ? isThai
-                          ? `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} รายการ)`
-                          : `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} items)`
-                        : isThai
-                        ? "ยังไม่มีข้อมูล SAP"
-                        : "No SAP Data"}
-                    </span>
-                    <span className="shrink-0">{filteredSpaceData.sapCurrentStockSummary.capacityPercent}%</span>
-                  </div>
-                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-violet-400 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, filteredSpaceData.sapCurrentStockSummary.capacityPercent)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 2. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
+              {/* 1. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
               <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1">
@@ -5046,7 +5196,7 @@ export function DailyReportView({
                 </div>
               </div>
 
-              {/* 3. พื้นที่ใช้ไป (ตัน) */}
+              {/* 2. พื้นที่ใช้ไป (ตัน) */}
               <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1">
@@ -5083,7 +5233,7 @@ export function DailyReportView({
                 </div>
               </div>
 
-              {/* 4. พื้นที่คงเหลือ (ตัน) */}
+              {/* 3. พื้นที่คงเหลือ (ตัน) */}
               <div
                 className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border flex flex-col justify-between ${
                   filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
@@ -5171,6 +5321,51 @@ export function DailyReportView({
                             : Math.max(0, 100 - filteredSpaceData.spaceCapacitySummary.spacePercent)
                         }%`,
                       }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. สต๊อกปัจจุบันSAP */}
+              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
+                      {isThai ? "สต๊อกปัจจุบันSAP" : "Current SAP Stock"}
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-violet-200 dark:text-violet-300 bg-violet-500/25 px-1.5 py-0.2 rounded border border-violet-400/35 shrink-0">
+                      {filteredSpaceData.sapCurrentStockSummary.capacityPercent}%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-violet-200 dark:text-violet-300 tabular-nums leading-tight">
+                    {filteredSpaceData.sapCurrentStockSummary.totalTons.toLocaleString(undefined, {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                      {isThai ? "ตัน" : "Tons"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar & SAP Record Count */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between gap-1 text-[9.5px] sm:text-[10px] font-bold text-violet-200 dark:text-violet-300">
+                    <span className="truncate">
+                      {filteredSpaceData.sapCurrentStockSummary.itemCount > 0
+                        ? isThai
+                          ? `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} รายการ)`
+                          : `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} items)`
+                        : isThai
+                        ? "ยังไม่มีข้อมูล SAP"
+                        : "No SAP Data"}
+                    </span>
+                    <span className="shrink-0">{filteredSpaceData.sapCurrentStockSummary.capacityPercent}%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-violet-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, filteredSpaceData.sapCurrentStockSummary.capacityPercent)}%` }}
                     />
                   </div>
                 </div>
@@ -5392,6 +5587,169 @@ export function DailyReportView({
                 })}
               </div>
             </div>
+          )}
+
+          {/* =========================================================================
+              RAW MATERIAL SUMMARY TABLE (GROUPED BY BATCH PREFIX)
+              ========================================================================= */}
+          {(spaceReportSubTab === "all" || spaceReportSubTab === "warehouse") && (
+            <section className="rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md overflow-hidden">
+              <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                    <Layers size={16} className="sm:w-5 sm:h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span>{isThai ? "ข้อมูลวัตถุดิบ" : "Raw Material Summary"}</span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] sm:text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+                        {filteredSpaceData.selectedBuilding
+                          ? isThai
+                            ? filteredSpaceData.selectedBuilding.buildingNameTh
+                            : filteredSpaceData.selectedBuilding.buildingNameEn
+                          : isThai
+                          ? "ทุกอาคาร (H, F, E9, E10, I)"
+                          : "All Buildings (H, F, E9, E10, I)"}
+                      </span>
+                    </h3>
+                    <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {isThai
+                        ? "สรุปจำนวนตะกร้า แถบเหล็กสลิต น้ำหนักรวม และสัดส่วน แยกตามรหัสขึ้นต้น BATCH (อัปเดตตามอาคารที่เลือกแบบเรียลไทม์)"
+                        : "Summary of baskets, slit coils, net weight, and share grouped by BATCH prefix (live filtered by selected building)"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-left sm:text-right font-mono text-[11px] sm:text-xs font-bold text-indigo-600 dark:text-indigo-400 tabular-nums">
+                  <span>
+                    {filteredSpaceData.materialSummary.totals.coilCount.toLocaleString()}{" "}
+                    {isThai ? "แถบ" : "coils"}
+                  </span>
+                  <span className="mx-1.5 text-slate-400">•</span>
+                  <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
+                    {filteredSpaceData.materialSummary.totals.totalWeightKg.toLocaleString()} kg
+                  </span>{" "}
+                  ({filteredSpaceData.materialSummary.totals.totalTons.toLocaleString(undefined, {
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3,
+                  })}{" "}
+                  {isThai ? "ตัน" : "TON"})
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[10.5px] sm:text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
+                      <th className="!p-1.5 sm:!p-3 !text-center w-10">#</th>
+                      <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "ประเภทวัตถุดิบ" : "Material Type"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "รหัสขึ้นต้น BATCH" : "BATCH Prefix"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "จำนวนตะกร้า" : "Baskets"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "จำนวนรายการ / แถบ" : "Items / Coils"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนักรวม (kg)" : "Weight (kg)"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนักรวม (ตัน)" : "Weight (Tons)"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "สัดส่วน (%)" : "Share (%)"}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                    {filteredSpaceData.materialSummary.rows.map((mat, idx) => {
+                      const isZero = mat.coilCount === 0;
+                      return (
+                        <tr
+                          key={mat.key}
+                          className={`hover:bg-indigo-50/40 dark:hover:bg-indigo-950/20 transition-colors whitespace-nowrap ${
+                            isZero ? "opacity-60" : ""
+                          }`}
+                        >
+                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-slate-500 dark:text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-left font-bold text-slate-800 dark:text-slate-100">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${mat.dotClass}`} />
+                              <span>{isThai ? mat.nameTh : mat.nameEn}</span>
+                            </div>
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-center">
+                            <span
+                              className={`inline-flex items-center justify-center min-w-[44px] px-2 py-0.5 rounded-md font-mono font-extrabold text-[10px] sm:text-[11px] border ${mat.badgeClass}`}
+                            >
+                              {isThai ? mat.prefixLabelTh : mat.prefixLabelEn}
+                            </span>
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold text-slate-700 dark:text-slate-300">
+                            {mat.basketCount.toLocaleString()}
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold text-slate-800 dark:text-slate-200">
+                            {mat.coilCount.toLocaleString()}
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
+                            {mat.totalWeightKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold text-cyan-700 dark:text-cyan-300">
+                            {mat.totalTons.toLocaleString(undefined, {
+                              minimumFractionDigits: 3,
+                              maximumFractionDigits: 3,
+                            })}
+                          </td>
+                          <td className="!p-1.5 sm:!p-3 !text-center">
+                            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+                              <div className="w-14 sm:w-20 bg-slate-200 dark:bg-slate-700 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${mat.barClass}`}
+                                  style={{ width: `${Math.min(100, mat.weightPercent)}%` }}
+                                />
+                              </div>
+                              <span className="font-mono tabular-nums font-bold text-[10px] sm:text-[11px] w-10 sm:w-11 text-right text-slate-700 dark:text-slate-200">
+                                {mat.weightPercent.toFixed(1)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-100 dark:bg-[#0c1930] font-bold border-t-2 border-slate-300 dark:border-[#1e3a5f] whitespace-nowrap">
+                    <tr>
+                      <td
+                        colSpan={3}
+                        className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-800 dark:text-slate-100 font-black"
+                      >
+                        {filteredSpaceData.selectedBuilding
+                          ? isThai
+                            ? `รวมทั้งหมด (TOTAL) — ${filteredSpaceData.selectedBuilding.buildingNameTh}`
+                            : `TOTAL — ${filteredSpaceData.selectedBuilding.buildingNameEn}`
+                          : isThai
+                          ? "รวมทั้งหมด (TOTAL)"
+                          : "TOTAL (ALL BUILDINGS)"}
+                      </td>
+                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-800 dark:text-slate-100">
+                        {filteredSpaceData.materialSummary.totals.uniqueBasketCount.toLocaleString()}
+                      </td>
+                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
+                        {filteredSpaceData.materialSummary.totals.coilCount.toLocaleString()}
+                      </td>
+                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
+                        {filteredSpaceData.materialSummary.totals.totalWeightKg.toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        kg
+                      </td>
+                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-cyan-700 dark:text-cyan-300">
+                        {filteredSpaceData.materialSummary.totals.totalTons.toLocaleString(undefined, {
+                          minimumFractionDigits: 3,
+                          maximumFractionDigits: 3,
+                        })}{" "}
+                        {isThai ? "ตัน" : "T"}
+                      </td>
+                      <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-black text-indigo-600 dark:text-indigo-400">
+                        {filteredSpaceData.materialSummary.totals.totalWeightKg > 0 ? "100.0%" : "0.0%"}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </section>
           )}
 
           {/* =========================================================================
