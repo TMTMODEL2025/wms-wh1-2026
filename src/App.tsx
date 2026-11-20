@@ -60,11 +60,17 @@ import { PreStartInspection } from "./components/PreStartInspection";
 import { DailyDutyAssignmentPanel } from "./components/DailyDutyAssignmentPanel";
 import { SlitFilmManagement } from "./components/SlitFilmManagement";
 import { CoilManagement } from "./components/CoilManagement";
+import { RmSheetManagement } from "./components/RmSheetManagement";
 import {
   unsubscribeAllCoilFirestoreListeners,
   CoilModeTab,
   CoilStockRecord,
 } from "./services/coilDataService";
+import {
+  unsubscribeAllRmFirestoreListeners,
+  RmModeTab,
+  RmStockRecord,
+} from "./services/rmDataService";
 import { unsubscribeAllForkliftFirestoreListeners } from "./services/forkliftDataService";
 import {
   subscribeToWmsEmployees,
@@ -5371,6 +5377,7 @@ function WmsApp({
   const [warehouseInventoryExpanded, setWarehouseInventoryExpanded] = useState<boolean>(false);
   const [slitMenuExpanded, setSlitMenuExpanded] = useState<boolean>(false);
   const [coilMenuExpanded, setCoilMenuExpanded] = useState<boolean>(false);
+  const [rmMenuExpanded, setRmMenuExpanded] = useState<boolean>(false);
   const [administrationExpanded, setAdministrationExpanded] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -5383,6 +5390,7 @@ function WmsApp({
   });
   const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
   const [coilMode, setCoilMode] = useState<CoilModeTab>("inbound");
+  const [rmMode, setRmMode] = useState<RmModeTab>("inbound");
 
   // Guard active route against logged-in user's permitted sections
   useEffect(() => {
@@ -5393,10 +5401,13 @@ function WmsApp({
     }
   }, [currentUser, active, canAccessMenu, getDefaultMenu]);
 
-  // Strict Read-Quota Guard: immediately unsubscribe all Coil & Forklift Firestore listeners when leaving their respective pages
+  // Strict Read-Quota Guard: immediately unsubscribe all Coil, RM & Forklift Firestore listeners when leaving their respective pages
   useEffect(() => {
     if (active !== "coil") {
       unsubscribeAllCoilFirestoreListeners();
+    }
+    if (active !== "rm") {
+      unsubscribeAllRmFirestoreListeners();
     }
     if (
       ![
@@ -5883,6 +5894,8 @@ function WmsApp({
                             setSelectedRecord(null);
                             if (item.id === "slit") {
                               setSlitMenuExpanded(true);
+                            } else if (item.id === "rm") {
+                              setRmMenuExpanded(true);
                             }
                           }}
                           title={item.label}
@@ -6026,13 +6039,16 @@ function WmsApp({
                         const isActive = active === item.id;
                         const isSlit = item.id === "slit";
                         const isCoil = item.id === "coil";
+                        const isRm = item.id === "rm";
 
                         return (
                               <div
                                 key={item.id}
                                 style={{
                                   marginBottom:
-                                    (isSlit && slitMenuExpanded) || (isCoil && coilMenuExpanded)
+                                    (isSlit && slitMenuExpanded) ||
+                                    (isCoil && coilMenuExpanded) ||
+                                    (isRm && rmMenuExpanded)
                                       ? 4
                                       : 0,
                                 }}
@@ -6053,6 +6069,12 @@ function WmsApp({
                                         setActive(item.id);
                                         setSelectedRecord(null);
                                       }
+                                    } else if (isRm) {
+                                      setRmMenuExpanded((prev) => !prev);
+                                      if (!isActive) {
+                                        setActive(item.id);
+                                        setSelectedRecord(null);
+                                      }
                                     } else {
                                       setActive(item.id);
                                       setSelectedRecord(null);
@@ -6069,13 +6091,19 @@ function WmsApp({
                                     </span>
                                     <span>{item.label}</span>
                                   </div>
-                                  {(isSlit || isCoil) && (
+                                  {(isSlit || isCoil || isRm) && (
                                     <span
                                       className="nav-arrow-icon"
                                       style={{
                                         fontSize: 11,
                                         marginLeft: "auto",
-                                        transform: (isSlit ? slitMenuExpanded : coilMenuExpanded)
+                                        transform: (
+                                          isSlit
+                                            ? slitMenuExpanded
+                                            : isCoil
+                                            ? coilMenuExpanded
+                                            : rmMenuExpanded
+                                        )
                                           ? "rotate(0deg)"
                                           : "rotate(-90deg)",
                                       }}
@@ -6084,6 +6112,99 @@ function WmsApp({
                                     </span>
                                   )}
                                 </button>
+
+                                {/* Submenu for RM Steel Sheet (เหล็กแผ่น RM) */}
+                                {isRm && (
+                                  <div
+                                    className={`nav-submenu-collapse ${rmMenuExpanded ? "open" : ""}`}
+                                    aria-hidden={!rmMenuExpanded}
+                                  >
+                                    <div className="nav-submenu-inner">
+                                      <div className="nav-submenu">
+                                        {[
+                                          {
+                                            id: "inbound" as RmModeTab,
+                                            labelTh: "+ รับเข้า",
+                                            labelEn: "+ Inbound",
+                                            icon: ArrowDownRight,
+                                            color: "#10b981",
+                                          },
+                                          {
+                                            id: "outbound" as RmModeTab,
+                                            labelTh: "- เตรียมเบิก",
+                                            labelEn: "- Staging",
+                                            icon: ArrowUpRight,
+                                            color: "#f59e0b",
+                                          },
+                                          {
+                                            id: "operator_receive" as RmModeTab,
+                                            labelTh: "จ่ายออก",
+                                            labelEn: "Issue",
+                                            icon: Cpu,
+                                            color: "#38bdf8",
+                                          },
+                                          {
+                                            id: "relocate_layout" as RmModeTab,
+                                            labelTh: "ย้าย Layout",
+                                            labelEn: "Relocate Layout",
+                                            icon: ArrowRightLeft,
+                                            color: "#c084fc",
+                                          },
+                                          {
+                                            id: "stock_balance" as RmModeTab,
+                                            labelTh: "สต๊อก",
+                                            labelEn: "Stock Balance",
+                                            icon: Package,
+                                            color: "#06b6d4",
+                                          },
+                                          {
+                                            id: "return_warehouse" as RmModeTab,
+                                            labelTh: "คืนคลัง",
+                                            labelEn: "Return Warehouse",
+                                            icon: RotateCcw,
+                                            color: "#14b8a6",
+                                          },
+                                          {
+                                            id: "daily_report" as RmModeTab,
+                                            labelTh: "รายงาน",
+                                            labelEn: "Daily Report",
+                                            icon: FileText,
+                                            color: "#6366f1",
+                                          },
+                                        ].map((sub) => {
+                                          const SubIcon = sub.icon;
+                                          return (
+                                            <button
+                                              key={sub.id}
+                                              type="button"
+                                              tabIndex={rmMenuExpanded ? 0 : -1}
+                                              className={`nav-sub-btn ${
+                                                active === "rm" && rmMode === sub.id ? "active" : ""
+                                              }`}
+                                              onClick={() => {
+                                                setActive("rm");
+                                                setRmMode(sub.id);
+                                                setSelectedRecord(null);
+                                                if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                                  setSidebarCollapsed(true);
+                                                }
+                                              }}
+                                              title={language === "th" ? sub.labelTh : sub.labelEn}
+                                            >
+                                              <span
+                                                className="nav-icon"
+                                                style={{ width: 16, height: 16, color: sub.color }}
+                                              >
+                                                <SubIcon size={14} />
+                                              </span>
+                                              <span>{language === "th" ? sub.labelTh : sub.labelEn}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* Submenu for Steel Coil (การจัดการเหล็กม้วน) */}
                                 {isCoil && (
@@ -6477,11 +6598,12 @@ function WmsApp({
 
           <main className={`main ${active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report") ? "main-flush" : ""}`}>
             {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && active !== "manpower-planning" && (
-              <div className={`page-heading ${active === "slit" || active === "coil" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : active === "transport" ? "!items-center" : ""}`}>
+              <div className={`page-heading ${active === "slit" || active === "coil" || active === "rm" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : active === "transport" ? "!items-center" : ""}`}>
                 <div>
                   <h1>{pageTitle}</h1>
                   {active !== "slit" &&
                     active !== "coil" &&
+                    active !== "rm" &&
                     active !== "dashboard" &&
                     active !== "pre-start" &&
                     active !== "vehicles" &&
@@ -6494,7 +6616,7 @@ function WmsApp({
                     )}
                 </div>
 
-                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "coil" && active !== "admin" && (
+                {active !== "dashboard" && active !== "pre-start" && active !== "vehicles" && active !== "employees" && active !== "coil" && active !== "rm" && active !== "admin" && (
                   <div
                     id="page-heading-actions"
                     className={active === "slit" ? "heading-actions absolute top-0 right-0 z-10 flex items-center gap-2" : "heading-actions"}
@@ -6669,6 +6791,33 @@ function WmsApp({
                 }}
                 onLogTransaction={(activity, reference, status) => {
                   logModuleActivity("Coil Management", activity, reference, status, "coil");
+                }}
+              />
+            ) : active === "rm" ? (
+              <RmSheetManagement
+                activeMode={rmMode}
+                onModeChange={setRmMode}
+                onStockSummaryChange={(rmItems: RmStockRecord[]) => {
+                  setInventory((prev) => {
+                    const nonRm = prev.filter((item) => item.module !== "rm");
+                    const mappedRm: RecordItem[] = rmItems
+                      .filter((r) => r.weightKg > 0 && r.status !== "issued")
+                      .map((r, idx) => ({
+                        id: 800000 + idx,
+                        module: "rm",
+                        code: r.batchHu || r.batch,
+                        name: r.description || `${r.grade} ${r.certThickness}x${r.width}x${r.length}mm (${r.manufacturer})`,
+                        location: r.location,
+                        qty: Number((r.weightKg / 1000).toFixed(2)),
+                        unit: "TON",
+                        status: r.status === "available" ? "Available" : "Pending",
+                        updatedAt: r.scanTimestamp,
+                      }));
+                    return [...mappedRm, ...nonRm];
+                  });
+                }}
+                onLogTransaction={(activity, reference, status) => {
+                  logModuleActivity("RM Steel Sheet", activity, reference, status, "rm");
                 }}
               />
             ) : (

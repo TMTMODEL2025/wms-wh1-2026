@@ -65,6 +65,34 @@ service cloud.firestore {
         && data.items is list && data.items.size() <= 1000;
     }
 
+    function isValidRmStock(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.batch is string && data.batch.size() <= 128
+        && data.location is string && data.location.size() <= 64;
+    }
+
+    function isValidRmTransaction(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.batch is string && data.batch.size() <= 128
+        && data.txType is string && data.txType.size() <= 32;
+    }
+
+    function isValidRmStaging(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.orderNo is string && data.orderNo.size() <= 64;
+    }
+
+    function isValidRmLayout(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.bayCode is string && data.bayCode.size() <= 64;
+    }
+
+    function isValidRmSapChunk(data) {
+      return data.id is string && data.id.size() <= 128
+        && data.chunkIndex is number
+        && data.items is list && data.items.size() <= 1000;
+    }
+
     function isValidMhTransfer(data) {
       return data.id is string && data.id.size() <= 128
         && data.transferCode is string && data.transferCode.size() <= 64;
@@ -282,6 +310,36 @@ service cloud.firestore {
     match /coil_sap_chunks/{chunkId} {
       allow read: if true;
       allow create, update: if isValidId(chunkId) && isValidCoilSapChunk(request.resource.data);
+      allow delete: if isValidId(chunkId);
+    }
+
+    match /rm_stock/{recordId} {
+      allow read: if true;
+      allow create, update: if isValidId(recordId) && isValidRmStock(request.resource.data);
+      allow delete: if isValidId(recordId);
+    }
+
+    match /rm_transactions/{txId} {
+      allow read: if true;
+      allow create, update: if isValidId(txId) && isValidRmTransaction(request.resource.data);
+      allow delete: if isValidId(txId);
+    }
+
+    match /rm_staging/{stagingId} {
+      allow read: if true;
+      allow create, update: if isValidId(stagingId) && isValidRmStaging(request.resource.data);
+      allow delete: if isValidId(stagingId);
+    }
+
+    match /rm_layouts/{layoutId} {
+      allow read: if true;
+      allow create, update: if isValidId(layoutId) && isValidRmLayout(request.resource.data);
+      allow delete: if isValidId(layoutId);
+    }
+
+    match /rm_sap_chunks/{chunkId} {
+      allow read: if true;
+      allow create, update: if isValidId(chunkId) && isValidRmSapChunk(request.resource.data);
       allow delete: if isValidId(chunkId);
     }
 
