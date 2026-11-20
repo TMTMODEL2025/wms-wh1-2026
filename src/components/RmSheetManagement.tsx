@@ -601,7 +601,25 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
   const [inboundBarcodeInput, setInboundBarcodeInput] = useState<string>("");
   const [inboundQtyInput, setInboundQtyInput] = useState<string>("");
   const [bundleBatchInput, setBundleBatchInput] = useState<string>("");
+  const [externalVendorInput, setExternalVendorInput] = useState<string>("");
+  const [externalQtyInput, setExternalQtyInput] = useState<string>("");
+  const [externalWeightInput, setExternalWeightInput] = useState<string>("");
   const [isInboundCameraOpen, setIsInboundCameraOpen] = useState<boolean>(false);
+
+  const knownExternalVendors = useMemo(() => {
+    const set = new Set<string>();
+    rmStock.forEach((r) => {
+      if (r.manufacturer && r.manufacturer.trim() && r.manufacturer.trim() !== "-") {
+        set.add(r.manufacturer.trim());
+      }
+    });
+    rmSapItems.forEach((s) => {
+      if (s.manufacturer && s.manufacturer.trim() && s.manufacturer.trim() !== "-") {
+        set.add(s.manufacturer.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rmStock, rmSapItems]);
   const [cameraScanTarget, setCameraScanTarget] = useState<"location" | "barcode">("barcode");
   const [inboundSearch, setInboundSearch] = useState<string>("");
   const [lastScannedBanner, setLastScannedBanner] = useState<{
@@ -1072,16 +1090,44 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
           "Completed"
         );
       } else {
-        // โหมดรับภายนอก
+        // โหมดรับภายนอก (รองรับระบุ Vendor, จำนวน, น้ำหนัก จากฟอร์ม)
+        const cleanVendor = externalVendorInput.trim();
+        const parsedExtQty =
+          externalQtyInput.trim() !== ""
+            ? parseFloat(externalQtyInput.replace(/,/g, "")) || 0
+            : 0;
+        const parsedExtWeight =
+          externalWeightInput.trim() !== ""
+            ? parseFloat(externalWeightInput.replace(/,/g, "")) || 0
+            : 0;
+
+        const formulaWeightFromExtQty =
+          parsedExtQty > 0
+            ? calculateRmFormulaWeightKg(parsedExtQty, certThickness, width, length)
+            : 0;
+
         const resolvedWeight =
-          existingWeightKg > 0
+          parsedExtWeight > 0
+            ? Number(parsedExtWeight.toFixed(3))
+            : formulaWeightFromExtQty > 0
+            ? formulaWeightFromExtQty
+            : existingWeightKg > 0
             ? existingWeightKg
             : calculateRmFormulaWeightKg(1, certThickness, width, length);
+
         const resolvedQty =
-          existingQty > 0
+          parsedExtQty > 0
+            ? parsedExtQty
+            : resolvedWeight > 0
+            ? calculateRmQtyFromWeightKg(resolvedWeight, certThickness, width, length) ||
+              existingQty ||
+              1
+            : existingQty > 0
             ? existingQty
-            : calculateRmQtyFromWeightKg(resolvedWeight, certThickness, width, length) ||
-              1;
+            : 1;
+
+        const resolvedVendor =
+          cleanVendor || sapMatch?.manufacturer || existingRec?.manufacturer || "";
 
         const saved = await saveRmInboundToCloud({
           id: `RM-BATCH-${scannedBatch}`,
@@ -1101,13 +1147,13 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
           length,
           grade: sapMatch?.grade || existingRec?.grade || "-",
           unrestricted:
-            sapMatch?.unrestricted ||
-            existingRec?.unrestricted ||
-            (resolvedWeight > 0 ? resolvedWeight.toFixed(3) : "1.000"),
+            resolvedWeight > 0
+              ? resolvedWeight.toFixed(3)
+              : sapMatch?.unrestricted || existingRec?.unrestricted || "1.000",
           weightKg: resolvedWeight,
           initialWeightKg: resolvedWeight,
           inboundQty: resolvedQty,
-          manufacturer: sapMatch?.manufacturer ?? existingRec?.manufacturer ?? "",
+          manufacturer: resolvedVendor,
           salesDocument: sapMatch?.salesDocument ?? existingRec?.salesDocument ?? "",
           salesItem: sapMatch?.salesItem ?? existingRec?.salesItem ?? "0",
           conditionText: sapMatch?.conditionText ?? existingRec?.conditionText ?? "",
@@ -1117,6 +1163,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
           updatedAt: new Date().toISOString(),
         });
 
+        setExternalQtyInput("");
+        setExternalWeightInput("");
+
         playBeep("success");
         setLastScannedBanner({
           type: "success",
@@ -1124,17 +1173,17 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
             ? `รับภายนอกสำเร็จ! • Batch: [${saved.batch}] -> Location: ${saved.location}`
             : `External Inbound Batch [${saved.batch}] saved to ${saved.location}`,
           detail: isThai
-            ? `จำนวน: ${saved.inboundQty.toLocaleString()} • น้ำหนัก: ${saved.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG`
-            : `Qty: ${saved.inboundQty} • Weight: ${saved.weightKg} KG`,
+            ? `${saved.manufacturer ? `Vendor: ${saved.manufacturer} • ` : ""}จำนวน: ${saved.inboundQty.toLocaleString()} แผ่น • น้ำหนัก: ${saved.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG`
+            : `${saved.manufacturer ? `Vendor: ${saved.manufacturer} • ` : ""}Qty: ${saved.inboundQty} • Weight: ${saved.weightKg} KG`,
         });
         showToast(
           isThai
-            ? `รับเข้า Batch ${saved.batch} -> Location ${saved.location} สำเร็จ`
-            : `Inbound Batch ${saved.batch} -> ${saved.location}`,
+            ? `รับภายนอก Batch ${saved.batch}${saved.manufacturer ? ` (${saved.manufacturer})` : ""} -> ${saved.location} สำเร็จ`
+            : `External Batch ${saved.batch} -> ${saved.location}`,
           "success"
         );
         onLogTransaction?.(
-          `RM External Batch Inbound ${saved.batch} -> ${saved.location}`,
+          `RM External Batch Inbound ${saved.batch}${saved.manufacturer ? ` [Vendor: ${saved.manufacturer}]` : ""} (Qty: ${saved.inboundQty}, Weight: ${saved.weightKg} KG) -> ${saved.location}`,
           saved.batch,
           "Completed"
         );
@@ -1381,7 +1430,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
         qtyNum,
         weightKg,
         stackHeight,
-        manufacturer: sap.manufacturer ?? scanned?.manufacturer ?? "",
+        manufacturer: sap.manufacturer || scanned?.manufacturer || "",
         salesDocument: sap.salesDocument ?? scanned?.salesDocument ?? "",
         salesItem: sap.salesItem ?? scanned?.salesItem ?? "0",
         conditionText: sap.conditionText ?? scanned?.conditionText ?? "",
@@ -2030,7 +2079,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       <button
                         type="submit"
                         className={`px-4 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold text-white shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
-                          inboundCategory === "internal" && internalSubMode === "bundle"
+                          inboundCategory === "external"
+                            ? "bg-blue-600 hover:bg-blue-500"
+                            : internalSubMode === "bundle"
                             ? "bg-indigo-600 hover:bg-indigo-500"
                             : "bg-emerald-600 hover:bg-emerald-500"
                         }`}
@@ -2225,6 +2276,95 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* External Inbound Fields: Vendor, จำนวน, น้ำหนัก */}
+              {inboundCategory === "external" && (
+                <div className="space-y-2 pt-0.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-12 gap-2">
+                    <div className="col-span-2 sm:col-span-6">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-1">
+                        <Building2 size={12} className="text-blue-500" />
+                        <span>Vendor</span>
+                      </label>
+                      <div className="relative flex items-center">
+                        <input
+                          type="text"
+                          list="rm-external-vendor-list"
+                          value={externalVendorInput}
+                          onChange={(e) => setExternalVendorInput(e.target.value)}
+                          placeholder={isThai ? "ระบุชื่อ Vendor / ผู้ผลิต..." : "Enter Vendor..."}
+                          className="w-full pl-3 pr-8 py-2 rounded-lg text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                        />
+                        {externalVendorInput && (
+                          <button
+                            type="button"
+                            onClick={() => setExternalVendorInput("")}
+                            className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <datalist id="rm-external-vendor-list">
+                        {knownExternalVendors.map((v) => (
+                          <option key={v} value={v} />
+                        ))}
+                      </datalist>
+                    </div>
+
+                    <div className="col-span-1 sm:col-span-3">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                        {isThai ? "จำนวน (แผ่น)" : "Quantity"}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={externalQtyInput}
+                        onChange={(e) => setExternalQtyInput(e.target.value)}
+                        placeholder={
+                          activeInboundSpec.existingQty > 0
+                            ? String(activeInboundSpec.existingQty)
+                            : "1"
+                        }
+                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="col-span-1 sm:col-span-3">
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                        {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={externalWeightInput}
+                        onChange={(e) => setExternalWeightInput(e.target.value)}
+                        placeholder={(() => {
+                          const q = parseFloat(externalQtyInput.replace(/,/g, "")) || 0;
+                          const calc =
+                            q > 0
+                              ? calculateRmFormulaWeightKg(
+                                  q,
+                                  activeInboundSpec.certThickness,
+                                  activeInboundSpec.width,
+                                  activeInboundSpec.length
+                                )
+                              : activeInboundSpec.existingWeightKg;
+                          return calc > 0
+                            ? calc.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 3,
+                              })
+                            : "0.00";
+                        })()}
+                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </form>
@@ -2541,7 +2681,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
 
           {inboundCategory === "external" && (
             <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+              <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
                   {isThai
                     ? `รับภายนอก (${filteredExternalRecords.length})`
@@ -2557,17 +2697,100 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     type="text"
                     value={inboundSearch}
                     onChange={(e) => setInboundSearch(e.target.value)}
-                    placeholder={isThai ? "ค้นหา..." : "Search..."}
-                    className="w-full pl-8 pr-3 py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                    placeholder={isThai ? "ค้นหา Batch, Vendor, Location..." : "Search..."}
+                    className="w-full pl-8 pr-3 py-1.5 sm:py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* โหมดมือถือ: Card View สำหรับรับภายนอก */}
+              <div className="md:hidden divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                {filteredExternalRecords.slice(0, 50).map((r) => (
+                  <div key={r.id} className="p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-blue-500/15 text-blue-600 dark:text-blue-300 font-mono font-extrabold text-xs">
+                            {r.batch}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
+                            Loc: {r.location}
+                          </span>
+                          {r.manufacturer && r.manufacturer !== "-" && (
+                            <span className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 font-bold text-[11px]">
+                              {r.manufacturer}
+                            </span>
+                          )}
+                          {r.grade && r.grade !== "-" && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono font-bold text-[11px]">
+                              {r.grade}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium line-clamp-1">
+                          {r.materialNo !== "-" ? `${r.materialNo} • ` : ""}
+                          {r.description}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteRmStockFromCloud(r.id)}
+                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-red-500 cursor-pointer shrink-0"
+                        title={isThai ? "ลบรายการ" : "Delete"}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px] font-mono">
+                      <div className="px-2 py-1 rounded bg-slate-50 dark:bg-[#0c1930] border border-slate-200/70 dark:border-[#1e3a5f]">
+                        <span className="block text-[10px] text-slate-400">
+                          Vendor
+                        </span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200 truncate block">
+                          {r.manufacturer || "-"}
+                        </span>
+                      </div>
+
+                      <div className="px-2 py-1 rounded bg-sky-500/10 border border-sky-500/25 text-right">
+                        <span className="block text-[10px] text-sky-600 dark:text-sky-400">
+                          {isThai ? "จำนวน" : "Qty"}
+                        </span>
+                        <span className="font-extrabold text-sky-700 dark:text-sky-300">
+                          {Number(r.inboundQty || 1).toLocaleString()}{" "}
+                          {isThai ? "แผ่น" : "pcs"}
+                        </span>
+                      </div>
+
+                      <div className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-right">
+                        <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">
+                          {isThai ? "น้ำหนัก (KG)" : "Weight"}
+                        </span>
+                        <span className="font-extrabold text-emerald-700 dark:text-emerald-300">
+                          {Number(r.weightKg || 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredExternalRecords.length === 0 && (
+                  <div className="text-center py-8 text-xs text-slate-400">
+                    {isThai ? "ไม่มีข้อมูล" : "No records"}
+                  </div>
+                )}
+              </div>
+
+              {/* โหมดหน้าจอคอมพิวเตอร์ */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr>
                       <th>Location</th>
+                      <th>Vendor</th>
                       <th>Storage Location</th>
                       <th>Material No.</th>
                       <th>Discription</th>
@@ -2576,8 +2799,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       <th>กว้าง</th>
                       <th>ยาว</th>
                       <th>Grade</th>
-                      <th className="text-right">Unrestr.</th>
-                      <th>ผู้ผลิต</th>
+                      <th className="text-right">{isThai ? "จำนวน" : "Qty"}</th>
+                      <th className="text-right">{isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}</th>
                       <th className="text-center">{isThai ? "ลบ" : "Del"}</th>
                     </tr>
                   </thead>
@@ -2589,11 +2812,16 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                             {r.location}
                           </span>
                         </td>
+                        <td className="font-bold text-indigo-600 dark:text-indigo-300">
+                          {r.manufacturer || "-"}
+                        </td>
                         <td className="font-mono font-bold">{r.storageLocation}</td>
                         <td className="font-mono text-sky-600 dark:text-sky-400">
                           {r.materialNo}
                         </td>
-                        <td className="max-w-[240px] truncate">{r.description}</td>
+                        <td className="max-w-[240px] truncate" title={r.description}>
+                          {r.description}
+                        </td>
                         <td>
                           <span className="code font-mono font-extrabold text-blue-600 dark:text-blue-300">
                             {r.batch}
@@ -2603,10 +2831,15 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                         <td className="font-mono tabular-nums">{r.width}</td>
                         <td className="font-mono tabular-nums">{r.length}</td>
                         <td className="font-bold">{r.grade}</td>
-                        <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
-                          {r.unrestricted || Number(r.weightKg || 0).toLocaleString()}
+                        <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
+                          {Number(r.inboundQty || 1).toLocaleString()}
                         </td>
-                        <td>{r.manufacturer}</td>
+                        <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
+                          {Number(r.weightKg || 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 3,
+                          })}
+                        </td>
                         <td className="text-center">
                           <button
                             type="button"
@@ -2620,7 +2853,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     ))}
                     {filteredExternalRecords.length === 0 && (
                       <tr>
-                        <td colSpan={12} className="text-center py-6 text-slate-400">
+                        <td colSpan={13} className="text-center py-6 text-slate-400">
                           {isThai ? "ไม่มีข้อมูล" : "No records"}
                         </td>
                       </tr>

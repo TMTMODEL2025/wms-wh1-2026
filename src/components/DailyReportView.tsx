@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { useLanguage } from "../contexts/LanguageContext";
-import { SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
+import { sanitizeWeightKg, SlitBarcodeRecord, PickListOrder, SapMasterItem } from "./SlitFilmManagement";
 import {
   getStoredMachineStaging,
   saveStoredMachineStaging,
@@ -50,6 +50,7 @@ import {
 } from "../data/machineStagingStorage";
 import {
   getStoredMasterBasketLayout,
+  getStoredBuildingMaxCapacityTons,
   ensureWarehouseSpaceCloudSync,
   MASTER_BASKET_LAYOUT_UPDATED_EVENT,
   BUILDING_CAPACITY_UPDATED_EVENT,
@@ -2029,6 +2030,72 @@ export function DailyReportView({
         ? Math.round((machineTotals.totalUsedMeters / machineTotals.totalCapacityMeters) * 100)
         : 0;
 
+    // Warehouse Space Capacity Summary (Tons) across all 5 buildings (H, F, E9, E10, I)
+    const buildingMaxCapMap = getStoredBuildingMaxCapacityTons();
+    const totalMaxCapacityTons = buildingSummaries.reduce(
+      (sum, b) => sum + (buildingMaxCapMap[b.buildingId] ?? 8000),
+      0
+    );
+    const totalUsedSpaceTons = Number(
+      buildingSummaries
+        .reduce((sum, b) => sum + Number(((Number(b.totalWeightKg) || 0) / 1000).toFixed(3)), 0)
+        .toFixed(3)
+    );
+    const totalRemainingSpaceTons = Number((totalMaxCapacityTons - totalUsedSpaceTons).toFixed(3));
+    const spacePercent =
+      totalMaxCapacityTons > 0 ? Math.round((totalUsedSpaceTons / totalMaxCapacityTons) * 100) : 0;
+
+    // Current SAP Stock Summary (Tons) excluding dispatched batches
+    const sapDispatchedBatchSet = new Set<string>();
+    inboundList.forEach((r) => {
+      if (!r?.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      const loc = (r.location || "").trim();
+      const upperLoc = loc.toUpperCase();
+      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
+        sapDispatchedBatchSet.add(bKey);
+      }
+    });
+    outboundList.forEach((r) => {
+      if (!r?.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      const isTempEmergency = Boolean((r.isTemporaryOrder || r.orderNo?.startsWith("TEMP-")) && !r.matchedOrderNo);
+      const loc = (r.location || "").trim();
+      const upperLoc = loc.toUpperCase();
+      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
+        if (!isTempEmergency) {
+          sapDispatchedBatchSet.add(bKey);
+        }
+      }
+    });
+    pickLists.forEach((pl) => {
+      const isPlTemp = Boolean(
+        (pl.isTemporary || pl.orderNo?.startsWith("TEMP-")) && !pl.matchedOrderNo && !pl.operatorDismissed
+      );
+      (pl.items || []).forEach((item) => {
+        if (!item?.batch) return;
+        const bKey = item.batch.trim().toUpperCase();
+        if (item.machineIssued && !isPlTemp) {
+          sapDispatchedBatchSet.add(bKey);
+        }
+      });
+    });
+
+    let sapTotalWeightKg = 0;
+    let sapItemCount = 0;
+    resolvedSapMasterMap.forEach((sapItem, batchKey) => {
+      const cleanKey = String(batchKey || sapItem?.batch || "").trim().toUpperCase();
+      if (!cleanKey || sapDispatchedBatchSet.has(cleanKey)) return;
+      const safeWeightKg = sanitizeWeightKg(sapItem?.weightKg, sapItem?.unrestricted);
+      if (safeWeightKg <= 0) return;
+      sapTotalWeightKg += safeWeightKg;
+      sapItemCount += 1;
+    });
+
+    const sapTotalTons = Number((sapTotalWeightKg / 1000).toFixed(3));
+    const sapCapacityPercent =
+      totalMaxCapacityTons > 0 ? Math.round((sapTotalTons / totalMaxCapacityTons) * 100) : 0;
+
     return {
       buildingSummaries,
       allBasketRows,
@@ -2038,6 +2105,18 @@ export function DailyReportView({
       machineSummaries,
       machineTotals,
       machineUtilizationPercent,
+      spaceCapacitySummary: {
+        totalMaxCapacityTons,
+        totalUsedSpaceTons,
+        totalRemainingSpaceTons,
+        spacePercent,
+      },
+      sapCurrentStockSummary: {
+        totalWeightKg: sapTotalWeightKg,
+        totalTons: sapTotalTons,
+        itemCount: sapItemCount,
+        capacityPercent: sapCapacityPercent,
+      },
     };
   }, [inboundList, outboundList, pickLists, sapMasterMap, machineStagingConfigs, spaceStorageTick]);
 
@@ -4697,103 +4776,220 @@ export function DailyReportView({
             </div>
           </div>
 
-          {/* 4 TOP KPI CARDS FOR STORAGE SPACE REPORT */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
-            {/* KPI 1: Warehouse Baskets & Weight */}
-            <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-cyan-500">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
-                  {isThai ? "คลังจัดเก็บตะกร้า (5 อาคาร)" : "Warehouse Baskets (5 Bldgs)"}
-                </span>
-                <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-cyan-500/10 text-cyan-500 shrink-0">
-                  <Building2 size={14} className="sm:w-[18px] sm:h-[18px]" />
-                </div>
-              </div>
-              <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-                <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white font-mono tabular-nums">
-                  {storageSpaceAnalytics.warehouseTotals.totalWeightKg.toLocaleString()}
-                </span>
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500">kg</span>
-              </div>
-              <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs text-cyan-600 dark:text-cyan-400 font-bold font-mono tabular-nums truncate">
-                {storageSpaceAnalytics.warehouseTotals.totalCoils} {isThai ? "แถบ" : "coils"} ·{" "}
-                {storageSpaceAnalytics.warehouseTotals.totalBaskets} {isThai ? "ตะกร้า" : "baskets"}
-              </div>
+          {/* 4 TOP SUMMARY CARDS FOR STORAGE SPACE REPORT (Matching SpaceManagementView Style) */}
+          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-2.5 sm:p-5 text-white shadow-xl border border-cyan-500/30 dark:border-cyan-500/40">
+            <div className="absolute -right-12 -bottom-12 opacity-10 pointer-events-none hidden sm:block">
+              <Boxes size={240} />
             </div>
 
-            {/* KPI 2: Warehouse Basket Occupancy */}
-            <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-emerald-500">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
-                  {isThai ? "อัตราใช้ตะกร้าคลังอาคาร" : "Warehouse Basket Occupancy"}
-                </span>
-                <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
-                  <Boxes size={14} className="sm:w-[18px] sm:h-[18px]" />
+            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-3">
+              {/* 1. สต๊อกปัจจุบันSAP */}
+              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
+                      {isThai ? "สต๊อกปัจจุบันSAP" : "Current SAP Stock"}
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-violet-200 dark:text-violet-300 bg-violet-500/25 px-1.5 py-0.2 rounded border border-violet-400/35 shrink-0">
+                      {storageSpaceAnalytics.sapCurrentStockSummary.capacityPercent}%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-violet-200 dark:text-violet-300 tabular-nums leading-tight">
+                    {storageSpaceAnalytics.sapCurrentStockSummary.totalTons.toLocaleString(undefined, {
+                      minimumFractionDigits: 3,
+                      maximumFractionDigits: 3,
+                    })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                      {isThai ? "ตัน" : "Tons"}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-                <span className="text-base sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono tabular-nums">
-                  {storageSpaceAnalytics.warehouseOccupancyPercent}%
-                </span>
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 truncate">
-                  ({storageSpaceAnalytics.warehouseTotals.occupiedBaskets + storageSpaceAnalytics.warehouseTotals.fullBaskets}/
-                  {storageSpaceAnalytics.warehouseTotals.totalBaskets} {isThai ? "ตะกร้า" : "baskets"})
-                </span>
-              </div>
-              <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs text-slate-500 font-mono tabular-nums truncate">
-                {isThai
-                  ? `ว่าง ${storageSpaceAnalytics.warehouseTotals.availableBaskets} · ใช้งาน ${storageSpaceAnalytics.warehouseTotals.occupiedBaskets} · เต็ม ${storageSpaceAnalytics.warehouseTotals.fullBaskets}`
-                  : `Avail ${storageSpaceAnalytics.warehouseTotals.availableBaskets} · Used ${storageSpaceAnalytics.warehouseTotals.occupiedBaskets} · Full ${storageSpaceAnalytics.warehouseTotals.fullBaskets}`}
-              </div>
-            </div>
 
-            {/* KPI 3: Machine Staging Area (TM & CF) */}
-            <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-amber-500">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
-                  {isThai ? "พื้นที่วางรอผลิตหน้าเครื่องจักร" : "Machine Staging Racks"}
-                </span>
-                <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-amber-500/10 text-amber-500 shrink-0">
-                  <Cpu size={14} className="sm:w-[18px] sm:h-[18px]" />
+                {/* Progress Bar & SAP Record Count */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between gap-1 text-[9.5px] sm:text-[10px] font-bold text-violet-200 dark:text-violet-300">
+                    <span className="truncate">
+                      {storageSpaceAnalytics.sapCurrentStockSummary.itemCount > 0
+                        ? isThai
+                          ? `SAP (${storageSpaceAnalytics.sapCurrentStockSummary.itemCount.toLocaleString()} รายการ)`
+                          : `SAP (${storageSpaceAnalytics.sapCurrentStockSummary.itemCount.toLocaleString()} items)`
+                        : isThai
+                        ? "ยังไม่มีข้อมูล SAP"
+                        : "No SAP Data"}
+                    </span>
+                    <span className="shrink-0">{storageSpaceAnalytics.sapCurrentStockSummary.capacityPercent}%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-violet-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, storageSpaceAnalytics.sapCurrentStockSummary.capacityPercent)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-                <span className="text-base sm:text-2xl font-black text-slate-900 dark:text-white font-mono tabular-nums">
-                  {storageSpaceAnalytics.machineTotals.totalUsedMeters}
-                </span>
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 truncate">
-                  / {storageSpaceAnalytics.machineTotals.totalCapacityMeters} {isThai ? "เมตร" : "m"}
-                </span>
-              </div>
-              <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 font-bold font-mono tabular-nums truncate">
-                {storageSpaceAnalytics.machineTotals.totalCoils} {isThai ? "แถบ" : "coils"} (
-                {storageSpaceAnalytics.machineTotals.totalWeightKg.toLocaleString()} kg)
-              </div>
-            </div>
 
-            {/* KPI 4: Machine Staging Utilization */}
-            <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md border-l-4 border-l-purple-500">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide truncate">
-                  {isThai ? "อัตราใช้พื้นที่แคร่หน้าเครื่อง" : "Machine Rack Utilization"}
-                </span>
-                <div className="p-1 sm:p-2 rounded-md sm:rounded-lg bg-purple-500/10 text-purple-500 shrink-0">
-                  <BarChart3 size={14} className="sm:w-[18px] sm:h-[18px]" />
+              {/* 2. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
+              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-slate-300 text-[10px] sm:text-xs font-semibold truncate">
+                      <span className="sm:hidden">{isThai ? "ความจุรวม" : "Total Cap."}</span>
+                      <span className="hidden sm:inline">
+                        {isThai ? "พื้นที่จัดเก็บทั้งหมด (ตัน)" : "Total Storage Capacity (Tons)"}
+                      </span>
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-cyan-300 bg-cyan-500/20 px-1.5 py-0.2 rounded border border-cyan-400/30 shrink-0">
+                      100%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-white tabular-nums leading-tight">
+                    {storageSpaceAnalytics.spaceCapacitySummary.totalMaxCapacityTons.toLocaleString()}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                      {isThai ? "ตัน" : "Tons"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar with Percentage Label */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-cyan-300">
+                    <span>{isThai ? "ความจุรวมเต็มพิกัด" : "Full Capacity"}</span>
+                    <span>100%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div className="h-full bg-cyan-400 rounded-full transition-all duration-300 w-full" />
+                  </div>
                 </div>
               </div>
-              <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-                <span className="text-base sm:text-2xl font-black text-purple-600 dark:text-purple-400 font-mono tabular-nums">
-                  {storageSpaceAnalytics.machineUtilizationPercent}%
-                </span>
-                <span className="text-[10px] sm:text-xs font-bold text-slate-500 truncate">
-                  ({storageSpaceAnalytics.machineTotals.activeMachines}/{storageSpaceAnalytics.machineTotals.totalMachines}{" "}
-                  {isThai ? "เครื่อง" : "machines"})
-                </span>
+
+              {/* 3. พื้นที่ใช้ไป (ตัน) */}
+              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-amber-300 text-[10px] sm:text-xs font-semibold truncate">
+                      <span className="sm:hidden">{isThai ? "ใช้ไป" : "Used"}</span>
+                      <span className="hidden sm:inline">{isThai ? "พื้นที่ใช้ไป (ตัน)" : "Used Space (Tons)"}</span>
+                    </span>
+                    <span className="text-[10px] font-black font-mono tabular-nums text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400/30 shrink-0">
+                      {storageSpaceAnalytics.spaceCapacitySummary.spacePercent}%
+                    </span>
+                  </div>
+                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-amber-300 tabular-nums leading-tight">
+                    {storageSpaceAnalytics.spaceCapacitySummary.totalUsedSpaceTons.toLocaleString(undefined, {
+                      maximumFractionDigits: 3,
+                    })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                      {isThai ? "ตัน" : "Tons"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar with Percentage Label */}
+                <div className="mt-2.5 space-y-1">
+                  <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-amber-300">
+                    <span>{isThai ? "สัดส่วนพื้นที่ใช้ไป" : "Used Space Ratio"}</span>
+                    <span>{storageSpaceAnalytics.spaceCapacitySummary.spacePercent}%</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                      style={{ width: `${Math.min(100, storageSpaceAnalytics.spaceCapacitySummary.spacePercent)}%` }}
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-xs text-slate-500 font-mono tabular-nums truncate">
-                {isThai
-                  ? `แคร่ว่าง ${storageSpaceAnalytics.machineTotals.availableRacks} · ใช้งาน ${storageSpaceAnalytics.machineTotals.occupiedRacks} · เต็ม ${storageSpaceAnalytics.machineTotals.fullRacks}`
-                  : `Avail ${storageSpaceAnalytics.machineTotals.availableRacks} · Used ${storageSpaceAnalytics.machineTotals.occupiedRacks} · Full ${storageSpaceAnalytics.machineTotals.fullRacks}`}
+
+              {/* 4. พื้นที่คงเหลือ (ตัน) */}
+              <div
+                className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border flex flex-col justify-between ${
+                  storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                    ? "bg-rose-500/20 border-rose-400/40"
+                    : "bg-white/10 border-white/15"
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span
+                      className={`text-[10px] sm:text-xs font-semibold truncate ${
+                        storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                          ? "text-rose-300"
+                          : "text-emerald-300"
+                      }`}
+                    >
+                      <span className="sm:hidden">{isThai ? "คงเหลือ" : "Remaining"}</span>
+                      <span className="hidden sm:inline">
+                        {isThai ? "พื้นที่คงเหลือ (ตัน)" : "Remaining Space (Tons)"}
+                      </span>
+                    </span>
+                    <span
+                      className={`text-[10px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded border shrink-0 ${
+                        storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                          ? "text-rose-300 bg-rose-500/30 border-rose-400/40"
+                          : "text-emerald-300 bg-emerald-500/20 border-emerald-400/30"
+                      }`}
+                    >
+                      {storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                        ? "0%"
+                        : `${Math.max(0, 100 - storageSpaceAnalytics.spaceCapacitySummary.spacePercent)}%`}
+                    </span>
+                  </div>
+                  <div
+                    className={`mt-1 font-mono text-base sm:text-xl md:text-2xl font-black tabular-nums leading-tight ${
+                      storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                        ? "text-rose-400"
+                        : "text-emerald-400"
+                    }`}
+                  >
+                    {storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons.toLocaleString(undefined, {
+                      maximumFractionDigits: 3,
+                    })}{" "}
+                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                      {isThai ? "ตัน" : "Tons"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar with Percentage Label */}
+                <div className="mt-2.5 space-y-1">
+                  <div
+                    className={`flex justify-between text-[9.5px] sm:text-[10px] font-bold ${
+                      storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                        ? "text-rose-300"
+                        : "text-emerald-300"
+                    }`}
+                  >
+                    <span>
+                      {storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                        ? isThai
+                          ? "พื้นที่เกินความจุ!"
+                          : "Over Capacity!"
+                        : isThai
+                        ? "สัดส่วนพื้นที่คงเหลือ"
+                        : "Remaining Space Ratio"}
+                    </span>
+                    <span>
+                      {storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                        ? "0%"
+                        : `${Math.max(0, 100 - storageSpaceAnalytics.spaceCapacitySummary.spacePercent)}%`}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                          ? "bg-rose-500"
+                          : "bg-emerald-400"
+                      }`}
+                      style={{
+                        width: `${
+                          storageSpaceAnalytics.spaceCapacitySummary.totalRemainingSpaceTons < 0
+                            ? 100
+                            : Math.max(0, 100 - storageSpaceAnalytics.spaceCapacitySummary.spacePercent)
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
