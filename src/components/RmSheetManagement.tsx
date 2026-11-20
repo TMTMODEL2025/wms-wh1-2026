@@ -2108,6 +2108,208 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     </button>
                   </div>
                 </div>
+              ) : inboundCategory === "external" ? (
+                /* Compact Single-Row Layout for "รับภายนอก": Location, Batch, จำนวน (แผ่น), น้ำหนัก (KG), Vendor + บันทึก */
+                <div className="grid grid-cols-2 sm:grid-cols-12 lg:grid-cols-[minmax(145px,1.1fr)_minmax(195px,1.4fr)_minmax(76px,0.6fr)_minmax(88px,0.7fr)_minmax(130px,1.05fr)_auto] gap-2 items-end">
+                  {/* Location + สแกน */}
+                  <div className="col-span-2 sm:col-span-5 lg:col-span-1 space-y-1 min-w-0">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <MapPin size={13} className="text-emerald-500 shrink-0" />
+                      <span>Location</span>
+                    </label>
+
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1 min-w-0 flex items-center">
+                        <input
+                          ref={locationInputRef}
+                          type="text"
+                          value={inboundLocation}
+                          onChange={(e) => setInboundLocation(e.target.value.toUpperCase())}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              if (inboundLocation.trim()) {
+                                playBeep("success");
+                                focusBarcodeInput();
+                              }
+                            }
+                          }}
+                          placeholder="Location"
+                          className="w-full h-[36px] pl-2.5 pr-7 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                        />
+                        {inboundLocation && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboundLocation("");
+                              locationInputRef.current?.focus();
+                            }}
+                            className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraScanTarget("location");
+                          setIsInboundCameraOpen((v) =>
+                            cameraScanTarget === "location" ? !v : true
+                          );
+                        }}
+                        className="h-[36px] px-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap transition-colors"
+                      >
+                        <Camera size={13} />
+                        <span>{isThai ? "สแกน" : "Scan"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Batch + สแกน Batch */}
+                  <div className="col-span-2 sm:col-span-7 lg:col-span-1 space-y-1 min-w-0">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <Barcode size={14} className="text-emerald-500 shrink-0" />
+                      <span>Batch</span>
+                    </label>
+
+                    <div className="flex items-center gap-1.5">
+                      <div className="relative flex-1 min-w-0 flex items-center">
+                        <input
+                          ref={barcodeInputRef}
+                          type="text"
+                          value={inboundBarcodeInput}
+                          onChange={(e) => setInboundBarcodeInput(e.target.value.toUpperCase())}
+                          placeholder="Batch"
+                          className="w-full h-[36px] pl-2.5 pr-7 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                        />
+                        {inboundBarcodeInput && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInboundBarcodeInput("");
+                              focusBarcodeInput();
+                            }}
+                            className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraScanTarget("barcode");
+                          setIsInboundCameraOpen((v) =>
+                            cameraScanTarget === "barcode" ? !v : true
+                          );
+                        }}
+                        className="h-[36px] px-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60 flex items-center justify-center gap-1 cursor-pointer shrink-0 whitespace-nowrap transition-colors"
+                      >
+                        <Camera size={13} />
+                        <span>{isThai ? "สแกน Batch" : "Scan Batch"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* จำนวน (แผ่น) */}
+                  <div className="col-span-1 sm:col-span-3 lg:col-span-1 space-y-1 min-w-0">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                      {isThai ? "จำนวน (แผ่น)" : "Quantity"}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={externalQtyInput}
+                      onChange={(e) => setExternalQtyInput(e.target.value)}
+                      placeholder={
+                        activeInboundSpec.existingQty > 0
+                          ? String(activeInboundSpec.existingQty)
+                          : "1"
+                      }
+                      className="w-full h-[36px] px-2.5 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* น้ำหนัก (KG) */}
+                  <div className="col-span-1 sm:col-span-3 lg:col-span-1 space-y-1 min-w-0">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                      {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={externalWeightInput}
+                      onChange={(e) => setExternalWeightInput(e.target.value)}
+                      placeholder={(() => {
+                        const q = parseFloat(externalQtyInput.replace(/,/g, "")) || 0;
+                        const calc =
+                          q > 0
+                            ? calculateRmFormulaWeightKg(
+                                q,
+                                activeInboundSpec.certThickness,
+                                activeInboundSpec.width,
+                                activeInboundSpec.length
+                              )
+                            : activeInboundSpec.existingWeightKg;
+                        return calc > 0
+                          ? calc.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 3,
+                            })
+                          : "0.00";
+                      })()}
+                      className="w-full h-[36px] px-2.5 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Vendor */}
+                  <div className="col-span-2 sm:col-span-4 lg:col-span-1 space-y-1 min-w-0">
+                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                      <Building2 size={12} className="text-blue-500 shrink-0" />
+                      <span>Vendor</span>
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        list="rm-external-vendor-list"
+                        value={externalVendorInput}
+                        onChange={(e) => setExternalVendorInput(e.target.value)}
+                        placeholder={isThai ? "ระบุชื่อ Vendor / ผู้ผลิต..." : "Enter Vendor..."}
+                        className="w-full h-[36px] pl-2.5 pr-7 rounded-lg text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
+                      />
+                      {externalVendorInput && (
+                        <button
+                          type="button"
+                          onClick={() => setExternalVendorInput("")}
+                          className="absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
+                    </div>
+                    <datalist id="rm-external-vendor-list">
+                      {knownExternalVendors.map((v) => (
+                        <option key={v} value={v} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  {/* ปุ่ม บันทึก */}
+                  <div className="col-span-2 sm:col-span-2 lg:col-span-1">
+                    <button
+                      type="submit"
+                      className="w-full lg:w-auto h-[36px] px-4 rounded-lg text-xs font-extrabold text-white bg-blue-600 hover:bg-blue-500 shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors"
+                    >
+                      <CheckCircle2 size={14} />
+                      <span>{isThai ? "บันทึก" : "Save"}</span>
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
                   {/* Location Input with inline scan button */}
@@ -2238,9 +2440,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                         <button
                           type="submit"
                           className={`px-4 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold text-white shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
-                            inboundCategory === "external"
-                              ? "bg-blue-600 hover:bg-blue-500"
-                              : internalSubMode === "bundle"
+                            internalSubMode === "bundle"
                               ? "bg-indigo-600 hover:bg-indigo-500"
                               : "bg-emerald-600 hover:bg-emerald-500"
                           }`}
@@ -2430,95 +2630,6 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* External Inbound Fields: Vendor, จำนวน, น้ำหนัก */}
-              {inboundCategory === "external" && (
-                <div className="space-y-2 pt-0.5">
-                  <div className="grid grid-cols-2 sm:grid-cols-12 gap-2">
-                    <div className="col-span-2 sm:col-span-6">
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1 flex items-center gap-1">
-                        <Building2 size={12} className="text-blue-500" />
-                        <span>Vendor</span>
-                      </label>
-                      <div className="relative flex items-center">
-                        <input
-                          type="text"
-                          list="rm-external-vendor-list"
-                          value={externalVendorInput}
-                          onChange={(e) => setExternalVendorInput(e.target.value)}
-                          placeholder={isThai ? "ระบุชื่อ Vendor / ผู้ผลิต..." : "Enter Vendor..."}
-                          className="w-full pl-3 pr-8 py-2 rounded-lg text-xs font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                        />
-                        {externalVendorInput && (
-                          <button
-                            type="button"
-                            onClick={() => setExternalVendorInput("")}
-                            className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                          >
-                            <X size={14} />
-                          </button>
-                        )}
-                      </div>
-                      <datalist id="rm-external-vendor-list">
-                        {knownExternalVendors.map((v) => (
-                          <option key={v} value={v} />
-                        ))}
-                      </datalist>
-                    </div>
-
-                    <div className="col-span-1 sm:col-span-3">
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                        {isThai ? "จำนวน (แผ่น)" : "Quantity"}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={externalQtyInput}
-                        onChange={(e) => setExternalQtyInput(e.target.value)}
-                        placeholder={
-                          activeInboundSpec.existingQty > 0
-                            ? String(activeInboundSpec.existingQty)
-                            : "1"
-                        }
-                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div className="col-span-1 sm:col-span-3">
-                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                        {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={externalWeightInput}
-                        onChange={(e) => setExternalWeightInput(e.target.value)}
-                        placeholder={(() => {
-                          const q = parseFloat(externalQtyInput.replace(/,/g, "")) || 0;
-                          const calc =
-                            q > 0
-                              ? calculateRmFormulaWeightKg(
-                                  q,
-                                  activeInboundSpec.certThickness,
-                                  activeInboundSpec.width,
-                                  activeInboundSpec.length
-                                )
-                              : activeInboundSpec.existingWeightKg;
-                          return calc > 0
-                            ? calc.toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 3,
-                              })
-                            : "0.00";
-                        })()}
-                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
                 </div>
               )}
             </form>
