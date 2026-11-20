@@ -44,6 +44,9 @@ import {
   RmStagingOrder,
   RmLayoutZone,
   RmSapMasterItem,
+  RmSapBatchCategory,
+  RmSapCategory,
+  RM_SAP_BATCH_CATEGORIES,
   RM_INTERNAL_MACHINES,
   RM_SAP_CHUNK_SIZE,
   subscribeToRmStock,
@@ -68,14 +71,86 @@ interface RmSheetManagementProps {
 const STICKY_RM_LOCATION_KEY = "tmt_wms_rm_sticky_location_v1";
 
 // ============================================================================
+// Formula Helpers for RM Steel Sheet:
+// 1. น้ำหนัก (Weight) = จำนวน × หนา Certificated. × กว้าง × ยาว × 0.00000785
+// 2. จำนวน (Quantity in Stock Table) = น้ำหนัก ÷ หนา Certificated. ÷ กว้าง ÷ ยาว ÷ 0.00000785
+// 3. ความสูงของกอง (Stack Height) = จำนวน × หนา Certificated.
+// ============================================================================
+function calculateRmFormulaWeightKg(
+  qty: number,
+  certThickness: string | number | undefined,
+  width: string | number | undefined,
+  length: string | number | undefined
+): number {
+  const q = Number(qty) || 0;
+  const t = parseFloat(String(certThickness ?? "0").replace(/,/g, "")) || 0;
+  const w = parseFloat(String(width ?? "0").replace(/,/g, "")) || 0;
+  const l = parseFloat(String(length ?? "0").replace(/,/g, "")) || 0;
+  if (q <= 0 || t <= 0 || w <= 0 || l <= 0) return 0;
+  return Number((q * t * w * l * 0.00000785).toFixed(3));
+}
+
+function calculateRmQtyFromWeightKg(
+  weightKg: number,
+  certThickness: string | number | undefined,
+  width: string | number | undefined,
+  length: string | number | undefined
+): number {
+  const weight = Number(weightKg) || 0;
+  const t = parseFloat(String(certThickness ?? "0").replace(/,/g, "")) || 0;
+  const w = parseFloat(String(width ?? "0").replace(/,/g, "")) || 0;
+  const l = parseFloat(String(length ?? "0").replace(/,/g, "")) || 0;
+  if (weight <= 0 || t <= 0 || w <= 0 || l <= 0) return 0;
+  const rawQty = weight / t / w / l / 0.00000785;
+  // Snap to integer if within 0.01 rounding tolerance of a whole sheet
+  if (Math.abs(rawQty - Math.round(rawQty)) < 0.01) {
+    return Math.round(rawQty);
+  }
+  return Number(rawQty.toFixed(2));
+}
+
+function resolveRmRowWeightKg(
+  rawUnrestrOrWeight: number,
+  certThickness: string | number | undefined,
+  width: string | number | undefined,
+  length: string | number | undefined
+): number {
+  const val = Number(rawUnrestrOrWeight) || 0;
+  if (val <= 0) return 0;
+  const unitSheetWeight = calculateRmFormulaWeightKg(1, certThickness, width, length);
+  if (unitSheetWeight <= 0) return val;
+  // If value is already a weight in KG (>= 90% of 1 sheet's weight, or has non-integer decimals, or val * unitSheetWeight > 25,000 KG)
+  const isAlreadyWeightKg =
+    val >= unitSheetWeight * 0.9 ||
+    Math.abs(val - Math.round(val)) > 0.001 ||
+    val * unitSheetWeight > 25000;
+  if (isAlreadyWeightKg) {
+    return Number(val.toFixed(3));
+  }
+  // Otherwise val is sheet count (e.g., 1.000, 30.000, 2.000) -> multiply by 1 sheet weight
+  return Number((val * unitSheetWeight).toFixed(3));
+}
+
+function calculateRmStackHeight(
+  qty: number,
+  certThickness: string | number | undefined
+): number {
+  const q = Number(qty) || 0;
+  const t = parseFloat(String(certThickness ?? "0").replace(/,/g, "")) || 0;
+  if (q <= 0 || t <= 0) return 0;
+  return Number((q * t).toFixed(3));
+}
+
+// ============================================================================
 // Helper: Parse SAP Master Text / Table for RM Steel Sheet
-// Supports 13-column SAP Batch Stock table:
-// Storage Location | Material No. | Discription | Batch | หนา Certificated. | กว้าง | ยาว | Grade | Unrestricted | ผู้ผลิต | Sales Document | Item | Text สภาพสินค้า
+// Supports 13-column SAP Batch Stock table (Batch, VM, AB, STL, ฝาก):
+// Storage Location | Material No. | Discription | Batch | หนา Certificated. | กว้าง | ยาว | Grade | Unrestricted (จำนวน) | ผู้ผลิต | Sales Document | Item | Text สภาพสินค้า
 // And Bundle (BAHCH HU / BATCH HU) SAP exports
 // ============================================================================
 function parseRmSapMasterText(
   rawText: string,
-  defaultType: "batch" | "bundle" = "batch"
+  defaultType: "batch" | "bundle" = "batch",
+  sapCategory: RmSapCategory = "Batch"
 ): RmSapMasterItem[] {
   if (!rawText || !rawText.trim()) return [];
   const lines = rawText
@@ -184,11 +259,28 @@ function parseRmSapMasterText(
       if (!batchVal && !batchHuVal) continue;
 
       const rawUnrestr = getCol("unrestricted");
-      const parsedWeight = parseFloat(rawUnrestr.replace(/,/g, "")) || 0;
       const rawQty = getCol("inboundQty");
-      const parsedQty = parseFloat(rawQty.replace(/,/g, "")) || 1;
       const isBundleRow =
         defaultType === "bundle" || Boolean(batchHuVal) || headerMap["batchHu"] !== undefined;
+
+      const certThicknessVal = getCol("certThickness") || "-";
+      const widthVal = getCol("width") || "-";
+      const lengthVal = getCol("length") || "-";
+
+      // Resolve น้ำหนัก (weightKg) and จำนวน (qty = น้ำหนัก ÷ หนา Certificated. ÷ กว้าง ÷ ยาว ÷ 0.00000785)
+      const parsedUnrestrNum = parseFloat(rawUnrestr.replace(/,/g, "")) || 0;
+      const explicitQtyNum = parseFloat(rawQty.replace(/,/g, "")) || 0;
+      const parsedWeight = isBundleRow
+        ? parsedUnrestrNum
+        : parsedUnrestrNum > 0
+        ? resolveRmRowWeightKg(parsedUnrestrNum, certThicknessVal, widthVal, lengthVal)
+        : explicitQtyNum > 0
+        ? calculateRmFormulaWeightKg(explicitQtyNum, certThicknessVal, widthVal, lengthVal)
+        : 0;
+      const calculatedQty = !isBundleRow
+        ? calculateRmQtyFromWeightKg(parsedWeight, certThicknessVal, widthVal, lengthVal)
+        : explicitQtyNum || 1;
+      const parsedQty = calculatedQty > 0 ? calculatedQty : explicitQtyNum || parsedUnrestrNum || 1;
 
       // Fallback positional reading for columns 9, 10, 11, 12 if standard 13-col Batch table
       const manufacturerVal =
@@ -218,16 +310,18 @@ function parseRmSapMasterText(
 
       results.push({
         sapType: isBundleRow ? "bundle" : "batch",
+        sapCategory: isBundleRow ? "Bundle" : sapCategory === "Bundle" ? "Batch" : sapCategory,
         storageLocation: getCol("storageLocation") || "2A06",
         materialNo: getCol("materialNo") || "-",
         description: getCol("description") || "-",
         batch: batchVal || batchHuVal,
         batchHu: isBundleRow ? batchHuVal : "",
-        certThickness: getCol("certThickness") || "-",
-        width: getCol("width") || "-",
-        length: getCol("length") || "-",
+        certThickness: certThicknessVal,
+        width: widthVal,
+        length: lengthVal,
         grade: getCol("grade") || "-",
-        unrestricted: rawUnrestr || (parsedWeight > 0 ? parsedWeight.toFixed(3) : "0.000"),
+        unrestricted:
+          rawUnrestr || rawQty || (parsedWeight > 0 ? parsedWeight.toFixed(3) : "0.000"),
         weightKg: parsedWeight,
         inboundQty: parsedQty,
         manufacturer: manufacturerVal,
@@ -241,24 +335,43 @@ function parseRmSapMasterText(
       // 5: กว้าง | 6: ยาว | 7: Grade | 8: Unrestricted | 9: ผู้ผลิต | 10: Sales Document | 11: Item | 12: Text สภาพสินค้า
       if (defaultType === "batch" && cols.length >= 9) {
         const rawUnrestr = (cols[8] || "0").trim();
-        const parsedWeight = parseFloat(rawUnrestr.replace(/,/g, "")) || 0;
+        const parsedUnrestrNum = parseFloat(rawUnrestr.replace(/,/g, "")) || 0;
         const batchVal = (cols[3] || "").trim().toUpperCase();
         if (!batchVal) continue;
+        const certThicknessVal = (cols[4] || "").trim() || "-";
+        const widthVal = (cols[5] || "").trim() || "-";
+        const lengthVal = (cols[6] || "").trim() || "-";
+        const resolvedWeight = resolveRmRowWeightKg(
+          parsedUnrestrNum,
+          certThicknessVal,
+          widthVal,
+          lengthVal
+        );
+        const calculatedQty =
+          calculateRmQtyFromWeightKg(
+            resolvedWeight,
+            certThicknessVal,
+            widthVal,
+            lengthVal
+          ) ||
+          parsedUnrestrNum ||
+          1;
 
         results.push({
           sapType: "batch",
+          sapCategory: sapCategory === "Bundle" ? "Batch" : sapCategory,
           storageLocation: (cols[0] || "").trim() || "2A06",
           materialNo: (cols[1] || "").trim() || "-",
           description: (cols[2] || "").trim() || "-",
           batch: batchVal,
           batchHu: "",
-          certThickness: (cols[4] || "").trim() || "-",
-          width: (cols[5] || "").trim() || "-",
-          length: (cols[6] || "").trim() || "-",
+          certThickness: certThicknessVal,
+          width: widthVal,
+          length: lengthVal,
           grade: (cols[7] || "").trim() || "-",
-          unrestricted: rawUnrestr || (parsedWeight > 0 ? parsedWeight.toFixed(3) : "0.000"),
-          weightKg: parsedWeight,
-          inboundQty: 1,
+          unrestricted: rawUnrestr || (resolvedWeight > 0 ? resolvedWeight.toFixed(3) : "0.000"),
+          weightKg: resolvedWeight,
+          inboundQty: calculatedQty,
           manufacturer: (cols[9] ?? "").trim(),
           salesDocument: (cols[10] ?? "").trim(),
           salesItem:
@@ -277,6 +390,7 @@ function parseRmSapMasterText(
 
         results.push({
           sapType: "bundle",
+          sapCategory: "Bundle",
           storageLocation: (cols[0] || "").trim() || "1101",
           materialNo: "-",
           description: (cols[5] || "").trim() || "-",
@@ -417,9 +531,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     return "";
   });
   const [inboundBarcodeInput, setInboundBarcodeInput] = useState<string>("");
+  const [inboundQtyInput, setInboundQtyInput] = useState<string>("");
   const [bundleBatchInput, setBundleBatchInput] = useState<string>("");
-  const [bundleQtyInput, setBundleQtyInput] = useState<string>("");
-  const [bundleWeightInput, setBundleWeightInput] = useState<string>("");
   const [isInboundCameraOpen, setIsInboundCameraOpen] = useState<boolean>(false);
   const [cameraScanTarget, setCameraScanTarget] = useState<"location" | "barcode">("barcode");
   const [inboundSearch, setInboundSearch] = useState<string>("");
@@ -434,6 +547,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
 
   const locationInputRef = useRef<HTMLInputElement | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
+  const qtyInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && inboundLocation.trim()) {
@@ -447,18 +561,148 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     }, 60);
   };
 
+  // Helper: ตรวจสอบยอดคงเหลือปัจจุบันในหน้า "สต๊อก" สำหรับรหัส Batch ที่สแกน
+  const getBatchCurrentStockInfo = (rawCode: string) => {
+    const code = rawCode.trim().toUpperCase();
+    if (!code) {
+      return {
+        existsInStock: false,
+        certThickness: "",
+        width: "",
+        length: "",
+        grade: "-",
+        description: "-",
+        materialNo: "-",
+        storageLocation: "2A06",
+        existingQty: 0,
+        existingWeightKg: 0,
+        sapMatch: undefined as RmSapMasterItem | undefined,
+        existingRec: undefined as RmStockRecord | undefined,
+      };
+    }
+
+    const sapMatch = sapByBatch.get(code) || sapByHu.get(code);
+    const existingRec = rmStock.find(
+      (r) =>
+        r.internalSubMode !== "bundle" &&
+        r.status !== "issued" &&
+        r.batch.trim().toUpperCase() === code
+    );
+
+    const certThickness =
+      sapMatch?.certThickness || existingRec?.certThickness || "";
+    const width = sapMatch?.width || existingRec?.width || "";
+    const length = sapMatch?.length || existingRec?.length || "";
+
+    const sapUnrestrNum =
+      parseFloat(String(sapMatch?.unrestricted || "").replace(/,/g, "")) || 0;
+    const sapResolvedWeight =
+      sapUnrestrNum > 0
+        ? resolveRmRowWeightKg(sapUnrestrNum, certThickness, width, length)
+        : sapMatch && sapMatch.weightKg > 0
+        ? resolveRmRowWeightKg(sapMatch.weightKg, certThickness, width, length)
+        : 0;
+
+    const scannedResolvedWeight =
+      existingRec && existingRec.weightKg > 0
+        ? resolveRmRowWeightKg(existingRec.weightKg, certThickness, width, length)
+        : existingRec && existingRec.inboundQty > 0
+        ? calculateRmFormulaWeightKg(
+            existingRec.inboundQty,
+            certThickness,
+            width,
+            length
+          )
+        : 0;
+
+    const existingWeightKg =
+      existingRec &&
+      existingRec.inboundType === "internal" &&
+      scannedResolvedWeight > 0
+        ? scannedResolvedWeight
+        : sapResolvedWeight > 0
+        ? sapResolvedWeight
+        : scannedResolvedWeight;
+
+    const formulaExistingQty = calculateRmQtyFromWeightKg(
+      existingWeightKg,
+      certThickness,
+      width,
+      length
+    );
+    const existingQty =
+      formulaExistingQty > 0
+        ? formulaExistingQty
+        : existingRec &&
+          existingRec.inboundType === "internal" &&
+          existingRec.inboundQty > 0
+        ? existingRec.inboundQty
+        : sapMatch?.inboundQty || existingRec?.inboundQty || sapUnrestrNum || 0;
+
+    const existsInStock = Boolean(
+      (existingRec && (existingWeightKg > 0 || existingQty > 0)) ||
+        (sapMatch && (existingWeightKg > 0 || existingQty > 0))
+    );
+
+    return {
+      existsInStock,
+      certThickness,
+      width,
+      length,
+      grade: sapMatch?.grade || existingRec?.grade || "-",
+      description: sapMatch?.description || existingRec?.description || "-",
+      materialNo: sapMatch?.materialNo || existingRec?.materialNo || "-",
+      storageLocation:
+        sapMatch?.storageLocation || existingRec?.storageLocation || "2A06",
+      existingQty,
+      existingWeightKg,
+      sapMatch,
+      existingRec,
+    };
+  };
+
+  // Resolve active SAP/Stock spec & existing stock in หน้าสต๊อก for current typed/scanned barcode in รับภายใน form
+  const activeInboundSpec = useMemo(() => {
+    const code = inboundBarcodeInput.trim().toUpperCase();
+    const bundleBatch = bundleBatchInput.trim().toUpperCase();
+    const lookupCode =
+      internalSubMode === "bundle" && bundleBatch ? bundleBatch : code;
+    const stockInfo = getBatchCurrentStockInfo(lookupCode);
+    return {
+      sapMatch: stockInfo.sapMatch,
+      existingRec: stockInfo.existingRec,
+      certThickness: stockInfo.certThickness,
+      width: stockInfo.width,
+      length: stockInfo.length,
+      existsInStock: stockInfo.existsInStock,
+      existingQty: stockInfo.existingQty,
+      existingWeightKg: stockInfo.existingWeightKg,
+    };
+  }, [inboundBarcodeInput, bundleBatchInput, internalSubMode, sapByBatch, sapByHu, rmStock]);
+
+  const autoCalculatedInboundWeight = useMemo(() => {
+    const qty = parseFloat(inboundQtyInput.replace(/,/g, "")) || 0;
+    return calculateRmFormulaWeightKg(
+      qty,
+      activeInboundSpec.certThickness,
+      activeInboundSpec.width,
+      activeInboundSpec.length
+    );
+  }, [inboundQtyInput, activeInboundSpec]);
+
   // ============================================================================
   // SAP Master Upload Modal State
   // ============================================================================
   const [isSapModalOpen, setIsSapModalOpen] = useState<boolean>(false);
   const [sapUploadType, setSapUploadType] = useState<"batch" | "bundle">("batch");
+  const [sapUploadCategory, setSapUploadCategory] = useState<RmSapCategory>("Batch");
   const [sapRawText, setSapRawText] = useState<string>("");
   const [isSapSaving, setIsSapSaving] = useState<boolean>(false);
   const sapFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsedSapPreview = useMemo(
-    () => parseRmSapMasterText(sapRawText, sapUploadType),
-    [sapRawText, sapUploadType]
+    () => parseRmSapMasterText(sapRawText, sapUploadType, sapUploadCategory),
+    [sapRawText, sapUploadType, sapUploadCategory]
   );
 
   // ============================================================================
@@ -466,6 +710,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
   // ============================================================================
   const [stockSearch, setStockSearch] = useState<string>("");
   const [stockTableType, setStockTableType] = useState<"batch" | "bundle">("batch");
+  const [stockBatchCategoryFilter, setStockBatchCategoryFilter] = useState<
+    "ALL" | RmSapBatchCategory
+  >("ALL");
   const [stockCompareFilter, setStockCompareFilter] = useState<
     "ALL" | "matched" | "unscanned" | "no_sap"
   >("ALL");
@@ -527,6 +774,11 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     const effectiveSubMode: RmInternalSubMode =
       inboundCategory === "internal" ? internalSubMode : "batch";
 
+    const parsedInputQty =
+      inboundQtyInput.trim() !== ""
+        ? parseFloat(inboundQtyInput.replace(/,/g, "")) || 1
+        : 0;
+
     // Clear barcode input immediately so operator can continue rapid scanning
     setInboundBarcodeInput("");
     focusBarcodeInput();
@@ -537,29 +789,42 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
       // ข้อมูลที่แสดง: Location | Batch | BAHCH HU | จำนวนรับเข้า | น้ำหนักรับเข้า | Material Description
       // ----------------------------------------------------------------------
       const scannedHu = rawScanned;
-      const sapMatch = sapByHu.get(scannedHu) || sapByBatch.get(scannedHu);
+      const cleanBundleBatch = bundleBatchInput.trim().toUpperCase();
+      const sapMatch =
+        sapByHu.get(scannedHu) ||
+        sapByBatch.get(scannedHu) ||
+        (cleanBundleBatch ? sapByBatch.get(cleanBundleBatch) : undefined);
       const existingRec = rmStock.find(
         (r) =>
           (r.batchHu && r.batchHu.toUpperCase() === scannedHu) ||
-          r.id === `RM-HU-${scannedHu}`
+          r.id === `RM-HU-${scannedHu}` ||
+          (cleanBundleBatch && r.batch.toUpperCase() === cleanBundleBatch)
       );
 
       const resolvedBatch =
-        bundleBatchInput.trim().toUpperCase() ||
+        cleanBundleBatch ||
         sapMatch?.batch ||
         existingRec?.batch ||
         scannedHu;
       const resolvedQty =
-        bundleQtyInput.trim() !== ""
-          ? Number(bundleQtyInput) || 1
+        parsedInputQty > 0
+          ? parsedInputQty
           : sapMatch && sapMatch.inboundQty > 0
           ? sapMatch.inboundQty
           : existingRec && existingRec.inboundQty > 0
           ? existingRec.inboundQty
           : 1;
+
+      const formulaWeight = calculateRmFormulaWeightKg(
+        resolvedQty,
+        sapMatch?.certThickness || existingRec?.certThickness,
+        sapMatch?.width || existingRec?.width,
+        sapMatch?.length || existingRec?.length
+      );
+
       const resolvedWeight =
-        bundleWeightInput.trim() !== ""
-          ? Number(bundleWeightInput) || 0
+        formulaWeight > 0
+          ? formulaWeight
           : sapMatch && sapMatch.weightKg > 0
           ? sapMatch.weightKg
           : existingRec && existingRec.weightKg > 0
@@ -576,6 +841,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
         id: `RM-HU-${scannedHu}`,
         inboundType: "internal",
         internalSubMode: "bundle",
+        sapCategory: "Bundle",
         machine: activeMachine,
         location: cleanLoc,
         storageLocation: sapMatch?.storageLocation || existingRec?.storageLocation || "1101",
@@ -589,7 +855,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
         grade: sapMatch?.grade || existingRec?.grade || "-",
         unrestricted:
           sapMatch?.unrestricted ||
-          (resolvedWeight > 0 ? resolvedWeight.toLocaleString() : "0"),
+          (resolvedWeight > 0 ? resolvedWeight.toFixed(3) : "0.000"),
         weightKg: resolvedWeight,
         initialWeightKg: resolvedWeight,
         inboundQty: resolvedQty,
@@ -610,7 +876,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
           ? `รับภายใน Bundle สำเร็จ! เครื่อง ${activeMachine} • BAHCH HU: [${saved.batchHu}] -> Location: ${saved.location}`
           : `Bundle Inbound Saved! Machine ${activeMachine} • BAHCH HU: [${saved.batchHu}] -> ${saved.location}`,
         detail: isThai
-          ? `Batch: ${saved.batch} • จำนวนรับเข้า: ${saved.inboundQty.toLocaleString()} • น้ำหนักรับเข้า: ${saved.weightKg.toLocaleString()} KG • ${saved.description}`
+          ? `Batch: ${saved.batch} • จำนวน: ${saved.inboundQty.toLocaleString()} • น้ำหนักคำนวณ: ${saved.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG`
           : `Batch: ${saved.batch} • Qty: ${saved.inboundQty} • Weight: ${saved.weightKg} KG`,
       });
       showToast(
@@ -627,85 +893,184 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     } else {
       // ----------------------------------------------------------------------
       // โหมดรับภายใน Batch (จากเครื่อง CL03, 04, 05, 06) หรือ รับภายนอก:
-      // ข้อมูลที่แสดง: Storage Location | Material No. | Discription | Batch | หนา Certificated. | กว้าง | ยาว | Grade | Unrestr. | ผู้ผลิต
+      // เมื่อสแกน Batch ในโหมด "รับภายใน Batch" ให้เช็คก่อนว่าในหน้า "สต๊อก" มีของเท่าไร
+      // และนำจำนวน/น้ำหนักที่สแกนเพิ่มใหม่ไปบวกเพิ่ม (+) จากข้อมูลที่มีอยู่ในหน้า "สต๊อก"
       // ----------------------------------------------------------------------
       const scannedBatch = rawScanned;
-      const sapMatch = sapByBatch.get(scannedBatch) || sapByHu.get(scannedBatch);
-      const existingRec = rmStock.find(
-        (r) => r.batch.toUpperCase() === scannedBatch && r.internalSubMode === "batch"
-      );
+      const stockInfo = getBatchCurrentStockInfo(scannedBatch);
+      const { sapMatch, existingRec, existingQty, existingWeightKg } = stockInfo;
 
-      const resolvedWeight =
-        sapMatch && sapMatch.weightKg > 0
-          ? sapMatch.weightKg
-          : existingRec && existingRec.weightKg > 0
-          ? existingRec.weightKg
-          : 0;
+      const certThickness =
+        sapMatch?.certThickness || existingRec?.certThickness || "-";
+      const width = sapMatch?.width || existingRec?.width || "-";
+      const length = sapMatch?.length || existingRec?.length || "-";
 
-      const saved = await saveRmInboundToCloud({
-        id: `RM-BATCH-${scannedBatch}`,
-        inboundType: inboundCategory,
-        internalSubMode: "batch",
-        machine: activeMachine,
-        location: cleanLoc,
-        storageLocation:
-          sapMatch?.storageLocation || existingRec?.storageLocation || "2A06",
-        materialNo: sapMatch?.materialNo || existingRec?.materialNo || "-",
-        description: sapMatch?.description || existingRec?.description || "-",
-        batch: scannedBatch,
-        batchHu: sapMatch?.batchHu || existingRec?.batchHu || "",
-        certThickness: sapMatch?.certThickness || existingRec?.certThickness || "-",
-        width: sapMatch?.width || existingRec?.width || "-",
-        length: sapMatch?.length || existingRec?.length || "-",
-        grade: sapMatch?.grade || existingRec?.grade || "-",
-        unrestricted:
-          sapMatch?.unrestricted ||
-          existingRec?.unrestricted ||
-          (resolvedWeight > 0 ? resolvedWeight.toFixed(3) : "0.000"),
-        weightKg: resolvedWeight,
-        initialWeightKg: resolvedWeight,
-        inboundQty: sapMatch?.inboundQty || existingRec?.inboundQty || 1,
-        manufacturer: sapMatch?.manufacturer ?? existingRec?.manufacturer ?? "",
-        salesDocument: sapMatch?.salesDocument ?? existingRec?.salesDocument ?? "",
-        salesItem: sapMatch?.salesItem ?? existingRec?.salesItem ?? "0",
-        conditionText: sapMatch?.conditionText ?? existingRec?.conditionText ?? "",
-        status: "available",
-        hasSapData: Boolean(sapMatch),
-        scanTimestamp: timestamp,
-        updatedAt: new Date().toISOString(),
-      });
+      if (inboundCategory === "internal") {
+        // จำนวนที่สแกนรับเพิ่มในครั้งนี้
+        const addedQty = parsedInputQty > 0 ? parsedInputQty : 1;
+        const addedWeightKg = calculateRmFormulaWeightKg(
+          addedQty,
+          certThickness,
+          width,
+          length
+        );
 
-      playBeep("success");
-      setLastScannedBanner({
-        type: "success",
-        message: isThai
-          ? `${
-              inboundCategory === "internal"
-                ? `รับภายใน Batch สำเร็จ! เครื่อง ${activeMachine}`
-                : "รับภายนอกสำเร็จ!"
-            } • Batch: [${saved.batch}] -> Location: ${saved.location}`
-          : `Inbound Batch [${saved.batch}] saved to ${saved.location}`,
-        detail: isThai
-          ? `Mat: ${saved.materialNo} • ขนาด: ${saved.certThickness} x ${saved.width} x ${saved.length} • Grade: ${saved.grade} • Unrestr.: ${saved.unrestricted} • ผู้ผลิต: ${saved.manufacturer || "-"}`
-          : `Spec: ${saved.certThickness}x${saved.width}x${saved.length} • Grade: ${saved.grade}`,
-      });
-      showToast(
-        isThai
-          ? `รับเข้า Batch ${saved.batch} -> Location ${saved.location} สำเร็จ`
-          : `Inbound Batch ${saved.batch} -> ${saved.location}`,
-        "success"
-      );
-      onLogTransaction?.(
-        `RM ${inboundCategory === "internal" ? `Internal (${activeMachine})` : "External"} Batch Inbound ${saved.batch} -> ${saved.location}`,
-        saved.batch,
-        "Completed"
-      );
+        // บวกเพิ่มจากข้อมูลที่มีอยู่ในหน้า "สต๊อก"
+        const accumulatedWeightKg = Number(
+          (existingWeightKg + addedWeightKg).toFixed(3)
+        );
+        const formulaTotalQty = calculateRmQtyFromWeightKg(
+          accumulatedWeightKg,
+          certThickness,
+          width,
+          length
+        );
+        const accumulatedQty =
+          formulaTotalQty > 0
+            ? formulaTotalQty
+            : Number((existingQty + addedQty).toFixed(2));
+
+        const saved = await saveRmInboundToCloud({
+          id: `RM-BATCH-${scannedBatch}`,
+          inboundType: "internal",
+          internalSubMode: "batch",
+          sapCategory: sapMatch?.sapCategory || existingRec?.sapCategory || "Batch",
+          machine: activeMachine,
+          location: cleanLoc,
+          storageLocation:
+            sapMatch?.storageLocation || existingRec?.storageLocation || "2A06",
+          materialNo: sapMatch?.materialNo || existingRec?.materialNo || "-",
+          description: sapMatch?.description || existingRec?.description || "-",
+          batch: scannedBatch,
+          batchHu: sapMatch?.batchHu || existingRec?.batchHu || "",
+          certThickness,
+          width,
+          length,
+          grade: sapMatch?.grade || existingRec?.grade || "-",
+          unrestricted:
+            accumulatedWeightKg > 0
+              ? accumulatedWeightKg.toFixed(3)
+              : accumulatedQty.toFixed(3),
+          weightKg: accumulatedWeightKg,
+          initialWeightKg:
+            existingRec && existingRec.initialWeightKg > 0
+              ? existingRec.initialWeightKg
+              : existingWeightKg > 0
+              ? existingWeightKg
+              : accumulatedWeightKg,
+          inboundQty: accumulatedQty,
+          manufacturer: sapMatch?.manufacturer ?? existingRec?.manufacturer ?? "",
+          salesDocument: sapMatch?.salesDocument ?? existingRec?.salesDocument ?? "",
+          salesItem: sapMatch?.salesItem ?? existingRec?.salesItem ?? "0",
+          conditionText: sapMatch?.conditionText ?? existingRec?.conditionText ?? "",
+          status: "available",
+          hasSapData: Boolean(sapMatch || existingRec?.hasSapData),
+          scanTimestamp: timestamp,
+          updatedAt: new Date().toISOString(),
+        });
+
+        playBeep("success");
+        setLastScannedBanner({
+          type: "success",
+          message: isThai
+            ? `รับภายใน Batch (${activeMachine}) • Batch: [${saved.batch}] -> Location: ${saved.location}`
+            : `Internal Batch [${saved.batch}] saved to ${saved.location}`,
+          detail: isThai
+            ? `สต๊อกเดิม: ${existingQty.toLocaleString()} แผ่น (${existingWeightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG) + รับเพิ่ม: ${addedQty.toLocaleString()} แผ่น (${addedWeightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG) = รวมในสต๊อก: ${saved.inboundQty.toLocaleString()} แผ่น (${saved.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG)`
+            : `Prev: ${existingQty} (${existingWeightKg} KG) + Added: ${addedQty} (${addedWeightKg} KG) = Total: ${saved.inboundQty} (${saved.weightKg} KG)`,
+        });
+        showToast(
+          isThai
+            ? `Batch ${saved.batch}: สต๊อกเดิม ${existingQty.toLocaleString()} + รับเพิ่ม ${addedQty.toLocaleString()} = รวม ${saved.inboundQty.toLocaleString()} แผ่น`
+            : `Batch ${saved.batch}: ${existingQty} + ${addedQty} = ${saved.inboundQty}`,
+          "success"
+        );
+        onLogTransaction?.(
+          `RM Internal (${activeMachine}) Batch Inbound ${saved.batch} (+${addedQty} -> Total ${saved.inboundQty}) -> ${saved.location}`,
+          saved.batch,
+          "Completed"
+        );
+      } else {
+        // โหมดรับภายนอก
+        const resolvedWeight =
+          existingWeightKg > 0
+            ? existingWeightKg
+            : calculateRmFormulaWeightKg(1, certThickness, width, length);
+        const resolvedQty =
+          existingQty > 0
+            ? existingQty
+            : calculateRmQtyFromWeightKg(resolvedWeight, certThickness, width, length) ||
+              1;
+
+        const saved = await saveRmInboundToCloud({
+          id: `RM-BATCH-${scannedBatch}`,
+          inboundType: "external",
+          internalSubMode: "batch",
+          sapCategory: sapMatch?.sapCategory || existingRec?.sapCategory || "Batch",
+          machine: activeMachine,
+          location: cleanLoc,
+          storageLocation:
+            sapMatch?.storageLocation || existingRec?.storageLocation || "2A06",
+          materialNo: sapMatch?.materialNo || existingRec?.materialNo || "-",
+          description: sapMatch?.description || existingRec?.description || "-",
+          batch: scannedBatch,
+          batchHu: sapMatch?.batchHu || existingRec?.batchHu || "",
+          certThickness,
+          width,
+          length,
+          grade: sapMatch?.grade || existingRec?.grade || "-",
+          unrestricted:
+            sapMatch?.unrestricted ||
+            existingRec?.unrestricted ||
+            (resolvedWeight > 0 ? resolvedWeight.toFixed(3) : "1.000"),
+          weightKg: resolvedWeight,
+          initialWeightKg: resolvedWeight,
+          inboundQty: resolvedQty,
+          manufacturer: sapMatch?.manufacturer ?? existingRec?.manufacturer ?? "",
+          salesDocument: sapMatch?.salesDocument ?? existingRec?.salesDocument ?? "",
+          salesItem: sapMatch?.salesItem ?? existingRec?.salesItem ?? "0",
+          conditionText: sapMatch?.conditionText ?? existingRec?.conditionText ?? "",
+          status: "available",
+          hasSapData: Boolean(sapMatch),
+          scanTimestamp: timestamp,
+          updatedAt: new Date().toISOString(),
+        });
+
+        playBeep("success");
+        setLastScannedBanner({
+          type: "success",
+          message: isThai
+            ? `รับภายนอกสำเร็จ! • Batch: [${saved.batch}] -> Location: ${saved.location}`
+            : `External Inbound Batch [${saved.batch}] saved to ${saved.location}`,
+          detail: isThai
+            ? `จำนวน: ${saved.inboundQty.toLocaleString()} • น้ำหนัก: ${saved.weightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG`
+            : `Qty: ${saved.inboundQty} • Weight: ${saved.weightKg} KG`,
+        });
+        showToast(
+          isThai
+            ? `รับเข้า Batch ${saved.batch} -> Location ${saved.location} สำเร็จ`
+            : `Inbound Batch ${saved.batch} -> ${saved.location}`,
+          "success"
+        );
+        onLogTransaction?.(
+          `RM External Batch Inbound ${saved.batch} -> ${saved.location}`,
+          saved.batch,
+          "Completed"
+        );
+      }
     }
   };
 
   // ============================================================================
   // SAP Excel / CSV File Upload & Paste Import Handlers
   // ============================================================================
+  const openSapUploadModal = (category: RmSapCategory) => {
+    setSapUploadCategory(category);
+    setSapUploadType(category === "Bundle" ? "bundle" : "batch");
+    setSapRawText("");
+    setIsSapModalOpen(true);
+  };
+
   const handleSapFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -733,6 +1098,12 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     }
   };
 
+  const resolveSapItemCategory = (item: RmSapMasterItem): RmSapCategory => {
+    if (item.sapCategory) return item.sapCategory;
+    const itemType = item.sapType || (item.batchHu ? "bundle" : "batch");
+    return itemType === "bundle" ? "Bundle" : "Batch";
+  };
+
   const handleConfirmSapImport = async () => {
     if (parsedSapPreview.length === 0) {
       showToast(
@@ -743,18 +1114,17 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     }
     setIsSapSaving(true);
     try {
-      // Keep items of the OTHER sapType so Batch and Bundle SAP uploads don't overwrite each other
-      const preservedOtherItems = rmSapItems.filter((item) => {
-        const itemType = item.sapType || (item.batchHu ? "bundle" : "batch");
-        return itemType !== sapUploadType;
-      });
+      // Keep items of all OTHER sapCategories so Batch, VM, AB, STL, ฝาก, and Bundle uploads don't overwrite each other
+      const preservedOtherItems = rmSapItems.filter(
+        (item) => resolveSapItemCategory(item) !== sapUploadCategory
+      );
       const combinedSapItems = [...preservedOtherItems, ...parsedSapPreview];
       await saveRmSapChunksToCloud(combinedSapItems);
       playBeep("success");
       showToast(
         isThai
-          ? `อัปโหลดสต๊อก SAP ${sapUploadType === "batch" ? "Batch" : "Bundle"} (${parsedSapPreview.length.toLocaleString()} รายการ) สำเร็จ!`
-          : `Uploaded ${parsedSapPreview.length.toLocaleString()} SAP items!`,
+          ? `อัปโหลดสต๊อก SAP (${sapUploadCategory}) จำนวน ${parsedSapPreview.length.toLocaleString()} รายการ สำเร็จ!`
+          : `Uploaded ${parsedSapPreview.length.toLocaleString()} SAP (${sapUploadCategory}) items!`,
         "success"
       );
       setIsSapModalOpen(false);
@@ -763,6 +1133,23 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
       setIsSapSaving(false);
     }
   };
+
+  // Count of uploaded SAP rows per category
+  const sapCountByCategory = useMemo(() => {
+    const counts: Record<RmSapCategory, number> = {
+      Batch: 0,
+      VM: 0,
+      AB: 0,
+      STL: 0,
+      ฝาก: 0,
+      Bundle: 0,
+    };
+    rmSapItems.forEach((item) => {
+      const cat = resolveSapItemCategory(item);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [rmSapItems]);
 
   // ============================================================================
   // Filtered Records for Inbound Tables
@@ -817,6 +1204,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     const seenBatches = new Set<string>();
     const rows: Array<{
       key: string;
+      sapCategory: RmSapBatchCategory;
       compareStatus: "matched" | "unscanned" | "no_sap";
       scannedLocation: string;
       machine: string;
@@ -828,21 +1216,75 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
       width: string;
       length: string;
       grade: string;
-      unrestricted: string;
+      qtyDisplay: string;
+      qtyNum: number;
+      weightKg: number;
+      stackHeight: number;
       manufacturer: string;
       salesDocument: string;
       salesItem: string;
       conditionText: string;
     }> = [];
 
-    // 1. All SAP Batch rows (Matched if scanned, Unscanned if not scanned yet)
+    // 1. All SAP Batch rows (Batch, VM, AB, STL, ฝาก)
     sapBatchItems.forEach((sap, idx) => {
       const normBatch = (sap.batch || "").trim().toUpperCase();
       if (!normBatch) return;
       seenBatches.add(normBatch);
       const scanned = scannedBatchMap.get(normBatch);
+      const cat =
+        sap.sapCategory && sap.sapCategory !== "Bundle" ? sap.sapCategory : "Batch";
+      const certThickness = sap.certThickness || scanned?.certThickness || "-";
+      const width = sap.width || scanned?.width || "-";
+      const length = sap.length || scanned?.length || "-";
+
+      // 1) หาน้ำหนัก (weightKg) จากรายการสแกน หรือจาก SAP
+      const sapUnrestrNum =
+        parseFloat(String(sap.unrestricted || "").replace(/,/g, "")) || 0;
+      const sapResolvedWeight =
+        sapUnrestrNum > 0
+          ? resolveRmRowWeightKg(sapUnrestrNum, certThickness, width, length)
+          : sap.weightKg > 0
+          ? resolveRmRowWeightKg(sap.weightKg, certThickness, width, length)
+          : 0;
+      const scannedResolvedWeight =
+        scanned && scanned.weightKg > 0
+          ? resolveRmRowWeightKg(scanned.weightKg, certThickness, width, length)
+          : 0;
+      const weightKg =
+        scanned && scanned.inboundType === "internal" && scannedResolvedWeight > 0
+          ? scannedResolvedWeight
+          : sapResolvedWeight > 0
+          ? sapResolvedWeight
+          : scannedResolvedWeight;
+
+      // 2) หาจำนวน = น้ำหนัก ÷ หนา Certificated. ÷ กว้าง ÷ ยาว ÷ 0.00000785
+      const formulaQty = calculateRmQtyFromWeightKg(
+        weightKg,
+        certThickness,
+        width,
+        length
+      );
+      const qtyNum =
+        formulaQty > 0
+          ? formulaQty
+          : scanned && scanned.inboundType === "internal" && scanned.inboundQty > 0
+          ? scanned.inboundQty
+          : scanned?.inboundQty || sap.inboundQty || sapUnrestrNum || 0;
+      const qtyDisplay =
+        qtyNum > 0
+          ? qtyNum.toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 2,
+            })
+          : "0";
+
+      // 3) ความสูงของกอง = จำนวน × หนา Certificated.
+      const stackHeight = calculateRmStackHeight(qtyNum, certThickness);
+
       rows.push({
-        key: `SAP-BATCH-${normBatch}-${idx}`,
+        key: `SAP-BATCH-${cat}-${normBatch}-${idx}`,
+        sapCategory: cat,
         compareStatus: scanned ? "matched" : "unscanned",
         scannedLocation: scanned?.location || "",
         machine: scanned?.machine || "",
@@ -850,14 +1292,14 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
         materialNo: sap.materialNo || scanned?.materialNo || "-",
         description: sap.description || scanned?.description || "-",
         batch: normBatch,
-        certThickness: sap.certThickness || scanned?.certThickness || "-",
-        width: sap.width || scanned?.width || "-",
-        length: sap.length || scanned?.length || "-",
+        certThickness,
+        width,
+        length,
         grade: sap.grade || scanned?.grade || "-",
-        unrestricted:
-          sap.unrestricted ||
-          scanned?.unrestricted ||
-          (sap.weightKg ? sap.weightKg.toFixed(3) : "0.000"),
+        qtyDisplay,
+        qtyNum,
+        weightKg,
+        stackHeight,
         manufacturer: sap.manufacturer ?? scanned?.manufacturer ?? "",
         salesDocument: sap.salesDocument ?? scanned?.salesDocument ?? "",
         salesItem: sap.salesItem ?? scanned?.salesItem ?? "0",
@@ -871,8 +1313,48 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
       const normBatch = (r.batch || "").trim().toUpperCase();
       if (!normBatch || seenBatches.has(normBatch)) return;
       seenBatches.add(normBatch);
+      const cat =
+        r.sapCategory && r.sapCategory !== "Bundle" ? r.sapCategory : "Batch";
+      const certThickness = r.certThickness || "-";
+      const width = r.width || "-";
+      const length = r.length || "-";
+      const unrestrNum =
+        parseFloat(String(r.unrestricted || "").replace(/,/g, "")) || 0;
+
+      // 1) หาน้ำหนัก (weightKg)
+      const weightFromQty =
+        r.inboundQty > 0
+          ? calculateRmFormulaWeightKg(r.inboundQty, certThickness, width, length)
+          : 0;
+      const weightKg =
+        r.weightKg > 0
+          ? resolveRmRowWeightKg(r.weightKg, certThickness, width, length)
+          : weightFromQty > 0
+          ? weightFromQty
+          : resolveRmRowWeightKg(unrestrNum, certThickness, width, length);
+
+      // 2) หาจำนวน = น้ำหนัก ÷ หนา Certificated. ÷ กว้าง ÷ ยาว ÷ 0.00000785
+      const formulaQty = calculateRmQtyFromWeightKg(
+        weightKg,
+        certThickness,
+        width,
+        length
+      );
+      const qtyNum = formulaQty > 0 ? formulaQty : r.inboundQty || unrestrNum || 0;
+      const qtyDisplay =
+        qtyNum > 0
+          ? qtyNum.toLocaleString(undefined, {
+              minimumFractionDigits: 0,
+              maximumFractionDigits: 2,
+            })
+          : "0";
+
+      // 3) ความสูงของกอง = จำนวน × หนา Certificated.
+      const stackHeight = calculateRmStackHeight(qtyNum, certThickness);
+
       rows.push({
         key: `SCAN-BATCH-${r.id}`,
+        sapCategory: cat,
         compareStatus: r.hasSapData ? "matched" : "no_sap",
         scannedLocation: r.location || "-",
         machine: r.machine || "",
@@ -880,11 +1362,14 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
         materialNo: r.materialNo || "-",
         description: r.description || "-",
         batch: normBatch,
-        certThickness: r.certThickness || "-",
-        width: r.width || "-",
-        length: r.length || "-",
+        certThickness,
+        width,
+        length,
         grade: r.grade || "-",
-        unrestricted: r.unrestricted || (r.weightKg ? r.weightKg.toFixed(3) : "0.000"),
+        qtyDisplay,
+        qtyNum,
+        weightKg,
+        stackHeight,
         manufacturer: r.manufacturer && r.manufacturer !== "-" ? r.manufacturer : "",
         salesDocument: r.salesDocument ?? "",
         salesItem: r.salesItem ?? "0",
@@ -895,18 +1380,23 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     return rows;
   }, [rmSapItems, rmStock]);
 
+  const categoryFilteredBatchStock = useMemo(() => {
+    if (stockBatchCategoryFilter === "ALL") return batchStockComparison;
+    return batchStockComparison.filter((r) => r.sapCategory === stockBatchCategoryFilter);
+  }, [batchStockComparison, stockBatchCategoryFilter]);
+
   const filteredBatchStockComparison = useMemo(() => {
     const q = stockSearch.trim().toLowerCase();
-    return batchStockComparison.filter((r) => {
+    return categoryFilteredBatchStock.filter((r) => {
       if (stockCompareFilter !== "ALL" && r.compareStatus !== stockCompareFilter) {
         return false;
       }
       if (!q) return true;
-      return `${r.scannedLocation} ${r.storageLocation} ${r.materialNo} ${r.description} ${r.batch} ${r.grade} ${r.manufacturer} ${r.salesDocument} ${r.conditionText}`
+      return `${r.sapCategory} ${r.scannedLocation} ${r.storageLocation} ${r.materialNo} ${r.description} ${r.batch} ${r.grade} ${r.manufacturer} ${r.salesDocument} ${r.conditionText}`
         .toLowerCase()
         .includes(q);
     });
-  }, [batchStockComparison, stockSearch, stockCompareFilter]);
+  }, [categoryFilteredBatchStock, stockSearch, stockCompareFilter]);
 
   const bundleStockComparison = useMemo(() => {
     const sapBundleItems = rmSapItems.filter(
@@ -1361,49 +1851,133 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 </div>
               </div>
 
-              {/* Bundle Optional Fields */}
-              {inboundCategory === "internal" && internalSubMode === "bundle" && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-0.5">
-                      Batch
-                    </label>
-                    <input
-                      type="text"
-                      value={bundleBatchInput}
-                      onChange={(e) => setBundleBatchInput(e.target.value.toUpperCase())}
-                      placeholder="Batch"
-                      className="w-full px-3 py-1.5 rounded-lg text-xs font-mono border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
-                    />
+              {/* Internal Inbound Fields: จำนวน & น้ำหนัก (คำนวณอัตโนมัติ: จำนวน × หนา Certificated. × กว้าง × ยาว × 0.00000785) */}
+              {inboundCategory === "internal" && (
+                <div className="space-y-2 pt-1">
+                  <div
+                    className={`grid grid-cols-1 ${
+                      internalSubMode === "bundle" ? "sm:grid-cols-3" : "sm:grid-cols-2"
+                    } gap-2.5`}
+                  >
+                    {internalSubMode === "bundle" && (
+                      <div>
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                          Batch
+                        </label>
+                        <input
+                          type="text"
+                          value={bundleBatchInput}
+                          onChange={(e) => setBundleBatchInput(e.target.value.toUpperCase())}
+                          placeholder="Batch"
+                          className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
+                        {isThai ? "จำนวน" : "Quantity"}
+                      </label>
+                      <input
+                        ref={qtyInputRef}
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={inboundQtyInput}
+                        onChange={(e) => setInboundQtyInput(e.target.value)}
+                        placeholder="1"
+                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                          {isThai ? "น้ำหนัก" : "Weight"}
+                        </label>
+                        {Boolean(
+                          activeInboundSpec.certThickness &&
+                            activeInboundSpec.width &&
+                            activeInboundSpec.length
+                        ) && (
+                          <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            {`${Number(inboundQtyInput) > 0 ? Number(inboundQtyInput) : 0} × ${activeInboundSpec.certThickness} × ${activeInboundSpec.width} × ${activeInboundSpec.length} × 0.00000785`}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={
+                          autoCalculatedInboundWeight > 0
+                            ? autoCalculatedInboundWeight.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 3,
+                              })
+                            : "0.00"
+                        }
+                        className="w-full px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-not-allowed"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-0.5">
-                      {isThai ? "จำนวนรับเข้า" : "Qty"}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={bundleQtyInput}
-                      onChange={(e) => setBundleQtyInput(e.target.value)}
-                      placeholder="1"
-                      className="w-full px-3 py-1.5 rounded-lg text-xs font-mono border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-0.5">
-                      {isThai ? "น้ำหนักรับเข้า" : "Weight (KG)"}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={bundleWeightInput}
-                      onChange={(e) => setBundleWeightInput(e.target.value)}
-                      placeholder="KG"
-                      className="w-full px-3 py-1.5 rounded-lg text-xs font-mono border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white"
-                    />
-                  </div>
+
+                  {/* แสดงการเช็คยอดในหน้าสต๊อก + ยอดบวกเพิ่ม สำหรับโหมด รับภายใน Batch */}
+                  {internalSubMode === "batch" && inboundBarcodeInput.trim() !== "" && (
+                    <div className="px-3 py-2 rounded-lg border border-sky-500/30 bg-sky-500/10 text-xs flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2 font-mono">
+                        <span className="font-extrabold text-sky-700 dark:text-sky-300">
+                          {isThai
+                            ? `ในสต๊อก: ${activeInboundSpec.existingQty.toLocaleString()} แผ่น (${activeInboundSpec.existingWeightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG)`
+                            : `In Stock: ${activeInboundSpec.existingQty} (${activeInboundSpec.existingWeightKg} KG)`}
+                        </span>
+                        <span className="text-slate-400">+</span>
+                        <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
+                          {isThai
+                            ? `รับเพิ่ม: ${(parseFloat(inboundQtyInput.replace(/,/g, "")) || 1).toLocaleString()} แผ่น (${(autoCalculatedInboundWeight > 0
+                                ? autoCalculatedInboundWeight
+                                : calculateRmFormulaWeightKg(
+                                    1,
+                                    activeInboundSpec.certThickness,
+                                    activeInboundSpec.width,
+                                    activeInboundSpec.length
+                                  )
+                              ).toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 3,
+                              })} KG)`
+                            : `Add: ${parseFloat(inboundQtyInput.replace(/,/g, "")) || 1}`}
+                        </span>
+                      </div>
+
+                      <div className="font-mono font-extrabold text-amber-600 dark:text-amber-300">
+                        {(() => {
+                          const addQ = parseFloat(inboundQtyInput.replace(/,/g, "")) || 1;
+                          const addW =
+                            autoCalculatedInboundWeight > 0
+                              ? autoCalculatedInboundWeight
+                              : calculateRmFormulaWeightKg(
+                                  addQ,
+                                  activeInboundSpec.certThickness,
+                                  activeInboundSpec.width,
+                                  activeInboundSpec.length
+                                );
+                          const sumW = Number(
+                            (activeInboundSpec.existingWeightKg + addW).toFixed(3)
+                          );
+                          const sumQ =
+                            calculateRmQtyFromWeightKg(
+                              sumW,
+                              activeInboundSpec.certThickness,
+                              activeInboundSpec.width,
+                              activeInboundSpec.length
+                            ) || Number((activeInboundSpec.existingQty + addQ).toFixed(2));
+                          return isThai
+                            ? `รวมในสต๊อก: ${sumQ.toLocaleString()} แผ่น (${sumW.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG)`
+                            : `New Stock Total: ${sumQ} (${sumW} KG)`;
+                        })()}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </form>
@@ -1473,6 +2047,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       <th>กว้าง</th>
                       <th>ยาว</th>
                       <th>Grade</th>
+                      <th className="text-right">{isThai ? "จำนวน" : "Qty"}</th>
+                      <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
                       <th className="text-right">Unrestr.</th>
                       <th>ผู้ผลิต</th>
                       <th className="text-center">{isThai ? "ลบ" : "Del"}</th>
@@ -1507,8 +2083,17 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                         <td className="font-mono tabular-nums">{r.width}</td>
                         <td className="font-mono tabular-nums">{r.length}</td>
                         <td className="font-bold">{r.grade}</td>
+                        <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
+                          {Number(r.inboundQty || 1).toLocaleString()}
+                        </td>
                         <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
-                          {r.unrestricted || Number(r.weightKg || 0).toLocaleString()}
+                          {Number(r.weightKg || 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 3,
+                          })}
+                        </td>
+                        <td className="font-mono font-bold tabular-nums text-right">
+                          {r.unrestricted || "-"}
                         </td>
                         <td>{r.manufacturer}</td>
                         <td className="text-center">
@@ -1524,7 +2109,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     ))}
                     {filteredInternalBatchRecords.length === 0 && (
                       <tr>
-                        <td colSpan={13} className="text-center py-6 text-slate-400">
+                        <td colSpan={15} className="text-center py-6 text-slate-400">
                           {isThai ? "ไม่มีข้อมูล" : "No records"}
                         </td>
                       </tr>
@@ -1815,9 +2400,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
          ===================================================================== */}
       {activeMode === "stock_balance" && (
         <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-          {/* Toolbar */}
-          <div className="px-4 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
+          {/* Row 1: Toggle สต๊อก Batch / สต๊อก Bundle + ปุ่มอัปโหลดสต๊อก SAP ทั้ง 5 ผลิตภัณฑ์ */}
+          <div className="px-4 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               {/* Toggle: สต๊อก Batch vs สต๊อก Bundle */}
               <div className="flex items-center gap-1.5">
                 <button
@@ -1855,80 +2440,146 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 </button>
               </div>
 
-              {/* Comparison Status Filter */}
-              <div className="flex items-center gap-1">
-                {(
-                  [
-                    {
-                      id: "ALL",
-                      label: isThai ? "ทั้งหมด" : "All",
-                      count:
-                        stockTableType === "batch"
-                          ? batchStockComparison.length
-                          : bundleStockComparison.length,
-                    },
-                    {
-                      id: "matched",
-                      label: isThai ? "สแกนแล้ว" : "Scanned",
-                      count: (stockTableType === "batch"
-                        ? batchStockComparison
-                        : bundleStockComparison
-                      ).filter((r) => r.compareStatus === "matched").length,
-                    },
-                    {
-                      id: "unscanned",
-                      label: isThai ? "รอสแกน" : "Unscanned",
-                      count: (stockTableType === "batch"
-                        ? batchStockComparison
-                        : bundleStockComparison
-                      ).filter((r) => r.compareStatus === "unscanned").length,
-                    },
-                    {
-                      id: "no_sap",
-                      label: isThai ? "ไม่มีใน SAP" : "Not in SAP",
-                      count: (stockTableType === "batch"
-                        ? batchStockComparison
-                        : bundleStockComparison
-                      ).filter((r) => r.compareStatus === "no_sap").length,
-                    },
-                  ] as const
-                ).map((f) => (
+              {/* SAP Upload Buttons */}
+              {stockTableType === "batch" ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {RM_SAP_BATCH_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => openSapUploadModal(cat)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                    >
+                      <FileSpreadsheet size={13} />
+                      <span>
+                        {isThai
+                          ? `อัปโหลดสต๊อก SAP (${cat})`
+                          : `Upload SAP (${cat})`}
+                      </span>
+                      {sapCountByCategory[cat] > 0 && (
+                        <span className="px-1.5 py-0.2 rounded bg-white/20 text-[10.5px] font-mono">
+                          {sapCountByCategory[cat].toLocaleString()}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-1.5">
                   <button
-                    key={f.id}
                     type="button"
-                    onClick={() => setStockCompareFilter(f.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
-                      stockCompareFilter === f.id
-                        ? "bg-cyan-600 text-white border-cyan-500"
-                        : "bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
-                    }`}
+                    onClick={() => openSapUploadModal("Bundle")}
+                    className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
                   >
-                    {f.label} ({f.count})
+                    <FileSpreadsheet size={14} />
+                    <span>
+                      {isThai
+                        ? "อัปโหลดสต๊อก SAP (Bundle)"
+                        : "Upload SAP (Bundle)"}
+                    </span>
+                    {sapCountByCategory.Bundle > 0 && (
+                      <span className="px-1.5 py-0.2 rounded bg-white/20 text-[10.5px] font-mono">
+                        {sapCountByCategory.Bundle.toLocaleString()}
+                      </span>
+                    )}
                   </button>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSapUploadType(stockTableType);
-                  setIsSapModalOpen(true);
-                }}
-                className="px-3 py-1.5 rounded-lg text-xs font-extrabold bg-cyan-600 hover:bg-cyan-500 text-white shadow-xs flex items-center gap-1.5 cursor-pointer"
-              >
-                <FileSpreadsheet size={14} />
-                <span>
-                  {isThai
-                    ? stockTableType === "batch"
-                      ? "อัปโหลดสต๊อก SAP (Batch)"
-                      : "อัปโหลดสต๊อก SAP (Bundle)"
-                    : "Upload SAP Stock"}
-                </span>
-              </button>
+            {/* Row 2: Product Group Filter (for Batch) + Comparison Status Filter + Search */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
+                {stockTableType === "batch" && (
+                  <div className="flex items-center gap-1 flex-wrap pr-2 border-r border-slate-200 dark:border-[#1e3a5f]">
+                    <button
+                      type="button"
+                      onClick={() => setStockBatchCategoryFilter("ALL")}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                        stockBatchCategoryFilter === "ALL"
+                          ? "bg-emerald-600 text-white border-emerald-500"
+                          : "bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                      }`}
+                    >
+                      {isThai ? "ทุกผลิตภัณฑ์" : "All"} ({batchStockComparison.length})
+                    </button>
+                    {RM_SAP_BATCH_CATEGORIES.map((cat) => {
+                      const catCount = batchStockComparison.filter(
+                        (r) => r.sapCategory === cat
+                      ).length;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setStockBatchCategoryFilter(cat)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                            stockBatchCategoryFilter === cat
+                              ? "bg-emerald-600 text-white border-emerald-500"
+                              : "bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                          }`}
+                        >
+                          {cat} ({catCount})
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-              <div className="relative w-full sm:w-52">
+                {/* Comparison Status Filter */}
+                <div className="flex items-center gap-1 flex-wrap">
+                  {(
+                    [
+                      {
+                        id: "ALL",
+                        label: isThai ? "ทั้งหมด" : "All",
+                        count:
+                          stockTableType === "batch"
+                            ? categoryFilteredBatchStock.length
+                            : bundleStockComparison.length,
+                      },
+                      {
+                        id: "matched",
+                        label: isThai ? "สแกนแล้ว" : "Scanned",
+                        count: (stockTableType === "batch"
+                          ? categoryFilteredBatchStock
+                          : bundleStockComparison
+                        ).filter((r) => r.compareStatus === "matched").length,
+                      },
+                      {
+                        id: "unscanned",
+                        label: isThai ? "รอสแกน" : "Unscanned",
+                        count: (stockTableType === "batch"
+                          ? categoryFilteredBatchStock
+                          : bundleStockComparison
+                        ).filter((r) => r.compareStatus === "unscanned").length,
+                      },
+                      {
+                        id: "no_sap",
+                        label: isThai ? "ไม่มีใน SAP" : "Not in SAP",
+                        count: (stockTableType === "batch"
+                          ? categoryFilteredBatchStock
+                          : bundleStockComparison
+                        ).filter((r) => r.compareStatus === "no_sap").length,
+                      },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setStockCompareFilter(f.id)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer ${
+                        stockCompareFilter === f.id
+                          ? "bg-cyan-600 text-white border-cyan-500"
+                          : "bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                      }`}
+                    >
+                      {f.label} ({f.count})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="relative w-full sm:w-56">
                 <Search
                   size={13}
                   className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -1944,12 +2595,13 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
             </div>
           </div>
 
-          {/* TABLE 1: สต๊อก Batch (13 คอลัมน์ตามตาราง SAP + สถานะ & Location ที่สแกน) */}
+          {/* TABLE 1: สต๊อก Batch (แสดงคอลัมน์ จำนวน แทน Unrestricted + เพิ่ม น้ำหนัก และ ความสูงของกอง) */}
           {stockTableType === "batch" && (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr>
+                    <th>{isThai ? "ประเภท" : "Type"}</th>
                     <th>{isThai ? "สถานะ" : "Status"}</th>
                     <th>Location</th>
                     <th>Storage Location</th>
@@ -1960,7 +2612,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     <th className="text-right">กว้าง</th>
                     <th className="text-right">ยาว</th>
                     <th>Grade</th>
-                    <th className="text-right">Unrestricted</th>
+                    <th className="text-right">{isThai ? "จำนวน" : "Quantity"}</th>
+                    <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
+                    <th className="text-right">{isThai ? "ความสูงของกอง" : "Stack Height"}</th>
                     <th>ผู้ผลิต</th>
                     <th>Sales Document</th>
                     <th className="text-center">Item</th>
@@ -1970,6 +2624,11 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 <tbody>
                   {filteredBatchStockComparison.slice(0, 200).map((r) => (
                     <tr key={r.key}>
+                      <td>
+                        <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-extrabold text-[11px] whitespace-nowrap">
+                          {r.sapCategory}
+                        </span>
+                      </td>
                       <td>
                         {r.compareStatus === "matched" ? (
                           <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-extrabold text-[11px] whitespace-nowrap">
@@ -2008,8 +2667,24 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       <td className="font-mono tabular-nums text-right">{r.width}</td>
                       <td className="font-mono tabular-nums text-right">{r.length}</td>
                       <td className="font-bold">{r.grade}</td>
+                      <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
+                        {r.qtyDisplay}
+                      </td>
                       <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
-                        {r.unrestricted}
+                        {r.weightKg > 0
+                          ? r.weightKg.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 3,
+                            })
+                          : "0.00"}
+                      </td>
+                      <td className="font-mono font-extrabold tabular-nums text-right text-amber-600 dark:text-amber-400">
+                        {r.stackHeight > 0
+                          ? r.stackHeight.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 3,
+                            })
+                          : "0.00"}
                       </td>
                       <td>{r.manufacturer}</td>
                       <td className="font-mono">{r.salesDocument}</td>
@@ -2019,7 +2694,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                   ))}
                   {filteredBatchStockComparison.length === 0 && (
                     <tr>
-                      <td colSpan={15} className="text-center py-6 text-slate-400">
+                      <td colSpan={18} className="text-center py-6 text-slate-400">
                         {isThai ? "ไม่มีข้อมูล" : "No records"}
                       </td>
                     </tr>
@@ -2204,7 +2879,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
       )}
 
       {/* =====================================================================
-          MODAL: SAP MASTER UPLOAD / PASTE (แยก สต๊อก Batch 13 คอลัมน์ vs สต๊อก Bundle)
+          MODAL: SAP MASTER UPLOAD / PASTE (รองรับ Batch, VM, AB, STL, ฝาก และ Bundle)
          ===================================================================== */}
       {isSapModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
@@ -2214,10 +2889,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 <Database size={16} />
                 <h3 className="text-sm font-extrabold m-0">
                   {isThai
-                    ? sapUploadType === "batch"
-                      ? "อัปโหลดสต๊อก SAP (สต๊อก Batch)"
-                      : "อัปโหลดสต๊อก SAP (สต๊อก Bundle)"
-                    : "Upload SAP Stock"}
+                    ? `อัปโหลดสต๊อก SAP (${sapUploadCategory})`
+                    : `Upload SAP Stock (${sapUploadCategory})`}
                 </h3>
               </div>
               <button
@@ -2231,30 +2904,42 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
 
             <div className="p-4 space-y-3 max-h-[84vh] overflow-y-auto">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                {/* เลือกประเภทตาราง SAP ที่ต้องการอัปโหลด: สต๊อก Batch vs สต๊อก Bundle */}
-                <div className="flex items-center gap-1.5">
+                {/* เลือกผลิตภัณฑ์ SAP ที่ต้องการอัปโหลด: Batch, VM, AB, STL, ฝาก หรือ Bundle */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {RM_SAP_BATCH_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => {
+                        setSapUploadCategory(cat);
+                        setSapUploadType("batch");
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                        sapUploadCategory === cat
+                          ? "bg-emerald-600 text-white border-emerald-500"
+                          : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
+                      }`}
+                    >
+                      <Barcode size={13} />
+                      <span>
+                        {isThai ? `อัปโหลดสต๊อก SAP (${cat})` : `SAP (${cat})`}
+                      </span>
+                    </button>
+                  ))}
+
                   <button
                     type="button"
-                    onClick={() => setSapUploadType("batch")}
+                    onClick={() => {
+                      setSapUploadCategory("Bundle");
+                      setSapUploadType("bundle");
+                    }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                      sapUploadType === "batch"
-                        ? "bg-emerald-600 text-white border-emerald-500"
-                        : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
-                    }`}
-                  >
-                    <Barcode size={14} />
-                    <span>{isThai ? "สต๊อก Batch" : "Batch Stock"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSapUploadType("bundle")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
-                      sapUploadType === "bundle"
+                      sapUploadCategory === "Bundle"
                         ? "bg-indigo-600 text-white border-indigo-500"
                         : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
                     }`}
                   >
-                    <ScanLine size={14} />
+                    <ScanLine size={13} />
                     <span>{isThai ? "สต๊อก Bundle" : "Bundle Stock"}</span>
                   </button>
                 </div>
@@ -2275,17 +2960,40 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     <FileSpreadsheet size={14} />
                     <span>{isThai ? "เลือกไฟล์" : "Choose File"}</span>
                   </button>
+                  {sapCountByCategory[sapUploadCategory] > 0 && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const remaining = rmSapItems.filter(
+                          (item) => resolveSapItemCategory(item) !== sapUploadCategory
+                        );
+                        await saveRmSapChunksToCloud(remaining);
+                        showToast(
+                          isThai
+                            ? `ล้างข้อมูล SAP (${sapUploadCategory}) แล้ว`
+                            : `Cleared SAP (${sapUploadCategory})`,
+                          "info"
+                        );
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Trash2 size={13} />
+                      <span>
+                        {isThai ? `ล้าง (${sapUploadCategory})` : `Clear (${sapUploadCategory})`}
+                      </span>
+                    </button>
+                  )}
                   {rmSapItems.length > 0 && (
                     <button
                       type="button"
                       onClick={async () => {
                         await clearRmSapChunksFromCloud();
-                        showToast(isThai ? "ล้างข้อมูล SAP แล้ว" : "Cleared SAP", "info");
+                        showToast(isThai ? "ล้างข้อมูล SAP ทั้งหมดแล้ว" : "Cleared all SAP", "info");
                       }}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-300 flex items-center gap-1 cursor-pointer"
                     >
                       <Trash2 size={13} />
-                      <span>{isThai ? "ล้างข้อมูล" : "Clear"}</span>
+                      <span>{isThai ? "ล้างทั้งหมด" : "Clear All"}</span>
                     </button>
                   )}
                 </div>
@@ -2307,8 +3015,8 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden">
                   <div className="px-3 py-1.5 bg-slate-100 dark:bg-[#0c1930] border-b border-slate-200 dark:border-[#1e3a5f] text-xs font-extrabold">
                     {isThai
-                      ? `${parsedSapPreview.length.toLocaleString()} รายการ`
-                      : `${parsedSapPreview.length.toLocaleString()} rows`}
+                      ? `${sapUploadCategory}: ${parsedSapPreview.length.toLocaleString()} รายการ`
+                      : `${sapUploadCategory}: ${parsedSapPreview.length.toLocaleString()} rows`}
                   </div>
                   <div className="max-h-56 overflow-auto">
                     {sapUploadType === "batch" ? (
@@ -2323,7 +3031,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                             <th className="text-right">กว้าง</th>
                             <th className="text-right">ยาว</th>
                             <th>Grade</th>
-                            <th className="text-right">Unrestricted</th>
+                            <th className="text-right">{isThai ? "จำนวน" : "Quantity"}</th>
+                            <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
+                            <th className="text-right">{isThai ? "ความสูงของกอง" : "Stack Height"}</th>
                             <th>ผู้ผลิต</th>
                             <th>Sales Document</th>
                             <th className="text-center">Item</th>
@@ -2331,27 +3041,74 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {parsedSapPreview.slice(0, 50).map((item, idx) => (
-                            <tr key={`${item.batch}-${idx}`}>
-                              <td className="font-mono">{item.storageLocation}</td>
-                              <td className="font-mono">{item.materialNo}</td>
-                              <td className="max-w-[220px] truncate">{item.description}</td>
-                              <td className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                {item.batch}
-                              </td>
-                              <td className="font-mono text-right">{item.certThickness}</td>
-                              <td className="font-mono text-right">{item.width}</td>
-                              <td className="font-mono text-right">{item.length}</td>
-                              <td className="font-bold">{item.grade}</td>
-                              <td className="font-mono font-bold text-right">
-                                {item.unrestricted}
-                              </td>
-                              <td>{item.manufacturer}</td>
-                              <td className="font-mono">{item.salesDocument}</td>
-                              <td className="font-mono text-center">{item.salesItem}</td>
-                              <td>{item.conditionText}</td>
-                            </tr>
-                          ))}
+                          {parsedSapPreview.slice(0, 50).map((item, idx) => {
+                            const rawNum =
+                              parseFloat(String(item.unrestricted || "").replace(/,/g, "")) || 0;
+                            const previewWeight =
+                              item.weightKg > 0
+                                ? item.weightKg
+                                : resolveRmRowWeightKg(
+                                    rawNum,
+                                    item.certThickness,
+                                    item.width,
+                                    item.length
+                                  );
+                            const previewQty =
+                              calculateRmQtyFromWeightKg(
+                                previewWeight,
+                                item.certThickness,
+                                item.width,
+                                item.length
+                              ) ||
+                              item.inboundQty ||
+                              0;
+                            const previewStackHeight = calculateRmStackHeight(
+                              previewQty,
+                              item.certThickness
+                            );
+                            return (
+                              <tr key={`${item.batch}-${idx}`}>
+                                <td className="font-mono">{item.storageLocation}</td>
+                                <td className="font-mono">{item.materialNo}</td>
+                                <td className="max-w-[220px] truncate">{item.description}</td>
+                                <td className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                                  {item.batch}
+                                </td>
+                                <td className="font-mono text-right">{item.certThickness}</td>
+                                <td className="font-mono text-right">{item.width}</td>
+                                <td className="font-mono text-right">{item.length}</td>
+                                <td className="font-bold">{item.grade}</td>
+                                <td className="font-mono font-bold text-right text-sky-600 dark:text-sky-300">
+                                  {previewQty > 0
+                                    ? previewQty.toLocaleString(undefined, {
+                                        minimumFractionDigits: 0,
+                                        maximumFractionDigits: 2,
+                                      })
+                                    : "0"}
+                                </td>
+                                <td className="font-mono font-bold text-right text-emerald-600 dark:text-emerald-400">
+                                  {previewWeight > 0
+                                    ? previewWeight.toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 3,
+                                      })
+                                    : "0.00"}
+                                </td>
+                                <td className="font-mono font-bold text-right text-amber-600 dark:text-amber-400">
+                                  {previewStackHeight > 0
+                                    ? previewStackHeight.toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 3,
+                                      })
+                                    : "0.00"}
+                                </td>
+                                <td>{item.manufacturer}</td>
+                                <td className="font-mono">{item.salesDocument}</td>
+                                <td className="font-mono text-center">{item.salesItem}</td>
+                                <td>{item.conditionText}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     ) : (

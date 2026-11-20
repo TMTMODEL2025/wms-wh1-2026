@@ -34,13 +34,23 @@ export type RmModeTab =
 export type RmInboundCategory = "internal" | "external";
 export type RmInternalSubMode = "batch" | "bundle";
 export type RmStatus = "available" | "staged" | "issued";
+export type RmSapBatchCategory = "Batch" | "VM" | "AB" | "STL" | "ฝาก";
+export type RmSapCategory = RmSapBatchCategory | "Bundle";
 
 export const RM_INTERNAL_MACHINES = ["CL03", "CL04", "CL05", "CL06"] as const;
+export const RM_SAP_BATCH_CATEGORIES: RmSapBatchCategory[] = [
+  "Batch",
+  "VM",
+  "AB",
+  "STL",
+  "ฝาก",
+];
 
 export interface RmStockRecord {
   id: string;
   inboundType: RmInboundCategory; // "internal" | "external"
   internalSubMode: RmInternalSubMode; // "batch" | "bundle"
+  sapCategory?: RmSapCategory; // "Batch" | "VM" | "AB" | "STL" | "ฝาก" | "Bundle"
   machine: string; // "CL03" | "CL04" | "CL05" | "CL06" | "EXTERNAL"
   location: string; // พื้นที่จัดเก็บที่พิมพ์หรือสแกนหน้างาน
   previousLocation?: string;
@@ -151,6 +161,7 @@ export interface RmLayoutZone {
 
 export interface RmSapMasterItem {
   sapType?: "batch" | "bundle";
+  sapCategory?: RmSapCategory;
   storageLocation: string;
   materialNo: string;
   description: string;
@@ -278,6 +289,7 @@ function sanitizeRmStockPayload(record: RmStockRecord): RmStockRecord {
     id: safeId,
     inboundType: record.inboundType === "external" ? "external" : "internal",
     internalSubMode: record.internalSubMode === "bundle" ? "bundle" : "batch",
+    sapCategory: record.sapCategory || (record.internalSubMode === "bundle" ? "Bundle" : "Batch"),
     machine: String(record.machine || "CL03").slice(0, 32),
     location: safeLocation || "-",
     previousLocation: String(record.previousLocation || "").slice(0, 64),
@@ -754,6 +766,7 @@ export async function saveRmSapChunksToCloud(
     if (!match) return rec;
     const updated = sanitizeRmStockPayload({
       ...rec,
+      sapCategory: match.sapCategory || rec.sapCategory,
       storageLocation: match.storageLocation || rec.storageLocation,
       materialNo: match.materialNo && match.materialNo !== "-" ? match.materialNo : rec.materialNo,
       description:
@@ -765,10 +778,28 @@ export async function saveRmSapChunksToCloud(
       width: match.width && match.width !== "-" ? match.width : rec.width,
       length: match.length && match.length !== "-" ? match.length : rec.length,
       grade: match.grade && match.grade !== "-" ? match.grade : rec.grade,
-      unrestricted: match.unrestricted || rec.unrestricted,
-      weightKg: match.weightKg > 0 ? match.weightKg : rec.weightKg,
-      initialWeightKg: match.weightKg > 0 ? match.weightKg : rec.initialWeightKg,
-      inboundQty: match.inboundQty > 0 ? match.inboundQty : rec.inboundQty,
+      unrestricted:
+        rec.inboundType === "internal" && rec.weightKg > 0
+          ? rec.unrestricted
+          : match.unrestricted || rec.unrestricted,
+      weightKg:
+        rec.inboundType === "internal" && rec.weightKg > 0
+          ? rec.weightKg
+          : match.weightKg > 0
+          ? match.weightKg
+          : rec.weightKg,
+      initialWeightKg:
+        rec.inboundType === "internal" && rec.initialWeightKg > 0
+          ? rec.initialWeightKg
+          : match.weightKg > 0
+          ? match.weightKg
+          : rec.initialWeightKg,
+      inboundQty:
+        rec.inboundType === "internal" && rec.inboundQty > 0
+          ? rec.inboundQty
+          : match.inboundQty > 0
+          ? match.inboundQty
+          : rec.inboundQty,
       manufacturer:
         match.manufacturer !== undefined && match.manufacturer !== "-"
           ? match.manufacturer
