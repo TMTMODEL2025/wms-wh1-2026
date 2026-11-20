@@ -53,12 +53,14 @@ import {
   subscribeToRmTransactions,
   subscribeToRmStaging,
   subscribeToRmLayouts,
+  subscribeToRmMachines,
   subscribeToRmSapChunks,
   saveRmInboundToCloud,
   deleteRmStockFromCloud,
   relocateRmStockInCloud,
   saveRmSapChunksToCloud,
   clearRmSapChunksFromCloud,
+  saveRmMachinesToCloud,
 } from "../services/rmDataService";
 
 interface RmSheetManagementProps {
@@ -131,6 +133,7 @@ function resolveRmRowWeightKg(
   return Number((val * unitSheetWeight).toFixed(3));
 }
 
+// ความสูงของกอง (หน่วย: เมตร) = (จำนวน × หนา Certificated.) ÷ 1000
 function calculateRmStackHeight(
   qty: number,
   certThickness: string | number | undefined
@@ -138,7 +141,7 @@ function calculateRmStackHeight(
   const q = Number(qty) || 0;
   const t = parseFloat(String(certThickness ?? "0").replace(/,/g, "")) || 0;
   if (q <= 0 || t <= 0) return 0;
-  return Number((q * t).toFixed(3));
+  return Number(((q * t) / 1000).toFixed(4));
 }
 
 // ============================================================================
@@ -475,6 +478,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
   const [rmTransactions, setRmTransactions] = useState<RmTransactionRecord[]>([]);
   const [rmStagingOrders, setRmStagingOrders] = useState<RmStagingOrder[]>([]);
   const [rmLayouts, setRmLayouts] = useState<RmLayoutZone[]>([]);
+  const [rmMachines, setRmMachines] = useState<string[]>([...RM_INTERNAL_MACHINES]);
+  const [isAddMachineOpen, setIsAddMachineOpen] = useState<boolean>(false);
+  const [newMachineInput, setNewMachineInput] = useState<string>("");
   const [rmSapItems, setRmSapItems] = useState<RmSapMasterItem[]>([]);
   const [rmSapChunkCount, setRmSapChunkCount] = useState<number>(0);
 
@@ -486,6 +492,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
     const unsubTx = subscribeToRmTransactions(setRmTransactions);
     const unsubStaging = subscribeToRmStaging(setRmStagingOrders);
     const unsubLayouts = subscribeToRmLayouts(setRmLayouts);
+    const unsubMachines = subscribeToRmMachines((list) => {
+      setRmMachines(list);
+    });
     const unsubSap = subscribeToRmSapChunks((items, chunkCount) => {
       setRmSapItems(items);
       setRmSapChunkCount(chunkCount);
@@ -495,9 +504,68 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
       unsubTx();
       unsubStaging();
       unsubLayouts();
+      unsubMachines();
       unsubSap();
     };
   }, []);
+
+  const handleAddMachine = async () => {
+    const clean = newMachineInput
+      .replace(/[\x00-\x1F\x7F\u200B-\u200D\uFEFF]/g, "")
+      .trim()
+      .toUpperCase();
+    if (!clean) {
+      showToast(
+        isThai ? "กรุณาระบุชื่อเครื่องจักร" : "Please enter machine name",
+        "warning"
+      );
+      return;
+    }
+    if (rmMachines.includes(clean)) {
+      setInboundMachine(clean);
+      setNewMachineInput("");
+      setIsAddMachineOpen(false);
+      showToast(
+        isThai ? `เลือกเครื่องจักร ${clean} แล้ว` : `Selected machine ${clean}`,
+        "info"
+      );
+      return;
+    }
+    const nextList = [...rmMachines, clean];
+    await saveRmMachinesToCloud(nextList);
+    setInboundMachine(clean);
+    setNewMachineInput("");
+    setIsAddMachineOpen(false);
+    playBeep("success");
+    showToast(
+      isThai
+        ? `เพิ่มเครื่องจักร ${clean} สำเร็จ`
+        : `Added machine ${clean}`,
+      "success"
+    );
+    focusBarcodeInput();
+  };
+
+  const handleRemoveMachine = async (machineId: string) => {
+    if (rmMachines.length <= 1) {
+      showToast(
+        isThai
+          ? "ต้องมีเครื่องจักรอย่างน้อย 1 เครื่อง"
+          : "At least 1 machine is required",
+        "warning"
+      );
+      return;
+    }
+    const nextList = rmMachines.filter((m) => m !== machineId);
+    await saveRmMachinesToCloud(nextList);
+    if (inboundMachine === machineId && nextList.length > 0) {
+      setInboundMachine(nextList[0]);
+    }
+    showToast(
+      isThai ? `ลบเครื่องจักร ${machineId} แล้ว` : `Removed ${machineId}`,
+      "info"
+    );
+  };
 
   // Build fast O(1) lookup maps by Batch AND by BATCH HU
   const { sapByBatch, sapByHu } = useMemo(() => {
@@ -516,7 +584,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
 
   // ============================================================================
   // Tab 1 State: +รับเข้า (Inbound)
-  //   1. รับภายใน (Internal: CL03, CL04, CL05, CL06)
+  //   1. รับภายใน (Internal: CL03, CL04, CL05, CL06 + เครื่องจักรที่เพิ่มเอง)
   //      - รับภายใน Batch (สแกนบาร์โค้ดจาก Batch)
   //      - รับภายใน Bundle (สแกนบาร์โค้ดจาก BAHCH HU)
   //   2. รับภายนอก (External)
@@ -548,6 +616,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
   const locationInputRef = useRef<HTMLInputElement | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
   const qtyInputRef = useRef<HTMLInputElement | null>(null);
+  const newMachineInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && inboundLocation.trim()) {
@@ -716,11 +785,23 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
   const [stockCompareFilter, setStockCompareFilter] = useState<
     "ALL" | "matched" | "unscanned" | "no_sap"
   >("ALL");
+  const [stockPage, setStockPage] = useState<number>(1);
+  const [stockPageSize, setStockPageSize] = useState<number>(20);
   const [relocateTargetLoc, setRelocateTargetLoc] = useState<string>("");
   const [relocateScanInput, setRelocateScanInput] = useState<string>("");
   const [selectedRelocateIds, setSelectedRelocateIds] = useState<string[]>([]);
   const [returnScanInput, setReturnScanInput] = useState<string>("");
   const [returnLocationInput, setReturnLocationInput] = useState<string>("");
+
+  useEffect(() => {
+    setStockPage(1);
+  }, [
+    stockTableType,
+    stockBatchCategoryFilter,
+    stockCompareFilter,
+    stockSearch,
+    stockPageSize,
+  ]);
 
   // ============================================================================
   // Inbound Scan Handler (Unlimited Barcode Length for Batch & BAHCH HU)
@@ -1593,14 +1674,14 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
          ===================================================================== */}
       {activeMode === "inbound" && (
         <div className="space-y-3">
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-3.5 shadow-xs space-y-3">
-            {/* Inbound Category: รับภายใน / รับภายนอก */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-200 dark:border-[#1e3a5f]">
-              <div className="flex flex-wrap gap-2">
+          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-3 sm:p-4 shadow-xs space-y-3">
+            {/* Inbound Category & Sub-Mode Switcher (Full-width 2-col grid on mobile) */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2.5 border-b border-slate-200 dark:border-[#1e3a5f]">
+              <div className="grid grid-cols-2 sm:flex gap-1.5">
                 <button
                   type="button"
                   onClick={() => setInboundCategory("internal")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     inboundCategory === "internal"
                       ? "bg-emerald-600 text-white border-emerald-500 shadow-xs"
                       : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
@@ -1613,7 +1694,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                 <button
                   type="button"
                   onClick={() => setInboundCategory("external")}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                  className={`px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                     inboundCategory === "external"
                       ? "bg-blue-600 text-white border-blue-500 shadow-xs"
                       : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f]"
@@ -1625,14 +1706,14 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
               </div>
 
               {inboundCategory === "internal" && (
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="grid grid-cols-2 sm:flex items-center gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       setInternalSubMode("batch");
                       focusBarcodeInput();
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2 sm:py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       internalSubMode === "batch"
                         ? "bg-emerald-600 text-white border-emerald-500 shadow-xs"
                         : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#1e3a5f]"
@@ -1648,7 +1729,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                       setInternalSubMode("bundle");
                       focusBarcodeInput();
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-3 py-2 sm:py-1.5 rounded-lg text-xs font-extrabold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       internalSubMode === "bundle"
                         ? "bg-indigo-600 text-white border-indigo-500 shadow-xs"
                         : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#1e3a5f]"
@@ -1661,33 +1742,123 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
               )}
             </div>
 
-            {/* Machine Selector: CL03, CL04, CL05, CL06 */}
+            {/* Machine Selector: CL03, CL04, CL05, CL06 + เพิ่มเครื่องจักรได้ */}
             {inboundCategory === "internal" && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
-                  {isThai ? "เครื่องจักร:" : "Machine:"}
-                </span>
-                <div className="grid grid-cols-4 gap-1.5 flex-1 max-w-md">
-                  {RM_INTERNAL_MACHINES.map((mId) => {
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                    {isThai ? "เครื่องจักร:" : "Machine:"}
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddMachineOpen((v) => !v);
+                      setTimeout(() => newMachineInputRef.current?.focus(), 60);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold border flex items-center gap-1 cursor-pointer transition-all ${
+                      isAddMachineOpen
+                        ? "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-700"
+                        : internalSubMode === "bundle"
+                        ? "bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border-indigo-500/30"
+                        : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/30"
+                    }`}
+                  >
+                    <Plus size={12} />
+                    <span>{isThai ? "เพิ่มเครื่องจักร" : "Add Machine"}</span>
+                  </button>
+                </div>
+
+                {isAddMachineOpen && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
+                    <input
+                      ref={newMachineInputRef}
+                      type="text"
+                      value={newMachineInput}
+                      onChange={(e) => setNewMachineInput(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddMachine();
+                        } else if (e.key === "Escape") {
+                          setIsAddMachineOpen(false);
+                        }
+                      }}
+                      placeholder={
+                        isThai
+                          ? "ระบุรหัสเครื่องจักร เช่น CL07..."
+                          : "Machine code e.g. CL07..."
+                      }
+                      className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddMachine}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-extrabold text-white cursor-pointer shrink-0 ${
+                        internalSubMode === "bundle"
+                          ? "bg-indigo-600 hover:bg-indigo-500"
+                          : "bg-emerald-600 hover:bg-emerald-500"
+                      }`}
+                    >
+                      {isThai ? "เพิ่ม" : "Add"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddMachineOpen(false);
+                        setNewMachineInput("");
+                      }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-1.5">
+                  {rmMachines.map((mId) => {
                     const isSelected = inboundMachine === mId;
+                    const isCustomMachine = !(
+                      RM_INTERNAL_MACHINES as readonly string[]
+                    ).includes(mId);
                     return (
-                      <button
-                        key={mId}
-                        type="button"
-                        onClick={() => {
-                          setInboundMachine(mId);
-                          focusBarcodeInput();
-                        }}
-                        className={`py-1.5 px-2.5 rounded-lg border text-center font-mono font-extrabold text-xs transition-all cursor-pointer ${
-                          isSelected
-                            ? internalSubMode === "bundle"
-                              ? "bg-indigo-600 text-white border-indigo-500 shadow-xs"
-                              : "bg-emerald-600 text-white border-emerald-500 shadow-xs"
-                            : "bg-slate-50 dark:bg-[#0c1930] text-slate-800 dark:text-slate-100 border-slate-200 dark:border-[#1e3a5f]"
-                        }`}
-                      >
-                        {mId}
-                      </button>
+                      <div key={mId} className="relative group flex">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInboundMachine(mId);
+                            focusBarcodeInput();
+                          }}
+                          className={`w-full sm:w-auto sm:min-w-[74px] py-2 sm:py-1.5 ${
+                            isCustomMachine ? "pl-2.5 pr-6" : "px-2.5"
+                          } rounded-lg border text-center font-mono font-extrabold text-xs transition-all cursor-pointer ${
+                            isSelected
+                              ? internalSubMode === "bundle"
+                                ? "bg-indigo-600 text-white border-indigo-500 shadow-xs"
+                                : "bg-emerald-600 text-white border-emerald-500 shadow-xs"
+                              : "bg-slate-50 dark:bg-[#0c1930] text-slate-800 dark:text-slate-100 border-slate-200 dark:border-[#1e3a5f]"
+                          }`}
+                        >
+                          {mId}
+                        </button>
+                        {isCustomMachine && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveMachine(mId);
+                            }}
+                            title={isThai ? `ลบ ${mId}` : `Remove ${mId}`}
+                            className={`absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded-full transition-colors cursor-pointer ${
+                              isSelected
+                                ? "text-white/80 hover:text-white hover:bg-black/20"
+                                : "text-slate-400 hover:text-red-500 hover:bg-red-500/10"
+                            }`}
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -1728,63 +1899,66 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
               </div>
             )}
 
-            {/* Location & Barcode Form */}
-            <form onSubmit={(e) => handleInboundSubmit(e)} className="space-y-2.5">
+            {/* Location, Barcode, Quantity & Weight Form */}
+            <form onSubmit={(e) => handleInboundSubmit(e)} className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5">
-                {/* Location Input */}
+                {/* Location Input with inline scan button */}
                 <div className="md:col-span-4 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
-                      <MapPin size={13} className="text-emerald-500" />
-                      <span>Location</span>
-                    </label>
+                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                    <MapPin size={13} className="text-emerald-500" />
+                    <span>Location</span>
+                  </label>
+
+                  <div className="flex items-center gap-1.5">
+                    <div className="relative flex-1 flex items-center">
+                      <input
+                        ref={locationInputRef}
+                        type="text"
+                        value={inboundLocation}
+                        onChange={(e) => setInboundLocation(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (inboundLocation.trim()) {
+                              playBeep("success");
+                              focusBarcodeInput();
+                            }
+                          }
+                        }}
+                        placeholder="Location"
+                        className="w-full pl-3 pr-8 py-2.5 sm:py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      {inboundLocation && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInboundLocation("");
+                            locationInputRef.current?.focus();
+                          }}
+                          className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+
                     <button
                       type="button"
                       onClick={() => {
                         setCameraScanTarget("location");
-                        setIsInboundCameraOpen(true);
+                        setIsInboundCameraOpen((v) =>
+                          cameraScanTarget === "location" ? !v : true
+                        );
                       }}
-                      className="text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      className="px-2.5 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1 cursor-pointer shrink-0"
                     >
-                      <Camera size={12} />
+                      <Camera size={14} />
                       <span>{isThai ? "สแกน" : "Scan"}</span>
                     </button>
                   </div>
-
-                  <div className="relative flex items-center">
-                    <input
-                      ref={locationInputRef}
-                      type="text"
-                      value={inboundLocation}
-                      onChange={(e) => setInboundLocation(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          if (inboundLocation.trim()) {
-                            playBeep("success");
-                            focusBarcodeInput();
-                          }
-                        }
-                      }}
-                      placeholder="Location"
-                      className="w-full pl-3 pr-8 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                    />
-                    {inboundLocation && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInboundLocation("");
-                          locationInputRef.current?.focus();
-                        }}
-                        className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                      >
-                        <X size={14} />
-                      </button>
-                    )}
-                  </div>
                 </div>
 
-                {/* Barcode Input */}
+                {/* Barcode Input + Action Buttons */}
                 <div className="md:col-span-8 space-y-1">
                   <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1">
                     <Barcode
@@ -1802,62 +1976,82 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     </span>
                   </label>
 
-                  <div className="flex flex-wrap sm:flex-nowrap gap-2">
-                    <input
-                      ref={barcodeInputRef}
-                      type="text"
-                      value={inboundBarcodeInput}
-                      onChange={(e) => setInboundBarcodeInput(e.target.value.toUpperCase())}
-                      placeholder={
-                        inboundCategory === "internal" && internalSubMode === "bundle"
-                          ? "BAHCH HU"
-                          : "Batch"
-                      }
-                      className="flex-1 min-w-[180px] px-3 py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                    />
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1 flex items-center">
+                      <input
+                        ref={barcodeInputRef}
+                        type="text"
+                        value={inboundBarcodeInput}
+                        onChange={(e) => setInboundBarcodeInput(e.target.value.toUpperCase())}
+                        placeholder={
+                          inboundCategory === "internal" && internalSubMode === "bundle"
+                            ? "BAHCH HU"
+                            : "Batch"
+                        }
+                        className="w-full pl-3 pr-8 py-2.5 sm:py-2 rounded-lg text-xs font-mono font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      {inboundBarcodeInput && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInboundBarcodeInput("");
+                            focusBarcodeInput();
+                          }}
+                          className="absolute right-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCameraScanTarget("barcode");
-                        setIsInboundCameraOpen((v) => !v);
-                      }}
-                      className="px-3 py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center gap-1.5 cursor-pointer shrink-0"
-                    >
-                      <Camera size={14} />
-                      <span>
-                        {inboundCategory === "internal" && internalSubMode === "bundle"
-                          ? isThai
-                            ? "สแกน BAHCH HU"
-                            : "Scan HU"
-                          : isThai
-                          ? "สแกน Batch"
-                          : "Scan Batch"}
-                      </span>
-                    </button>
+                    <div className="grid grid-cols-2 sm:flex gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraScanTarget("barcode");
+                          setIsInboundCameraOpen((v) =>
+                            cameraScanTarget === "barcode" ? !v : true
+                          );
+                        }}
+                        className="px-3 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold bg-sky-50 dark:bg-sky-950/60 border border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Camera size={14} />
+                        <span>
+                          {inboundCategory === "internal" && internalSubMode === "bundle"
+                            ? isThai
+                              ? "สแกน HU"
+                              : "Scan HU"
+                            : isThai
+                            ? "สแกน Batch"
+                            : "Scan Batch"}
+                        </span>
+                      </button>
 
-                    <button
-                      type="submit"
-                      className={`px-4 py-2 rounded-lg text-xs font-extrabold text-white shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0 ${
-                        inboundCategory === "internal" && internalSubMode === "bundle"
-                          ? "bg-indigo-600 hover:bg-indigo-500"
-                          : "bg-emerald-600 hover:bg-emerald-500"
-                      }`}
-                    >
-                      <CheckCircle2 size={14} />
-                      <span>{isThai ? "บันทึก" : "Save"}</span>
-                    </button>
+                      <button
+                        type="submit"
+                        className={`px-4 py-2.5 sm:py-2 rounded-lg text-xs font-extrabold text-white shadow-xs flex items-center justify-center gap-1.5 cursor-pointer ${
+                          inboundCategory === "internal" && internalSubMode === "bundle"
+                            ? "bg-indigo-600 hover:bg-indigo-500"
+                            : "bg-emerald-600 hover:bg-emerald-500"
+                        }`}
+                      >
+                        <CheckCircle2 size={14} />
+                        <span>{isThai ? "บันทึก" : "Save"}</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Internal Inbound Fields: จำนวน & น้ำหนัก (คำนวณอัตโนมัติ: จำนวน × หนา Certificated. × กว้าง × ยาว × 0.00000785) */}
+              {/* Internal Inbound Fields: จำนวน & น้ำหนัก (2 columns side-by-side even on mobile) */}
               {inboundCategory === "internal" && (
-                <div className="space-y-2 pt-1">
+                <div className="space-y-2 pt-0.5">
                   <div
-                    className={`grid grid-cols-1 ${
-                      internalSubMode === "bundle" ? "sm:grid-cols-3" : "sm:grid-cols-2"
-                    } gap-2.5`}
+                    className={`grid ${
+                      internalSubMode === "bundle"
+                        ? "grid-cols-1 sm:grid-cols-3"
+                        : "grid-cols-2"
+                    } gap-2`}
                   >
                     {internalSubMode === "bundle" && (
                       <div>
@@ -1876,7 +2070,7 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
 
                     <div>
                       <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1">
-                        {isThai ? "จำนวน" : "Quantity"}
+                        {isThai ? "จำนวน (แผ่น)" : "Quantity"}
                       </label>
                       <input
                         ref={qtyInputRef}
@@ -1891,19 +2085,10 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     </div>
 
                     <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
-                          {isThai ? "น้ำหนัก" : "Weight"}
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate">
+                          {isThai ? "น้ำหนัก (KG)" : "Weight (KG)"}
                         </label>
-                        {Boolean(
-                          activeInboundSpec.certThickness &&
-                            activeInboundSpec.width &&
-                            activeInboundSpec.length
-                        ) && (
-                          <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {`${Number(inboundQtyInput) > 0 ? Number(inboundQtyInput) : 0} × ${activeInboundSpec.certThickness} × ${activeInboundSpec.width} × ${activeInboundSpec.length} × 0.00000785`}
-                          </span>
-                        )}
                       </div>
                       <input
                         type="text"
@@ -1921,35 +2106,80 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     </div>
                   </div>
 
-                  {/* แสดงการเช็คยอดในหน้าสต๊อก + ยอดบวกเพิ่ม สำหรับโหมด รับภายใน Batch */}
-                  {internalSubMode === "batch" && inboundBarcodeInput.trim() !== "" && (
-                    <div className="px-3 py-2 rounded-lg border border-sky-500/30 bg-sky-500/10 text-xs flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2 font-mono">
-                        <span className="font-extrabold text-sky-700 dark:text-sky-300">
-                          {isThai
-                            ? `ในสต๊อก: ${activeInboundSpec.existingQty.toLocaleString()} แผ่น (${activeInboundSpec.existingWeightKg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG)`
-                            : `In Stock: ${activeInboundSpec.existingQty} (${activeInboundSpec.existingWeightKg} KG)`}
-                        </span>
-                        <span className="text-slate-400">+</span>
-                        <span className="font-extrabold text-emerald-600 dark:text-emerald-400">
-                          {isThai
-                            ? `รับเพิ่ม: ${(parseFloat(inboundQtyInput.replace(/,/g, "")) || 1).toLocaleString()} แผ่น (${(autoCalculatedInboundWeight > 0
-                                ? autoCalculatedInboundWeight
-                                : calculateRmFormulaWeightKg(
-                                    1,
-                                    activeInboundSpec.certThickness,
-                                    activeInboundSpec.width,
-                                    activeInboundSpec.length
-                                  )
-                              ).toLocaleString(undefined, {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 3,
-                              })} KG)`
-                            : `Add: ${parseFloat(inboundQtyInput.replace(/,/g, "")) || 1}`}
-                        </span>
-                      </div>
+                  {/* แสดงสูตรขนาดแผ่น (ถ้าพบข้อมูลใน SAP/สต๊อก) แบบกะทัดรัดไม่ล้นจอ */}
+                  {Boolean(
+                    activeInboundSpec.certThickness &&
+                      activeInboundSpec.width &&
+                      activeInboundSpec.length &&
+                      activeInboundSpec.certThickness !== "-"
+                  ) && (
+                    <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-1 text-[11px] font-mono">
+                      <span className="text-slate-500 dark:text-slate-400">
+                        {isThai ? "สเปคแผ่น:" : "Spec:"}{" "}
+                        <strong className="text-slate-800 dark:text-slate-200">
+                          {`${activeInboundSpec.certThickness} × ${activeInboundSpec.width} × ${activeInboundSpec.length}`}
+                        </strong>
+                      </span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                        {`${Number(inboundQtyInput) > 0 ? Number(inboundQtyInput) : 0} × ${activeInboundSpec.certThickness} × ${activeInboundSpec.width} × ${activeInboundSpec.length} × 0.00000785`}
+                      </span>
+                    </div>
+                  )}
 
-                      <div className="font-mono font-extrabold text-amber-600 dark:text-amber-300">
+                  {/* แสดงการเช็คยอดในหน้าสต๊อก + ยอดบวกเพิ่ม สำหรับโหมด รับภายใน Batch (แบ่ง 3 ช่องเป็นระเบียบบนมือถือ) */}
+                  {internalSubMode === "batch" && inboundBarcodeInput.trim() !== "" && (
+                    <div className="p-2.5 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-1.5">
+                      <div className="grid grid-cols-3 gap-1.5 text-center font-mono">
+                        <div className="p-1.5 rounded-lg bg-white/80 dark:bg-[#0c1930] border border-slate-200/80 dark:border-[#1e3a5f]">
+                          <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                            {isThai ? "สต๊อกเดิม" : "In Stock"}
+                          </div>
+                          <div className="text-xs font-extrabold text-sky-700 dark:text-sky-300">
+                            {activeInboundSpec.existingQty.toLocaleString()}{" "}
+                            <span className="text-[10px] font-normal">
+                              {isThai ? "แผ่น" : "pcs"}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                            {activeInboundSpec.existingWeightKg.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            KG
+                          </div>
+                        </div>
+
+                        <div className="p-1.5 rounded-lg bg-white/80 dark:bg-[#0c1930] border border-emerald-500/30">
+                          <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                            {isThai ? "+ รับเพิ่ม" : "+ Add"}
+                          </div>
+                          <div className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
+                            +
+                            {(
+                              parseFloat(inboundQtyInput.replace(/,/g, "")) || 1
+                            ).toLocaleString()}{" "}
+                            <span className="text-[10px] font-normal">
+                              {isThai ? "แผ่น" : "pcs"}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 truncate">
+                            +
+                            {(autoCalculatedInboundWeight > 0
+                              ? autoCalculatedInboundWeight
+                              : calculateRmFormulaWeightKg(
+                                  1,
+                                  activeInboundSpec.certThickness,
+                                  activeInboundSpec.width,
+                                  activeInboundSpec.length
+                                )
+                            ).toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            KG
+                          </div>
+                        </div>
+
                         {(() => {
                           const addQ = parseFloat(inboundQtyInput.replace(/,/g, "")) || 1;
                           const addW =
@@ -1971,9 +2201,26 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                               activeInboundSpec.width,
                               activeInboundSpec.length
                             ) || Number((activeInboundSpec.existingQty + addQ).toFixed(2));
-                          return isThai
-                            ? `รวมในสต๊อก: ${sumQ.toLocaleString()} แผ่น (${sumW.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 3 })} KG)`
-                            : `New Stock Total: ${sumQ} (${sumW} KG)`;
+                          return (
+                            <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/40">
+                              <div className="text-[10px] font-bold text-amber-700 dark:text-amber-300">
+                                {isThai ? "รวมในสต๊อก" : "New Total"}
+                              </div>
+                              <div className="text-xs font-extrabold text-amber-700 dark:text-amber-300">
+                                {sumQ.toLocaleString()}{" "}
+                                <span className="text-[10px] font-normal">
+                                  {isThai ? "แผ่น" : "pcs"}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-amber-700/80 dark:text-amber-300/80 truncate">
+                                {sumW.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}{" "}
+                                KG
+                              </div>
+                            </div>
+                          );
                         })()}
                       </div>
                     </div>
@@ -1982,10 +2229,10 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
               )}
             </form>
 
-            {/* Only show scan feedback banner after an actual scan event */}
+            {/* Scan feedback banner */}
             {lastScannedBanner.type !== "idle" && (
               <div
-                className={`px-3 py-2 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+                className={`px-3 py-2 rounded-lg border text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 ${
                   lastScannedBanner.type === "success"
                     ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
                     : lastScannedBanner.type === "warning"
@@ -1995,10 +2242,10 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
               >
                 <div className="font-extrabold flex items-center gap-1.5">
                   <CheckCircle2 size={14} className="shrink-0" />
-                  <span>{lastScannedBanner.message}</span>
+                  <span className="break-all sm:break-normal">{lastScannedBanner.message}</span>
                 </div>
                 {lastScannedBanner.detail && (
-                  <span className="text-[11px] opacity-85 font-mono">
+                  <span className="text-[11px] opacity-85 font-mono pl-5 sm:pl-0">
                     {lastScannedBanner.detail}
                   </span>
                 )}
@@ -2007,11 +2254,11 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
           </div>
 
           {/* =================================================================
-              INBOUND DATA TABLES
+              INBOUND DATA TABLES (Mobile Card View + Desktop Table View)
              ================================================================= */}
           {inboundCategory === "internal" && internalSubMode === "batch" && (
             <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden shadow-xs">
-              <div className="px-4 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+              <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
                   {isThai
                     ? `รับภายใน Batch (${filteredInternalBatchRecords.length})`
@@ -2027,13 +2274,93 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                     type="text"
                     value={inboundSearch}
                     onChange={(e) => setInboundSearch(e.target.value)}
-                    placeholder={isThai ? "ค้นหา..." : "Search..."}
-                    className="w-full pl-8 pr-3 py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                    placeholder={isThai ? "ค้นหา Batch, Location..." : "Search..."}
+                    className="w-full pl-8 pr-3 py-1.5 sm:py-1 rounded-lg text-xs border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* โหมดมือถือ: แสดงเป็นระเบียบแบบ Card อ่านง่ายไม่ต้องเลื่อนซ้าย-ขวา */}
+              <div className="md:hidden divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                {filteredInternalBatchRecords.slice(0, 50).map((r) => (
+                  <div key={r.id} className="p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-mono font-extrabold text-xs">
+                            {r.batch}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
+                            Loc: {r.location}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-mono font-bold text-[11px]">
+                            {r.machine}
+                          </span>
+                          {r.grade && r.grade !== "-" && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 font-mono font-bold text-[11px]">
+                              {r.grade}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300 font-medium line-clamp-1">
+                          {r.materialNo !== "-" ? `${r.materialNo} • ` : ""}
+                          {r.description}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteRmStockFromCloud(r.id)}
+                        className="p-1.5 rounded-lg hover:bg-red-500/15 text-red-500 cursor-pointer shrink-0"
+                        title={isThai ? "ลบรายการ" : "Delete"}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-1.5 pt-1 text-[11px] font-mono">
+                      <div className="px-2 py-1 rounded bg-slate-50 dark:bg-[#0c1930] border border-slate-200/70 dark:border-[#1e3a5f]">
+                        <span className="block text-[10px] text-slate-400">
+                          {isThai ? "ขนาด (มม.)" : "Size"}
+                        </span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">
+                          {r.certThickness}×{r.width}×{r.length}
+                        </span>
+                      </div>
+
+                      <div className="px-2 py-1 rounded bg-sky-500/10 border border-sky-500/25 text-right">
+                        <span className="block text-[10px] text-sky-600 dark:text-sky-400">
+                          {isThai ? "จำนวน" : "Qty"}
+                        </span>
+                        <span className="font-extrabold text-sky-700 dark:text-sky-300">
+                          {Number(r.inboundQty || 1).toLocaleString()}{" "}
+                          {isThai ? "แผ่น" : "pcs"}
+                        </span>
+                      </div>
+
+                      <div className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/25 text-right">
+                        <span className="block text-[10px] text-emerald-600 dark:text-emerald-400">
+                          {isThai ? "น้ำหนัก (KG)" : "Weight"}
+                        </span>
+                        <span className="font-extrabold text-emerald-700 dark:text-emerald-300">
+                          {Number(r.weightKg || 0).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {filteredInternalBatchRecords.length === 0 && (
+                  <div className="text-center py-8 text-xs text-slate-400">
+                    {isThai ? "ไม่มีข้อมูล" : "No records"}
+                  </div>
+                )}
+              </div>
+
+              {/* โหมดหน้าจอคอมพิวเตอร์ / แท็บเล็ตแนวนอน */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr>
@@ -2595,185 +2922,349 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
             </div>
           </div>
 
-          {/* TABLE 1: สต๊อก Batch (แสดงคอลัมน์ จำนวน แทน Unrestricted + เพิ่ม น้ำหนัก และ ความสูงของกอง) */}
-          {stockTableType === "batch" && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>{isThai ? "ประเภท" : "Type"}</th>
-                    <th>{isThai ? "สถานะ" : "Status"}</th>
-                    <th>Location</th>
-                    <th>Storage Location</th>
-                    <th>Material No.</th>
-                    <th>Discription</th>
-                    <th>Batch</th>
-                    <th className="text-right">หนา Certificated.</th>
-                    <th className="text-right">กว้าง</th>
-                    <th className="text-right">ยาว</th>
-                    <th>Grade</th>
-                    <th className="text-right">{isThai ? "จำนวน" : "Quantity"}</th>
-                    <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
-                    <th className="text-right">{isThai ? "ความสูงของกอง" : "Stack Height"}</th>
-                    <th>ผู้ผลิต</th>
-                    <th>Sales Document</th>
-                    <th className="text-center">Item</th>
-                    <th>Text สภาพสินค้า</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBatchStockComparison.slice(0, 200).map((r) => (
-                    <tr key={r.key}>
-                      <td>
-                        <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-extrabold text-[11px] whitespace-nowrap">
-                          {r.sapCategory}
-                        </span>
-                      </td>
-                      <td>
-                        {r.compareStatus === "matched" ? (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-extrabold text-[11px] whitespace-nowrap">
-                            {isThai ? "สแกนแล้ว" : "Scanned"}
-                          </span>
-                        ) : r.compareStatus === "unscanned" ? (
-                          <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-300 font-extrabold text-[11px] whitespace-nowrap">
-                            {isThai ? "รอสแกน" : "Unscanned"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-300 font-extrabold text-[11px] whitespace-nowrap">
-                            {isThai ? "ไม่มีใน SAP" : "No SAP"}
-                          </span>
-                        )}
-                      </td>
-                      <td>
-                        {r.scannedLocation ? (
-                          <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
-                            {r.scannedLocation}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-mono">-</span>
-                        )}
-                      </td>
-                      <td className="font-mono font-bold">{r.storageLocation}</td>
-                      <td className="font-mono text-sky-600 dark:text-sky-400">
-                        {r.materialNo}
-                      </td>
-                      <td className="max-w-[260px] truncate" title={r.description}>
-                        {r.description}
-                      </td>
-                      <td className="font-mono font-extrabold text-emerald-600 dark:text-emerald-300">
-                        {r.batch}
-                      </td>
-                      <td className="font-mono tabular-nums text-right">{r.certThickness}</td>
-                      <td className="font-mono tabular-nums text-right">{r.width}</td>
-                      <td className="font-mono tabular-nums text-right">{r.length}</td>
-                      <td className="font-bold">{r.grade}</td>
-                      <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
-                        {r.qtyDisplay}
-                      </td>
-                      <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
-                        {r.weightKg > 0
-                          ? r.weightKg.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 3,
-                            })
-                          : "0.00"}
-                      </td>
-                      <td className="font-mono font-extrabold tabular-nums text-right text-amber-600 dark:text-amber-400">
-                        {r.stackHeight > 0
-                          ? r.stackHeight.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 3,
-                            })
-                          : "0.00"}
-                      </td>
-                      <td>{r.manufacturer}</td>
-                      <td className="font-mono">{r.salesDocument}</td>
-                      <td className="font-mono text-center">{r.salesItem}</td>
-                      <td>{r.conditionText}</td>
-                    </tr>
-                  ))}
-                  {filteredBatchStockComparison.length === 0 && (
-                    <tr>
-                      <td colSpan={18} className="text-center py-6 text-slate-400">
-                        {isThai ? "ไม่มีข้อมูล" : "No records"}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {/* TABLE 1: สต๊อก Batch (แสดงคอลัมน์ จำนวน แทน Unrestricted + เพิ่ม น้ำหนัก และ ความสูงของกอง หน่วยเมตร + แบ่งหน้า 20 รายการ/หน้า) */}
+          {stockTableType === "batch" &&
+            (() => {
+              const totalItems = filteredBatchStockComparison.length;
+              const totalPages = Math.max(1, Math.ceil(totalItems / stockPageSize));
+              const currentPage = Math.min(stockPage, totalPages);
+              const startIdx = (currentPage - 1) * stockPageSize;
+              const paginatedRows = filteredBatchStockComparison.slice(
+                startIdx,
+                startIdx + stockPageSize
+              );
 
-          {/* TABLE 2: สต๊อก Bundle (แยกจากตาราง สต๊อก Batch ชัดเจน) */}
-          {stockTableType === "bundle" && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr>
-                    <th>{isThai ? "สถานะ" : "Status"}</th>
-                    <th>Location</th>
-                    <th>{isThai ? "เครื่อง" : "Machine"}</th>
-                    <th>Batch</th>
-                    <th>BAHCH HU</th>
-                    <th className="text-right">จำนวนรับเข้า</th>
-                    <th className="text-right">น้ำหนักรับเข้า</th>
-                    <th>Material Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBundleStockComparison.slice(0, 200).map((r) => (
-                    <tr key={r.key}>
-                      <td>
-                        {r.compareStatus === "matched" ? (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-extrabold text-[11px] whitespace-nowrap">
-                            {isThai ? "สแกนแล้ว" : "Scanned"}
-                          </span>
-                        ) : r.compareStatus === "unscanned" ? (
-                          <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-300 font-extrabold text-[11px] whitespace-nowrap">
-                            {isThai ? "รอสแกน" : "Unscanned"}
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-300 font-extrabold text-[11px] whitespace-nowrap">
-                            {isThai ? "ไม่มีใน SAP" : "No SAP"}
-                          </span>
+              return (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr>
+                          <th>{isThai ? "ประเภท" : "Type"}</th>
+                          <th>{isThai ? "สถานะ" : "Status"}</th>
+                          <th>Location</th>
+                          <th>Storage Location</th>
+                          <th>Material No.</th>
+                          <th>Discription</th>
+                          <th>Batch</th>
+                          <th className="text-right">หนา Certificated.</th>
+                          <th className="text-right">กว้าง</th>
+                          <th className="text-right">ยาว</th>
+                          <th>Grade</th>
+                          <th className="text-right">{isThai ? "จำนวน" : "Quantity"}</th>
+                          <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
+                          <th className="text-right">
+                            {isThai ? "ความสูงของกอง (ม.)" : "Stack Height (m)"}
+                          </th>
+                          <th>ผู้ผลิต</th>
+                          <th>Sales Document</th>
+                          <th className="text-center">Item</th>
+                          <th>Text สภาพสินค้า</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRows.map((r) => (
+                          <tr key={r.key}>
+                            <td>
+                              <span className="px-2 py-0.5 rounded bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-extrabold text-[11px] whitespace-nowrap">
+                                {r.sapCategory}
+                              </span>
+                            </td>
+                            <td>
+                              {r.compareStatus === "matched" ? (
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-extrabold text-[11px] whitespace-nowrap">
+                                  {isThai ? "สแกนแล้ว" : "Scanned"}
+                                </span>
+                              ) : r.compareStatus === "unscanned" ? (
+                                <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-300 font-extrabold text-[11px] whitespace-nowrap">
+                                  {isThai ? "รอสแกน" : "Unscanned"}
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-300 font-extrabold text-[11px] whitespace-nowrap">
+                                  {isThai ? "ไม่มีใน SAP" : "No SAP"}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              {r.scannedLocation ? (
+                                <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
+                                  {r.scannedLocation}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-mono">-</span>
+                              )}
+                            </td>
+                            <td className="font-mono font-bold">{r.storageLocation}</td>
+                            <td className="font-mono text-sky-600 dark:text-sky-400">
+                              {r.materialNo}
+                            </td>
+                            <td className="max-w-[260px] truncate" title={r.description}>
+                              {r.description}
+                            </td>
+                            <td className="font-mono font-extrabold text-emerald-600 dark:text-emerald-300">
+                              {r.batch}
+                            </td>
+                            <td className="font-mono tabular-nums text-right">
+                              {r.certThickness}
+                            </td>
+                            <td className="font-mono tabular-nums text-right">{r.width}</td>
+                            <td className="font-mono tabular-nums text-right">{r.length}</td>
+                            <td className="font-bold">{r.grade}</td>
+                            <td className="font-mono font-extrabold tabular-nums text-right text-sky-600 dark:text-sky-300">
+                              {r.qtyDisplay}
+                            </td>
+                            <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
+                              {r.weightKg > 0
+                                ? r.weightKg.toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 3,
+                                  })
+                                : "0.00"}
+                            </td>
+                            <td className="font-mono font-extrabold tabular-nums text-right text-amber-600 dark:text-amber-400">
+                              {r.stackHeight > 0
+                                ? `${r.stackHeight.toLocaleString(undefined, {
+                                    minimumFractionDigits: 3,
+                                    maximumFractionDigits: 4,
+                                  })} ม.`
+                                : "0.000 ม."}
+                            </td>
+                            <td>{r.manufacturer}</td>
+                            <td className="font-mono">{r.salesDocument}</td>
+                            <td className="font-mono text-center">{r.salesItem}</td>
+                            <td>{r.conditionText}</td>
+                          </tr>
+                        ))}
+                        {totalItems === 0 && (
+                          <tr>
+                            <td colSpan={18} className="text-center py-6 text-slate-400">
+                              {isThai ? "ไม่มีข้อมูล" : "No records"}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td>
-                        {r.scannedLocation ? (
-                          <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
-                            {r.scannedLocation}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-mono">-</span>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Footer (NEXT PAGE เริ่มที่ 20 รายการต่อหน้า) */}
+                  <div className="px-4 py-2.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0c1930]/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300 font-bold">
+                      <span>
+                        {totalItems > 0
+                          ? isThai
+                            ? `แสดง ${(startIdx + 1).toLocaleString()} - ${Math.min(
+                                startIdx + stockPageSize,
+                                totalItems
+                              ).toLocaleString()} จาก ${totalItems.toLocaleString()} รายการ`
+                            : `Showing ${startIdx + 1} - ${Math.min(
+                                startIdx + stockPageSize,
+                                totalItems
+                              )} of ${totalItems}`
+                          : isThai
+                          ? "0 รายการ"
+                          : "0 items"}
+                      </span>
+                      <select
+                        value={stockPageSize}
+                        onChange={(e) => setStockPageSize(Number(e.target.value) || 20)}
+                        className="px-2 py-1 rounded-lg text-xs font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-800 dark:text-slate-100 cursor-pointer"
+                      >
+                        {[20, 50, 100, 200].map((size) => (
+                          <option key={size} value={size}>
+                            {isThai ? `${size} รายการ/หน้า` : `${size} / page`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={currentPage <= 1}
+                        onClick={() => setStockPage((p) => Math.max(1, p - 1))}
+                        className={`px-3 py-1 rounded-lg text-xs font-extrabold border transition-all ${
+                          currentPage > 1
+                            ? "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#1a2d52] cursor-pointer"
+                            : "bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-[#1e3a5f]/50 cursor-not-allowed"
+                        }`}
+                      >
+                        {isThai ? "ก่อนหน้า" : "PREV"}
+                      </button>
+
+                      <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] font-mono font-extrabold text-slate-700 dark:text-slate-200">
+                        {isThai
+                          ? `หน้า ${currentPage} / ${totalPages}`
+                          : `Page ${currentPage} / ${totalPages}`}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setStockPage((p) => Math.min(totalPages, p + 1))}
+                        className={`px-3 py-1 rounded-lg text-xs font-extrabold border transition-all ${
+                          currentPage < totalPages
+                            ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500 shadow-xs cursor-pointer"
+                            : "bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-[#1e3a5f]/50 cursor-not-allowed"
+                        }`}
+                      >
+                        {isThai ? "หน้าถัดไป (NEXT PAGE)" : "NEXT PAGE"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+          {/* TABLE 2: สต๊อก Bundle (แยกจากตาราง สต๊อก Batch ชัดเจน + แบ่งหน้า 20 รายการ/หน้า) */}
+          {stockTableType === "bundle" &&
+            (() => {
+              const totalItems = filteredBundleStockComparison.length;
+              const totalPages = Math.max(1, Math.ceil(totalItems / stockPageSize));
+              const currentPage = Math.min(stockPage, totalPages);
+              const startIdx = (currentPage - 1) * stockPageSize;
+              const paginatedRows = filteredBundleStockComparison.slice(
+                startIdx,
+                startIdx + stockPageSize
+              );
+
+              return (
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr>
+                          <th>{isThai ? "สถานะ" : "Status"}</th>
+                          <th>Location</th>
+                          <th>{isThai ? "เครื่อง" : "Machine"}</th>
+                          <th>Batch</th>
+                          <th>BAHCH HU</th>
+                          <th className="text-right">จำนวนรับเข้า</th>
+                          <th className="text-right">น้ำหนักรับเข้า</th>
+                          <th>Material Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRows.map((r) => (
+                          <tr key={r.key}>
+                            <td>
+                              {r.compareStatus === "matched" ? (
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 font-extrabold text-[11px] whitespace-nowrap">
+                                  {isThai ? "สแกนแล้ว" : "Scanned"}
+                                </span>
+                              ) : r.compareStatus === "unscanned" ? (
+                                <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-300 font-extrabold text-[11px] whitespace-nowrap">
+                                  {isThai ? "รอสแกน" : "Unscanned"}
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-300 font-extrabold text-[11px] whitespace-nowrap">
+                                  {isThai ? "ไม่มีใน SAP" : "No SAP"}
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              {r.scannedLocation ? (
+                                <span className="px-2 py-0.5 rounded bg-sky-500/15 text-sky-600 dark:text-sky-300 font-mono font-extrabold text-[11px]">
+                                  {r.scannedLocation}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-mono">-</span>
+                              )}
+                            </td>
+                            <td className="font-mono font-bold">{r.machine || "-"}</td>
+                            <td className="font-mono font-bold">{r.batch}</td>
+                            <td className="font-mono font-extrabold text-indigo-600 dark:text-indigo-300">
+                              {r.batchHu}
+                            </td>
+                            <td className="font-mono font-extrabold tabular-nums text-right">
+                              {Number(r.inboundQty || 1).toLocaleString()}
+                            </td>
+                            <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
+                              {Number(r.weightKg || 0).toLocaleString()}
+                            </td>
+                            <td className="max-w-[280px] truncate" title={r.description}>
+                              {r.description}
+                            </td>
+                          </tr>
+                        ))}
+                        {totalItems === 0 && (
+                          <tr>
+                            <td colSpan={8} className="text-center py-6 text-slate-400">
+                              {isThai ? "ไม่มีข้อมูล" : "No records"}
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="font-mono font-bold">{r.machine || "-"}</td>
-                      <td className="font-mono font-bold">{r.batch}</td>
-                      <td className="font-mono font-extrabold text-indigo-600 dark:text-indigo-300">
-                        {r.batchHu}
-                      </td>
-                      <td className="font-mono font-extrabold tabular-nums text-right">
-                        {Number(r.inboundQty || 1).toLocaleString()}
-                      </td>
-                      <td className="font-mono font-extrabold tabular-nums text-right text-emerald-600 dark:text-emerald-400">
-                        {Number(r.weightKg || 0).toLocaleString()}
-                      </td>
-                      <td className="max-w-[280px] truncate" title={r.description}>
-                        {r.description}
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredBundleStockComparison.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="text-center py-6 text-slate-400">
-                        {isThai ? "ไม่มีข้อมูล" : "No records"}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Footer (NEXT PAGE เริ่มที่ 20 รายการต่อหน้า) */}
+                  <div className="px-4 py-2.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0c1930]/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300 font-bold">
+                      <span>
+                        {totalItems > 0
+                          ? isThai
+                            ? `แสดง ${(startIdx + 1).toLocaleString()} - ${Math.min(
+                                startIdx + stockPageSize,
+                                totalItems
+                              ).toLocaleString()} จาก ${totalItems.toLocaleString()} รายการ`
+                            : `Showing ${startIdx + 1} - ${Math.min(
+                                startIdx + stockPageSize,
+                                totalItems
+                              )} of ${totalItems}`
+                          : isThai
+                          ? "0 รายการ"
+                          : "0 items"}
+                      </span>
+                      <select
+                        value={stockPageSize}
+                        onChange={(e) => setStockPageSize(Number(e.target.value) || 20)}
+                        className="px-2 py-1 rounded-lg text-xs font-extrabold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-800 dark:text-slate-100 cursor-pointer"
+                      >
+                        {[20, 50, 100, 200].map((size) => (
+                          <option key={size} value={size}>
+                            {isThai ? `${size} รายการ/หน้า` : `${size} / page`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={currentPage <= 1}
+                        onClick={() => setStockPage((p) => Math.max(1, p - 1))}
+                        className={`px-3 py-1 rounded-lg text-xs font-extrabold border transition-all ${
+                          currentPage > 1
+                            ? "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#1a2d52] cursor-pointer"
+                            : "bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-[#1e3a5f]/50 cursor-not-allowed"
+                        }`}
+                      >
+                        {isThai ? "ก่อนหน้า" : "PREV"}
+                      </button>
+
+                      <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] font-mono font-extrabold text-slate-700 dark:text-slate-200">
+                        {isThai
+                          ? `หน้า ${currentPage} / ${totalPages}`
+                          : `Page ${currentPage} / ${totalPages}`}
+                      </span>
+
+                      <button
+                        type="button"
+                        disabled={currentPage >= totalPages}
+                        onClick={() => setStockPage((p) => Math.min(totalPages, p + 1))}
+                        className={`px-3 py-1 rounded-lg text-xs font-extrabold border transition-all ${
+                          currentPage < totalPages
+                            ? "bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500 shadow-xs cursor-pointer"
+                            : "bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-[#1e3a5f]/50 cursor-not-allowed"
+                        }`}
+                      >
+                        {isThai ? "หน้าถัดไป (NEXT PAGE)" : "NEXT PAGE"}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
         </div>
       )}
 
@@ -3033,7 +3524,9 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                             <th>Grade</th>
                             <th className="text-right">{isThai ? "จำนวน" : "Quantity"}</th>
                             <th className="text-right">{isThai ? "น้ำหนัก" : "Weight"}</th>
-                            <th className="text-right">{isThai ? "ความสูงของกอง" : "Stack Height"}</th>
+                            <th className="text-right">
+                              {isThai ? "ความสูงของกอง (ม.)" : "Stack Height (m)"}
+                            </th>
                             <th>ผู้ผลิต</th>
                             <th>Sales Document</th>
                             <th className="text-center">Item</th>
@@ -3096,11 +3589,11 @@ export const RmSheetManagement: React.FC<RmSheetManagementProps> = ({
                                 </td>
                                 <td className="font-mono font-bold text-right text-amber-600 dark:text-amber-400">
                                   {previewStackHeight > 0
-                                    ? previewStackHeight.toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 3,
-                                      })
-                                    : "0.00"}
+                                    ? `${previewStackHeight.toLocaleString(undefined, {
+                                        minimumFractionDigits: 3,
+                                        maximumFractionDigits: 4,
+                                      })} ม.`
+                                    : "0.000 ม."}
                                 </td>
                                 <td>{item.manufacturer}</td>
                                 <td className="font-mono">{item.salesDocument}</td>

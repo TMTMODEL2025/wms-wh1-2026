@@ -229,6 +229,8 @@ const RM_TX_CACHE_KEY = "tmt_wms_rm_tx_cache_v1";
 const RM_STAGING_CACHE_KEY = "tmt_wms_rm_staging_cache_v1";
 const RM_LAYOUTS_CACHE_KEY = "tmt_wms_rm_layouts_cache_v1";
 const RM_SAP_CACHE_KEY = "tmt_wms_rm_sap_cache_v1";
+const RM_MACHINES_CACHE_KEY = "tmt_wms_rm_machines_cache_v1";
+const RM_MACHINES_DOC_ID = "RM-CONFIG-MACHINES";
 
 type LocalCacheListener = () => void;
 const localRmListeners = new Set<LocalCacheListener>();
@@ -472,14 +474,18 @@ export function subscribeToRmLayouts(onData: (zones: RmLayoutZone[]) => void): (
     unsubFirestore = onSnapshot(
       colRef,
       (snapshot) => {
-        if (snapshot.empty) {
+        const docs: RmLayoutZone[] = [];
+        snapshot.forEach((d) => {
+          if (d.id === RM_MACHINES_DOC_ID) return;
+          const data = d.data() as RmLayoutZone;
+          if (data && data.bayCode) {
+            docs.push(data);
+          }
+        });
+        if (docs.length === 0) {
           onData(DEFAULT_RM_LAYOUT_ZONES);
           return;
         }
-        const docs: RmLayoutZone[] = [];
-        snapshot.forEach((d) => {
-          docs.push(d.data() as RmLayoutZone);
-        });
         docs.sort((a, b) => a.bayCode.localeCompare(b.bayCode));
         writeLocalCache(RM_LAYOUTS_CACHE_KEY, docs);
         onData(docs);
@@ -496,6 +502,86 @@ export function subscribeToRmLayouts(onData: (zones: RmLayoutZone[]) => void): (
     localRmListeners.delete(localHandler);
     if (unsubFirestore) unsubFirestore();
   };
+}
+
+export function subscribeToRmMachines(onData: (machines: string[]) => void): () => void {
+  const defaultList = [...RM_INTERNAL_MACHINES];
+  const cached = readLocalCache<string[]>(RM_MACHINES_CACHE_KEY, defaultList);
+  onData(cached.length > 0 ? cached : defaultList);
+
+  const localHandler = () => {
+    const current = readLocalCache<string[]>(RM_MACHINES_CACHE_KEY, defaultList);
+    onData(current.length > 0 ? current : defaultList);
+  };
+  localRmListeners.add(localHandler);
+
+  let unsubFirestore: (() => void) | null = null;
+  try {
+    const docRef = doc(db, RM_LAYOUTS_COLLECTION, RM_MACHINES_DOC_ID);
+    unsubFirestore = onSnapshot(
+      docRef,
+      (snapshot) => {
+        if (!snapshot.exists()) return;
+        const data = snapshot.data();
+        if (Array.isArray(data?.machines) && data.machines.length > 0) {
+          const cleanList = Array.from(
+            new Set(
+              data.machines
+                .map((m: unknown) => String(m || "").trim().toUpperCase())
+                .filter(Boolean)
+            )
+          );
+          if (cleanList.length > 0) {
+            writeLocalCache(RM_MACHINES_CACHE_KEY, cleanList);
+            onData(cleanList);
+          }
+        }
+      },
+      () => {
+        // fallback to local cache silently if config doc is not yet created
+      }
+    );
+  } catch {
+    // ignore
+  }
+
+  return () => {
+    localRmListeners.delete(localHandler);
+    if (unsubFirestore) unsubFirestore();
+  };
+}
+
+export async function saveRmMachinesToCloud(machines: string[]): Promise<string[]> {
+  const cleanList = Array.from(
+    new Set(
+      machines
+        .map((m) => String(m || "").trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+  const finalList = cleanList.length > 0 ? cleanList : [...RM_INTERNAL_MACHINES];
+  writeLocalCache(RM_MACHINES_CACHE_KEY, finalList);
+  notifyLocalRmListeners();
+
+  try {
+    await setDoc(
+      doc(db, RM_LAYOUTS_COLLECTION, RM_MACHINES_DOC_ID),
+      {
+        id: RM_MACHINES_DOC_ID,
+        machines: finalList,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(
+      error,
+      OperationType.WRITE,
+      `${RM_LAYOUTS_COLLECTION}/${RM_MACHINES_DOC_ID}`
+    );
+  }
+
+  return finalList;
 }
 
 export function subscribeToRmSapChunks(
