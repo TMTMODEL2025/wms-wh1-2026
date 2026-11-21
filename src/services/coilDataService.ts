@@ -26,7 +26,8 @@ export type CoilModeTab =
   | "operator_receive"
   | "outbound"
   | "relocate_layout"
-  | "stock_balance";
+  | "stock_balance"
+  | "warehouse_3d";
 
 export type CoilStatus = "available" | "staged" | "issued";
 
@@ -1421,8 +1422,11 @@ function isValidScannedCoilLocation(loc: unknown): boolean {
   }
   if (/[\u0E00-\u0E7F]/.test(s)) return false;
   if (/^\d+(\.\d+)?$/.test(s)) return false;
-  if (s.length > 16) return false;
-  return /^[A-Z0-9]{1,6}[\/\-][A-Z0-9]{1,8}$/.test(s) || /^(E7|E8|H7|H8|05|21)$/.test(s);
+  if (s.length > 24) return false;
+  return (
+    /^[A-Z0-9]{1,6}([\/\-][A-Z0-9]{1,8}){1,3}$/.test(s) ||
+    /^(E7|E8|H7|H8|05|21)$/.test(s)
+  );
 }
 
 export async function importCoilSapStockToCloud(params: {

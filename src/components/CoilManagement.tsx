@@ -45,8 +45,14 @@ import {
   ChevronsLeft,
   ChevronsRight,
   ScanLine,
+  Box,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
+import { CoilWarehouse3DView } from "./coil3d/CoilWarehouse3DView";
+import {
+  getRowLevelOccupancy,
+  parseCoilLocationTo3D,
+} from "./coil3d/coilWarehouseLayout";
 import { cleanBarcode } from "../utils/barcodeUtils";
 import { showToast } from "../utils/swalUtils";
 import { useLanguage } from "../contexts/LanguageContext";
@@ -718,7 +724,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       const saved = window.localStorage.getItem(STICKY_COIL_LOCATION_KEY);
       if (saved && saved.trim()) return saved.trim().toUpperCase();
     }
-    return "E7/1";
+    return "E7/1/1/1";
   });
   const [inboundBuilding, setInboundBuilding] = useState<string>(() => {
     if (typeof window !== "undefined") {
@@ -734,11 +740,16 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     if (typeof window !== "undefined") {
       const saved = window.localStorage.getItem(STICKY_COIL_LOCATION_KEY);
       if (saved && saved.includes("/")) {
-        return saved.split("/").slice(1).join("/").trim().toUpperCase() || "1";
+        const parts = saved.split("/");
+        const r = (parts[1] || "").trim().toUpperCase();
+        if (r) return r;
       }
     }
     return "1";
   });
+  const [inboundLevel, setInboundLevel] = useState<1 | 2>(1);
+  const [inboundLevelManualOverride, setInboundLevelManualOverride] = useState<boolean>(false);
+  const [inboundManualLocationOverride, setInboundManualLocationOverride] = useState<string | null>(null);
   const [inboundSearch, setInboundSearch] = useState<string>("");
   const inboundBatchInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -767,37 +778,51 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
 
   const handleSelectInboundBuilding = (building: string) => {
     const cleanB = building.trim().toUpperCase();
-    const cleanR = inboundRow.trim().toUpperCase() || "1";
     setInboundBuilding(cleanB);
     if (!inboundRow.trim()) setInboundRow("1");
-    setInboundLocation(`${cleanB}/${cleanR}`);
+    setInboundLevelManualOverride(false);
+    setInboundManualLocationOverride(null);
     focusInboundBatchInput();
   };
 
   const handleSelectInboundRow = (rowVal: string, shouldFocusBatch = true) => {
-    const cleanR = rowVal.replace(/^\//, "").trim().toUpperCase();
-    const cleanB = inboundBuilding.trim().toUpperCase() || "E7";
+    const cleanR = rowVal.replace(/^\//, "").replace(/[^0-9A-Za-z]/g, "").trim().toUpperCase();
     setInboundRow(cleanR);
-    setInboundLocation(cleanR ? `${cleanB}/${cleanR}` : cleanB);
+    setInboundLevelManualOverride(false);
+    setInboundManualLocationOverride(null);
     if (shouldFocusBatch) {
       focusInboundBatchInput();
     }
   };
 
+  const handleSelectInboundLevel = (level: 1 | 2) => {
+    setInboundLevel(level);
+    setInboundLevelManualOverride(true);
+    setInboundManualLocationOverride(null);
+    focusInboundBatchInput();
+  };
+
   const handleManualInboundLocationChange = (rawVal: string) => {
     const val = rawVal.toUpperCase();
+    setInboundManualLocationOverride(val);
     setInboundLocation(val);
     if (val.includes("/")) {
-      const [bPart, ...rParts] = val.split("/");
-      const cleanB = bPart.trim().toUpperCase();
-      const cleanR = rParts.join("/").trim().toUpperCase();
+      const parts = val.split("/");
+      const cleanB = (parts[0] || "").trim().toUpperCase();
+      const cleanR = (parts[1] || "").trim().toUpperCase();
+      const cleanLv = parseInt((parts[2] || "").replace(/\D/g, ""), 10);
       if (INBOUND_BUILDINGS.includes(cleanB)) {
         setInboundBuilding(cleanB);
       }
-      setInboundRow(cleanR);
+      if (cleanR) {
+        setInboundRow(cleanR);
+      }
+      if (cleanLv === 1 || cleanLv === 2) {
+        setInboundLevel(cleanLv);
+        setInboundLevelManualOverride(true);
+      }
     } else if (INBOUND_BUILDINGS.includes(val.trim())) {
       setInboundBuilding(val.trim());
-      setInboundRow("");
     }
   };
 
@@ -912,6 +937,78 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     [coilStock]
   );
 
+  // Live Door/Row/Level/Seq occupancy & automatic recommendation for Inbound
+  const inboundRowOccupancy = useMemo(
+    () => getRowLevelOccupancy(inboundBuilding || "E7", inboundRow || "1", activeStockCoils),
+    [inboundBuilding, inboundRow, activeStockCoils]
+  );
+
+  // Quick occupancy counts per Door and per Row (for Step 2 & Step 3 badges)
+  const inboundDoorCoilCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of activeStockCoils) {
+      const p = parseCoilLocationTo3D(c.location);
+      counts[p.door] = (counts[p.door] || 0) + 1;
+    }
+    return counts;
+  }, [activeStockCoils]);
+
+  const inboundSelectedDoorRowCounts = useMemo(() => {
+    const targetDoor = (inboundBuilding || "E7").trim().toUpperCase();
+    const counts: Record<number, number> = {};
+    for (const c of activeStockCoils) {
+      const p = parseCoilLocationTo3D(c.location);
+      if (p.door === targetDoor) {
+        counts[p.row] = (counts[p.row] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [activeStockCoils, inboundBuilding]);
+
+  const effectiveInboundLevel: 1 | 2 = useMemo(() => {
+    if (!inboundLevelManualOverride) {
+      return inboundRowOccupancy.recommendedLevel;
+    }
+    // If operator manually chose Level 1 and it just became full while Level 2 has room, auto-advance to Level 2
+    if (inboundLevel === 1 && inboundRowOccupancy.level1.isFull && !inboundRowOccupancy.level2.isFull) {
+      return 2;
+    }
+    return inboundLevel;
+  }, [inboundLevel, inboundLevelManualOverride, inboundRowOccupancy]);
+
+  const effectiveInboundSeq =
+    effectiveInboundLevel === 1
+      ? inboundRowOccupancy.level1.nextSeq
+      : inboundRowOccupancy.level2.nextSeq;
+
+  const autoComposedInboundLocation = `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${effectiveInboundLevel}/${effectiveInboundSeq}`;
+
+  const effectiveInboundLocation =
+    inboundManualLocationOverride !== null && inboundManualLocationOverride.trim() !== ""
+      ? inboundManualLocationOverride.trim().toUpperCase()
+      : autoComposedInboundLocation;
+
+  // Keep inboundLocation & inboundLevel in sync with automatic recommendation and live stock changes
+  useEffect(() => {
+    if (!inboundLevelManualOverride && inboundLevel !== inboundRowOccupancy.recommendedLevel) {
+      setInboundLevel(inboundRowOccupancy.recommendedLevel);
+    } else if (
+      inboundLevelManualOverride &&
+      inboundLevel === 1 &&
+      inboundRowOccupancy.level1.isFull &&
+      !inboundRowOccupancy.level2.isFull
+    ) {
+      setInboundLevel(2);
+      setInboundLevelManualOverride(false);
+    }
+  }, [inboundLevel, inboundLevelManualOverride, inboundRowOccupancy]);
+
+  useEffect(() => {
+    if (inboundManualLocationOverride === null) {
+      setInboundLocation(autoComposedInboundLocation);
+    }
+  }, [autoComposedInboundLocation, inboundManualLocationOverride]);
+
   const availableCoils = useMemo(
     () => activeStockCoils.filter((c) => c.status === "available"),
     [activeStockCoils]
@@ -994,7 +1091,10 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     }
 
     const rawCode = rawSubmitted;
-    const finalLocation = inboundLocation.trim().toUpperCase() || `${inboundBuilding || "E7"}/${inboundRow || "1"}`;
+    const finalLocation =
+      effectiveInboundLocation ||
+      inboundLocation.trim().toUpperCase() ||
+      `${inboundBuilding || "E7"}/${inboundRow || "1"}/1/1`;
     const existingRecord = coilStock.find((c) => c.batch.toUpperCase() === rawCode);
     const sapMaster = coilSapMap.get(rawCode);
     const hasExistingSap = Boolean(existingRecord?.hasSapData || sapMaster);
@@ -1005,8 +1105,9 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
         ? existingRecord.weightKg
         : 0;
 
-    // Immediately clear input & keep focus for rapid continuous scanning
+    // Immediately clear input & reset manual location override so next scan auto-advances sequence
     setInboundScanInput("");
+    setInboundManualLocationOverride(null);
     focusInboundBatchInput();
 
     const { timestamp } = formatNowTimestamp();
@@ -2402,14 +2503,21 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       badgeCount: activeStockCoils.length,
       activeColor: "bg-cyan-600 text-white border-cyan-500 shadow-sm",
     },
+    {
+      id: "warehouse_3d",
+      labelTh: "ผังคลัง 3D",
+      labelEn: "3D Warehouse",
+      icon: Box,
+      activeColor: "bg-indigo-600 text-white border-indigo-500 shadow-sm",
+    },
   ];
 
   return (
     <div className="space-y-3 pb-16">
-      {/* Top Control Bar: 5 Sub-Tabs + Isolated Cloud DB Status & Real-Time Toggle */}
+      {/* Top Control Bar: Sub-Tabs + Isolated Cloud DB Status & Real-Time Toggle */}
       <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-2.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
-        {/* 5 Primary Sub-Tabs */}
-        <div className="grid grid-cols-5 sm:flex sm:flex-wrap items-center gap-1.5 w-full lg:w-auto">
+        {/* Primary Sub-Tabs */}
+        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 w-full lg:w-auto">
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeMode === tab.id;
@@ -2602,8 +2710,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                   </h2>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 m-0">
                     {isThai
-                      ? "เลือกอาคารและแถว (ล็อกค่า Location ค้างไว้ให้อัตโนมัติ) แล้วสแกนบาร์โค้ด Batch ได้ต่อเนื่องทันที"
-                      : "Select Building & Row (Sticky Location), then scan Batch barcodes continuously"}
+                      ? "ทำตาม 4 ขั้นตอน: สแกน Batch → เลือกประตู → เลือกแถว → เลือกชั้น (ระบบแนะนำชั้นและลำดับวางต่ออัตโนมัติ)"
+                      : "4-Step Inbound: Scan Batch → Select Door → Select Row → Select Level (Auto-recommended Slot)"}
                   </p>
                 </div>
               </div>
@@ -2649,13 +2757,28 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               </div>
             )}
 
-            {/* 1. Top: Auto-Focus Barcode / Batch Scanner Input */}
-            <form onSubmit={(e) => handleInboundSubmit(e)} className="pt-0.5">
-              <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                {isThai
-                  ? "สแกนบาร์โค้ด / รหัส Batch"
-                  : "Scan Barcode / Batch No."}
-              </label>
+            {/* STEP 1: Barcode / Batch Scanner Input */}
+            <form onSubmit={(e) => handleInboundSubmit(e)} className="pt-0.5 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center">
+                    1
+                  </span>
+                  <span>
+                    {isThai
+                      ? "สแกนบาร์โค้ด / รหัส Batch"
+                      : "Step 1: Scan Barcode / Batch No."}
+                  </span>
+                </label>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                  <MapPin size={12} className="text-emerald-500" />
+                  <span>{isThai ? "ตำแหน่งปลายทาง:" : "Target:"}</span>
+                  <span className="font-mono font-black text-emerald-700 dark:text-emerald-200">
+                    {effectiveInboundLocation}
+                  </span>
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <div className="relative flex-1 flex items-center">
                   <Barcode size={18} className="absolute left-3.5 text-emerald-500" />
@@ -2668,8 +2791,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     onChange={(e) => setInboundScanInput(e.target.value.toUpperCase())}
                     placeholder={
                       isThai
-                        ? `ยิงบาร์โค้ด หรือพิมพ์รหัส Batch (A-Z, 0-9 ไม่เกิน 10 หลัก) เข้าที่ ${inboundLocation || "E7/1"}...`
-                        : `Scan or type Batch (A-Z, 0-9 max 10 chars) into ${inboundLocation || "E7/1"}...`
+                        ? `ยิงบาร์โค้ด หรือพิมพ์รหัส Batch (A-Z, 0-9 ไม่เกิน 10 หลัก) เข้าที่ ${effectiveInboundLocation}...`
+                        : `Scan or type Batch (A-Z, 0-9 max 10 chars) into ${effectiveInboundLocation}...`
                     }
                     className="w-full pl-10 pr-4 py-3 rounded-xl text-sm sm:text-base font-mono font-black border-2 border-emerald-500 dark:border-emerald-500 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                   />
@@ -2679,103 +2802,472 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                   className="py-3 px-5 rounded-xl text-xs sm:text-sm font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
                 >
                   <Plus size={16} />
-                  <span>{isThai ? `บันทึกรับเข้า (${inboundLocation || "E7/1"})` : `Save (${inboundLocation || "E7/1"})`}</span>
+                  <span>
+                    {isThai
+                      ? `บันทึกรับเข้า (${effectiveInboundLocation})`
+                      : `Save (${effectiveInboundLocation})`}
+                  </span>
                 </button>
               </div>
             </form>
 
-            {/* 2 & 3. Below: 2-Step Easy Location Selector (Sticky) */}
-            <div className="p-3 rounded-xl bg-slate-50/90 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] space-y-3">
-              {/* Step 1: Main Building */}
+            {/* STEPS 2, 3, 4: Guided Door -> Row -> Level (Auto-Recommended) Selector */}
+            <div className="p-3.5 rounded-xl bg-slate-50/90 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] space-y-3.5">
+              {/* STEP 2: Select Door (E7, E8, H7, H8, 05, 21) */}
               <div>
-                <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center">
-                      1
+                      2
                     </span>
                     <Building2 size={14} className="text-emerald-500" />
-                    <span>{isThai ? "เลือกอาคารหลัก:" : "Step 1: Select Building:"}</span>
+                    <span>{isThai ? "เลือกประตูที่วาง (เช่น E7 หรือ E8):" : "Step 2: Select Door (e.g. E7, E8):"}</span>
                   </label>
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold">
                     <Lock size={11} />
                     <span>
-                      {isThai ? `ล็อก Location: ${inboundLocation || "-"}` : `Sticky Location: ${inboundLocation || "-"}`}
+                      {isThai
+                        ? `พิกัดปัจจุบัน: ${effectiveInboundLocation}`
+                        : `Active Slot: ${effectiveInboundLocation}`}
                     </span>
                   </span>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                  {INBOUND_BUILDINGS.map((b) => {
-                    const isSelected = inboundBuilding.toUpperCase() === b;
+                  {INBOUND_BUILDINGS.map((doorCode) => {
+                    const isSelected = inboundBuilding.toUpperCase() === doorCode;
+                    const doorCount = inboundDoorCoilCounts[doorCode] || 0;
                     return (
                       <button
-                        key={b}
+                        key={doorCode}
                         type="button"
-                        onClick={() => handleSelectInboundBuilding(b)}
-                        className={`py-2.5 px-3 rounded-xl text-sm font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        onClick={() => handleSelectInboundBuilding(doorCode)}
+                        className={`py-2 px-3 rounded-xl text-sm font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                           isSelected
                             ? "bg-emerald-600 text-white border-emerald-500 shadow-sm ring-2 ring-emerald-500/30"
                             : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#1e3a5f] hover:border-emerald-400"
                         }`}
                       >
                         <MapPin size={14} className={isSelected ? "text-white" : "text-emerald-500"} />
-                        <span>{b}</span>
+                        <span>{doorCode}</span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
+                            isSelected
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 dark:bg-[#0a1428] text-slate-500 dark:text-slate-400"
+                          }`}
+                        >
+                          {doorCount}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
-              {/* Step 2: Row Selector & Editable Combined Location */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-1 border-t border-slate-200/70 dark:border-[#1e3a5f]/80">
-                <div className="lg:col-span-8">
-                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 mb-1.5">
-                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center">
-                      2
-                    </span>
-                    <span>{isThai ? "เลือกหรือระบุแถวที่วาง (1, 2, 3...):" : "Step 2: Select or Enter Row:"}</span>
-                  </label>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {INBOUND_QUICK_ROWS.map((r) => {
-                      const isRowActive = inboundRow.toUpperCase() === r;
-                      return (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => handleSelectInboundRow(r, true)}
-                          className={`min-w-[40px] h-9 px-2.5 rounded-lg text-xs font-black border transition-all cursor-pointer ${
+              {/* STEP 3: Select Row */}
+              <div className="pt-2.5 border-t border-slate-200/70 dark:border-[#1e3a5f]/80">
+                <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 mb-2">
+                  <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center">
+                    3
+                  </span>
+                  <span>
+                    {isThai
+                      ? `เลือกแถวที่จะวาง ประตู ${inboundRowOccupancy.door} (เช่น แถว 1):`
+                      : `Step 3: Select Row in Door ${inboundRowOccupancy.door}:`}
+                  </span>
+                </label>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {INBOUND_QUICK_ROWS.map((r) => {
+                    const rowNum = parseInt(r, 10);
+                    const isRowActive = inboundRow.toUpperCase() === r;
+                    const countInRow = inboundSelectedDoorRowCounts[rowNum] || 0;
+                    const maxRowCap = inboundRowOccupancy.baseCapacity * 2 - 1;
+                    const isFullRow = countInRow >= maxRowCap;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => handleSelectInboundRow(r, true)}
+                        className={`min-w-[52px] h-10 px-2.5 rounded-lg text-xs font-black border transition-all cursor-pointer flex flex-col items-center justify-center leading-tight ${
+                          isRowActive
+                            ? "bg-emerald-600 text-white border-emerald-500 shadow-xs ring-2 ring-emerald-500/25"
+                            : isFullRow
+                            ? "bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300 border-red-200 dark:border-red-800/60"
+                            : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#1e3a5f] hover:border-emerald-400"
+                        }`}
+                      >
+                        <span>{isThai ? `แถว ${r}` : `R${r}`}</span>
+                        <span
+                          className={`text-[9.5px] font-bold ${
                             isRowActive
-                              ? "bg-emerald-600 text-white border-emerald-500 shadow-xs"
-                              : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#1e3a5f] hover:border-emerald-400"
+                              ? "text-emerald-100"
+                              : isFullRow
+                              ? "text-red-500 dark:text-red-400"
+                              : countInRow > 0
+                              ? "text-sky-600 dark:text-sky-400"
+                              : "text-slate-400"
                           }`}
                         >
-                          {r}
-                        </button>
-                      );
-                    })}
-                    <input
-                      type="text"
-                      value={inboundRow}
-                      onChange={(e) => handleSelectInboundRow(e.target.value, false)}
-                      placeholder={isThai ? "ระบุแถว..." : "Row..."}
-                      className="w-24 h-9 px-2.5 rounded-lg text-xs font-mono font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-900 dark:text-white"
-                      title={isThai ? "พิมพ์เลขแถวที่วางเองได้" : "Type custom row"}
-                    />
-                  </div>
+                          {countInRow > 0 ? `${countInRow}/${maxRowCap}` : isThai ? "ว่าง" : "Empty"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <input
+                    type="text"
+                    value={inboundRow}
+                    onChange={(e) => handleSelectInboundRow(e.target.value, false)}
+                    placeholder={isThai ? "ระบุแถว..." : "Row..."}
+                    className="w-24 h-10 px-2.5 rounded-lg text-xs font-mono font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-900 dark:text-white"
+                    title={isThai ? "พิมพ์เลขแถวที่วางเองได้" : "Type custom row"}
+                  />
+                </div>
+              </div>
+
+              {/* STEP 4: Select Level (Auto-Recommended) + Live Row Slot Preview + Editable Code */}
+              <div className="pt-2.5 border-t border-slate-200/70 dark:border-[#1e3a5f]/80 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center">
+                      4
+                    </span>
+                    <Layers size={14} className="text-emerald-500" />
+                    <span>
+                      {isThai
+                        ? "เลือกชั้นที่จะวาง (ระบบแนะนำอัตโนมัติตามสถานะว่างของแถว):"
+                        : "Step 4: Select Level (Auto-Recommended):"}
+                    </span>
+                  </label>
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                      inboundRowOccupancy.isRowCompletelyFull
+                        ? "bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                        : "bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800/70"
+                    }`}
+                  >
+                    <Sparkles size={12} className="shrink-0" />
+                    <span>
+                      {isThai
+                        ? inboundRowOccupancy.reasonTh
+                        : inboundRowOccupancy.reasonEn}
+                    </span>
+                  </span>
                 </div>
 
-                <div className="lg:col-span-4">
-                  <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200 mb-1.5">
-                    {isThai ? "รหัส Location (อาคาร/แถว - แก้ไขได้):" : "Location Code (Editable):"}
-                  </label>
-                  <div className="relative flex items-center">
-                    <MapPin size={15} className="absolute left-3 text-emerald-500" />
-                    <input
-                      type="text"
-                      value={inboundLocation}
-                      onChange={(e) => handleManualInboundLocationChange(e.target.value)}
-                      placeholder="เช่น E7/1, H8/2"
-                      className="w-full h-9 pl-9 pr-3 rounded-lg text-sm font-mono font-black border border-emerald-400 dark:border-emerald-600 bg-white dark:bg-[#111e38] text-emerald-700 dark:text-emerald-300"
-                    />
+                {/* Level 1 & Level 2 Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {/* Level 1 Card */}
+                  {(() => {
+                    const l1 = inboundRowOccupancy.level1;
+                    const isSelected = effectiveInboundLevel === 1;
+                    const isRecommended = inboundRowOccupancy.recommendedLevel === 1 && !inboundRowOccupancy.isRowCompletelyFull;
+                    const pct = Math.min(100, Math.round((l1.occupiedCount / l1.capacity) * 100));
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectInboundLevel(1)}
+                        className={`text-left p-3 rounded-xl border transition-all cursor-pointer space-y-2 ${
+                          isSelected
+                            ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/25 shadow-xs"
+                            : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-emerald-400"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-xs font-black ${
+                                isSelected
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                              }`}
+                            >
+                              {isThai ? "ชั้นที่ 1" : "Level 1"}
+                            </span>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                              {isThai ? "วางฐานพื้น" : "Floor Base"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {isRecommended && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/40">
+                                {isThai ? "แนะนำอัตโนมัติ" : "Recommended"}
+                              </span>
+                            )}
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                                l1.isFull
+                                  ? "bg-red-500/15 text-red-600 dark:text-red-300"
+                                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              }`}
+                            >
+                              {l1.isFull
+                                ? isThai
+                                  ? "เต็มแล้ว"
+                                  : "Full"
+                                : isThai
+                                ? `ว่าง ${l1.availableCount}/${l1.capacity}`
+                                : `${l1.availableCount}/${l1.capacity} Free`}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              l1.isFull ? "bg-red-500" : "bg-emerald-500"
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {isThai
+                              ? `วางอยู่แล้ว ${l1.occupiedCount} ม้วน`
+                              : `${l1.occupiedCount} coils stored`}
+                          </span>
+                          <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300">
+                            {isThai ? "พิกัดถัดไป:" : "Next:"}{" "}
+                            {inboundRowOccupancy.door}/{inboundRowOccupancy.row}/1/{l1.nextSeq}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })()}
+
+                  {/* Level 2 Card */}
+                  {(() => {
+                    const l2 = inboundRowOccupancy.level2;
+                    const isSelected = effectiveInboundLevel === 2;
+                    const isRecommended = inboundRowOccupancy.recommendedLevel === 2 && !inboundRowOccupancy.isRowCompletelyFull;
+                    const pct = Math.min(100, Math.round((l2.occupiedCount / l2.capacity) * 100));
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectInboundLevel(2)}
+                        className={`text-left p-3 rounded-xl border transition-all cursor-pointer space-y-2 ${
+                          isSelected
+                            ? "bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/25 shadow-xs"
+                            : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-indigo-400"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-xs font-black ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+                              }`}
+                            >
+                              {isThai ? "ชั้นที่ 2" : "Level 2"}
+                            </span>
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                              {isThai ? "วางซ้อนบนร่อง" : "Upper Stack"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            {isRecommended && (
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/40">
+                                {isThai ? "แนะนำอัตโนมัติ" : "Recommended"}
+                              </span>
+                            )}
+                            <span
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
+                                l2.isFull
+                                  ? "bg-red-500/15 text-red-600 dark:text-red-300"
+                                  : l2.availableSupportedSlots.length > 0
+                                  ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
+                                  : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                              }`}
+                            >
+                              {l2.isFull
+                                ? isThai
+                                  ? "เต็มแล้ว"
+                                  : "Full"
+                                : l2.availableSupportedSlots.length > 0
+                                ? isThai
+                                  ? `พร้อมซ้อน ${l2.availableSupportedSlots.length} ช่อง`
+                                  : `${l2.availableSupportedSlots.length} Ready`
+                                : isThai
+                                ? "รอฐานชั้น 1 (≥2 ม้วน)"
+                                : "Needs L1 Base"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              l2.isFull ? "bg-red-500" : "bg-indigo-500"
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {isThai
+                              ? `วางอยู่แล้ว ${l2.occupiedCount}/${l2.capacity} ม้วน`
+                              : `${l2.occupiedCount}/${l2.capacity} coils stacked`}
+                          </span>
+                          <span className="font-mono font-extrabold text-indigo-700 dark:text-indigo-300">
+                            {isThai ? "พิกัดถัดไป:" : "Next:"}{" "}
+                            {inboundRowOccupancy.door}/{inboundRowOccupancy.row}/2/{l2.nextSeq}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })()}
+                </div>
+
+                {/* Live Mini Pyramid Slot Map + Editable 4-Part Location Code */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-1">
+                  {/* Visual Row Slot Occupancy Map */}
+                  <div className="lg:col-span-7 p-2.5 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] space-y-1.5">
+                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-500 dark:text-slate-400">
+                      <span>
+                        {isThai
+                          ? `ผังช่องวางปัจจุบัน: ประตู ${inboundRowOccupancy.door} แถว ${inboundRowOccupancy.row}`
+                          : `Live Row Map: Door ${inboundRowOccupancy.door} Row ${inboundRowOccupancy.row}`}
+                      </span>
+                      <div className="flex items-center gap-2.5 text-[10px]">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-xs bg-sky-500" />
+                          {isThai ? "มีม้วน" : "Used"}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-xs bg-emerald-500" />
+                          {isThai ? "ตำแหน่งถัดไป" : "Next"}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-xs bg-slate-300 dark:bg-slate-700" />
+                          {isThai ? "ว่าง" : "Empty"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Level 2 Row (7 slots, offset half-width like pyramid) */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-10 text-[10px] font-bold text-indigo-500 shrink-0">
+                        {isThai ? "ชั้น 2" : "L2"}
+                      </span>
+                      <div className="flex items-center gap-1 pl-3 flex-wrap">
+                        {Array.from(
+                          { length: inboundRowOccupancy.level2.capacity },
+                          (_, i) => i + 1
+                        ).map((slotNum) => {
+                          const isUsed = inboundRowOccupancy.level2.occupiedSlots.includes(slotNum);
+                          const isNextTarget =
+                            effectiveInboundLevel === 2 && effectiveInboundSeq === slotNum;
+                          const isSupported =
+                            inboundRowOccupancy.level2.supportedSlots.includes(slotNum);
+                          return (
+                            <button
+                              key={`L2-${slotNum}`}
+                              type="button"
+                              onClick={() => {
+                                setInboundLevel(2);
+                                setInboundLevelManualOverride(true);
+                                setInboundManualLocationOverride(
+                                  `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/2/${slotNum}`
+                                );
+                                focusInboundBatchInput();
+                              }}
+                              title={`${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/2/${slotNum}`}
+                              className={`w-7 h-6 rounded text-[10px] font-mono font-black border transition-all cursor-pointer ${
+                                isNextTarget
+                                  ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30"
+                                  : isUsed
+                                  ? "bg-sky-600 text-white border-sky-500"
+                                  : isSupported
+                                  ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700"
+                                  : "bg-slate-100 dark:bg-[#0a1428] text-slate-400 border-slate-200 dark:border-slate-800"
+                              }`}
+                            >
+                              {slotNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Level 1 Row (8 floor base slots) */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-10 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                        {isThai ? "ชั้น 1" : "L1"}
+                      </span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {Array.from(
+                          { length: inboundRowOccupancy.level1.capacity },
+                          (_, i) => i + 1
+                        ).map((slotNum) => {
+                          const isUsed = inboundRowOccupancy.level1.occupiedSlots.includes(slotNum);
+                          const isNextTarget =
+                            effectiveInboundLevel === 1 && effectiveInboundSeq === slotNum;
+                          return (
+                            <button
+                              key={`L1-${slotNum}`}
+                              type="button"
+                              onClick={() => {
+                                setInboundLevel(1);
+                                setInboundLevelManualOverride(true);
+                                setInboundManualLocationOverride(
+                                  `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/1/${slotNum}`
+                                );
+                                focusInboundBatchInput();
+                              }}
+                              title={`${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/1/${slotNum}`}
+                              className={`w-7 h-6 rounded text-[10px] font-mono font-black border transition-all cursor-pointer ${
+                                isNextTarget
+                                  ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30"
+                                  : isUsed
+                                  ? "bg-sky-600 text-white border-sky-500"
+                                  : "bg-slate-100 dark:bg-[#0a1428] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400"
+                              }`}
+                            >
+                              {slotNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Editable 4-Part Location Code & Meaning Breakdown */}
+                  <div className="lg:col-span-5 flex flex-col justify-between gap-1.5">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                      {isThai
+                        ? "รหัส Location เต็ม (ประตู/แถว/ชั้น/ลำดับ):"
+                        : "Location Code (Door/Row/Level/Seq):"}
+                    </label>
+                    <div className="relative flex items-center">
+                      <MapPin size={15} className="absolute left-3 text-emerald-500" />
+                      <input
+                        type="text"
+                        value={effectiveInboundLocation}
+                        onChange={(e) => handleManualInboundLocationChange(e.target.value)}
+                        placeholder="เช่น E7/1/2/3"
+                        className="w-full h-10 pl-9 pr-3 rounded-lg text-sm font-mono font-black border border-emerald-400 dark:border-emerald-600 bg-white dark:bg-[#111e38] text-emerald-700 dark:text-emerald-300"
+                      />
+                    </div>
+                    <div className="text-[10.5px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span>
+                        <strong className="text-slate-700 dark:text-slate-200">{inboundRowOccupancy.door}</strong> = {isThai ? "ประตู" : "Door"}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        <strong className="text-slate-700 dark:text-slate-200">/{inboundRowOccupancy.row}</strong> = {isThai ? "แถว" : "Row"}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundLevel}</strong> = {isThai ? "ชั้น" : "Level"}
+                      </span>
+                      <span>·</span>
+                      <span>
+                        <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundSeq}</strong> = {isThai ? "ลำดับวางต่อ" : "Seq"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3975,7 +4467,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
          ===================================================================== */}
       {activeMode === "relocate_layout" && (
         <div className="space-y-3">
-          {/* Bay Capacity Overview Grid (from coil_layouts) */}
+          {/* Bay Capacity Overview Grid (from coil_layouts) — hidden per user request */}
+          {false && (
           <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -4068,6 +4561,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               })}
             </div>
           </div>
+          )}
 
           {/* Scan & Select Coils to Relocate */}
           <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 shadow-xs space-y-3">
@@ -4762,6 +5256,18 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {/* =====================================================================
+          MODE 6: 3D COIL WAREHOUSE LAYOUT (ผังคลัง 3D — Live Sync)
+         ===================================================================== */}
+      {activeMode === "warehouse_3d" && (
+        <CoilWarehouse3DView
+          activeCoils={activeStockCoils}
+          coilSapMap={coilSapMap}
+          isThai={isThai}
+          isCloudLoading={isCloudLoading}
+        />
       )}
 
       {/* =====================================================================

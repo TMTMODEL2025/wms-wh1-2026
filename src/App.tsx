@@ -6248,6 +6248,13 @@ function WmsApp({
                                             icon: Package,
                                             color: "#06b6d4",
                                           },
+                                          {
+                                            id: "warehouse_3d" as CoilModeTab,
+                                            labelTh: "ผังคลัง 3D",
+                                            labelEn: "3D Warehouse",
+                                            icon: Boxes,
+                                            color: "#818cf8",
+                                          },
                                         ].map((sub) => {
                                           const SubIcon = sub.icon;
                                           return (
