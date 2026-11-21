@@ -18,6 +18,7 @@ export type EmployeeRole =
   | "Sr.Inspector"
   | "Operator"
   | "Supervisor"
+  | "Assistant Manager"
   | "Manager"
   | "Other";
 

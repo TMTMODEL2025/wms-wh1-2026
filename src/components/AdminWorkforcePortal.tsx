@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Calendar,
@@ -50,6 +50,12 @@ export function AdminWorkforcePortal({
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sectionFilter, setSectionFilter] = useState<WmsSectionId | "all">("all");
   const [dateFilter, setDateFilter] = useState<string>("");
+  const [logPage, setLogPage] = useState<number>(1);
+  const [logPageSize, setLogPageSize] = useState<number>(20);
+
+  useEffect(() => {
+    setLogPage(1);
+  }, [searchQuery, sectionFilter, dateFilter, logPageSize]);
 
   const todayYmd = useMemo(() => {
     const d = new Date();
@@ -73,6 +79,15 @@ export function AdminWorkforcePortal({
       );
     });
   }, [activityLogs, sectionFilter, dateFilter, searchQuery]);
+
+  const totalLogItems = filteredLogs.length;
+  const totalLogPages = Math.max(1, Math.ceil(totalLogItems / logPageSize));
+  const currentLogPage = Math.min(logPage, totalLogPages);
+  const logStartIdx = (currentLogPage - 1) * logPageSize;
+  const paginatedLogs = useMemo(
+    () => filteredLogs.slice(logStartIdx, logStartIdx + logPageSize),
+    [filteredLogs, logStartIdx, logPageSize]
+  );
 
   const auditStats = useMemo(() => {
     const todayLogs = activityLogs.filter((l) => l.dateYmd === todayYmd);
@@ -149,6 +164,7 @@ export function AdminWorkforcePortal({
           onNavigateToAssignment={onNavigateToAssignment}
           onNavigateToVehicles={onNavigateToVehicles}
           onLogTransaction={onLogTransaction}
+          hideSubTabs
         />
       ) : (
         <div className="space-y-4">
@@ -259,7 +275,12 @@ export function AdminWorkforcePortal({
                 <span>ประวัติการบันทึกข้อมูลและอ้างอิงผู้ปฏิบัติงาน</span>
               </div>
               <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                แสดง {filteredLogs.length} รายการ
+                {totalLogItems > 0
+                  ? `แสดง ${logStartIdx + 1} - ${Math.min(
+                      logStartIdx + logPageSize,
+                      totalLogItems
+                    )} จาก ${totalLogItems.toLocaleString("en-US")} รายการ`
+                  : "แสดง 0 รายการ"}
               </span>
             </div>
 
@@ -277,7 +298,7 @@ export function AdminWorkforcePortal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-                  {filteredLogs.length === 0 ? (
+                  {paginatedLogs.length === 0 ? (
                     <tr>
                       <td
                         colSpan={7}
@@ -287,7 +308,7 @@ export function AdminWorkforcePortal({
                       </td>
                     </tr>
                   ) : (
-                    filteredLogs.map((log) => (
+                    paginatedLogs.map((log) => (
                       <tr
                         key={log.id}
                         className="hover:bg-slate-50/80 dark:hover:bg-[#162749]/40"
@@ -331,6 +352,63 @@ export function AdminWorkforcePortal({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Footer (NEXT PAGE เริ่มที่ 20 รายการต่อหน้า) */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50/70 px-4 py-2.5 text-xs dark:border-[#1e3a5f] dark:bg-[#0b1329]">
+              <div className="flex flex-wrap items-center gap-2 text-slate-600 dark:text-slate-300">
+                <span className="font-mono font-bold tabular-nums">
+                  {totalLogItems > 0
+                    ? `แสดง ${logStartIdx + 1} - ${Math.min(
+                        logStartIdx + logPageSize,
+                        totalLogItems
+                      )} จาก ${totalLogItems.toLocaleString("en-US")} รายการ`
+                    : "0 รายการ"}
+                </span>
+                <select
+                  value={logPageSize}
+                  onChange={(e) => setLogPageSize(Number(e.target.value) || 20)}
+                  className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-extrabold text-slate-800 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-100"
+                >
+                  {[10, 20, 50, 100].map((size) => (
+                    <option key={size} value={size}>
+                      {`${size} รายการ/หน้า`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  disabled={currentLogPage <= 1}
+                  onClick={() => setLogPage((p) => Math.max(1, p - 1))}
+                  className={`rounded-lg border px-3 py-1 text-xs font-extrabold transition-all ${
+                    currentLogPage > 1
+                      ? "cursor-pointer border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-200 dark:hover:bg-[#1a2d52]"
+                      : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-[#1e3a5f]/50 dark:bg-[#0c1930]"
+                  }`}
+                >
+                  ก่อนหน้า
+                </button>
+
+                <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 font-mono font-extrabold tabular-nums text-slate-700 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:text-slate-200">
+                  {`หน้า ${currentLogPage} / ${totalLogPages}`}
+                </span>
+
+                <button
+                  type="button"
+                  disabled={currentLogPage >= totalLogPages}
+                  onClick={() => setLogPage((p) => Math.min(totalLogPages, p + 1))}
+                  className={`rounded-lg border px-3 py-1 text-xs font-extrabold transition-all ${
+                    currentLogPage < totalLogPages
+                      ? "cursor-pointer border-sky-500 bg-sky-600 text-white shadow-xs hover:bg-sky-500"
+                      : "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-[#1e3a5f]/50 dark:bg-[#0c1930]"
+                  }`}
+                >
+                  หน้าถัดไป (NEXT PAGE)
+                </button>
+              </div>
             </div>
           </div>
         </div>

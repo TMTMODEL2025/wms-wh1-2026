@@ -4390,7 +4390,7 @@ function DashboardView({
       ) {
         whAll.push(e);
         if (isActive) whActive.push(e);
-      } else if (e.role === "Supervisor" || e.role === "Manager") {
+      } else if (e.role === "Supervisor" || e.role === "Assistant Manager" || e.role === "Manager") {
         supAll.push(e);
         if (isActive) supActive.push(e);
       }
@@ -5378,7 +5378,6 @@ function WmsApp({
   const [slitMenuExpanded, setSlitMenuExpanded] = useState<boolean>(false);
   const [coilMenuExpanded, setCoilMenuExpanded] = useState<boolean>(false);
   const [rmMenuExpanded, setRmMenuExpanded] = useState<boolean>(false);
-  const [administrationExpanded, setAdministrationExpanded] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       if (typeof window.matchMedia === "function") {
@@ -5473,7 +5472,6 @@ function WmsApp({
     "fuel",
   ].includes(active);
   const isWarehouseInventoryActive = ["slit", "rm", "coil"].includes(active);
-  const isAdministrationActive = ["admin"].includes(active);
   const [inventory, setInventory] = useState<RecordItem[]>(INITIAL_INVENTORY);
   const [fleet, setFleet] = useState<RecordItem[]>(INITIAL_FLEET);
   const [employees, setEmployees] = useState<RecordItem[]>(INITIAL_EMPLOYEES);
@@ -6526,68 +6524,35 @@ function WmsApp({
                     </div>
                     )}
 
-                    {/* 4. Administration section */}
+                    {/* 4. Administration items promoted directly to top-level menu buttons */}
                     {administrationItems.length > 0 && (
-                    <div style={{ marginTop: 8, marginBottom: 4 }}>
-                      <button
-                        type="button"
-                        className={`nav-caption-btn ${isAdministrationActive ? "active-group" : ""}`}
-                        onClick={() => {
-                          setAdministrationExpanded(!administrationExpanded);
-                        }}
-                        title={translations.administration}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                          <Users size={13} className={isAdministrationActive ? "text-cyan-400" : "text-slate-400"} />
-                          <span>{translations.administration}</span>
-                        </div>
-                        <span
-                          className="nav-arrow-icon"
-                          style={{
-                            transform: administrationExpanded ? "rotate(0deg)" : "rotate(-90deg)",
-                          }}
-                        >
-                          <ChevronDown size={14} />
-                        </span>
-                      </button>
-
-                      {/* Submenu / Items under Administration */}
-                      <div
-                        className={`nav-submenu-collapse ${administrationExpanded ? "open" : ""}`}
-                        aria-hidden={!administrationExpanded}
-                      >
-                        <div className="nav-submenu-inner">
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
-                            {administrationItems.map((item) => {
-                              const Icon = item.icon;
-                              const isActive = active === item.id;
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  tabIndex={administrationExpanded ? 0 : -1}
-                                  className={`nav-card-btn ${isActive ? "active" : ""}`}
-                                  onClick={() => {
-                                    setActive(item.id);
-                                    setSelectedRecord(null);
-                                    if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                      setSidebarCollapsed(true);
-                                    }
-                                  }}
-                                  title={item.label}
-                                >
-                                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                                    <span className="nav-icon">
-                                      <Icon size={16} />
-                                    </span>
-                                    <span>{item.label}</span>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8, marginBottom: 4 }}>
+                      {administrationItems.map((item) => {
+                        const Icon = item.icon;
+                        const isActive = active === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`nav-card-btn ${isActive ? "active" : ""}`}
+                            onClick={() => {
+                              setActive(item.id);
+                              setSelectedRecord(null);
+                              if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                setSidebarCollapsed(true);
+                              }
+                            }}
+                            title={item.label}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+                              <span className="nav-icon">
+                                <Icon size={16} />
+                              </span>
+                              <span>{item.label}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                     )}
                   </div>

@@ -131,7 +131,7 @@ export function getDefaultSectionsForRoleAndDept(
   role: EmployeeRole,
   department: string
 ): WmsSectionId[] {
-  if (role === "Manager" || role === "Supervisor") {
+  if (role === "Manager" || role === "Assistant Manager" || role === "Supervisor") {
     return [...ALL_WMS_SECTION_IDS];
   }
 
@@ -142,6 +142,10 @@ export function getDefaultSectionsForRoleAndDept(
     sections.push("overview");
   }
 
+  if (dept.includes("admin") || dept.includes("incoming")) {
+    if (!sections.includes("overview")) sections.push("overview");
+    if (!sections.includes("admin_hr")) sections.push("admin_hr");
+  }
   if (dept.includes("material handling") || dept.includes("fleet") || role === "Driver") {
     if (!sections.includes("fleet_ops")) sections.push("fleet_ops");
   }

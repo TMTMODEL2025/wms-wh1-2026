@@ -1181,6 +1181,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
 
   const isSupervisorOrManager =
     currentUser?.role === "Supervisor" ||
+    currentUser?.role === "Assistant Manager" ||
     currentUser?.role === "Manager" ||
     currentUser?.role === "Sr.Warehouse Officer";
 

@@ -115,6 +115,7 @@ interface EmployeeManagementProps {
   onNavigateToAssignment?: () => void;
   onNavigateToVehicles?: () => void;
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
+  hideSubTabs?: boolean;
 }
 
 export function EmployeeManagement({
@@ -126,6 +127,7 @@ export function EmployeeManagement({
   onNavigateToAssignment,
   onNavigateToVehicles,
   onLogTransaction,
+  hideSubTabs = false,
 }: EmployeeManagementProps) {
   // Search & Filter state
   const [searchKeyword, setSearchKeyword] = useState<string>("");
@@ -259,6 +261,7 @@ export function EmployeeManagement({
         (e.role === "Officer" ||
           e.role === "Sr.Warehouse Officer" ||
           e.role === "Supervisor" ||
+          e.role === "Assistant Manager" ||
           e.role === "Manager") &&
         e.employmentStatus === "Active"
     ).length;
@@ -709,58 +712,60 @@ export function EmployeeManagement({
       )}
 
       {/* Sub-Navigation Tabs: Registry vs Daily Duty Assignment */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-[#1e3a5f]">
-        <div
-          role="tablist"
-          aria-label="Employee Management Views"
-          className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-[#0c162c]"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeSubTab === "registry"}
-            onClick={() => setActiveSubTab("registry")}
-            className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold whitespace-nowrap shrink-0 transition ${
-              activeSubTab === "registry"
-                ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-            }`}
+      {!hideSubTabs && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-[#1e3a5f]">
+          <div
+            role="tablist"
+            aria-label="Employee Management Views"
+            className="inline-flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-[#0c162c]"
           >
-            <Users size={14} className={activeSubTab === "registry" ? "text-cyan-600 dark:text-cyan-400" : ""} />
-            <span>ทำเนียบพนักงาน (Employee Registry)</span>
-            <span className="font-mono text-[11px] font-semibold opacity-70 tabular-nums">
-              · {employees.length}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSubTab === "registry"}
+              onClick={() => setActiveSubTab("registry")}
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold whitespace-nowrap shrink-0 transition ${
+                activeSubTab === "registry"
+                  ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              <Users size={14} className={activeSubTab === "registry" ? "text-cyan-600 dark:text-cyan-400" : ""} />
+              <span>ทำเนียบพนักงาน (Employee Registry)</span>
+              <span className="font-mono text-[11px] font-semibold opacity-70 tabular-nums">
+                · {employees.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSubTab === "daily_duty"}
+              onClick={() => setActiveSubTab("daily_duty")}
+              className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold whitespace-nowrap shrink-0 transition ${
+                activeSubTab === "daily_duty"
+                  ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              }`}
+            >
+              <ClipboardList size={14} className={activeSubTab === "daily_duty" ? "text-indigo-600 dark:text-indigo-400" : ""} />
+              <span>มอบหมายงานประจำวัน (หัวหน้างาน)</span>
+              <span className="font-mono text-[11px] font-semibold opacity-75 tabular-nums">
+                · วันนี้ {dailyDuties.filter((d) => d.workingDate === todayDate).length} คน
+              </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span>วันที่ปัจจุบัน:</span>
+            <span className="font-mono font-semibold text-slate-700 tabular-nums dark:text-slate-200">
+              {todayDate}
             </span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeSubTab === "daily_duty"}
-            onClick={() => setActiveSubTab("daily_duty")}
-            className={`inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-bold whitespace-nowrap shrink-0 transition ${
-              activeSubTab === "daily_duty"
-                ? "bg-white text-slate-900 shadow-xs dark:bg-[#162544] dark:text-white"
-                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-            }`}
-          >
-            <ClipboardList size={14} className={activeSubTab === "daily_duty" ? "text-indigo-600 dark:text-indigo-400" : ""} />
-            <span>มอบหมายงานประจำวัน (หัวหน้างาน)</span>
-            <span className="font-mono text-[11px] font-semibold opacity-75 tabular-nums">
-              · วันนี้ {dailyDuties.filter((d) => d.workingDate === todayDate).length} คน
-            </span>
-          </button>
+          </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <span>วันที่ปัจจุบัน:</span>
-          <span className="font-mono font-semibold text-slate-700 tabular-nums dark:text-slate-200">
-            {todayDate}
-          </span>
-        </div>
-      </div>
-
-      {activeSubTab === "daily_duty" ? (
+      {!hideSubTabs && activeSubTab === "daily_duty" ? (
         <DailyDutyAssignmentPanel
           employees={employees}
           vehicles={vehicles}
@@ -1453,6 +1458,7 @@ function RoleBadge({ role }: { role: EmployeeRole }) {
     case "Sr.Inspector":
       return <span className="status status-maintenance">{role}</span>;
     case "Supervisor":
+    case "Assistant Manager":
     case "Manager":
       return <span className="status status-manager">{role}</span>;
     default:

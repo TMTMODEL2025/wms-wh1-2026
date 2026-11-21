@@ -13,6 +13,7 @@ export const EMPLOYEE_ROLES: EmployeeRole[] = [
   "Sr.Inspector",
   "Operator",
   "Supervisor",
+  "Assistant Manager",
   "Manager",
   "Other",
 ];
@@ -23,6 +24,7 @@ export const MASTER_DEPARTMENTS: string[] = [
   "Warehouse 1 - Slitting Bay",
   "Warehouse 1 - RM Staging",
   "Logistics & Shipping Dock",
+  "Admin & Incoming",
 ];
 
 export const MASTER_EMPLOYEES: Employee[] = [];
