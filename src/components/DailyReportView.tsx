@@ -2300,6 +2300,79 @@ export function DailyReportView({
       },
     };
 
+    // Machine Group Summaries (TM 01-14 vs CF 1,2,4,5) matching MachineStagingArea.tsx (1.20 m = 16 tons)
+    const metersToStagingTons = (meters: number): number => (meters / 1.2) * 16;
+    const computeMachineGroupStats = (cat: "pipe" | "c_channel") => {
+      const groupMachines = machineStagingConfigs.filter((m) => m.category === cat);
+      const totalMachines = groupMachines.length;
+      let totalRacks = 0;
+      let totalCapacityMeters = 0;
+      let usedRacks = 0;
+      let occupiedRacks = 0;
+      let fullRacks = 0;
+      let usedMeters = 0;
+      let availableRacks = 0;
+      let availableMeters = 0;
+      let maintenanceRacks = 0;
+      let maintenanceMeters = 0;
+
+      groupMachines.forEach((m) => {
+        (m.racks || []).forEach((r) => {
+          const maxM = Math.max(1, Math.round((r.maxCapacityMm || 2000) / 1000));
+          const usedM = Math.min(maxM, Math.max(0, r.usedMeters ?? 0));
+          totalRacks += 1;
+          totalCapacityMeters += maxM;
+
+          if (r.status === "maintenance") {
+            maintenanceRacks += 1;
+            maintenanceMeters += maxM;
+            usedMeters += usedM;
+          } else {
+            usedMeters += usedM;
+            availableMeters += Math.max(0, maxM - usedM);
+            if (usedM > 0) {
+              usedRacks += 1;
+              if (usedM >= maxM) {
+                fullRacks += 1;
+              } else {
+                occupiedRacks += 1;
+              }
+            } else {
+              availableRacks += 1;
+            }
+          }
+        });
+      });
+
+      const usagePercent =
+        totalCapacityMeters > 0 ? Math.round((usedMeters / totalCapacityMeters) * 100) : 0;
+
+      return {
+        category: cat,
+        totalMachines,
+        totalRacks,
+        totalCapacityMeters,
+        totalCapacityTons: metersToStagingTons(totalCapacityMeters),
+        usedRacks,
+        occupiedRacks,
+        fullRacks,
+        usedMeters,
+        usedTons: metersToStagingTons(usedMeters),
+        availableRacks,
+        availableMeters,
+        availableTons: metersToStagingTons(availableMeters),
+        maintenanceRacks,
+        maintenanceMeters,
+        maintenanceTons: metersToStagingTons(maintenanceMeters),
+        usagePercent,
+      };
+    };
+
+    const machineGroupSummaries = {
+      tm: computeMachineGroupStats("pipe"),
+      cf: computeMachineGroupStats("c_channel"),
+    };
+
     return {
       buildingSummaries,
       allBasketRows,
@@ -2309,6 +2382,7 @@ export function DailyReportView({
       machineSummaries,
       machineTotals,
       machineUtilizationPercent,
+      machineGroupSummaries,
       spaceCapacitySummary: {
         totalMaxCapacityTons,
         totalUsedSpaceTons,
@@ -5374,6 +5448,381 @@ export function DailyReportView({
           </div>
 
           {/* =========================================================================
+              MACHINE GROUP SUMMARY CARDS: TM (TM 01 - TM 14) & CF (CF 1, CF 2, CF 4, CF 5)
+              Displayed directly after the 4 top cards on the "พื้นที่หน้าเครื่อง" sub-tab
+              ========================================================================= */}
+          {spaceReportSubTab === "machine" && (() => {
+            const { tm, cf } = storageSpaceAnalytics.machineGroupSummaries;
+            const formatStagingTons = (tons: number): string =>
+              Number(tons.toFixed(2)).toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2,
+              });
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 sm:gap-4">
+                {/* TM Group Summary Card */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    setSpaceMachineCategoryFilter((prev) => (prev === "pipe" ? "all" : "pipe"))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSpaceMachineCategoryFilter((prev) => (prev === "pipe" ? "all" : "pipe"));
+                    }
+                  }}
+                  className={`rounded-xl sm:rounded-2xl p-3 sm:p-5 bg-white dark:bg-[#111e38] shadow-md border-2 transition-all cursor-pointer ${
+                    spaceMachineCategoryFilter === "pipe"
+                      ? "border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-500/15"
+                      : "border-slate-200 dark:border-[#1e3a5f] hover:border-cyan-300 dark:hover:border-cyan-500/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-slate-100 dark:border-[#1e3a5f]">
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                      <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
+                        <Cpu size={16} className="sm:w-5 sm:h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white flex items-center gap-2 truncate">
+                          <span className="truncate">
+                            {isThai
+                              ? "กลุ่มเครื่องผลิตท่อ TM (TM 01 - TM 14)"
+                              : "Pipe Forming Group TM (TM 01 - TM 14)"}
+                          </span>
+                        </h3>
+                        <p className="text-[10.5px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
+                          {isThai ? "รวม" : "Total"} {tm.totalMachines}{" "}
+                          {isThai ? "เครื่อง · รองรับ" : "machines · Capacity"}{" "}
+                          <strong className="font-mono text-cyan-600 dark:text-cyan-400">
+                            {formatStagingTons(tm.totalCapacityTons)} {isThai ? "ตัน" : "Tons"}
+                          </strong>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      {tm.maintenanceRacks > 0 && (
+                        <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                          {isThai
+                            ? `ซ่อมบำรุง ${tm.maintenanceRacks} แคร่ (${tm.maintenanceMeters} ม. / ${formatStagingTons(tm.maintenanceTons)} ตัน)`
+                            : `Maint. ${tm.maintenanceRacks} racks (${tm.maintenanceMeters} m / ${formatStagingTons(tm.maintenanceTons)} T)`}
+                        </span>
+                      )}
+                      <span
+                        className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-black font-mono tabular-nums border ${
+                          tm.usagePercent >= 85
+                            ? "bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                            : tm.usagePercent > 0
+                            ? "bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                        }`}
+                      >
+                        {isThai ? `ใช้งาน ${tm.usagePercent}%` : `Used ${tm.usagePercent}%`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                    {/* 1. มีแคร่ทั้งหมด */}
+                    <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-[#0c1930]/80 border border-slate-200/80 dark:border-[#1e3a5f] min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+                          {isThai ? "มีแคร่ทั้งหมด" : "Total Racks"}
+                        </div>
+                        <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums leading-tight">
+                          <span className="text-cyan-600 dark:text-cyan-400">
+                            {formatStagingTons(tm.totalCapacityTons)}
+                          </span>{" "}
+                          <span className="font-sans text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>{" "}
+                          <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 sm:mt-0">
+                            ({tm.totalRacks} {isThai ? "แคร่" : "racks"} / {tm.totalCapacityMeters}{" "}
+                            {isThai ? "ม." : "m"})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                          <span>{isThai ? "สัดส่วนความจุ" : "Capacity"}</span>
+                          <span>100%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-cyan-500 rounded-full transition-all duration-300 w-full" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. ใช้ไป */}
+                    <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
+                            {isThai ? "ใช้ไป" : "Used"}
+                          </span>
+                          <span className="text-[9.5px] sm:text-[10px] font-black font-mono tabular-nums text-sky-600 dark:text-sky-400">
+                            {tm.usagePercent}%
+                          </span>
+                        </div>
+                        <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-sky-700 dark:text-sky-300 font-mono tabular-nums leading-tight">
+                          <span>{formatStagingTons(tm.usedTons)}</span>{" "}
+                          <span className="font-sans text-[10px] sm:text-xs font-bold text-sky-600/80 dark:text-sky-400/80">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>{" "}
+                          <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-sky-700/90 dark:text-sky-300/90 mt-0.5 sm:mt-0">
+                            ({tm.usedRacks} {isThai ? "แคร่" : "racks"} / {tm.usedMeters}{" "}
+                            {isThai ? "ม." : "m"})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-sky-700 dark:text-sky-300">
+                          <span>{isThai ? "สัดส่วนใช้ไป" : "Used Ratio"}</span>
+                          <span>{tm.usagePercent}%</span>
+                        </div>
+                        <div className="w-full bg-sky-200/60 dark:bg-sky-900/60 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-sky-500 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, tm.usagePercent)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. คงเหลือ */}
+                    <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                          {isThai ? "คงเหลือ" : "Available"}
+                        </div>
+                        <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-emerald-700 dark:text-emerald-300 font-mono tabular-nums leading-tight">
+                          <span>{formatStagingTons(tm.availableTons)}</span>{" "}
+                          <span className="font-sans text-[10px] sm:text-xs font-bold text-emerald-600/80 dark:text-emerald-400/80">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>{" "}
+                          <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 sm:mt-0">
+                            ({tm.availableRacks} {isThai ? "แคร่" : "racks"} / {tm.availableMeters}{" "}
+                            {isThai ? "ม." : "m"})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                          <span>{isThai ? "สัดส่วนคงเหลือ" : "Remaining"}</span>
+                          <span>{Math.max(0, 100 - tm.usagePercent)}%</span>
+                        </div>
+                        <div className="w-full bg-emerald-200/60 dark:bg-emerald-900/60 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, Math.max(0, 100 - tm.usagePercent))}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Utilization Bar */}
+                  <div className="mt-2.5 sm:mt-3.5">
+                    <div className="w-full h-1.5 sm:h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          tm.usagePercent >= 85
+                            ? "bg-rose-500"
+                            : tm.usagePercent > 0
+                            ? "bg-sky-500"
+                            : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${Math.min(100, tm.usagePercent)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* CF Group Summary Card */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    setSpaceMachineCategoryFilter((prev) => (prev === "c_channel" ? "all" : "c_channel"))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSpaceMachineCategoryFilter((prev) => (prev === "c_channel" ? "all" : "c_channel"));
+                    }
+                  }}
+                  className={`rounded-xl sm:rounded-2xl p-3 sm:p-5 bg-white dark:bg-[#111e38] shadow-md border-2 transition-all cursor-pointer ${
+                    spaceMachineCategoryFilter === "c_channel"
+                      ? "border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-500/15"
+                      : "border-slate-200 dark:border-[#1e3a5f] hover:border-cyan-300 dark:hover:border-cyan-500/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-slate-100 dark:border-[#1e3a5f]">
+                    <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                      <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+                        <Layers size={16} className="sm:w-5 sm:h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white flex items-center gap-2 truncate">
+                          <span className="truncate">
+                            {isThai
+                              ? "กลุ่มเครื่องผลิตตัวซี CF (CF 1, CF 2, CF 4, CF 5)"
+                              : "C-Channel Group CF (CF 1, CF 2, CF 4, CF 5)"}
+                          </span>
+                        </h3>
+                        <p className="text-[10.5px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">
+                          {isThai ? "รวม" : "Total"} {cf.totalMachines}{" "}
+                          {isThai ? "เครื่อง · รองรับ" : "machines · Capacity"}{" "}
+                          <strong className="font-mono text-indigo-600 dark:text-indigo-400">
+                            {formatStagingTons(cf.totalCapacityTons)} {isThai ? "ตัน" : "Tons"}
+                          </strong>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                      {cf.maintenanceRacks > 0 && (
+                        <span className="hidden sm:inline-block px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                          {isThai
+                            ? `ซ่อมบำรุง ${cf.maintenanceRacks} แคร่ (${cf.maintenanceMeters} ม. / ${formatStagingTons(cf.maintenanceTons)} ตัน)`
+                            : `Maint. ${cf.maintenanceRacks} racks (${cf.maintenanceMeters} m / ${formatStagingTons(cf.maintenanceTons)} T)`}
+                        </span>
+                      )}
+                      <span
+                        className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[10.5px] sm:text-xs font-black font-mono tabular-nums border ${
+                          cf.usagePercent >= 85
+                            ? "bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                            : cf.usagePercent > 0
+                            ? "bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-800"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+                        }`}
+                      >
+                        {isThai ? `ใช้งาน ${cf.usagePercent}%` : `Used ${cf.usagePercent}%`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                    {/* 1. มีแคร่ทั้งหมด */}
+                    <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-[#0c1930]/80 border border-slate-200/80 dark:border-[#1e3a5f] min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
+                          {isThai ? "มีแคร่ทั้งหมด" : "Total Racks"}
+                        </div>
+                        <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white font-mono tabular-nums leading-tight">
+                          <span className="text-indigo-600 dark:text-indigo-400">
+                            {formatStagingTons(cf.totalCapacityTons)}
+                          </span>{" "}
+                          <span className="font-sans text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>{" "}
+                          <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-slate-600 dark:text-slate-300 mt-0.5 sm:mt-0">
+                            ({cf.totalRacks} {isThai ? "แคร่" : "racks"} / {cf.totalCapacityMeters}{" "}
+                            {isThai ? "ม." : "m"})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                          <span>{isThai ? "สัดส่วนความจุ" : "Capacity"}</span>
+                          <span>100%</span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-500 rounded-full transition-all duration-300 w-full" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 2. ใช้ไป */}
+                    <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
+                            {isThai ? "ใช้ไป" : "Used"}
+                          </span>
+                          <span className="text-[9.5px] sm:text-[10px] font-black font-mono tabular-nums text-sky-600 dark:text-sky-400">
+                            {cf.usagePercent}%
+                          </span>
+                        </div>
+                        <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-sky-700 dark:text-sky-300 font-mono tabular-nums leading-tight">
+                          <span>{formatStagingTons(cf.usedTons)}</span>{" "}
+                          <span className="font-sans text-[10px] sm:text-xs font-bold text-sky-600/80 dark:text-sky-400/80">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>{" "}
+                          <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-sky-700/90 dark:text-sky-300/90 mt-0.5 sm:mt-0">
+                            ({cf.usedRacks} {isThai ? "แคร่" : "racks"} / {cf.usedMeters}{" "}
+                            {isThai ? "ม." : "m"})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-sky-700 dark:text-sky-300">
+                          <span>{isThai ? "สัดส่วนใช้ไป" : "Used Ratio"}</span>
+                          <span>{cf.usagePercent}%</span>
+                        </div>
+                        <div className="w-full bg-sky-200/60 dark:bg-sky-900/60 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-sky-500 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, cf.usagePercent)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. คงเหลือ */}
+                    <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                          {isThai ? "คงเหลือ" : "Available"}
+                        </div>
+                        <div className="mt-0.5 sm:mt-1 text-xs sm:text-sm md:text-base font-black text-emerald-700 dark:text-emerald-300 font-mono tabular-nums leading-tight">
+                          <span>{formatStagingTons(cf.availableTons)}</span>{" "}
+                          <span className="font-sans text-[10px] sm:text-xs font-bold text-emerald-600/80 dark:text-emerald-400/80">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>{" "}
+                          <span className="block sm:inline text-[9.5px] sm:text-xs font-bold text-emerald-700/90 dark:text-emerald-300/90 mt-0.5 sm:mt-0">
+                            ({cf.availableRacks} {isThai ? "แคร่" : "racks"} / {cf.availableMeters}{" "}
+                            {isThai ? "ม." : "m"})
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 space-y-0.5">
+                        <div className="flex justify-between items-center text-[9px] sm:text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                          <span>{isThai ? "สัดส่วนคงเหลือ" : "Remaining"}</span>
+                          <span>{Math.max(0, 100 - cf.usagePercent)}%</span>
+                        </div>
+                        <div className="w-full bg-emerald-200/60 dark:bg-emerald-900/60 h-1.5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, Math.max(0, 100 - cf.usagePercent))}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Utilization Bar */}
+                  <div className="mt-2.5 sm:mt-3.5">
+                    <div className="w-full h-1.5 sm:h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${
+                          cf.usagePercent >= 85
+                            ? "bg-rose-500"
+                            : cf.usagePercent > 0
+                            ? "bg-sky-500"
+                            : "bg-emerald-500"
+                        }`}
+                        style={{ width: `${Math.min(100, cf.usagePercent)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* =========================================================================
               BUILDING SPACE SUMMARY CARDS & WAREHOUSE BUILDING SELECTOR (H, F, E9, E10, I)
               ========================================================================= */}
           {(spaceReportSubTab === "all" || spaceReportSubTab === "warehouse") && (
@@ -5643,10 +6092,6 @@ export function DailyReportView({
                     <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
                       <th className="!p-1.5 sm:!p-3 !text-center w-10">#</th>
                       <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "ประเภทวัตถุดิบ" : "Material Type"}</th>
-                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "รหัสขึ้นต้น BATCH" : "BATCH Prefix"}</th>
-                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "จำนวนตะกร้า" : "Baskets"}</th>
-                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "จำนวนรายการ / แถบ" : "Items / Coils"}</th>
-                      <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนักรวม (kg)" : "Weight (kg)"}</th>
                       <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนักรวม (ตัน)" : "Weight (Tons)"}</th>
                       <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "สัดส่วน (%)" : "Share (%)"}</th>
                     </tr>
@@ -5669,22 +6114,6 @@ export function DailyReportView({
                               <span className={`w-2 h-2 rounded-full shrink-0 ${mat.dotClass}`} />
                               <span>{isThai ? mat.nameTh : mat.nameEn}</span>
                             </div>
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center">
-                            <span
-                              className={`inline-flex items-center justify-center min-w-[44px] px-2 py-0.5 rounded-md font-mono font-extrabold text-[10px] sm:text-[11px] border ${mat.badgeClass}`}
-                            >
-                              {isThai ? mat.prefixLabelTh : mat.prefixLabelEn}
-                            </span>
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold text-slate-700 dark:text-slate-300">
-                            {mat.basketCount.toLocaleString()}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold text-slate-800 dark:text-slate-200">
-                            {mat.coilCount.toLocaleString()}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
-                            {mat.totalWeightKg.toLocaleString(undefined, { maximumFractionDigits: 2 })} kg
                           </td>
                           <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold text-cyan-700 dark:text-cyan-300">
                             {mat.totalTons.toLocaleString(undefined, {
@@ -5712,7 +6141,7 @@ export function DailyReportView({
                   <tfoot className="bg-slate-100 dark:bg-[#0c1930] font-bold border-t-2 border-slate-300 dark:border-[#1e3a5f] whitespace-nowrap">
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={2}
                         className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-800 dark:text-slate-100 font-black"
                       >
                         {filteredSpaceData.selectedBuilding
@@ -5722,18 +6151,6 @@ export function DailyReportView({
                           : isThai
                           ? "รวมทั้งหมด (TOTAL)"
                           : "TOTAL (ALL BUILDINGS)"}
-                      </td>
-                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-800 dark:text-slate-100">
-                        {filteredSpaceData.materialSummary.totals.uniqueBasketCount.toLocaleString()}
-                      </td>
-                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
-                        {filteredSpaceData.materialSummary.totals.coilCount.toLocaleString()}
-                      </td>
-                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
-                        {filteredSpaceData.materialSummary.totals.totalWeightKg.toLocaleString(undefined, {
-                          maximumFractionDigits: 2,
-                        })}{" "}
-                        kg
                       </td>
                       <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-cyan-700 dark:text-cyan-300">
                         {filteredSpaceData.materialSummary.totals.totalTons.toLocaleString(undefined, {
@@ -5999,7 +6416,6 @@ export function DailyReportView({
                         <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
                           <th className="!p-1.5 sm:!p-3 !text-center w-10 sm:w-14">#</th>
                           <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "เครื่องจักร" : "Machine"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "ประเภท / รายละเอียด" : "Category"}</th>
                           <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "แคร่ทั้งหมด" : "Total Racks"}</th>
                           <th className="!p-1.5 sm:!p-3 !text-center !text-emerald-600 dark:!text-emerald-400">{isThai ? "ว่าง" : "Avail"}</th>
                           <th className="!p-1.5 sm:!p-3 !text-center !text-amber-600 dark:!text-amber-400">{isThai ? "ใช้งาน" : "Occupied"}</th>
@@ -6012,7 +6428,7 @@ export function DailyReportView({
                       <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
                         {filteredMachines.length === 0 ? (
                           <tr>
-                            <td colSpan={10} className="!p-5 sm:!p-8 !text-center text-slate-400 text-[11px] sm:text-xs font-medium">
+                            <td colSpan={9} className="!p-5 sm:!p-8 !text-center text-slate-400 text-[11px] sm:text-xs font-medium">
                               {isThai
                                 ? "ไม่พบเครื่องจักรที่ตรงกับเงื่อนไขตัวกรอง"
                                 : "No machine staging records match the filter."}
@@ -6027,11 +6443,6 @@ export function DailyReportView({
                               <td className="!p-1.5 sm:!p-3 !text-center font-mono text-slate-400 tabular-nums">{idx + 1}</td>
                               <td className="!p-1.5 sm:!p-3 !text-left font-mono font-black text-amber-600 dark:text-amber-400 whitespace-nowrap">
                                 {m.machineCode}
-                              </td>
-                              <td className="!p-1.5 sm:!p-3 !text-left text-slate-600 dark:text-slate-300">
-                                <div className="font-bold text-slate-800 dark:text-slate-200">
-                                  {m.machineNameTh}
-                                </div>
                               </td>
                               <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold">
                                 {m.totalRacks}
@@ -6181,7 +6592,7 @@ export function DailyReportView({
                       </tbody>
                       <tfoot className="bg-slate-100 dark:bg-[#0c1930] font-bold border-t-2 border-slate-300 dark:border-[#1e3a5f] whitespace-nowrap">
                         <tr>
-                          <td colSpan={3} className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                          <td colSpan={2} className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-700 dark:text-slate-200">
                             {isThai ? "รวมพื้นที่หน้าเครื่องจักรทั้งหมด (Total)" : "All Machines Total"}
                           </td>
                           <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums">
