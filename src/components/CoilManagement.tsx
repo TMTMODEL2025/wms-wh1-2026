@@ -46,12 +46,21 @@ import {
   ChevronsRight,
   ScanLine,
   Box,
+  Minus,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { CoilWarehouse3DView } from "./coil3d/CoilWarehouse3DView";
 import {
+  DEFAULT_BASE_SLOTS_PER_ROW,
+  MAX_BASE_SLOTS_PER_ROW,
+  MAX_STACK_LEVEL,
+  MIN_BASE_SLOTS_PER_ROW,
+  STACK_LEVELS,
+  StackLevel,
+  clampBaseSlotsPerRow,
   getRowLevelOccupancy,
   parseCoilLocationTo3D,
+  validateCoilPlacementLocation,
 } from "./coil3d/coilWarehouseLayout";
 import { cleanBarcode } from "../utils/barcodeUtils";
 import { showToast } from "../utils/swalUtils";
@@ -268,6 +277,7 @@ const COMMON_MANUFACTURERS = ["SSI", "GJ", "POSCO", "JFE", "NIPPON", "SYS", "CSC
 const INBOUND_BUILDINGS = ["E7", "E8", "H7", "H8", "05", "21"];
 const INBOUND_QUICK_ROWS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const STICKY_COIL_LOCATION_KEY = "tmt_wms_coil_sticky_location_v1";
+const WAREHOUSE_BASE_SLOTS_KEY = "tmt_wms_coil_base_slots_per_row_v1";
 
 // ============================================================================
 // SAP Data Decoders & Parsers for Coil Stock Upload (UTF-8 / Windows-874 / Excel)
@@ -747,11 +757,30 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     }
     return "1";
   });
-  const [inboundLevel, setInboundLevel] = useState<1 | 2>(1);
+  const [inboundLevel, setInboundLevel] = useState<StackLevel>(1);
   const [inboundLevelManualOverride, setInboundLevelManualOverride] = useState<boolean>(false);
   const [inboundManualLocationOverride, setInboundManualLocationOverride] = useState<string | null>(null);
   const [inboundSearch, setInboundSearch] = useState<string>("");
+  const [warehouseBaseSlotsPerRow, setWarehouseBaseSlotsPerRow] = useState<number>(() => {
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem(WAREHOUSE_BASE_SLOTS_KEY);
+      if (saved) return clampBaseSlotsPerRow(Number(saved));
+    }
+    return DEFAULT_BASE_SLOTS_PER_ROW;
+  });
   const inboundBatchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleChangeWarehouseBaseSlots = (nextVal: number) => {
+    const clamped = clampBaseSlotsPerRow(nextVal);
+    setWarehouseBaseSlotsPerRow(clamped);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(WAREHOUSE_BASE_SLOTS_KEY, String(clamped));
+      } catch {
+        // ignore storage error
+      }
+    }
+  };
 
   const focusInboundBatchInput = () => {
     setTimeout(() => {
@@ -795,12 +824,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     }
   };
 
-  const handleSelectInboundLevel = (level: 1 | 2) => {
-    setInboundLevel(level);
-    setInboundLevelManualOverride(true);
-    setInboundManualLocationOverride(null);
-    focusInboundBatchInput();
-  };
+  // (handleSelectInboundLevel is declared below after inboundRowOccupancy so it can validate Level 2 base support live)
 
   const handleManualInboundLocationChange = (rawVal: string) => {
     const val = rawVal.toUpperCase();
@@ -817,8 +841,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       if (cleanR) {
         setInboundRow(cleanR);
       }
-      if (cleanLv === 1 || cleanLv === 2) {
-        setInboundLevel(cleanLv);
+      if (cleanLv >= 1 && cleanLv <= MAX_STACK_LEVEL) {
+        setInboundLevel(cleanLv as StackLevel);
         setInboundLevelManualOverride(true);
       }
     } else if (INBOUND_BUILDINGS.includes(val.trim())) {
@@ -939,8 +963,14 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
 
   // Live Door/Row/Level/Seq occupancy & automatic recommendation for Inbound
   const inboundRowOccupancy = useMemo(
-    () => getRowLevelOccupancy(inboundBuilding || "E7", inboundRow || "1", activeStockCoils),
-    [inboundBuilding, inboundRow, activeStockCoils]
+    () =>
+      getRowLevelOccupancy(
+        inboundBuilding || "E7",
+        inboundRow || "1",
+        activeStockCoils,
+        warehouseBaseSlotsPerRow
+      ),
+    [inboundBuilding, inboundRow, activeStockCoils, warehouseBaseSlotsPerRow]
   );
 
   // Quick occupancy counts per Door and per Row (for Step 2 & Step 3 badges)
@@ -965,21 +995,28 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     return counts;
   }, [activeStockCoils, inboundBuilding]);
 
-  const effectiveInboundLevel: 1 | 2 = useMemo(() => {
+  const effectiveInboundLevel: StackLevel = useMemo(() => {
     if (!inboundLevelManualOverride) {
       return inboundRowOccupancy.recommendedLevel;
     }
-    // If operator manually chose Level 1 and it just became full while Level 2 has room, auto-advance to Level 2
-    if (inboundLevel === 1 && inboundRowOccupancy.level1.isFull && !inboundRowOccupancy.level2.isFull) {
-      return 2;
+    // Strictly enforce base support for upper levels (2..4): never stay on an unsupported level
+    if (inboundLevel >= 2 && !inboundRowOccupancy.levels[inboundLevel].canPlace) {
+      return inboundRowOccupancy.recommendedLevel;
+    }
+    // If operator manually chose a level that just became completely full, auto-advance to recommended level
+    if (
+      inboundRowOccupancy.levels[inboundLevel].isFull &&
+      inboundRowOccupancy.recommendedLevel !== inboundLevel &&
+      !inboundRowOccupancy.isRowCompletelyFull
+    ) {
+      return inboundRowOccupancy.recommendedLevel;
     }
     return inboundLevel;
   }, [inboundLevel, inboundLevelManualOverride, inboundRowOccupancy]);
 
   const effectiveInboundSeq =
-    effectiveInboundLevel === 1
-      ? inboundRowOccupancy.level1.nextSeq
-      : inboundRowOccupancy.level2.nextSeq;
+    inboundRowOccupancy.levels[effectiveInboundLevel].nextSeq ??
+    inboundRowOccupancy.level1.nextSeq;
 
   const autoComposedInboundLocation = `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${effectiveInboundLevel}/${effectiveInboundSeq}`;
 
@@ -988,17 +1025,66 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       ? inboundManualLocationOverride.trim().toUpperCase()
       : autoComposedInboundLocation;
 
+  const inboundPlacementValidation = useMemo(
+    () =>
+      validateCoilPlacementLocation(
+        effectiveInboundLocation,
+        activeStockCoils,
+        inboundScanInput.trim() ? [inboundScanInput.trim()] : [],
+        warehouseBaseSlotsPerRow
+      ),
+    [effectiveInboundLocation, activeStockCoils, inboundScanInput, warehouseBaseSlotsPerRow]
+  );
+
+  const relocatePlacementValidation = useMemo(() => {
+    const target = relocateTargetLocation.trim().toUpperCase();
+    if (!target) return null;
+    return validateCoilPlacementLocation(
+      target,
+      activeStockCoils,
+      selectedRelocateBatches,
+      warehouseBaseSlotsPerRow
+    );
+  }, [relocateTargetLocation, activeStockCoils, selectedRelocateBatches, warehouseBaseSlotsPerRow]);
+
+  const handleSelectInboundLevel = (level: StackLevel) => {
+    const lvInfo = inboundRowOccupancy.levels[level];
+    if (level >= 2 && !lvInfo.canPlace) {
+      const lowerLv = level - 1;
+      playBeep("error");
+      showToast(
+        isThai
+          ? lvInfo.isFull
+            ? `ไม่สามารถวางชั้นที่ ${level} แถว ${inboundRowOccupancy.door}/${inboundRowOccupancy.row} ได้ — ชั้นที่ ${level} เต็มแล้ว`
+            : `ไม่สามารถวางชั้นที่ ${level} ได้ — ต้องมีฐานชั้นที่ ${lowerLv} วางติดกันอย่างน้อย 2 ลูกก่อน (เช่น ชั้น ${lowerLv} ลูกที่ 1 และลูกที่ 2)`
+          : lvInfo.isFull
+          ? `Level ${level} in ${inboundRowOccupancy.door}/${inboundRowOccupancy.row} is full`
+          : `Cannot select Level ${level} — requires at least 2 adjacent Level ${lowerLv} base coils`,
+        "error"
+      );
+      focusInboundBatchInput();
+      return;
+    }
+    setInboundLevel(level);
+    setInboundLevelManualOverride(true);
+    setInboundManualLocationOverride(null);
+    focusInboundBatchInput();
+  };
+
   // Keep inboundLocation & inboundLevel in sync with automatic recommendation and live stock changes
   useEffect(() => {
-    if (!inboundLevelManualOverride && inboundLevel !== inboundRowOccupancy.recommendedLevel) {
+    if (inboundLevel >= 2 && !inboundRowOccupancy.levels[inboundLevel].canPlace) {
+      setInboundLevel(inboundRowOccupancy.recommendedLevel);
+      setInboundLevelManualOverride(false);
+    } else if (!inboundLevelManualOverride && inboundLevel !== inboundRowOccupancy.recommendedLevel) {
       setInboundLevel(inboundRowOccupancy.recommendedLevel);
     } else if (
       inboundLevelManualOverride &&
-      inboundLevel === 1 &&
-      inboundRowOccupancy.level1.isFull &&
-      !inboundRowOccupancy.level2.isFull
+      inboundRowOccupancy.levels[inboundLevel].isFull &&
+      inboundRowOccupancy.recommendedLevel !== inboundLevel &&
+      !inboundRowOccupancy.isRowCompletelyFull
     ) {
-      setInboundLevel(2);
+      setInboundLevel(inboundRowOccupancy.recommendedLevel);
       setInboundLevelManualOverride(false);
     }
   }, [inboundLevel, inboundLevelManualOverride, inboundRowOccupancy]);
@@ -1095,6 +1181,28 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       effectiveInboundLocation ||
       inboundLocation.trim().toUpperCase() ||
       `${inboundBuilding || "E7"}/${inboundRow || "1"}/1/1`;
+
+    // Strictly enforce Level 2+ pyramid base-support rule before saving
+    const placementValidation = validateCoilPlacementLocation(
+      finalLocation,
+      activeStockCoils,
+      [rawCode],
+      warehouseBaseSlotsPerRow
+    );
+    if (!placementValidation.valid) {
+      playBeep("error");
+      showToast(
+        isThai
+          ? placementValidation.reasonTh ||
+              "ไม่สามารถวางชั้นที่ 2 ได้ — ต้องมีฐานชั้นที่ 1 รองรับครบ 2 ลูกก่อน"
+          : placementValidation.reasonEn ||
+              "Cannot place on Level 2 — requires 2 supporting Level 1 base coils",
+        "error"
+      );
+      focusInboundBatchInput();
+      return;
+    }
+
     const existingRecord = coilStock.find((c) => c.batch.toUpperCase() === rawCode);
     const sapMaster = coilSapMap.get(rawCode);
     const hasExistingSap = Boolean(existingRecord?.hasSapData || sapMaster);
@@ -2223,6 +2331,26 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       return;
     }
 
+    // Strictly enforce Level 2+ pyramid base-support rule on relocation target
+    const relocateCheck = validateCoilPlacementLocation(
+      target,
+      activeStockCoils,
+      coilsToMove.map((c) => c.batch),
+      warehouseBaseSlotsPerRow
+    );
+    if (!relocateCheck.valid) {
+      playBeep("error");
+      showToast(
+        isThai
+          ? relocateCheck.reasonTh ||
+              "ไม่สามารถย้ายไปวางชั้นที่ 2 ได้ — ต้องมีฐานชั้นที่ 1 รองรับครบ 2 ลูกก่อน"
+          : relocateCheck.reasonEn ||
+              "Cannot relocate to Level 2 — requires 2 supporting Level 1 base coils",
+        "error"
+      );
+      return;
+    }
+
     await relocateCoilsInCloud({
       coils: coilsToMove,
       targetLocation: target,
@@ -2881,7 +3009,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     const rowNum = parseInt(r, 10);
                     const isRowActive = inboundRow.toUpperCase() === r;
                     const countInRow = inboundSelectedDoorRowCounts[rowNum] || 0;
-                    const maxRowCap = inboundRowOccupancy.baseCapacity * 2 - 1;
+                    const maxRowCap = inboundRowOccupancy.totalRowCapacity;
                     const isFullRow = countInRow >= maxRowCap;
                     return (
                       <button
@@ -2954,184 +3082,225 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                   </span>
                 </div>
 
-                {/* Level 1 & Level 2 Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                  {/* Level 1 Card */}
-                  {(() => {
-                    const l1 = inboundRowOccupancy.level1;
-                    const isSelected = effectiveInboundLevel === 1;
-                    const isRecommended = inboundRowOccupancy.recommendedLevel === 1 && !inboundRowOccupancy.isRowCompletelyFull;
-                    const pct = Math.min(100, Math.round((l1.occupiedCount / l1.capacity) * 100));
+                {/* Level 1 to Level 4 Cards (Strictly Max 4 Levels) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
+                  {STACK_LEVELS.map((lv) => {
+                    const info = inboundRowOccupancy.levels[lv];
+                    const isBase = lv === 1;
+                    const isLocked = !isBase && !info.canPlace;
+                    const isSelected = effectiveInboundLevel === lv && (isBase || info.canPlace);
+                    const isRecommended =
+                      inboundRowOccupancy.recommendedLevel === lv &&
+                      (isBase || info.canPlace) &&
+                      !inboundRowOccupancy.isRowCompletelyFull;
+                    const pct =
+                      info.capacity > 0
+                        ? Math.min(100, Math.round((info.occupiedCount / info.capacity) * 100))
+                        : 100;
+
+                    const themeMap: Record<
+                      StackLevel,
+                      {
+                        subtitleTh: string;
+                        subtitleEn: string;
+                        selectedCard: string;
+                        hoverCard: string;
+                        badgeSelected: string;
+                        readyBadge: string;
+                        barColor: string;
+                        nextText: string;
+                      }
+                    > = {
+                      1: {
+                        subtitleTh: "วางฐานพื้น",
+                        subtitleEn: "Floor Base",
+                        selectedCard:
+                          "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/25 shadow-xs",
+                        hoverCard: "hover:border-emerald-400",
+                        badgeSelected: "bg-emerald-600 text-white",
+                        readyBadge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                        barColor: "bg-emerald-500",
+                        nextText: "text-emerald-700 dark:text-emerald-300",
+                      },
+                      2: {
+                        subtitleTh: "ซ้อนบนชั้น 1",
+                        subtitleEn: "Above L1",
+                        selectedCard:
+                          "bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/25 shadow-xs",
+                        hoverCard: "hover:border-indigo-400",
+                        badgeSelected: "bg-indigo-600 text-white",
+                        readyBadge: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
+                        barColor: "bg-indigo-500",
+                        nextText: "text-indigo-700 dark:text-indigo-300",
+                      },
+                      3: {
+                        subtitleTh: "ซ้อนบนชั้น 2",
+                        subtitleEn: "Above L2",
+                        selectedCard:
+                          "bg-violet-50/90 dark:bg-violet-950/40 border-violet-500 ring-2 ring-violet-500/25 shadow-xs",
+                        hoverCard: "hover:border-violet-400",
+                        badgeSelected: "bg-violet-600 text-white",
+                        readyBadge: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+                        barColor: "bg-violet-500",
+                        nextText: "text-violet-700 dark:text-violet-300",
+                      },
+                      4: {
+                        subtitleTh: "ชั้นสูงสุด",
+                        subtitleEn: "Top (Max)",
+                        selectedCard:
+                          "bg-amber-50/90 dark:bg-amber-950/35 border-amber-500 ring-2 ring-amber-500/25 shadow-xs",
+                        hoverCard: "hover:border-amber-400",
+                        badgeSelected: "bg-amber-600 text-white",
+                        readyBadge: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+                        barColor: "bg-amber-500",
+                        nextText: "text-amber-700 dark:text-amber-300",
+                      },
+                    };
+                    const t = themeMap[lv];
+
                     return (
                       <button
+                        key={`level-card-${lv}`}
                         type="button"
-                        onClick={() => handleSelectInboundLevel(1)}
-                        className={`text-left p-3 rounded-xl border transition-all cursor-pointer space-y-2 ${
-                          isSelected
-                            ? "bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/25 shadow-xs"
-                            : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-emerald-400"
+                        aria-disabled={isLocked}
+                        onClick={() => handleSelectInboundLevel(lv)}
+                        className={`text-left p-2.5 rounded-xl border transition-all space-y-2 ${
+                          isLocked
+                            ? "bg-slate-50/80 dark:bg-[#0c162b] border-slate-200 dark:border-slate-800 opacity-75 cursor-not-allowed"
+                            : isSelected
+                            ? `${t.selectedCard} cursor-pointer`
+                            : `bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] ${t.hoverCard} cursor-pointer`
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
                             <span
-                              className={`px-2 py-0.5 rounded-md text-xs font-black ${
+                              className={`px-2 py-0.5 rounded-md text-[11px] font-black inline-flex items-center gap-1 shrink-0 ${
                                 isSelected
-                                  ? "bg-emerald-600 text-white"
+                                  ? t.badgeSelected
+                                  : isLocked
+                                  ? "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                                   : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
                               }`}
                             >
-                              {isThai ? "ชั้นที่ 1" : "Level 1"}
+                              {isLocked && <Lock size={10} />}
+                              {isThai ? `ชั้นที่ ${lv}` : `Level ${lv}`}
                             </span>
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                              {isThai ? "วางฐานพื้น" : "Floor Base"}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {isRecommended && (
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/40">
-                                {isThai ? "แนะนำอัตโนมัติ" : "Recommended"}
-                              </span>
-                            )}
-                            <span
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                                l1.isFull
-                                  ? "bg-red-500/15 text-red-600 dark:text-red-300"
-                                  : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                              }`}
-                            >
-                              {l1.isFull
-                                ? isThai
-                                  ? "เต็มแล้ว"
-                                  : "Full"
-                                : isThai
-                                ? `ว่าง ${l1.availableCount}/${l1.capacity}`
-                                : `${l1.availableCount}/${l1.capacity} Free`}
+                            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 truncate">
+                              {isThai ? t.subtitleTh : t.subtitleEn}
                             </span>
                           </div>
+                          {isRecommended && (
+                            <span className="px-1.5 py-0.5 rounded text-[9.5px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/40 shrink-0">
+                              {isThai ? "แนะนำ" : "Auto"}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1 text-[10px]">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {info.occupiedCount}/{info.capacity} {isThai ? "ม้วน" : "coils"}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded font-extrabold ${
+                              info.isFull
+                                ? "bg-red-500/15 text-red-600 dark:text-red-300"
+                                : isBase
+                                ? t.readyBadge
+                                : info.canPlace
+                                ? t.readyBadge
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                            }`}
+                          >
+                            {info.isFull
+                              ? isThai
+                                ? "เต็มแล้ว"
+                                : "Full"
+                              : isBase
+                              ? isThai
+                                ? `ว่าง ${info.availableCount}`
+                                : `${info.availableCount} Free`
+                              : info.canPlace
+                              ? isThai
+                                ? `ซ้อนได้ ${info.availableSupportedSlots.length}`
+                                : `${info.availableSupportedSlots.length} Ready`
+                              : isThai
+                              ? `ขาดฐานชั้น ${lv - 1}`
+                              : `Needs L${lv - 1}`}
+                          </span>
                         </div>
 
                         <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              l1.isFull ? "bg-red-500" : "bg-emerald-500"
+                              info.isFull ? "bg-red-500" : isLocked ? "bg-slate-400" : t.barColor
                             }`}
                             style={{ width: `${pct}%` }}
                           />
                         </div>
 
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-slate-500 dark:text-slate-400">
-                            {isThai
-                              ? `วางอยู่แล้ว ${l1.occupiedCount} ม้วน`
-                              : `${l1.occupiedCount} coils stored`}
-                          </span>
-                          <span className="font-mono font-extrabold text-emerald-700 dark:text-emerald-300">
-                            {isThai ? "พิกัดถัดไป:" : "Next:"}{" "}
-                            {inboundRowOccupancy.door}/{inboundRowOccupancy.row}/1/{l1.nextSeq}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })()}
-
-                  {/* Level 2 Card */}
-                  {(() => {
-                    const l2 = inboundRowOccupancy.level2;
-                    const isSelected = effectiveInboundLevel === 2;
-                    const isRecommended = inboundRowOccupancy.recommendedLevel === 2 && !inboundRowOccupancy.isRowCompletelyFull;
-                    const pct = Math.min(100, Math.round((l2.occupiedCount / l2.capacity) * 100));
-                    return (
-                      <button
-                        type="button"
-                        onClick={() => handleSelectInboundLevel(2)}
-                        className={`text-left p-3 rounded-xl border transition-all cursor-pointer space-y-2 ${
-                          isSelected
-                            ? "bg-indigo-50/90 dark:bg-indigo-950/40 border-indigo-500 ring-2 ring-indigo-500/25 shadow-xs"
-                            : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-indigo-400"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`px-2 py-0.5 rounded-md text-xs font-black ${
-                                isSelected
-                                  ? "bg-indigo-600 text-white"
-                                  : "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200"
-                              }`}
-                            >
-                              {isThai ? "ชั้นที่ 2" : "Level 2"}
+                        <div className="flex items-center justify-between text-[10.5px] gap-1">
+                          {(isBase || info.canPlace) && info.nextSeq !== null ? (
+                            <span className={`font-mono font-extrabold ${t.nextText}`}>
+                              {isThai ? "ถัดไป:" : "Next:"}{" "}
+                              {inboundRowOccupancy.door}/{inboundRowOccupancy.row}/{lv}/{info.nextSeq}
                             </span>
-                            <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                              {isThai ? "วางซ้อนบนร่อง" : "Upper Stack"}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            {isRecommended && (
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/40">
-                                {isThai ? "แนะนำอัตโนมัติ" : "Recommended"}
-                              </span>
-                            )}
-                            <span
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-extrabold ${
-                                l2.isFull
-                                  ? "bg-red-500/15 text-red-600 dark:text-red-300"
-                                  : l2.availableSupportedSlots.length > 0
-                                  ? "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300"
-                                  : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-                              }`}
-                            >
-                              {l2.isFull
+                          ) : (
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 truncate">
+                              {info.isFull
                                 ? isThai
-                                  ? "เต็มแล้ว"
-                                  : "Full"
-                                : l2.availableSupportedSlots.length > 0
-                                ? isThai
-                                  ? `พร้อมซ้อน ${l2.availableSupportedSlots.length} ช่อง`
-                                  : `${l2.availableSupportedSlots.length} Ready`
+                                  ? `ชั้น ${lv} เต็มแล้ว`
+                                  : `L${lv} Full`
                                 : isThai
-                                ? "รอฐานชั้น 1 (≥2 ม้วน)"
-                                : "Needs L1 Base"}
+                                ? `ต้องมีชั้น ${lv - 1} ติดกัน 2 ลูก`
+                                : `Needs 2 adjacent L${lv - 1}`}
                             </span>
-                          </div>
-                        </div>
-
-                        <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all ${
-                              l2.isFull ? "bg-red-500" : "bg-indigo-500"
-                            }`}
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-slate-500 dark:text-slate-400">
-                            {isThai
-                              ? `วางอยู่แล้ว ${l2.occupiedCount}/${l2.capacity} ม้วน`
-                              : `${l2.occupiedCount}/${l2.capacity} coils stacked`}
-                          </span>
-                          <span className="font-mono font-extrabold text-indigo-700 dark:text-indigo-300">
-                            {isThai ? "พิกัดถัดไป:" : "Next:"}{" "}
-                            {inboundRowOccupancy.door}/{inboundRowOccupancy.row}/2/{l2.nextSeq}
-                          </span>
+                          )}
                         </div>
                       </button>
                     );
-                  })()}
+                  })}
                 </div>
 
-                {/* Live Mini Pyramid Slot Map + Editable 4-Part Location Code */}
+                {/* Live Mini Pyramid Slot Map (4 Tiers Max: L4 down to L1) + Editable 4-Part Location Code */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 pt-1">
                   {/* Visual Row Slot Occupancy Map */}
                   <div className="lg:col-span-7 p-2.5 rounded-lg bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] space-y-1.5">
-                    <div className="flex items-center justify-between text-[10.5px] font-bold text-slate-500 dark:text-slate-400">
-                      <span>
-                        {isThai
-                          ? `ผังช่องวางปัจจุบัน: ประตู ${inboundRowOccupancy.door} แถว ${inboundRowOccupancy.row}`
-                          : `Live Row Map: Door ${inboundRowOccupancy.door} Row ${inboundRowOccupancy.row}`}
-                      </span>
-                      <div className="flex items-center gap-2.5 text-[10px]">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10.5px] font-bold text-slate-500 dark:text-slate-400">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>
+                          {isThai
+                            ? `ผังช่องวางปัจจุบัน (สูงสุด ${MAX_STACK_LEVEL} ชั้น): ประตู ${inboundRowOccupancy.door} แถว ${inboundRowOccupancy.row}`
+                            : `Live Row Map (Max ${MAX_STACK_LEVEL} Levels): ${inboundRowOccupancy.door} Row ${inboundRowOccupancy.row}`}
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#0a1428] border border-slate-200 dark:border-[#1e3a5f] text-[10px]">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            {isThai ? "ฐาน/แถว:" : "Base/Row:"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleChangeWarehouseBaseSlots(warehouseBaseSlotsPerRow - 1)}
+                            disabled={warehouseBaseSlotsPerRow <= MIN_BASE_SLOTS_PER_ROW}
+                            className="w-4 h-4 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-40 inline-flex items-center justify-center cursor-pointer"
+                            title={isThai ? "ลดจำนวนลูกต่อแถว" : "Decrease coils per row"}
+                          >
+                            <Minus size={10} />
+                          </button>
+                          <span className="font-mono font-black text-emerald-700 dark:text-emerald-300 px-0.5">
+                            {warehouseBaseSlotsPerRow}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleChangeWarehouseBaseSlots(warehouseBaseSlotsPerRow + 1)}
+                            disabled={warehouseBaseSlotsPerRow >= MAX_BASE_SLOTS_PER_ROW}
+                            className="w-4 h-4 rounded bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-40 inline-flex items-center justify-center cursor-pointer"
+                            title={isThai ? "เพิ่มจำนวนลูกต่อแถว" : "Increase coils per row"}
+                          >
+                            <Plus size={10} />
+                          </button>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-[10px]">
                         <span className="inline-flex items-center gap-1">
                           <span className="w-2 h-2 rounded-xs bg-sky-500" />
                           {isThai ? "มีม้วน" : "Used"}
@@ -3141,97 +3310,120 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                           {isThai ? "ตำแหน่งถัดไป" : "Next"}
                         </span>
                         <span className="inline-flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-xs bg-slate-300 dark:bg-slate-700" />
-                          {isThai ? "ว่าง" : "Empty"}
+                          <span className="w-2 h-2 rounded-xs bg-indigo-400" />
+                          {isThai ? "ซ้อนได้" : "Ready"}
+                        </span>
+                        <span className="inline-flex items-center gap-1">
+                          <span className="w-2 h-2 rounded-xs border border-dashed border-slate-400 bg-slate-200 dark:bg-slate-800" />
+                          {isThai ? "ล็อก (ขาดฐาน)" : "No Base"}
                         </span>
                       </div>
                     </div>
 
-                    {/* Level 2 Row (7 slots, offset half-width like pyramid) */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-10 text-[10px] font-bold text-indigo-500 shrink-0">
-                        {isThai ? "ชั้น 2" : "L2"}
-                      </span>
-                      <div className="flex items-center gap-1 pl-3 flex-wrap">
-                        {Array.from(
-                          { length: inboundRowOccupancy.level2.capacity },
-                          (_, i) => i + 1
-                        ).map((slotNum) => {
-                          const isUsed = inboundRowOccupancy.level2.occupiedSlots.includes(slotNum);
-                          const isNextTarget =
-                            effectiveInboundLevel === 2 && effectiveInboundSeq === slotNum;
-                          const isSupported =
-                            inboundRowOccupancy.level2.supportedSlots.includes(slotNum);
-                          return (
-                            <button
-                              key={`L2-${slotNum}`}
-                              type="button"
-                              onClick={() => {
-                                setInboundLevel(2);
-                                setInboundLevelManualOverride(true);
-                                setInboundManualLocationOverride(
-                                  `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/2/${slotNum}`
-                                );
-                                focusInboundBatchInput();
-                              }}
-                              title={`${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/2/${slotNum}`}
-                              className={`w-7 h-6 rounded text-[10px] font-mono font-black border transition-all cursor-pointer ${
-                                isNextTarget
-                                  ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30"
-                                  : isUsed
-                                  ? "bg-sky-600 text-white border-sky-500"
-                                  : isSupported
-                                  ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700"
-                                  : "bg-slate-100 dark:bg-[#0a1428] text-slate-400 border-slate-200 dark:border-slate-800"
-                              }`}
-                            >
-                              {slotNum}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    {/* Pyramid Tiers from Level 4 (Top) down to Level 1 (Floor Base) */}
+                    {([4, 3, 2, 1] as StackLevel[]).map((lv) => {
+                      const lvInfo = inboundRowOccupancy.levels[lv];
+                      const lowerInfo = lv >= 2 ? inboundRowOccupancy.levels[(lv - 1) as StackLevel] : null;
+                      const labelColorClass =
+                        lv === 1
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : lv === 2
+                          ? "text-indigo-500"
+                          : lv === 3
+                          ? "text-violet-500"
+                          : "text-amber-500";
+                      const readySlotClass =
+                        lv === 1
+                          ? "bg-slate-100 dark:bg-[#0a1428] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400 cursor-pointer"
+                          : lv === 2
+                          ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 border-indigo-400 dark:border-indigo-600 hover:bg-indigo-100 cursor-pointer"
+                          : lv === 3
+                          ? "bg-violet-50 dark:bg-violet-950/50 text-violet-600 dark:text-violet-300 border-violet-400 dark:border-violet-600 hover:bg-violet-100 cursor-pointer"
+                          : "bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-300 border-amber-400 dark:border-amber-600 hover:bg-amber-100 cursor-pointer";
+                      const indentPx = (lv - 1) * 14;
 
-                    {/* Level 1 Row (8 floor base slots) */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-10 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-                        {isThai ? "ชั้น 1" : "L1"}
+                      return (
+                        <div key={`tier-${lv}`} className="flex items-center gap-1.5">
+                          <span className={`w-10 text-[10px] font-bold shrink-0 ${labelColorClass}`}>
+                            {isThai ? `ชั้น ${lv}` : `L${lv}`}
+                          </span>
+                          <div
+                            className="flex items-center gap-1 flex-wrap"
+                            style={{ paddingLeft: `${indentPx}px` }}
+                          >
+                            {Array.from({ length: lvInfo.capacity }, (_, i) => i + 1).map((slotNum) => {
+                              const isUsed = lvInfo.occupiedSlots.includes(slotNum);
+                              const isSupported = lv === 1 || lvInfo.supportedSlots.includes(slotNum);
+                              const isNextTarget =
+                                effectiveInboundLevel === lv &&
+                                effectiveInboundSeq === slotNum &&
+                                isSupported;
+                              const isLockedSlot = lv >= 2 && !isUsed && !isSupported;
+                              const missingBase =
+                                lowerInfo !== null
+                                  ? [slotNum, slotNum + 1].filter(
+                                      (s) => !lowerInfo.occupiedSlots.includes(s)
+                                    )
+                                  : [];
+
+                              return (
+                                <button
+                                  key={`L${lv}-${slotNum}`}
+                                  type="button"
+                                  aria-disabled={isLockedSlot}
+                                  onClick={() => {
+                                    if (lv >= 2 && !isSupported) {
+                                      playBeep("error");
+                                      showToast(
+                                        isThai
+                                          ? `ไม่สามารถวางชั้นที่ ${lv} ลูกที่ ${slotNum} (${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}) ได้ — ต้องมีฐานชั้นที่ ${lv - 1} ลูกที่ ${slotNum} และลูกที่ ${slotNum + 1} รองรับก่อน (ยังขาดลูกที่ ${missingBase.join(" และ ")})`
+                                          : `Cannot place on Level ${lv} Slot ${slotNum} — requires Level ${lv - 1} base coils #${slotNum} and #${slotNum + 1}`,
+                                        "error"
+                                      );
+                                      focusInboundBatchInput();
+                                      return;
+                                    }
+                                    setInboundLevel(lv);
+                                    setInboundLevelManualOverride(true);
+                                    setInboundManualLocationOverride(
+                                      `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}`
+                                    );
+                                    focusInboundBatchInput();
+                                  }}
+                                  title={
+                                    isLockedSlot
+                                      ? isThai
+                                        ? `วางไม่ได้: ชั้น ${lv} ลูกที่ ${slotNum} ต้องมีฐานชั้น ${lv - 1} ลูกที่ ${slotNum} และลูกที่ ${slotNum + 1} รองรับก่อน`
+                                        : `Locked: L${lv} #${slotNum} requires L${lv - 1} #${slotNum} & #${slotNum + 1}`
+                                      : `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}`
+                                  }
+                                  className={`w-7 h-6 rounded text-[10px] font-mono font-black border transition-all inline-flex items-center justify-center ${
+                                    isNextTarget
+                                      ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30 cursor-pointer"
+                                      : isUsed
+                                      ? "bg-sky-600 text-white border-sky-500 cursor-pointer"
+                                      : isSupported
+                                      ? readySlotClass
+                                      : "bg-slate-100/70 dark:bg-[#091224] text-slate-400/70 border-dashed border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-65"
+                                  }`}
+                                >
+                                  {slotNum}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-0.5 flex items-center gap-1">
+                      <ShieldCheck size={11} className="text-indigo-500 shrink-0" />
+                      <span>
+                        {isThai
+                          ? `จำกัดความสูงสูงสุด ${MAX_STACK_LEVEL} ชั้น · การวางชั้น 2–${MAX_STACK_LEVEL} ลูกที่ k ต้องมีฐานชั้นล่างลูกที่ k และ k+1 รองรับครบทั้ง 2 ลูก`
+                          : `Max ${MAX_STACK_LEVEL} levels · Upper levels (L2–L${MAX_STACK_LEVEL}) slot k require BOTH lower-level coils #k and #(k+1).`}
                       </span>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {Array.from(
-                          { length: inboundRowOccupancy.level1.capacity },
-                          (_, i) => i + 1
-                        ).map((slotNum) => {
-                          const isUsed = inboundRowOccupancy.level1.occupiedSlots.includes(slotNum);
-                          const isNextTarget =
-                            effectiveInboundLevel === 1 && effectiveInboundSeq === slotNum;
-                          return (
-                            <button
-                              key={`L1-${slotNum}`}
-                              type="button"
-                              onClick={() => {
-                                setInboundLevel(1);
-                                setInboundLevelManualOverride(true);
-                                setInboundManualLocationOverride(
-                                  `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/1/${slotNum}`
-                                );
-                                focusInboundBatchInput();
-                              }}
-                              title={`${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/1/${slotNum}`}
-                              className={`w-7 h-6 rounded text-[10px] font-mono font-black border transition-all cursor-pointer ${
-                                isNextTarget
-                                  ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30"
-                                  : isUsed
-                                  ? "bg-sky-600 text-white border-sky-500"
-                                  : "bg-slate-100 dark:bg-[#0a1428] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400"
-                              }`}
-                            >
-                              {slotNum}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    </p>
                   </div>
 
                   {/* Editable 4-Part Location Code & Meaning Breakdown */}
@@ -3242,32 +3434,67 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                         : "Location Code (Door/Row/Level/Seq):"}
                     </label>
                     <div className="relative flex items-center">
-                      <MapPin size={15} className="absolute left-3 text-emerald-500" />
+                      <MapPin
+                        size={15}
+                        className={`absolute left-3 ${
+                          inboundPlacementValidation.valid ? "text-emerald-500" : "text-red-500"
+                        }`}
+                      />
                       <input
                         type="text"
                         value={effectiveInboundLocation}
                         onChange={(e) => handleManualInboundLocationChange(e.target.value)}
                         placeholder="เช่น E7/1/2/3"
-                        className="w-full h-10 pl-9 pr-3 rounded-lg text-sm font-mono font-black border border-emerald-400 dark:border-emerald-600 bg-white dark:bg-[#111e38] text-emerald-700 dark:text-emerald-300"
+                        className={`w-full h-10 pl-9 pr-3 rounded-lg text-sm font-mono font-black border bg-white dark:bg-[#111e38] ${
+                          inboundPlacementValidation.valid
+                            ? "border-emerald-400 dark:border-emerald-600 text-emerald-700 dark:text-emerald-300"
+                            : "border-red-500 dark:border-red-500 text-red-600 dark:text-red-400 ring-2 ring-red-500/20"
+                        }`}
                       />
                     </div>
-                    <div className="text-[10.5px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span>
-                        <strong className="text-slate-700 dark:text-slate-200">{inboundRowOccupancy.door}</strong> = {isThai ? "ประตู" : "Door"}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        <strong className="text-slate-700 dark:text-slate-200">/{inboundRowOccupancy.row}</strong> = {isThai ? "แถว" : "Row"}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundLevel}</strong> = {isThai ? "ชั้น" : "Level"}
-                      </span>
-                      <span>·</span>
-                      <span>
-                        <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundSeq}</strong> = {isThai ? "ลำดับวางต่อ" : "Seq"}
-                      </span>
-                    </div>
+                    {!inboundPlacementValidation.valid ? (
+                      <div className="p-2 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/80 text-[10.5px] text-red-700 dark:text-red-300 space-y-1">
+                        <div className="flex items-start gap-1.5 font-bold">
+                          <AlertTriangle size={13} className="shrink-0 mt-0.5 text-red-500" />
+                          <span>
+                            {isThai
+                              ? inboundPlacementValidation.reasonTh
+                              : inboundPlacementValidation.reasonEn}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setInboundLevelManualOverride(false);
+                            setInboundManualLocationOverride(null);
+                            focusInboundBatchInput();
+                          }}
+                          className="text-[10px] font-extrabold underline text-red-700 dark:text-red-200 hover:text-red-900 cursor-pointer"
+                        >
+                          {isThai
+                            ? `เปลี่ยนไปใช้พิกัดแนะนำ (${inboundPlacementValidation.recommendedLocation})`
+                            : `Use recommended (${inboundPlacementValidation.recommendedLocation})`}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-[10.5px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span>
+                          <strong className="text-slate-700 dark:text-slate-200">{inboundRowOccupancy.door}</strong> = {isThai ? "ประตู" : "Door"}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          <strong className="text-slate-700 dark:text-slate-200">/{inboundRowOccupancy.row}</strong> = {isThai ? "แถว" : "Row"}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundLevel}</strong> = {isThai ? "ชั้น" : "Level"}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundSeq}</strong> = {isThai ? "ลำดับวางต่อ" : "Seq"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -4586,8 +4813,22 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                   type="text"
                   value={relocateTargetLocation}
                   onChange={(e) => setRelocateTargetLocation(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 rounded-lg text-xs font-mono font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930]"
+                  className={`w-full px-3 py-2 rounded-lg text-xs font-mono font-bold border bg-white dark:bg-[#0c1930] ${
+                    relocatePlacementValidation && !relocatePlacementValidation.valid
+                      ? "border-red-500 text-red-600 dark:text-red-400"
+                      : "border-slate-300 dark:border-[#1e3a5f]"
+                  }`}
                 />
+                {relocatePlacementValidation && !relocatePlacementValidation.valid && (
+                  <p className="mt-1 text-[10.5px] font-bold text-red-600 dark:text-red-400 flex items-start gap-1">
+                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                    <span>
+                      {isThai
+                        ? relocatePlacementValidation.reasonTh
+                        : relocatePlacementValidation.reasonEn}
+                    </span>
+                  </p>
+                )}
               </div>
               <div className="flex items-end gap-2">
                 <button
@@ -5267,6 +5508,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
           coilSapMap={coilSapMap}
           isThai={isThai}
           isCloudLoading={isCloudLoading}
+          baseSlotsPerRow={warehouseBaseSlotsPerRow}
+          onChangeBaseSlotsPerRow={handleChangeWarehouseBaseSlots}
         />
       )}
 

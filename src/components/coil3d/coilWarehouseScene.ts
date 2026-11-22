@@ -459,7 +459,7 @@ export class CoilWarehouseSceneEngine {
     // 2. Scene, atmosphere, and IBL RoomEnvironment
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b1324);
-    this.scene.fog = new THREE.Fog(0x0b1324, 72, 185);
+    this.scene.fog = new THREE.Fog(0x0b1324, 95, 250);
 
     this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
     this.envRenderTarget = this.pmremGenerator.fromScene(new RoomEnvironment(), 0.04);
@@ -467,7 +467,7 @@ export class CoilWarehouseSceneEngine {
     this.scene.environmentIntensity = 0.65;
 
     // 3. Camera & OrbitControls
-    this.camera = new THREE.PerspectiveCamera(42, width / height, 0.3, 350);
+    this.camera = new THREE.PerspectiveCamera(42, width / height, 0.3, 460);
     this.camera.position.set(27, 20, 31);
 
     this.controls = new OrbitControls(this.camera, canvas);
@@ -475,7 +475,7 @@ export class CoilWarehouseSceneEngine {
     this.controls.dampingFactor = 0.08;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.04;
     this.controls.minDistance = 6;
-    this.controls.maxDistance = 95;
+    this.controls.maxDistance = 165;
     this.controls.target.set(0, 1.8, 0);
     this.controls.update();
 
@@ -484,13 +484,13 @@ export class CoilWarehouseSceneEngine {
     this.scene.add(hemi);
 
     const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.45);
-    keyLight.position.set(26, 38, 28);
+    keyLight.position.set(28, 42, 30);
     if (!this.isSoftwareGl) {
       keyLight.castShadow = true;
       keyLight.shadow.mapSize.set(2048, 2048);
       keyLight.shadow.camera.near = 5;
-      keyLight.shadow.camera.far = 120;
-      const d = 32;
+      keyLight.shadow.camera.far = 180;
+      const d = 48;
       keyLight.shadow.camera.left = -d;
       keyLight.shadow.camera.right = d;
       keyLight.shadow.camera.top = d;
@@ -505,7 +505,7 @@ export class CoilWarehouseSceneEngine {
     this.scene.add(rimLight);
 
     // Exterior horizon industrial apron ground plane (matches reference image)
-    const groundGeo = new THREE.PlaneGeometry(360, 360);
+    const groundGeo = new THREE.PlaneGeometry(480, 480);
     const groundMat = new THREE.MeshStandardMaterial({
       color: 0x3b4454,
       roughness: 0.94,
@@ -731,8 +731,8 @@ export class CoilWarehouseSceneEngine {
 
     const W = layout.group.slabWidth;
     const D = layout.group.slabDepth;
-    const bayH = 8.4;
-    const railY = 6.2;
+    const bayH = 10.2;
+    const railY = 8.0;
 
     // 1. Concrete Warehouse Slab
     const floorTex = createWarehouseFloorTexture(

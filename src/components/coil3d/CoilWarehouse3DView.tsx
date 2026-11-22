@@ -16,6 +16,8 @@ import {
   Layers,
   MapPin,
   Box,
+  Minus,
+  Plus,
 } from "lucide-react";
 import {
   CoilSapMasterItem,
@@ -24,10 +26,16 @@ import {
 import {
   BUILDING_GROUPS,
   BuildingGroupId,
+  DEFAULT_BASE_SLOTS_PER_ROW,
+  MAX_BASE_SLOTS_PER_ROW,
+  MAX_STACK_LEVEL,
+  MIN_BASE_SLOTS_PER_ROW,
   WarehouseSlot3D,
   SlotVisualStatus,
   buildBuildingWarehouseLayout,
+  clampBaseSlotsPerRow,
   getGroupCoilCounts,
+  getMaxCoilsPerRow,
   parseCoilLocationTo3D,
 } from "./coilWarehouseLayout";
 import {
@@ -41,6 +49,8 @@ interface CoilWarehouse3DViewProps {
   coilSapMap: Map<string, CoilSapMasterItem>;
   isThai: boolean;
   isCloudLoading?: boolean;
+  baseSlotsPerRow?: number;
+  onChangeBaseSlotsPerRow?: (slots: number) => void;
 }
 
 const STATUS_BADGE_META: Record<
@@ -90,8 +100,11 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
   coilSapMap,
   isThai,
   isCloudLoading = false,
+  baseSlotsPerRow,
+  onChangeBaseSlotsPerRow,
 }) => {
   const [selectedGroupId, setSelectedGroupId] = useState<BuildingGroupId>("E7-E8");
+  const [internalBaseSlots, setInternalBaseSlots] = useState<number>(DEFAULT_BASE_SLOTS_PER_ROW);
   const [doorFilter, setDoorFilter] = useState<string>("ALL");
   const [rowFilter, setRowFilter] = useState<string>("ALL");
   const [levelFilter, setLevelFilter] = useState<string>("ALL");
@@ -114,6 +127,19 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<CoilWarehouseSceneEngine | null>(null);
 
+  const effectiveBaseSlotsPerRow = clampBaseSlotsPerRow(
+    baseSlotsPerRow !== undefined ? baseSlotsPerRow : internalBaseSlots
+  );
+
+  const handleUpdateBaseSlots = (nextVal: number) => {
+    const clamped = clampBaseSlotsPerRow(nextVal);
+    if (onChangeBaseSlotsPerRow) {
+      onChangeBaseSlotsPerRow(clamped);
+    } else {
+      setInternalBaseSlots(clamped);
+    }
+  };
+
   // Live coil counts across all 4 building groups
   const groupCounts = useMemo(
     () => getGroupCoilCounts(activeCoils),
@@ -122,8 +148,14 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
 
   // Compute current building group 3D pyramid layout from live stock
   const layout = useMemo(
-    () => buildBuildingWarehouseLayout(selectedGroupId, activeCoils, coilSapMap),
-    [selectedGroupId, activeCoils, coilSapMap]
+    () =>
+      buildBuildingWarehouseLayout(
+        selectedGroupId,
+        activeCoils,
+        coilSapMap,
+        effectiveBaseSlotsPerRow
+      ),
+    [selectedGroupId, activeCoils, coilSapMap, effectiveBaseSlotsPerRow]
   );
 
   // Quick live search suggestions across all buildings
@@ -566,8 +598,8 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
             </div>
             <div className="text-[10.5px] text-slate-400 mt-0.5">
               {isThai
-                ? `ประตู: ${layout.doors.join(", ")} · ว่าง ${layout.stats.emptyFloorCount}/${layout.stats.totalFloorCount} ช่องฐาน · จอง ${layout.stats.reservedCount} ม้วน`
-                : `Doors: ${layout.doors.join(", ")} · Empty ${layout.stats.emptyFloorCount}/${layout.stats.totalFloorCount} floor slots`}
+                ? `ประตู: ${layout.doors.join(", ")} · แถวละ ${layout.group.baseSlotsPerRow} ฐาน · สูงสุด ${MAX_STACK_LEVEL} ชั้น (${getMaxCoilsPerRow(layout.group.baseSlotsPerRow)} ม้วน/แถว) · ว่าง ${layout.stats.emptyFloorCount}/${layout.stats.totalFloorCount} ช่องฐาน`
+                : `Doors: ${layout.doors.join(", ")} · ${layout.group.baseSlotsPerRow} base/row · Max ${MAX_STACK_LEVEL} levels (${getMaxCoilsPerRow(layout.group.baseSlotsPerRow)}/row) · Empty ${layout.stats.emptyFloorCount}/${layout.stats.totalFloorCount}`}
             </div>
           </div>
         </div>
@@ -697,6 +729,21 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                       )}
                     </div>
 
+                    {selectedSlot.level >= 2 && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-indigo-500/15 border border-indigo-400/35 text-[11px] text-indigo-200 font-semibold flex items-center justify-between gap-2">
+                        <span>
+                          {isThai
+                            ? `ฐานรองรับ (ชั้น ${selectedSlot.level - 1}):`
+                            : `Base Support (L${selectedSlot.level - 1}):`}
+                        </span>
+                        <span className="font-mono font-bold text-indigo-300">
+                          {isThai
+                            ? `ลูกที่ ${selectedSlot.slotIndex} & ลูกที่ ${selectedSlot.slotIndex + 1}`
+                            : `#${selectedSlot.slotIndex} & #${selectedSlot.slotIndex + 1}`}
+                        </span>
+                      </div>
+                    )}
+
                     {selectedSlot.coil.status === "staged" && (
                       <div className="px-2.5 py-1.5 rounded-lg bg-orange-500/15 border border-orange-500/40 text-[11px] text-orange-200 font-semibold">
                         {isThai ? "จองเตรียมเบิก:" : "Staged Order:"}{" "}
@@ -744,7 +791,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                         {isThai ? "พิกัดช่องจัดเก็บ:" : "Slot Coordinate:"}
                       </span>
                       <span className="font-mono font-bold text-emerald-300">
-                        {selectedSlot.door}/{selectedSlot.row} (S{selectedSlot.slotIndex})
+                        {selectedSlot.door}/{selectedSlot.row}/1/{selectedSlot.slotIndex}
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[11px]">
@@ -759,8 +806,8 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                   </div>
                   <p className="text-[11px] text-slate-400 leading-relaxed m-0">
                     {isThai
-                      ? `ช่องฐานชั้นที่ 1 นี้พร้อมรับเข้าเหล็กม้วนใหม่ เมื่อสแกนรับเข้าที่ Location "${selectedSlot.door}/${selectedSlot.row}" ม้วนจะปรากฏบนผัง 3D ทันที`
-                      : `Floor saddle ready for inbound. Scanning into "${selectedSlot.door}/${selectedSlot.row}" immediately places the coil here.`}
+                      ? `ช่องฐานชั้นที่ 1 นี้พร้อมรับเข้าเหล็กม้วนใหม่ (${selectedSlot.door}/${selectedSlot.row}/1/${selectedSlot.slotIndex}) สามารถวางซ้อนได้สูงสุด ${MAX_STACK_LEVEL} ชั้น โดยชั้นที่ 2–${MAX_STACK_LEVEL} ลูกลำดับ k ต้องมีฐานชั้นล่างลูกที่ k และ k+1 รองรับครบทั้ง 2 ลูก`
+                      : `Floor saddle ready for inbound (${selectedSlot.door}/${selectedSlot.row}/1/${selectedSlot.slotIndex}). Supports up to ${MAX_STACK_LEVEL} levels; upper slot k requires lower coils #k and #(k+1).`}
                   </p>
                 </div>
               )}
@@ -880,6 +927,53 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                       </option>
                     ))}
                   </select>
+
+                  {/* Base Coils Per Row Stepper (Expandable 6..30 coils/row) */}
+                  <div
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#091020] border border-[#243961] text-xs text-slate-200"
+                    title={
+                      isThai
+                        ? "ปรับจำนวนม้วนฐานชั้นที่ 1 ต่อ 1 แถว (ขยายได้ 6 - 30 ลูก/แถว)"
+                        : "Adjust Level 1 base coils per row (6 - 30 coils/row)"
+                    }
+                  >
+                    <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap">
+                      {isThai ? "ฐาน/แถว:" : "Base/Row:"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateBaseSlots(effectiveBaseSlotsPerRow - 1)}
+                      disabled={effectiveBaseSlotsPerRow <= MIN_BASE_SLOTS_PER_ROW}
+                      className="w-5 h-5 rounded bg-[#13203b] hover:bg-[#1e3358] disabled:opacity-40 text-slate-200 inline-flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+                      aria-label="Decrease coils per row"
+                    >
+                      <Minus size={11} />
+                    </button>
+                    <select
+                      value={effectiveBaseSlotsPerRow}
+                      onChange={(e) => handleUpdateBaseSlots(Number(e.target.value))}
+                      aria-label="Coils per row"
+                      className="bg-transparent text-xs font-mono font-extrabold text-emerald-300 focus:outline-none cursor-pointer px-0.5"
+                    >
+                      {Array.from(
+                        { length: MAX_BASE_SLOTS_PER_ROW - MIN_BASE_SLOTS_PER_ROW + 1 },
+                        (_, i) => MIN_BASE_SLOTS_PER_ROW + i
+                      ).map((n) => (
+                        <option key={n} value={n} className="bg-[#091020] text-slate-100">
+                          {n} {isThai ? "ลูก" : "coils"}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateBaseSlots(effectiveBaseSlotsPerRow + 1)}
+                      disabled={effectiveBaseSlotsPerRow >= MAX_BASE_SLOTS_PER_ROW}
+                      className="w-5 h-5 rounded bg-[#13203b] hover:bg-[#1e3358] disabled:opacity-40 text-slate-200 inline-flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+                      aria-label="Increase coils per row"
+                    >
+                      <Plus size={11} />
+                    </button>
+                  </div>
 
                   {/* Pending SAP Toggle Button */}
                   <button

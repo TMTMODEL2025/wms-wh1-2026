@@ -23,6 +23,32 @@ export interface BuildingGroupConfig {
   slabDepth: number;
 }
 
+export const DEFAULT_BASE_SLOTS_PER_ROW = 12;
+export const MIN_BASE_SLOTS_PER_ROW = 6;
+export const MAX_BASE_SLOTS_PER_ROW = 30;
+export const MAX_STACK_LEVEL = 4;
+export type StackLevel = 1 | 2 | 3 | 4;
+export const STACK_LEVELS: StackLevel[] = [1, 2, 3, 4];
+
+export function clampBaseSlotsPerRow(value?: number): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_BASE_SLOTS_PER_ROW;
+  return Math.max(MIN_BASE_SLOTS_PER_ROW, Math.min(MAX_BASE_SLOTS_PER_ROW, n));
+}
+
+export function getLevelCapacity(baseSlotsPerRow: number, level: number): number {
+  if (level < 1 || level > MAX_STACK_LEVEL) return 0;
+  return Math.max(0, baseSlotsPerRow - (level - 1));
+}
+
+export function getMaxCoilsPerRow(baseSlotsPerRow: number): number {
+  let total = 0;
+  for (let lv = 1; lv <= MAX_STACK_LEVEL; lv++) {
+    total += getLevelCapacity(baseSlotsPerRow, lv);
+  }
+  return total;
+}
+
 export const BUILDING_GROUPS: BuildingGroupConfig[] = [
   {
     id: "E7-E8",
@@ -32,9 +58,9 @@ export const BUILDING_GROUPS: BuildingGroupConfig[] = [
     subtitleEn: "Main Coil Bay (2 Doors)",
     doors: ["E7", "E8"],
     defaultRowsPerDoor: 8,
-    baseSlotsPerRow: 8,
+    baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
     slabWidth: 42,
-    slabDepth: 24,
+    slabDepth: 28,
   },
   {
     id: "H7-H8",
@@ -44,9 +70,9 @@ export const BUILDING_GROUPS: BuildingGroupConfig[] = [
     subtitleEn: "H-Line Coil Bay (2 Doors)",
     doors: ["H7", "H8"],
     defaultRowsPerDoor: 8,
-    baseSlotsPerRow: 8,
+    baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
     slabWidth: 42,
-    slabDepth: 24,
+    slabDepth: 28,
   },
   {
     id: "05",
@@ -56,9 +82,9 @@ export const BUILDING_GROUPS: BuildingGroupConfig[] = [
     subtitleEn: "Storage Building 05",
     doors: ["05"],
     defaultRowsPerDoor: 10,
-    baseSlotsPerRow: 8,
+    baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
     slabWidth: 32,
-    slabDepth: 24,
+    slabDepth: 28,
   },
   {
     id: "21",
@@ -68,9 +94,9 @@ export const BUILDING_GROUPS: BuildingGroupConfig[] = [
     subtitleEn: "Storage Building 21",
     doors: ["21"],
     defaultRowsPerDoor: 10,
-    baseSlotsPerRow: 8,
+    baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
     slabWidth: 32,
-    slabDepth: 24,
+    slabDepth: 28,
   },
 ];
 
@@ -200,25 +226,25 @@ export function parseCoilLocationTo3D(rawLocation?: string): ParsedCoilLocation 
     }
   }
 
-  // Optional explicit level (parts[2], e.g. 1, 2, 3)
+  // Optional explicit level (parts[2], e.g. 1..4; parse higher integers too so validation can reject > 4)
   let explicitLevel: number | undefined;
   if (third) {
     const lvMatch = third.match(/\d+/);
     if (lvMatch) {
       const lv = parseInt(lvMatch[0], 10);
-      if (Number.isFinite(lv) && lv >= 1 && lv <= 3) {
+      if (Number.isFinite(lv) && lv >= 1 && lv <= 99) {
         explicitLevel = lv;
       }
     }
   }
 
-  // Optional explicit sequence slot (parts[3], e.g. 1..20)
+  // Optional explicit sequence slot (parts[3], e.g. 1..50)
   let explicitSlotIndex: number | undefined;
   if (fourth) {
     const slotMatch = fourth.match(/\d+/);
     if (slotMatch) {
       const slot = parseInt(slotMatch[0], 10);
-      if (Number.isFinite(slot) && slot >= 1 && slot <= 30) {
+      if (Number.isFinite(slot) && slot >= 1 && slot <= 50) {
         explicitSlotIndex = slot;
       }
     }
@@ -262,13 +288,13 @@ export function isCoilBlocked(coil: CoilStockRecord): boolean {
 /**
  * Computes auto-pyramid (slotIndex, level) for the n-th coil (0-based) placed inside a row.
  * Coils stack from the road edge (S1) going back into the bay (S2..SB),
- * with Level 2 nesting into the grooves between adjacent Level 1 coils.
+ * filling pyramid grooves up to MAX_STACK_LEVEL (4 levels max).
  */
 function computePyramidPositionInRow(
   orderIndex: number,
   baseSlotsPerRow: number
 ): { level: number; slotIndex: number } {
-  const B = Math.max(2, baseSlotsPerRow);
+  const B = Math.max(4, baseSlotsPerRow);
 
   if (orderIndex === 0) return { level: 1, slotIndex: 1 };
   if (orderIndex === 1) return { level: 1, slotIndex: 2 };
@@ -286,22 +312,31 @@ function computePyramidPositionInRow(
     return { level: 2, slotIndex: 2 + pair };
   }
 
-  // Overflow into Level 3 (1..(B-2))
+  // Level 3 (1..(B-2))
   const l3Index = orderIndex - twoLevelCap;
-  const maxL3 = Math.max(1, B - 2);
+  const maxL3 = Math.max(0, B - 2);
   if (l3Index < maxL3) {
     return { level: 3, slotIndex: 1 + l3Index };
   }
 
-  // Extreme overflow beyond L3: extend along Level 1 beyond B
-  const extraIdx = l3Index - maxL3;
+  // Level 4 (1..(B-3)) — strictly capped at 4 levels max
+  const l4Index = l3Index - maxL3;
+  const maxL4 = Math.max(0, B - 3);
+  if (l4Index < maxL4) {
+    return { level: 4, slotIndex: 1 + l4Index };
+  }
+
+  // Overflow beyond 4-level pyramid capacity: extend along Level 1 floor beyond B (never level 5+)
+  const extraIdx = l4Index - maxL4;
   return { level: 1, slotIndex: B + 1 + extraIdx };
 }
 
 /**
  * Resolves exact (level, slotIndex) assignments for all coils in a single (door, row) bucket.
- * Coils with explicit Door/Row/Level/Seq coordinates take their exact slot first;
- * legacy coils without explicit level/seq fill remaining pyramid slots without collision.
+ * Enforces the physical pyramid base-support rule AND maximum height of 4 levels:
+ * - Level 1: floor base.
+ * - Level L (2..4) slot k requires BOTH Level (L-1) slot k and slot k+1 beneath it.
+ * - Never renders any coil above Level 4 or floating without base support.
  */
 function resolveRowCoilPlacements(
   rowCoils: CoilStockRecord[],
@@ -309,46 +344,123 @@ function resolveRowCoilPlacements(
 ): Array<{ coil: CoilStockRecord; level: number; slotIndex: number }> {
   const occupiedKeys = new Set<string>();
   const resolved: Array<{ coil: CoilStockRecord; level: number; slotIndex: number }> = [];
+
+  const explicitByLevel: Record<StackLevel, Array<{ coil: CoilStockRecord; slot?: number }>> = {
+    1: [],
+    2: [],
+    3: [],
+    4: [],
+  };
   const implicitCoils: CoilStockRecord[] = [];
 
-  const getMaxSlotsForLevel = (lv: number) =>
-    lv === 1 ? baseSlotsPerRow : lv === 2 ? Math.max(1, baseSlotsPerRow - 1) : Math.max(1, baseSlotsPerRow - 2);
-
-  // Pass 1: Honor coils with explicit level & slotIndex (e.g., E7/1/2/3)
   for (const coil of rowCoils) {
     const parsed = parseCoilLocationTo3D(coil.location);
-    if (parsed.explicitLevel && parsed.explicitSlotIndex) {
-      let lv = parsed.explicitLevel;
-      let slot = parsed.explicitSlotIndex;
-      while (occupiedKeys.has(`${lv}:${slot}`)) {
-        slot += 1;
-      }
-      occupiedKeys.add(`${lv}:${slot}`);
-      resolved.push({ coil, level: lv, slotIndex: slot });
-    } else if (parsed.explicitLevel) {
-      // Explicit level only (e.g. E7/1/2): assign next available slot on that level
-      const lv = parsed.explicitLevel;
-      let slot = 1;
-      while (occupiedKeys.has(`${lv}:${slot}`)) {
-        slot += 1;
-      }
-      occupiedKeys.add(`${lv}:${slot}`);
-      resolved.push({ coil, level: lv, slotIndex: slot });
+    if (parsed.explicitLevel && parsed.explicitLevel >= 1) {
+      // Strictly clamp any historical record > 4 to max 4
+      const clampedLv = Math.min(MAX_STACK_LEVEL, parsed.explicitLevel) as StackLevel;
+      explicitByLevel[clampedLv].push({ coil, slot: parsed.explicitSlotIndex });
     } else {
       implicitCoils.push(coil);
     }
   }
 
-  // Pass 2: Place legacy coils (e.g. E7/1) in next free pyramid slots
+  const getMaxSlotsForLevel = (lv: number) => getLevelCapacity(baseSlotsPerRow, lv);
+
+  const hasBaseSupport = (level: number, slot: number): boolean => {
+    if (level <= 1) return true;
+    if (level > MAX_STACK_LEVEL) return false;
+    return (
+      occupiedKeys.has(`${level - 1}:${slot}`) &&
+      occupiedKeys.has(`${level - 1}:${slot + 1}`)
+    );
+  };
+
+  const findNextFreeFloorSlot = (startAt = 1): number => {
+    let slot = Math.max(1, startAt);
+    while (occupiedKeys.has(`1:${slot}`)) {
+      slot += 1;
+    }
+    return slot;
+  };
+
+  const findNextFreeSupportedSlot = (level: number, preferredSlot?: number): number | null => {
+    if (level > MAX_STACK_LEVEL || level < 1) return null;
+    if (preferredSlot && preferredSlot >= 1) {
+      if (!occupiedKeys.has(`${level}:${preferredSlot}`) && hasBaseSupport(level, preferredSlot)) {
+        return preferredSlot;
+      }
+    }
+    const maxSlots = getMaxSlotsForLevel(level);
+    for (let s = 1; s <= maxSlots; s++) {
+      if (!occupiedKeys.has(`${level}:${s}`) && hasBaseSupport(level, s)) {
+        return s;
+      }
+    }
+    return null;
+  };
+
+  const settleToHighestSupportedOrFloor = (maxLevel: number, coil: CoilStockRecord, preferredSlot?: number) => {
+    for (let lv = Math.min(MAX_STACK_LEVEL, maxLevel); lv >= 2; lv--) {
+      const slot = findNextFreeSupportedSlot(lv, lv === maxLevel ? preferredSlot : undefined);
+      if (slot !== null) {
+        occupiedKeys.add(`${lv}:${slot}`);
+        resolved.push({ coil, level: lv, slotIndex: slot });
+        return;
+      }
+    }
+    const floorSlot = findNextFreeFloorSlot(1);
+    occupiedKeys.add(`1:${floorSlot}`);
+    resolved.push({ coil, level: 1, slotIndex: floorSlot });
+  };
+
+  // Pass 1: Place all explicit Level 1 floor coils first
+  for (const item of explicitByLevel[1]) {
+    const slot = findNextFreeFloorSlot(item.slot || 1);
+    occupiedKeys.add(`1:${slot}`);
+    resolved.push({ coil: item.coil, level: 1, slotIndex: slot });
+  }
+
+  // Pass 2: Place explicit Level 2 coils that already have base support; defer others for Pass 4
+  const deferredL2: Array<{ coil: CoilStockRecord; slot?: number }> = [];
+  const reservedExplicitSlots = new Set<string>();
+  for (const lv of [2, 3, 4] as StackLevel[]) {
+    for (const item of explicitByLevel[lv]) {
+      if (item.slot) reservedExplicitSlots.add(`${lv}:${item.slot}`);
+    }
+  }
+
+  for (const item of explicitByLevel[2]) {
+    if (item.slot && !occupiedKeys.has(`2:${item.slot}`) && hasBaseSupport(2, item.slot)) {
+      occupiedKeys.add(`2:${item.slot}`);
+      resolved.push({ coil: item.coil, level: 2, slotIndex: item.slot });
+    } else if (!item.slot) {
+      const supportedSlot = findNextFreeSupportedSlot(2);
+      if (supportedSlot !== null) {
+        occupiedKeys.add(`2:${supportedSlot}`);
+        resolved.push({ coil: item.coil, level: 2, slotIndex: supportedSlot });
+      } else {
+        deferredL2.push(item);
+      }
+    } else {
+      deferredL2.push(item);
+    }
+  }
+
+  // Pass 3: Place legacy/implicit coils in next free & physically supported pyramid slots (max Level 4)
   let searchIdx = 0;
   for (const coil of implicitCoils) {
     let chosen = computePyramidPositionInRow(searchIdx, baseSlotsPerRow);
-    while (occupiedKeys.has(`${chosen.level}:${chosen.slotIndex}`)) {
+    let safetyCounter = 0;
+    while (
+      occupiedKeys.has(`${chosen.level}:${chosen.slotIndex}`) ||
+      !hasBaseSupport(chosen.level, chosen.slotIndex) ||
+      (chosen.level >= 2 && reservedExplicitSlots.has(`${chosen.level}:${chosen.slotIndex}`))
+    ) {
       searchIdx += 1;
+      safetyCounter += 1;
       chosen = computePyramidPositionInRow(searchIdx, baseSlotsPerRow);
-      if (searchIdx > baseSlotsPerRow * 4) {
-        const cap = getMaxSlotsForLevel(1);
-        chosen = { level: 1, slotIndex: cap + searchIdx };
+      if (safetyCounter > baseSlotsPerRow * 8) {
+        chosen = { level: 1, slotIndex: findNextFreeFloorSlot(1) };
         break;
       }
     }
@@ -357,33 +469,50 @@ function resolveRowCoilPlacements(
     searchIdx += 1;
   }
 
+  // Pass 4: Retry deferred explicit Level 2 coils
+  for (const item of deferredL2) {
+    settleToHighestSupportedOrFloor(2, item.coil, item.slot);
+  }
+
+  // Pass 5: Place explicit Level 3 coils (require BOTH Level 2 k & k+1)
+  for (const item of explicitByLevel[3]) {
+    settleToHighestSupportedOrFloor(3, item.coil, item.slot);
+  }
+
+  // Pass 6: Place explicit Level 4 coils (require BOTH Level 3 k & k+1; max height = 4)
+  for (const item of explicitByLevel[4]) {
+    settleToHighestSupportedOrFloor(4, item.coil, item.slot);
+  }
+
   return resolved;
+}
+
+export interface LevelOccupancyInfo {
+  level: StackLevel;
+  capacity: number;
+  occupiedSlots: number[];
+  supportedSlots: number[]; // Slots where lower-level base exists (for L1: 1..capacity; for L2..L4: both L-1(k) & L-1(k+1))
+  availableSupportedSlots: number[];
+  occupiedCount: number;
+  availableCount: number;
+  isFull: boolean;
+  hasBaseSupport: boolean;
+  canPlace: boolean;
+  nextSeq: number | null;
 }
 
 export interface RowLevelRecommendation {
   door: string;
   row: number;
   baseCapacity: number;
-  level1: {
-    capacity: number;
-    occupiedSlots: number[];
-    occupiedCount: number;
-    availableCount: number;
-    isFull: boolean;
-    nextSeq: number;
-  };
-  level2: {
-    capacity: number;
-    occupiedSlots: number[];
-    supportedSlots: number[]; // Slots where both L1(k) and L1(k+1) are present
-    availableSupportedSlots: number[];
-    occupiedCount: number;
-    availableCount: number;
-    isFull: boolean;
-    hasBaseSupport: boolean;
-    nextSeq: number;
-  };
-  recommendedLevel: 1 | 2;
+  totalRowCapacity: number;
+  maxStackLevel: number;
+  levels: Record<StackLevel, LevelOccupancyInfo>;
+  level1: LevelOccupancyInfo & { nextSeq: number };
+  level2: LevelOccupancyInfo;
+  level3: LevelOccupancyInfo;
+  level4: LevelOccupancyInfo;
+  recommendedLevel: StackLevel;
   recommendedSeq: number;
   recommendedLocation: string;
   reasonTh: string;
@@ -392,13 +521,15 @@ export interface RowLevelRecommendation {
 }
 
 /**
- * Inspects live stock inside (door, row) and recommends the optimal Level (1 or 2)
- * and next sequence slot (e.g. E7/1/2/3 = Door E7, Row 1, Level 2, Seq 3).
+ * Inspects live stock inside (door, row) across Levels 1..4 (max 4 levels)
+ * and recommends the optimal Level and next sequence slot (e.g. E7/1/3/2).
+ * Strictly enforces base support: Level L (2..4) slot k requires BOTH Level (L-1) slot k and k+1.
  */
 export function getRowLevelOccupancy(
   doorInput: string,
   rowInput: number | string,
-  activeCoils: CoilStockRecord[]
+  activeCoils: CoilStockRecord[],
+  customBaseSlotsPerRow?: number
 ): RowLevelRecommendation {
   const door = String(doorInput || "E7").trim().toUpperCase();
   const parsedRowNum = parseInt(String(rowInput || "1").replace(/\D/g, ""), 10);
@@ -407,8 +538,11 @@ export function getRowLevelOccupancy(
   const groupId = KNOWN_BUILDING_TO_GROUP[door] || "E7-E8";
   const groupCfg =
     BUILDING_GROUPS.find((g) => g.id === groupId) || BUILDING_GROUPS[0];
-  const baseCapacity = groupCfg.baseSlotsPerRow; // 8 floor slots
-  const level2Capacity = Math.max(1, baseCapacity - 1); // 7 pyramid groove slots
+  const baseCapacity =
+    customBaseSlotsPerRow !== undefined
+      ? clampBaseSlotsPerRow(customBaseSlotsPerRow)
+      : groupCfg.baseSlotsPerRow;
+  const totalRowCapacity = getMaxCoilsPerRow(baseCapacity);
 
   const rowCoils = activeCoils
     .filter((c) => c.status !== "issued")
@@ -425,110 +559,311 @@ export function getRowLevelOccupancy(
 
   const placements = resolveRowCoilPlacements(rowCoils, baseCapacity);
 
-  const l1Set = new Set<number>();
-  const l2Set = new Set<number>();
+  const setsByLevel: Record<StackLevel, Set<number>> = {
+    1: new Set<number>(),
+    2: new Set<number>(),
+    3: new Set<number>(),
+    4: new Set<number>(),
+  };
+
   placements.forEach((p) => {
-    if (p.level === 1) l1Set.add(p.slotIndex);
-    if (p.level === 2) l2Set.add(p.slotIndex);
+    if (p.level >= 1 && p.level <= MAX_STACK_LEVEL) {
+      setsByLevel[p.level as StackLevel].add(p.slotIndex);
+    }
   });
 
-  const l1Occupied = Array.from(l1Set).sort((a, b) => a - b);
-  const l2Occupied = Array.from(l2Set).sort((a, b) => a - b);
+  const buildLevelInfo = (lv: StackLevel): LevelOccupancyInfo => {
+    const cap = getLevelCapacity(baseCapacity, lv);
+    const occSet = setsByLevel[lv];
+    const occupiedSlots = Array.from(occSet).sort((a, b) => a - b);
+    const countInCap = occupiedSlots.filter((s) => s >= 1 && s <= cap).length;
+    const isFull = countInCap >= cap;
+    const availableCount = Math.max(0, cap - countInCap);
 
-  // Next free slot on Level 1 (sequential after existing coils or first gap)
-  let nextL1 = 1;
-  while (l1Set.has(nextL1)) nextL1 += 1;
-  const l1CountInCap = l1Occupied.filter((s) => s >= 1 && s <= baseCapacity).length;
-  const l1IsFull = l1CountInCap >= baseCapacity;
-  const l1Available = Math.max(0, baseCapacity - l1CountInCap);
+    if (lv === 1) {
+      let nextL1 = 1;
+      while (occSet.has(nextL1)) nextL1 += 1;
+      const supportedSlots = Array.from({ length: cap }, (_, i) => i + 1);
+      const availableSupportedSlots = supportedSlots.filter((s) => !occSet.has(s));
+      return {
+        level: 1,
+        capacity: cap,
+        occupiedSlots,
+        supportedSlots,
+        availableSupportedSlots,
+        occupiedCount: occupiedSlots.length,
+        availableCount,
+        isFull,
+        hasBaseSupport: true,
+        canPlace: true,
+        nextSeq: nextL1,
+      };
+    }
 
-  // Level 2 supported pyramid slots: slot k needs L1(k) AND L1(k+1)
-  const supportedSlots: number[] = [];
-  const availableSupportedSlots: number[] = [];
-  for (let k = 1; k <= level2Capacity; k++) {
-    if (l1Set.has(k) && l1Set.has(k + 1)) {
-      supportedSlots.push(k);
-      if (!l2Set.has(k)) {
-        availableSupportedSlots.push(k);
+    const lowerSet = setsByLevel[(lv - 1) as StackLevel];
+    const supportedSlots: number[] = [];
+    const availableSupportedSlots: number[] = [];
+    for (let k = 1; k <= cap; k++) {
+      if (lowerSet.has(k) && lowerSet.has(k + 1)) {
+        supportedSlots.push(k);
+        if (!occSet.has(k)) {
+          availableSupportedSlots.push(k);
+        }
       }
     }
-  }
 
-  let nextL2 = availableSupportedSlots.length > 0 ? availableSupportedSlots[0] : 1;
-  if (availableSupportedSlots.length === 0) {
-    while (l2Set.has(nextL2)) nextL2 += 1;
-  }
+    const nextSeq = availableSupportedSlots.length > 0 ? availableSupportedSlots[0] : null;
+    return {
+      level: lv,
+      capacity: cap,
+      occupiedSlots,
+      supportedSlots,
+      availableSupportedSlots,
+      occupiedCount: occupiedSlots.length,
+      availableCount,
+      isFull,
+      hasBaseSupport: supportedSlots.length > 0,
+      canPlace: availableSupportedSlots.length > 0,
+      nextSeq,
+    };
+  };
 
-  const l2CountInCap = l2Occupied.filter((s) => s >= 1 && s <= level2Capacity).length;
-  const l2IsFull = l2CountInCap >= level2Capacity;
-  const l2Available = Math.max(0, level2Capacity - l2CountInCap);
-  const hasBaseSupport = supportedSlots.length > 0;
-  const isRowCompletelyFull = l1IsFull && l2IsFull;
+  const level1Info = buildLevelInfo(1) as LevelOccupancyInfo & { nextSeq: number };
+  const level2Info = buildLevelInfo(2);
+  const level3Info = buildLevelInfo(3);
+  const level4Info = buildLevelInfo(4);
 
-  // Smart recommendation rules:
-  // 1. If Level 1 is NOT full -> recommend Level 1 (base floor first for safety & stability),
-  //    while still letting operator choose Level 2 anytime base support exists.
-  // 2. If Level 1 IS full and Level 2 has free slots -> auto-recommend Level 2!
-  // 3. If both full -> recommend Level 2 overflow warning / suggest another row.
-  let recommendedLevel: 1 | 2 = 1;
-  let recommendedSeq = nextL1;
+  const levels: Record<StackLevel, LevelOccupancyInfo> = {
+    1: level1Info,
+    2: level2Info,
+    3: level3Info,
+    4: level4Info,
+  };
+
+  const isRowCompletelyFull =
+    level1Info.isFull && level2Info.isFull && level3Info.isFull && level4Info.isFull;
+
+  // Smart auto-recommendation across Levels 1..4:
+  // Recommend lowest level that isn't full and has valid base support.
+  let recommendedLevel: StackLevel = 1;
+  let recommendedSeq = level1Info.nextSeq;
   let reasonTh = "";
   let reasonEn = "";
 
-  if (!l1IsFull) {
+  if (!level1Info.isFull) {
     recommendedLevel = 1;
-    recommendedSeq = nextL1;
-    if (l1CountInCap === 0) {
-      reasonTh = `แถว ${row} ว่างทั้งหมด — แนะนำวางชั้น 1 ลำดับที่ ${nextL1}`;
-      reasonEn = `Row ${row} is empty — recommended Level 1, Slot ${nextL1}`;
-    } else if (availableSupportedSlots.length > 0) {
-      reasonTh = `ชั้น 1 ว่างอีก ${l1Available} ช่อง (แนะนำลำดับ ${nextL1}) · ชั้น 2 วางซ้อนได้ ${availableSupportedSlots.length} ช่อง`;
-      reasonEn = `Level 1 has ${l1Available} slots free (Next #${nextL1}) · Level 2 ready (${availableSupportedSlots.length} slots)`;
+    recommendedSeq = level1Info.nextSeq;
+    const upperReadyLevels = ([2, 3, 4] as StackLevel[]).filter((lv) => levels[lv].canPlace);
+    if (level1Info.occupiedCount === 0) {
+      reasonTh = `แถว ${row} ว่างทั้งหมด — แนะนำวางชั้น 1 ลำดับที่ ${recommendedSeq} (วางซ้อนได้สูงสุด 4 ชั้น)`;
+      reasonEn = `Row ${row} is empty — recommended Level 1, Slot ${recommendedSeq} (max 4 levels)`;
+    } else if (upperReadyLevels.length > 0) {
+      reasonTh = `ชั้น 1 ว่างอีก ${level1Info.availableCount} ช่อง (แนะนำลำดับ ${recommendedSeq}) · ชั้น ${upperReadyLevels.join(", ")} พร้อมวางซ้อนได้`;
+      reasonEn = `Level 1 has ${level1Info.availableCount} free (Next #${recommendedSeq}) · Upper levels ready: L${upperReadyLevels.join(", L")}`;
     } else {
-      reasonTh = `ชั้น 1 มี ${l1CountInCap}/${baseCapacity} ม้วน — แนะนำวางต่อชั้น 1 ลำดับที่ ${nextL1}`;
-      reasonEn = `Level 1 has ${l1CountInCap}/${baseCapacity} coils — recommended Level 1, Slot ${nextL1}`;
+      reasonTh = `ชั้น 1 มี ${level1Info.occupiedCount}/${baseCapacity} ม้วน — แนะนำวางต่อชั้น 1 ลำดับที่ ${recommendedSeq} (ชั้นบนต้องมีฐานติดกัน 2 ลูก)`;
+      reasonEn = `Level 1 has ${level1Info.occupiedCount}/${baseCapacity} coils — recommended Level 1, Slot ${recommendedSeq}`;
     }
-  } else if (!l2IsFull) {
+  } else if (level2Info.canPlace && level2Info.nextSeq !== null) {
     recommendedLevel = 2;
-    recommendedSeq = nextL2;
-    reasonTh = `ชั้น 1 เต็มแล้ว (${baseCapacity}/${baseCapacity}) — แนะนำอัตโนมัติวางชั้น 2 ลำดับที่ ${nextL2}`;
-    reasonEn = `Level 1 full (${baseCapacity}/${baseCapacity}) — auto-recommended Level 2, Slot ${nextL2}`;
+    recommendedSeq = level2Info.nextSeq;
+    reasonTh = `ชั้น 1 เต็มแล้ว — แนะนำอัตโนมัติวางชั้น 2 ลำดับที่ ${recommendedSeq} (มีฐานชั้น 1 ลูกที่ ${recommendedSeq} และ ${recommendedSeq + 1} รองรับ)`;
+    reasonEn = `Level 1 full — auto-recommended Level 2, Slot ${recommendedSeq}`;
+  } else if (level3Info.canPlace && level3Info.nextSeq !== null) {
+    recommendedLevel = 3;
+    recommendedSeq = level3Info.nextSeq;
+    reasonTh = `ชั้น 1–2 เต็มแล้ว — แนะนำอัตโนมัติวางชั้น 3 ลำดับที่ ${recommendedSeq} (มีฐานชั้น 2 ลูกที่ ${recommendedSeq} และ ${recommendedSeq + 1} รองรับ)`;
+    reasonEn = `Levels 1–2 full — auto-recommended Level 3, Slot ${recommendedSeq}`;
+  } else if (level4Info.canPlace && level4Info.nextSeq !== null) {
+    recommendedLevel = 4;
+    recommendedSeq = level4Info.nextSeq;
+    reasonTh = `ชั้น 1–3 เต็มแล้ว — แนะนำอัตโนมัติวางชั้น 4 (ชั้นสูงสุด) ลำดับที่ ${recommendedSeq} (มีฐานชั้น 3 ลูกที่ ${recommendedSeq} และ ${recommendedSeq + 1} รองรับ)`;
+    reasonEn = `Levels 1–3 full — auto-recommended Level 4 (Max), Slot ${recommendedSeq}`;
   } else {
-    recommendedLevel = 2;
-    recommendedSeq = nextL2;
-    reasonTh = `แถว ${row} เต็มทั้งชั้น 1 และชั้น 2 (${baseCapacity + level2Capacity}/${baseCapacity + level2Capacity}) — แนะนำเลือกแถวอื่นที่ว่าง`;
-    reasonEn = `Row ${row} is completely full — consider selecting another row`;
+    recommendedLevel = 1;
+    recommendedSeq = level1Info.nextSeq;
+    reasonTh = `แถว ${row} เต็มครบทั้ง 4 ชั้นแล้ว (${totalRowCapacity}/${totalRowCapacity} ม้วน) — แนะนำเลือกแถวอื่นที่ว่าง`;
+    reasonEn = `Row ${row} is completely full across all 4 levels (${totalRowCapacity}/${totalRowCapacity}) — select another row`;
   }
 
   return {
     door,
     row,
     baseCapacity,
-    level1: {
-      capacity: baseCapacity,
-      occupiedSlots: l1Occupied,
-      occupiedCount: l1Occupied.length,
-      availableCount: l1Available,
-      isFull: l1IsFull,
-      nextSeq: nextL1,
-    },
-    level2: {
-      capacity: level2Capacity,
-      occupiedSlots: l2Occupied,
-      supportedSlots,
-      availableSupportedSlots,
-      occupiedCount: l2Occupied.length,
-      availableCount: l2Available,
-      isFull: l2IsFull,
-      hasBaseSupport,
-      nextSeq: nextL2,
-    },
+    totalRowCapacity,
+    maxStackLevel: MAX_STACK_LEVEL,
+    levels,
+    level1: level1Info,
+    level2: level2Info,
+    level3: level3Info,
+    level4: level4Info,
     recommendedLevel,
     recommendedSeq,
     recommendedLocation: `${door}/${row}/${recommendedLevel}/${recommendedSeq}`,
     reasonTh,
     reasonEn,
     isRowCompletelyFull,
+  };
+}
+
+export interface CoilPlacementValidationResult {
+  valid: boolean;
+  door: string;
+  row: number;
+  level: number;
+  slotIndex?: number;
+  requiredBaseSlots: number[];
+  missingBaseSlots: number[];
+  reasonTh?: string;
+  reasonEn?: string;
+  recommendedLocation: string;
+}
+
+/**
+ * Validates whether a target Location (e.g. E7/1/2/1 or E7/1/4/1) satisfies:
+ * 1. Maximum stack height = 4 levels (rejects Level 5+).
+ * 2. Pyramid base-support rule: Level L (2..4) slot k MUST have BOTH Level (L-1) slot k AND k+1 occupied.
+ * Excludes any batch in `excludeBatches` so a coil being updated/relocated cannot count as its own base.
+ */
+export function validateCoilPlacementLocation(
+  targetLocation: string,
+  activeCoils: CoilStockRecord[],
+  excludeBatches: string[] = [],
+  customBaseSlotsPerRow?: number
+): CoilPlacementValidationResult {
+  const parsed = parseCoilLocationTo3D(targetLocation);
+  const excludeSet = new Set(
+    excludeBatches.map((b) => String(b || "").trim().toUpperCase()).filter(Boolean)
+  );
+  const filteredCoils = activeCoils.filter(
+    (c) =>
+      c.status !== "issued" &&
+      !excludeSet.has(String(c.batch || "").trim().toUpperCase())
+  );
+
+  const occupancy = getRowLevelOccupancy(
+    parsed.door,
+    parsed.row,
+    filteredCoils,
+    customBaseSlotsPerRow
+  );
+  const targetLevel = parsed.explicitLevel || 1;
+
+  // Hard cap: maximum 4 levels allowed
+  if (targetLevel > MAX_STACK_LEVEL) {
+    return {
+      valid: false,
+      door: parsed.door,
+      row: parsed.row,
+      level: targetLevel,
+      slotIndex: parsed.explicitSlotIndex,
+      requiredBaseSlots: [],
+      missingBaseSlots: [],
+      reasonTh: `ไม่สามารถวางชั้นที่ ${targetLevel} (${parsed.rawLocation}) ได้ — ระบบจำกัดความสูงการวางสูงสุดแค่ ${MAX_STACK_LEVEL} ชั้นเท่านั้น (ชั้น 1–${MAX_STACK_LEVEL})`,
+      reasonEn: `Cannot place on Level ${targetLevel} — maximum stacking height is ${MAX_STACK_LEVEL} levels (L1–L${MAX_STACK_LEVEL})`,
+      recommendedLocation: occupancy.recommendedLocation,
+    };
+  }
+
+  if (targetLevel <= 1) {
+    return {
+      valid: true,
+      door: parsed.door,
+      row: parsed.row,
+      level: 1,
+      slotIndex: parsed.explicitSlotIndex ?? occupancy.level1.nextSeq,
+      requiredBaseSlots: [],
+      missingBaseSlots: [],
+      recommendedLocation: occupancy.recommendedLocation,
+    };
+  }
+
+  // Levels 2, 3, 4: strictly require BOTH lower-level coils k and k+1
+  const lv = targetLevel as StackLevel;
+  const lowerLv = (lv - 1) as StackLevel;
+  const levelInfo = occupancy.levels[lv];
+  const lowerInfo = occupancy.levels[lowerLv];
+  const lowerSet = new Set(lowerInfo.occupiedSlots);
+  const currSet = new Set(levelInfo.occupiedSlots);
+
+  // If user didn't specify a slot (e.g., E7/1/3), check if any supported empty slot exists on this level
+  if (!parsed.explicitSlotIndex) {
+    if (levelInfo.canPlace && levelInfo.nextSeq !== null) {
+      const k = levelInfo.nextSeq;
+      return {
+        valid: true,
+        door: parsed.door,
+        row: parsed.row,
+        level: lv,
+        slotIndex: k,
+        requiredBaseSlots: [k, k + 1],
+        missingBaseSlots: [],
+        recommendedLocation: `${parsed.door}/${parsed.row}/${lv}/${k}`,
+      };
+    }
+
+    if (levelInfo.isFull) {
+      return {
+        valid: false,
+        door: parsed.door,
+        row: parsed.row,
+        level: lv,
+        requiredBaseSlots: [],
+        missingBaseSlots: [],
+        reasonTh: `ไม่สามารถวางชั้นที่ ${lv} แถว ${parsed.door}/${parsed.row} ได้ — ชั้นที่ ${lv} เต็มแล้ว (${levelInfo.capacity}/${levelInfo.capacity})`,
+        reasonEn: `Cannot place on Level ${lv} in ${parsed.door}/${parsed.row} — Level ${lv} is full`,
+        recommendedLocation: occupancy.recommendedLocation,
+      };
+    }
+
+    let firstFree = 1;
+    while (currSet.has(firstFree) && firstFree <= levelInfo.capacity) {
+      firstFree += 1;
+    }
+    const req = [firstFree, firstFree + 1];
+    const missing = req.filter((s) => !lowerSet.has(s));
+    return {
+      valid: false,
+      door: parsed.door,
+      row: parsed.row,
+      level: lv,
+      slotIndex: firstFree,
+      requiredBaseSlots: req,
+      missingBaseSlots: missing,
+      reasonTh: `ไม่สามารถวางชั้นที่ ${lv} (${parsed.door}/${parsed.row}/${lv}/${firstFree}) ได้ — ต้องมีฐานชั้นที่ ${lowerLv} ลูกที่ ${firstFree} และลูกที่ ${firstFree + 1} รองรับก่อน (ยังขาดชั้น ${lowerLv} ลูกที่ ${missing.join(" และ ")})`,
+      reasonEn: `Cannot place on Level ${lv} Slot ${firstFree} — requires Level ${lowerLv} base coils #${firstFree} & #${firstFree + 1} (missing L${lowerLv} #${missing.join(", #")})`,
+      recommendedLocation: occupancy.recommendedLocation,
+    };
+  }
+
+  // Explicit slot k on Level 2, 3, or 4 (e.g., E7/1/4/1)
+  const k = parsed.explicitSlotIndex;
+  const req = [k, k + 1];
+  const missing = req.filter((s) => !lowerSet.has(s));
+  if (missing.length > 0) {
+    return {
+      valid: false,
+      door: parsed.door,
+      row: parsed.row,
+      level: lv,
+      slotIndex: k,
+      requiredBaseSlots: req,
+      missingBaseSlots: missing,
+      reasonTh: `ไม่สามารถวางชั้นที่ ${lv} ลูกที่ ${k} (${parsed.door}/${parsed.row}/${lv}/${k}) ได้ — ต้องมีฐานชั้นที่ ${lowerLv} ลูกที่ ${k} และลูกที่ ${k + 1} รองรับก่อน (ยังขาดชั้น ${lowerLv} ลูกที่ ${missing.join(" และ ")})`,
+      reasonEn: `Cannot place on Level ${lv} Slot ${k} (${parsed.door}/${parsed.row}/${lv}/${k}) — requires Level ${lowerLv} base coils #${k} and #${k + 1} (missing L${lowerLv} #${missing.join(", #")})`,
+      recommendedLocation: occupancy.recommendedLocation,
+    };
+  }
+
+  return {
+    valid: true,
+    door: parsed.door,
+    row: parsed.row,
+    level: lv,
+    slotIndex: k,
+    requiredBaseSlots: req,
+    missingBaseSlots: [],
+    recommendedLocation: `${parsed.door}/${parsed.row}/${lv}/${k}`,
   };
 }
 
@@ -553,10 +888,15 @@ export function getGroupCoilCounts(
 export function buildBuildingWarehouseLayout(
   groupId: BuildingGroupId,
   activeCoils: CoilStockRecord[],
-  sapMap?: Map<string, CoilSapMasterItem>
+  sapMap?: Map<string, CoilSapMasterItem>,
+  customBaseSlotsPerRow?: number
 ): BuildingLayoutResult {
   const baseGroup =
     BUILDING_GROUPS.find((g) => g.id === groupId) || BUILDING_GROUPS[0];
+  const configuredBaseSlots =
+    customBaseSlotsPerRow !== undefined
+      ? clampBaseSlotsPerRow(customBaseSlotsPerRow)
+      : baseGroup.baseSlotsPerRow;
 
   // Filter coils belonging to this building group
   const groupCoils: Array<{ coil: CoilStockRecord; parsed: ParsedCoilLocation }> = [];
@@ -586,7 +926,7 @@ export function buildBuildingWarehouseLayout(
     string,
     Array<{ coil: CoilStockRecord; level: number; slotIndex: number }>
   >();
-  let maxBaseSlotsNeeded = baseGroup.baseSlotsPerRow;
+  let maxBaseSlotsNeeded = configuredBaseSlots;
 
   for (const item of groupCoils) {
     const key = `${item.parsed.door}::${item.parsed.row}`;
@@ -600,13 +940,12 @@ export function buildBuildingWarehouseLayout(
   const isDualDoor = doors.length >= 2;
 
   bucketMap.forEach((list, key) => {
-    const placements = resolveRowCoilPlacements(list, baseGroup.baseSlotsPerRow);
+    const placements = resolveRowCoilPlacements(list, configuredBaseSlots);
     resolvedBucketMap.set(key, placements);
     for (const p of placements) {
-      if (p.level === 1 && p.slotIndex > maxBaseSlotsNeeded) {
-        maxBaseSlotsNeeded = p.slotIndex;
-      } else if (p.level === 2 && p.slotIndex + 1 > maxBaseSlotsNeeded) {
-        maxBaseSlotsNeeded = p.slotIndex + 1;
+      const footprintMax = p.slotIndex + Math.max(0, p.level - 1);
+      if (footprintMax > maxBaseSlotsNeeded) {
+        maxBaseSlotsNeeded = footprintMax;
       }
     }
   });
@@ -776,9 +1115,7 @@ export function buildBuildingWarehouseLayout(
   });
 
   const rows = Array.from({ length: rowCount }, (_, i) => i + 1);
-  const levels = Array.from(usedLevelsSet).sort((a, b) => a - b);
-  if (!levels.includes(2)) levels.push(2);
-  levels.sort((a, b) => a - b);
+  const levels = [1, 2, 3, 4];
 
   const totalFloorCount = doors.length * rowCount * baseSlots;
 
