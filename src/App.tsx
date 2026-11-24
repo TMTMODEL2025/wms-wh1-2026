@@ -1377,7 +1377,7 @@ const CSS = `
 
   .main.main-3d-viewport {
     max-width: none !important;
-    padding: 10px 14px 10px 14px !important;
+    padding: 10px 14px 66px 14px !important;
     display: flex !important;
     flex-direction: column !important;
     height: 100% !important;
@@ -1395,7 +1395,7 @@ const CSS = `
     }
 
     .main.main-3d-viewport {
-      padding: 6px 8px 66px 8px !important;
+      padding: 6px 8px 64px 8px !important;
     }
   }
 
