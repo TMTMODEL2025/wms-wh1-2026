@@ -1425,7 +1425,7 @@ function isValidScannedCoilLocation(loc: unknown): boolean {
   if (s.length > 24) return false;
   return (
     /^[A-Z0-9]{1,6}([\/\-][A-Z0-9]{1,8}){1,3}$/.test(s) ||
-    /^(E7|E8|H7|H8|05|21)$/.test(s)
+    /^(E7|E8|H7|H8|H9|H10|05|21)$/.test(s)
   );
 }
 
@@ -1573,7 +1573,7 @@ export async function importCoilSapStockToCloud(params: {
           storageLocation: cleanStorageLoc,
           conditionText: cleanConditionText,
           heatNo: cleanHeatNo,
-          remark: cleanConditionText || "",
+          remark: cleanConditionText || existing.remark || "",
           hasSapData: true,
         })
       );

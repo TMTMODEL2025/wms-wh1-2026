@@ -379,34 +379,378 @@ function splitCsvLine(line: string, delimiter = ","): string[] {
   return result;
 }
 
-// Strict 15-column SAP format ([0] to [14]):
-// [0] Material No.
-// [1] Discription
-// [2] Batch
-// [3] หนา Certificated.
-// [4] ความหนาเป้าหมาย
-// [5] กว้าง
-// [6] Grade
-// [7] ผู้ผลิต
-// [8] Skinpass
-// [9] Storage Location
-// [10] Unrestr.
-// [11] หมายเลขคอยล์
-// [12] Text สภาพสินค้า
-// [13] HEAT NO.
-// [14] นน. ชั่งจริง
+interface SapHeaderColumnMap {
+  batch: number;
+  materialNo?: number;
+  description?: number;
+  certThickness?: number;
+  targetThickness?: number;
+  width?: number;
+  grade?: number;
+  manufacturer?: number;
+  skinpass?: number;
+  storageLocation?: number;
+  weightKg?: number;
+  coilNo?: number;
+  conditionText?: number;
+  heatNo?: number;
+  actualWeightKg?: number;
+}
+
+function normalizeSapHeaderCell(raw: string): string {
+  return raw
+    .replace(/^\uFEFF/, "")
+    .toLowerCase()
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectSapHeaderColumnMap(cells: string[]): SapHeaderColumnMap | null {
+  let batchIdx = -1;
+  const map: Partial<SapHeaderColumnMap> = {};
+  let matchedCount = 0;
+
+  for (let i = 0; i < cells.length; i++) {
+    const h = normalizeSapHeaderCell(cells[i] || "");
+    if (!h) continue;
+    const compact = h.replace(/[\s()._\-:/]/g, "");
+
+    if (
+      batchIdx === -1 &&
+      (h === "batch" ||
+        h === "batch no." ||
+        h === "batch no" ||
+        h.includes("batch") ||
+        compact.includes("batchno") ||
+        h.includes("แบตช์") ||
+        h.includes("รหัส batch"))
+    ) {
+      batchIdx = i;
+      matchedCount++;
+      continue;
+    }
+
+    // Check targetThickness BEFORE certThickness so "ความหนาเป้าหมาย" never maps to "ความหนา"
+    if (
+      map.targetThickness === undefined &&
+      (h.includes("ความหนาเป้าหมาย") ||
+        h.includes("หนาเป้าหมาย") ||
+        (h.includes("เป้าหมาย") && (h.includes("หนา") || h.includes("thick"))) ||
+        (h.includes("target") && h.includes("thick")))
+    ) {
+      map.targetThickness = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.certThickness === undefined &&
+      (h.includes("certificated") ||
+        h.includes("ความหนา") ||
+        h === "หนา" ||
+        h.startsWith("หนา ") ||
+        h.startsWith("หนา(") ||
+        h.includes("thickness") ||
+        h === "thick")
+    ) {
+      map.certThickness = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.width === undefined &&
+      (h === "กว้าง" ||
+        h.includes("ความกว้าง") ||
+        h.startsWith("กว้าง") ||
+        h.includes("width"))
+    ) {
+      map.width = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.grade === undefined &&
+      (h === "grade" ||
+        h.includes("grade") ||
+        h.includes("เกรด"))
+    ) {
+      map.grade = i;
+      matchedCount++;
+      continue;
+    }
+
+    // Check actualWeightKg BEFORE weightKg so "นน. ชั่งจริง" never maps to "น้ำหนัก (Unrestr.)"
+    if (
+      map.actualWeightKg === undefined &&
+      (h.includes("ชั่งจริง") ||
+        compact.includes("นนชั่งจริง") ||
+        (h.includes("actual") && (h.includes("weight") || h.includes("wt"))))
+    ) {
+      map.actualWeightKg = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.weightKg === undefined &&
+      (h.includes("unrestr") ||
+        h.includes("น้ำหนัก") ||
+        h === "นน." ||
+        h === "นน" ||
+        h.includes("weight"))
+    ) {
+      map.weightKg = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.materialNo === undefined &&
+      (h.includes("material") || compact.startsWith("matno") || h.includes("รหัสวัตถุดิบ"))
+    ) {
+      map.materialNo = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.description === undefined &&
+      (h.includes("discription") || h.includes("description") || h.includes("รายละเอียด"))
+    ) {
+      map.description = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.manufacturer === undefined &&
+      (h.includes("ผู้ผลิต") || h.includes("manufacturer") || h.includes("maker") || h.includes("mill"))
+    ) {
+      map.manufacturer = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (map.skinpass === undefined && compact.includes("skinpass")) {
+      map.skinpass = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.storageLocation === undefined &&
+      (h.includes("storage loc") || h === "sloc" || h.includes("storage location"))
+    ) {
+      map.storageLocation = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.coilNo === undefined &&
+      (h.includes("หมายเลขคอยล์") || h.includes("coil no") || h.includes("coil number") || h.includes("เลขคอยล์"))
+    ) {
+      map.coilNo = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (
+      map.conditionText === undefined &&
+      (h.includes("สภาพสินค้า") || h.includes("condition") || h.includes("หมายเหตุ"))
+    ) {
+      map.conditionText = i;
+      matchedCount++;
+      continue;
+    }
+
+    if (map.heatNo === undefined && (h.includes("heat no") || h === "heat")) {
+      map.heatNo = i;
+      matchedCount++;
+      continue;
+    }
+  }
+
+  // Require Batch column + at least 1 other recognized SAP column to confirm a genuine header row
+  if (batchIdx !== -1 && matchedCount >= 2) {
+    return { ...map, batch: batchIdx };
+  }
+  return null;
+}
+
+function normalizeSapStorageLocation(rawVal: string): string {
+  let storageLocation = rawVal.trim() || "-";
+  if (
+    storageLocation.includes("E+") ||
+    storageLocation.includes("e+") ||
+    storageLocation === "2000000000" ||
+    storageLocation === "2.00E+09"
+  ) {
+    storageLocation = "2E09";
+  }
+  return storageLocation;
+}
+
+// Supports both:
+// 1) Dynamic header-mapped SAP tables (e.g. "Batch No.", "น้ำหนัก (Unrestr.)", "นน. ชั่งจริง",
+//    "ความหนา", "ความหนาเป้าหมาย", "กว้าง", "Grade", or full 15-column SAP headers in any order)
+// 2) Legacy headerless 15-column SAP format ([0] Material No. .. [14] นน. ชั่งจริง)
 function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
   if (!rawRows || rawRows.length === 0) return [];
   const items: CoilSapMasterItem[] = [];
 
-  for (let r = 0; r < rawRows.length; r++) {
-    const row = rawRows[r];
-    if (!Array.isArray(row) || row.length < 3) continue;
+  const cleanRows: string[][] = rawRows
+    .filter((row) => Array.isArray(row) && row.length >= 2)
+    .map((row) =>
+      row.map((cell) =>
+        cell !== null && cell !== undefined
+          ? String(cell)
+              .replace(/^\uFEFF/, "")
+              .trim()
+              .replace(/^["']|["']$/g, "")
+          : ""
+      )
+    )
+    .filter((cells) => cells.some((c) => c.length > 0));
 
-    let cells = row.map((cell) =>
-      cell !== null && cell !== undefined ? String(cell).trim().replace(/^["']|["']$/g, "") : ""
-    );
-    if (cells.every((c) => c.length === 0)) continue;
+  if (cleanRows.length === 0) return [];
+
+  // Scan top rows for a recognized SAP header row
+  let headerRowIdx = -1;
+  let headerMap: SapHeaderColumnMap | null = null;
+  let headerColCount = 0;
+
+  const scanLimit = Math.min(cleanRows.length, 10);
+  for (let r = 0; r < scanLimit; r++) {
+    const detected = detectSapHeaderColumnMap(cleanRows[r]);
+    if (detected) {
+      headerRowIdx = r;
+      headerMap = detected;
+      headerColCount = cleanRows[r].length;
+      break;
+    }
+  }
+
+  // Mode 1: Dynamic header-mapped parsing (handles 7-col custom SAP format & full 15-col SAP headers)
+  if (headerMap && headerRowIdx !== -1) {
+    for (let r = headerRowIdx + 1; r < cleanRows.length; r++) {
+      let cells = [...cleanRows[r]];
+
+      // Skip repeated header rows inside multi-page exports
+      if (detectSapHeaderColumnMap(cells)) continue;
+
+      // Repair unquoted CSV thousand-separator splits on numeric weight columns when extra cells appear
+      if (cells.length > headerColCount) {
+        const numericCandidates = [headerMap.weightKg, headerMap.actualWeightKg]
+          .filter((idx): idx is number => idx !== undefined)
+          .sort((a, b) => a - b);
+        for (const numIdx of numericCandidates) {
+          if (
+            cells.length > headerColCount &&
+            numIdx + 1 < cells.length &&
+            /^\d{1,3}$/.test(cells[numIdx] || "") &&
+            /^\d{3}(\.\d+)?$/.test(cells[numIdx + 1] || "")
+          ) {
+            cells = [
+              ...cells.slice(0, numIdx),
+              `${cells[numIdx]},${cells[numIdx + 1]}`,
+              ...cells.slice(numIdx + 2),
+            ];
+          }
+        }
+      }
+
+      const readCell = (idx?: number): string =>
+        idx !== undefined && idx >= 0 && idx < cells.length ? (cells[idx] || "").trim() : "";
+
+      const rawBatchCell = readCell(headerMap.batch).toUpperCase();
+      if (!rawBatchCell || rawBatchCell.includes("-") || /[\u0E00-\u0E7F]/.test(rawBatchCell)) {
+        continue;
+      }
+      const rawBatchCode = rawBatchCell.replace(/[^A-Z0-9]/g, "");
+      if (
+        !rawBatchCode ||
+        rawBatchCode.length < 3 ||
+        rawBatchCode.length > 12 ||
+        rawBatchCode === "BATCH" ||
+        rawBatchCode === "BATCHNO" ||
+        rawBatchCode === "TOTAL" ||
+        rawBatchCode === "SUM"
+      ) {
+        continue;
+      }
+
+      const materialNo = readCell(headerMap.materialNo);
+      const description = readCell(headerMap.description);
+
+      const rawCertThick = formatSapThickness(readCell(headerMap.certThickness));
+      const rawTargetThick = formatSapThickness(readCell(headerMap.targetThickness));
+      const certThickness = rawCertThick !== "-" ? rawCertThick : rawTargetThick;
+      const targetThickness = rawTargetThick !== "-" ? rawTargetThick : certThickness;
+
+      const width = formatSapWidth(readCell(headerMap.width));
+      const rawGrade = readCell(headerMap.grade).toUpperCase();
+      const grade = rawGrade || "-";
+
+      const rawManufacturer = readCell(headerMap.manufacturer).toUpperCase();
+      const manufacturer =
+        rawManufacturer && rawManufacturer !== "AUTOSK" && rawManufacturer !== "NONSK"
+          ? rawManufacturer
+          : "-";
+
+      const skinpass = readCell(headerMap.skinpass);
+      const storageLocation =
+        headerMap.storageLocation !== undefined
+          ? normalizeSapStorageLocation(readCell(headerMap.storageLocation))
+          : "-";
+
+      const actualWeightKg =
+        headerMap.actualWeightKg !== undefined
+          ? sanitizeCoilWeightKg(readCell(headerMap.actualWeightKg))
+          : 0;
+      const rawUnrestrWeight =
+        headerMap.weightKg !== undefined
+          ? sanitizeCoilWeightKg(readCell(headerMap.weightKg))
+          : 0;
+      const weightKg =
+        headerMap.weightKg !== undefined ? rawUnrestrWeight : actualWeightKg;
+
+      const coilNo = readCell(headerMap.coilNo).toUpperCase() || "-";
+      const conditionText = readCell(headerMap.conditionText);
+      const heatNo = readCell(headerMap.heatNo).toUpperCase();
+
+      items.push({
+        materialNo,
+        description,
+        batch: rawBatchCode,
+        certThickness,
+        targetThickness,
+        width,
+        grade,
+        manufacturer,
+        skinpass,
+        storageLocation,
+        weightKg,
+        unrestricted: `${weightKg.toLocaleString()} kg`,
+        coilNo,
+        conditionText,
+        heatNo,
+        actualWeightKg,
+        salesDoc: "",
+        qualityClass: "-",
+      });
+    }
+
+    return items;
+  }
+
+  // Mode 2: Legacy headerless 15-column SAP format ([0] to [14])
+  for (let r = 0; r < cleanRows.length; r++) {
+    let cells = [...cleanRows[r]];
+    if (cells.length < 3) continue;
 
     // If Excel sheet has leading empty column(s) before Material No., shift left so [0] is Material No.
     while (cells.length > 15 && cells[0] === "") {
@@ -477,15 +821,7 @@ function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
     // [8] Skinpass
     const skinpass = (cells[8] || "").trim();
     // [9] Storage Location
-    let storageLocation = (cells[9] || "").trim() || "-";
-    if (
-      storageLocation.includes("E+") ||
-      storageLocation.includes("e+") ||
-      storageLocation === "2000000000" ||
-      storageLocation === "2.00E+09"
-    ) {
-      storageLocation = "2E09";
-    }
+    const storageLocation = normalizeSapStorageLocation(cells[9] || "");
     // [10] Unrestr. (น้ำหนักคงเหลือ kg - strip commas, never [5] กว้าง)
     const weightKg = sanitizeCoilWeightKg(cells[10]);
     // [11] หมายเลขคอยล์ (Coil No.)
@@ -525,33 +861,43 @@ function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
 function parseRawCoilSapText(rawText: string): CoilSapMasterItem[] {
   if (!rawText || !rawText.trim()) return [];
 
-  // 1. Tab-Separated (TSV) from Excel/SAP copy-paste: preserve exact tab positions [0]..[14]
+  // 1. Tab-Separated (TSV) from Excel/SAP copy-paste: preserve exact tab positions
   if (rawText.includes("\t")) {
     const tsvLines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
     const tsvRows = tsvLines.map((line) =>
-      line.split("\t").map((c) => c.trim().replace(/^["']|["']$/g, ""))
+      line.split("\t").map((c) => c.replace(/^\uFEFF/, "").trim().replace(/^["']|["']$/g, ""))
     );
     const parsedTsv = parseCoilSapRows(tsvRows);
     if (parsedTsv.length > 0) return parsedTsv;
   }
 
-  // 2. CSV / Semicolon / Pipe lines (quote-aware so "8,280" in [10] Unrestr. stays a single column)
+  // 2. CSV / Semicolon / Pipe / Space-aligned lines (detect table-level delimiter so "12,450" in space-aligned text is not split by ',')
   const lines = rawText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const firstLine = lines[0] || "";
+  const isSpaceAlignedTable =
+    !firstLine.includes("\t") &&
+    !firstLine.includes(";") &&
+    !firstLine.includes("|") &&
+    !firstLine.includes(",") &&
+    firstLine.trim().split(/\s{2,}/).length >= 3;
+
   const rows: string[][] = [];
   for (const line of lines) {
     let cols: string[];
     if (line.includes("\t")) {
       cols = line.split("\t");
-    } else if (line.includes(";") && (line.match(/;/g) || []).length >= 5) {
+    } else if (isSpaceAlignedTable) {
+      cols = line.trim().split(/\s{2,}/);
+    } else if (line.includes(";") && (line.match(/;/g) || []).length >= 2) {
       cols = splitCsvLine(line, ";");
-    } else if (line.includes("|") && (line.match(/\|/g) || []).length >= 5) {
+    } else if (line.includes("|") && (line.match(/\|/g) || []).length >= 2) {
       cols = line.split("|");
     } else if (line.includes(",")) {
       cols = splitCsvLine(line, ",");
     } else {
       cols = line.trim().split(/\s{2,}/);
     }
-    rows.push(cols.map((c) => c.trim().replace(/^["']|["']$/g, "")));
+    rows.push(cols.map((c) => c.replace(/^\uFEFF/, "").trim().replace(/^["']|["']$/g, "")));
   }
   const parsedFromLines = parseCoilSapRows(rows);
   if (parsedFromLines.length > 0) return parsedFromLines;
@@ -5634,28 +5980,33 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                         <table className="w-full text-[11px]">
                           <thead>
                             <tr>
-                              <th>[2] Batch</th>
-                              <th>[11] Coil No.</th>
-                              <th>[6] เกรด</th>
-                              <th>[3]x[5] หนา x กว้าง (mm)</th>
-                              <th>[7] ผู้ผลิต</th>
-                              <th>[10] น้ำหนักคงเหลือ (kg)</th>
+                              <th>Batch No.</th>
+                              <th>Grade</th>
+                              <th>ความหนา / เป้าหมาย (mm)</th>
+                              <th>กว้าง (mm)</th>
+                              <th>น้ำหนัก (Unrestr.)</th>
+                              <th>นน. ชั่งจริง</th>
                             </tr>
                           </thead>
                           <tbody>
                             {parsedSapPreviewItems.slice(0, 5).map((itm, idx) => (
                               <tr key={`${itm.batch}-${idx}`}>
                                 <td className="font-mono font-bold text-cyan-400">{itm.batch}</td>
-                                <td className="font-mono">{itm.coilNo}</td>
                                 <td className="font-bold">{itm.grade}</td>
                                 <td className="font-mono">
-                                  {itm.certThickness !== "-" && itm.width !== "-"
-                                    ? `${itm.certThickness} x ${itm.width}`
-                                    : "-"}
+                                  {itm.certThickness}
+                                  {itm.targetThickness && itm.targetThickness !== "-" && itm.targetThickness !== itm.certThickness
+                                    ? ` / ${itm.targetThickness}`
+                                    : ""}
                                 </td>
-                                <td>{itm.manufacturer}</td>
+                                <td className="font-mono">{itm.width}</td>
                                 <td className="font-mono font-bold">
                                   {itm.weightKg > 0 ? `${itm.weightKg.toLocaleString()} kg` : "0"}
+                                </td>
+                                <td className="font-mono">
+                                  {itm.actualWeightKg && itm.actualWeightKg > 0
+                                    ? `${itm.actualWeightKg.toLocaleString()} kg`
+                                    : "-"}
                                 </td>
                               </tr>
                             ))}
