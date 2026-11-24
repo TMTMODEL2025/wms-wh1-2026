@@ -272,8 +272,15 @@ export function DailyReportView({
 
   // Filter Header States
   const todayStr = useMemo(() => formatLocalDateStr(new Date()), []);
+  const operationalTodayStr = useMemo(() => {
+    const now = new Date();
+    if (now.getHours() < 8) {
+      return formatLocalDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+    }
+    return formatLocalDateStr(now);
+  }, []);
   const [reportMode, setReportMode] = useState<"daily" | "monthly" | "space">("daily");
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const [selectedDate, setSelectedDate] = useState<string>(operationalTodayStr);
   const [selectedShift, setSelectedShift] = useState<"day" | "night">(() => {
     const h = new Date().getHours();
     return h >= 8 && h < 20 ? "day" : "night";
@@ -281,7 +288,7 @@ export function DailyReportView({
   const [hasUserChangedShift, setHasUserChangedShift] = useState<boolean>(false);
 
   // Monthly Report Filter States
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => todayStr.slice(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => operationalTodayStr.slice(0, 7));
   const [monthlyShiftFilter, setMonthlyShiftFilter] = useState<"all" | "day" | "night">("all");
   const [showOnlyActiveDays, setShowOnlyActiveDays] = useState<boolean>(false);
   const [monthlyLedgerPage, setMonthlyLedgerPage] = useState<number>(1);
@@ -445,40 +452,127 @@ export function DailyReportView({
     };
   }, []);
 
-  // Helper to parse timestamp to Date object or time components in local time
-  const parseTimestampDate = (timestampStr?: string): Date | null => {
+  // Helper to get next/previous calendar day string YYYY-MM-DD in local time
+  const getNextDayStr = (dateStr: string): string => {
+    const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
+    if (!y || !m || !d) return dateStr;
+    const nextD = new Date(y, m - 1, d + 1);
+    return formatLocalDateStr(nextD);
+  };
+
+  const getPrevDayStr = (dateStr: string): string => {
+    const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
+    if (!y || !m || !d) return dateStr;
+    const prevD = new Date(y, m - 1, d - 1);
+    return formatLocalDateStr(prevD);
+  };
+
+  // Helper to parse date-only YYYY-MM-DD or DD/MM/YYYY string into [year, month(1-12), day]
+  const parseDateParts = (dateStr?: string): [number, number, number] | null => {
+    if (!dateStr) return null;
+    const trimmed = dateStr.trim();
+    const ymd = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (ymd) {
+      let y = parseInt(ymd[1], 10);
+      if (y > 2400) y -= 543;
+      const m = parseInt(ymd[2], 10);
+      const d = parseInt(ymd[3], 10);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return [y, m, d];
+    }
+    const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (dmy) {
+      let y = parseInt(dmy[3], 10);
+      if (y > 2400) y -= 543;
+      let d = parseInt(dmy[1], 10);
+      let m = parseInt(dmy[2], 10);
+      if (m > 12 && d <= 12) {
+        const tmp = d;
+        d = m;
+        m = tmp;
+      }
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) return [y, m, d];
+    }
+    return null;
+  };
+
+  // Helper to parse timestamp to Date object in local time (supports ISO, YYYY-MM-DD, DD/MM/YYYY, Thai BE, date-only, and explicit fallbackDateStr for time-only)
+  const parseTimestampDate = (timestampStr?: string, fallbackDateStr?: string): Date | null => {
     if (!timestampStr) return null;
 
-    const trimmed = timestampStr.trim();
+    const trimmed = String(timestampStr).trim();
     if (!trimmed || trimmed === "-") return null;
 
+    // 0. ISO string with explicit timezone (e.g. "2026-11-24T02:30:00.000Z" or "+07:00")
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) {
+      const isoDate = new Date(trimmed);
+      if (!isNaN(isoDate.getTime())) return isoDate;
+    }
+
     // 1. YYYY-MM-DD HH:mm(:ss) or YYYY/MM/DD HH:mm(:ss)
-    const matchFull = trimmed.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})[\s,T]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+    const matchFull = trimmed.match(
+      /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})[\s,T]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\s*(AM|PM))?/i
+    );
     if (matchFull) {
-      const [, y, m, d, hh, mm, ss] = matchFull;
+      const [, y, m, d, hh, mm, ss, ampm] = matchFull;
       let yearNum = parseInt(y, 10);
       if (yearNum > 2400) yearNum -= 543;
-      return new Date(yearNum, parseInt(m, 10) - 1, parseInt(d, 10), parseInt(hh, 10), parseInt(mm, 10), parseInt(ss || "0", 10));
+      let hourNum = parseInt(hh, 10);
+      if (ampm) {
+        const upper = ampm.toUpperCase();
+        if (upper === "PM" && hourNum < 12) hourNum += 12;
+        if (upper === "AM" && hourNum === 12) hourNum = 0;
+      }
+      return new Date(yearNum, parseInt(m, 10) - 1, parseInt(d, 10), hourNum, parseInt(mm, 10), parseInt(ss || "0", 10));
     }
 
-    // 2. DD/MM/YYYY HH:mm(:ss)
-    const matchThaiSlash = trimmed.match(/(\d{1,2})[/](\d{1,2})[/](\d{4})[\s,]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+    // 2. DD/MM/YYYY HH:mm(:ss) or DD-MM-YYYY HH:mm(:ss) (including Thai BE years & comma separator)
+    const matchThaiSlash = trimmed.match(
+      /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})[\s,]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\s*(AM|PM))?/i
+    );
     if (matchThaiSlash) {
-      const [, d, m, y, hh, mm, ss] = matchThaiSlash;
+      const [, p1, p2, y, hh, mm, ss, ampm] = matchThaiSlash;
       let yearNum = parseInt(y, 10);
       if (yearNum > 2400) yearNum -= 543;
-      return new Date(yearNum, parseInt(m, 10) - 1, parseInt(d, 10), parseInt(hh, 10), parseInt(mm, 10), parseInt(ss || "0", 10));
+      let dayNum = parseInt(p1, 10);
+      let monthNum = parseInt(p2, 10);
+      if (monthNum > 12 && dayNum <= 12) {
+        const tmp = dayNum;
+        dayNum = monthNum;
+        monthNum = tmp;
+      }
+      let hourNum = parseInt(hh, 10);
+      if (ampm) {
+        const upper = ampm.toUpperCase();
+        if (upper === "PM" && hourNum < 12) hourNum += 12;
+        if (upper === "AM" && hourNum === 12) hourNum = 0;
+      }
+      return new Date(yearNum, monthNum - 1, dayNum, hourNum, parseInt(mm, 10), parseInt(ss || "0", 10));
     }
 
-    // 3. Time-only string "10:15" or "07:51:30"
-    const matchTime = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+    // 3. Date-only strings ("YYYY-MM-DD", "YYYY/MM/DD", "DD/MM/YYYY", "DD/MM/2569") -> local 08:00:00 (Day shift)
+    const dateOnlyParts = parseDateParts(trimmed);
+    if (dateOnlyParts) {
+      const [y, m, d] = dateOnlyParts;
+      return new Date(y, m - 1, d, 8, 0, 0);
+    }
+
+    // 4. Time-only string ("10:15" or "07:51:30") — ONLY valid when an explicit fallbackDateStr is provided
+    const matchTime = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\s*(AM|PM))?$/i);
     if (matchTime) {
-      const [, hh, mm, ss] = matchTime;
-      const [sy, sm, sd] = (selectedDate || todayStr).split("-").map((n) => parseInt(n, 10));
-      return new Date(sy || new Date().getFullYear(), (sm || 1) - 1, sd || 1, parseInt(hh, 10), parseInt(mm, 10), parseInt(ss || "0", 10));
+      const fallbackParts = parseDateParts(fallbackDateStr);
+      if (!fallbackParts) return null;
+      const [sy, sm, sd] = fallbackParts;
+      const [, hh, mm, ss, ampm] = matchTime;
+      let hourNum = parseInt(hh, 10);
+      if (ampm) {
+        const upper = ampm.toUpperCase();
+        if (upper === "PM" && hourNum < 12) hourNum += 12;
+        if (upper === "AM" && hourNum === 12) hourNum = 0;
+      }
+      return new Date(sy, sm - 1, sd, hourNum, parseInt(mm, 10), parseInt(ss || "0", 10));
     }
 
-    // 4. Fallback direct Date parsing
+    // 5. Fallback direct Date parsing
     const directDate = new Date(trimmed);
     if (!isNaN(directDate.getTime())) {
       return directDate;
@@ -487,85 +581,189 @@ export function DailyReportView({
     return null;
   };
 
-  // Helper to get next calendar day string YYYY-MM-DD in local time
-  const getNextDayStr = (dateStr: string): string => {
-    const [y, m, d] = dateStr.split("-").map((n) => parseInt(n, 10));
-    if (!y || !m || !d) return dateStr;
-    const nextD = new Date(y, m - 1, d + 1);
-    return formatLocalDateStr(nextD);
+  // Resolve PickList item timestamp safely, pairing time-only scannedAt/machineIssuedAt with pl.createdDate
+  const resolvePickListItemTimestamp = (
+    item: PickListOrder["items"][number],
+    pl: PickListOrder
+  ): { rawTs?: string; fallbackDateStr?: string } => {
+    const candidate = (item.machineIssuedAt || item.scannedAt || pl.createdAt || "").trim();
+    if (candidate) {
+      // If candidate already includes a date, parse directly without fallback
+      if (parseTimestampDate(candidate)) {
+        return { rawTs: candidate };
+      }
+      // If candidate is time-only (e.g. "09:15") and PickList has createdDate, pair them carefully
+      const timeMatch = candidate.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+      if (timeMatch && pl.createdDate) {
+        const dateParts = parseDateParts(pl.createdDate);
+        if (dateParts) {
+          const baseDateStr = formatLocalDateStr(new Date(dateParts[0], dateParts[1] - 1, dateParts[2]));
+          const itemHour = parseInt(timeMatch[1], 10);
+          const createdTimeMatch = (pl.createdAt || "").trim().match(/^(\d{1,2}):(\d{1,2})/);
+          const createdHour = createdTimeMatch ? parseInt(createdTimeMatch[1], 10) : -1;
+          // If PickList was created during evening night-shift (>=20:00) and scanned after midnight (<08:00), calendar date is next day
+          const resolvedFallbackDate =
+            createdHour >= 20 && itemHour < 8 ? getNextDayStr(baseDateStr) : baseDateStr;
+          return { rawTs: candidate, fallbackDateStr: resolvedFallbackDate };
+        }
+      }
+    }
+    if (pl.createdDate) {
+      return { rawTs: pl.createdDate };
+    }
+    return {};
   };
 
-  // Helper to check if a Date/Timestamp falls within selected date and shift
-  const isRecordInShift = (timestampStr: string | undefined, targetDate: string, targetShift: "day" | "night"): boolean => {
-    const dt = parseTimestampDate(timestampStr);
-    if (!dt) return true;
+  // Canonical Operational Date + Shift classifier (shared by BOTH Daily Report and Monthly Report)
+  // - Day Shift   (08:00 - 19:59): operational date = calendar date D, shift = "day"
+  // - Night Shift (20:00 - 23:59): operational date = calendar date D, shift = "night"
+  // - Night Shift (00:00 - 07:59): operational date = previous day D-1, shift = "night"
+  const getOperationalDateAndShift = (
+    timestampStr?: string,
+    fallbackDateStr?: string
+  ): { opDateStr: string; shift: "day" | "night"; date: Date } | null => {
+    const dt = parseTimestampDate(timestampStr, fallbackDateStr);
+    if (!dt) return null;
 
     const recDateStr = formatLocalDateStr(dt);
     const recHour = dt.getHours();
 
-    if (targetShift === "day") {
-      // Day shift: 08:00 - 19:59 on targetDate
-      return recDateStr === targetDate && recHour >= 8 && recHour < 20;
-    } else {
-      // Night shift:
-      // Includes 00:00 - 07:59 on targetDate (morning of targetDate, e.g. 07:51 today),
-      // 20:00 - 23:59 on targetDate, and 00:00 - 07:59 on targetDate + 1 day
-      const nextDayStr = getNextDayStr(targetDate);
-      if (recDateStr === targetDate && (recHour >= 20 || recHour < 8)) return true;
-      if (recDateStr === nextDayStr && recHour < 8) return true;
-      return false;
+    if (recHour >= 8 && recHour < 20) {
+      return { opDateStr: recDateStr, shift: "day", date: dt };
     }
+    if (recHour >= 20) {
+      return { opDateStr: recDateStr, shift: "night", date: dt };
+    }
+    // 00:00 - 07:59 belongs to the Night Shift that started at 20:00 on the previous operational day
+    return { opDateStr: getPrevDayStr(recDateStr), shift: "night", date: dt };
   };
 
-  const isRecordInSelectedShift = (timestampStr?: string): boolean => {
-    return isRecordInShift(timestampStr, selectedDate, selectedShift);
+  // Helper to check if a Date/Timestamp falls within selected operational date and shift
+  const isRecordInShift = (
+    timestampStr: string | undefined,
+    targetDate: string,
+    targetShift: "day" | "night",
+    fallbackDateStr?: string
+  ): boolean => {
+    const info = getOperationalDateAndShift(timestampStr, fallbackDateStr);
+    if (!info) return false;
+    return info.opDateStr === targetDate && info.shift === targetShift;
+  };
+
+  const isRecordInSelectedShift = (timestampStr?: string, fallbackDateStr?: string): boolean => {
+    return isRecordInShift(timestampStr, selectedDate, selectedShift, fallbackDateStr);
+  };
+
+  // Helper to normalize inbound machine name consistently across Daily and Monthly reports
+  const resolveInboundMachine = (item: SlitBarcodeRecord): string => {
+    const isExternal =
+      item.inboundType === "external" ||
+      (item.machine || "").trim().toUpperCase() === "EXTERNAL" ||
+      Boolean(item.conditionText && item.conditionText.includes("ภายนอก"));
+    if (isExternal) return "EXTERNAL";
+    const rawMachine = (item.machine || "").trim().toUpperCase();
+    if (!rawMachine || rawMachine === "-") return "SM01";
+    // Protect against outbound dispensing machine codes overwriting an inbound machine label
+    if (/^(TM|CF|ML|ZF)\d*/i.test(rawMachine)) return "SM01";
+    return rawMachine;
+  };
+
+  // Helper to safely resolve weightKg from record, unrestricted string, SAP master, or batch lookup map
+  const resolveRecordWeightKg = (
+    rawWeight: unknown,
+    rawUnrestricted?: string,
+    sapWeight?: number,
+    fallbackWeight?: number
+  ): number => {
+    const primary = sanitizeWeightKg(rawWeight, rawUnrestricted);
+    if (primary > 0) return primary;
+    if (sapWeight && sapWeight > 0) return sapWeight;
+    if (fallbackWeight && fallbackWeight > 0) return fallbackWeight;
+    return 0;
   };
 
   // Auto-select shift that has activity on selectedDate if user hasn't manually toggled shift
   useEffect(() => {
     if (hasUserChangedShift) return;
     const allRecs = [...inboundList, ...outboundList, ...movementHistoryList];
-    const hasCurrentShift = allRecs.some((r) => r.batch && isRecordInShift(r.scanTimestamp, selectedDate, selectedShift));
-    if (!hasCurrentShift) {
+    const hasActivityInShift = (shift: "day" | "night"): boolean => {
+      if (allRecs.some((r) => r.batch && isRecordInShift(r.scanTimestamp, selectedDate, shift))) {
+        return true;
+      }
+      return pickLists.some((pl) =>
+        (pl.items || []).some((item) => {
+          if (!item.batch || !(item.status === "verified" || item.machineIssued)) return false;
+          const { rawTs, fallbackDateStr } = resolvePickListItemTimestamp(item, pl);
+          return isRecordInShift(rawTs, selectedDate, shift, fallbackDateStr);
+        })
+      );
+    };
+
+    if (!hasActivityInShift(selectedShift)) {
       const otherShift: "day" | "night" = selectedShift === "day" ? "night" : "day";
-      const hasOtherShift = allRecs.some((r) => r.batch && isRecordInShift(r.scanTimestamp, selectedDate, otherShift));
-      if (hasOtherShift) {
+      if (hasActivityInShift(otherShift)) {
         setSelectedShift(otherShift);
       }
     }
-  }, [inboundList, outboundList, movementHistoryList, selectedDate, selectedShift, hasUserChangedShift]);
+  }, [inboundList, outboundList, movementHistoryList, pickLists, selectedDate, selectedShift, hasUserChangedShift]);
 
   // Formatted display time string (e.g. "09:15" or "21:40")
-  const formatTimeDisplay = (timestampStr?: string): string => {
-    const dt = parseTimestampDate(timestampStr);
+  const formatTimeDisplay = (timestampStr?: string, fallbackDateStr?: string): string => {
+    const dt = parseTimestampDate(timestampStr, fallbackDateStr);
     if (!dt) return timestampStr || "-";
     return dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   };
 
+  // Shared Batch -> Weight lookup map (SAP Master + Inbound + History + Outbound)
+  const batchWeightLookupMap = useMemo(() => {
+    const map = new Map<string, number>();
+    sapMasterMap.forEach((sap, bKey) => {
+      const w = sanitizeWeightKg(sap.weightKg, sap.unrestricted);
+      if (w > 0) map.set(bKey.trim().toUpperCase(), w);
+    });
+    [...inboundList, ...movementHistoryList, ...outboundList].forEach((r) => {
+      if (!r.batch) return;
+      const bKey = r.batch.trim().toUpperCase();
+      const w = sanitizeWeightKg(r.weightKg, r.unrestricted);
+      const existing = map.get(bKey) || 0;
+      if (w > 0) {
+        map.set(bKey, w);
+      } else if (existing > 0) {
+        map.set(bKey, existing);
+      }
+    });
+    return map;
+  }, [sapMasterMap, inboundList, movementHistoryList, outboundList]);
+
   // =========================================================================
-  // SECTION 1 DATA: Inbound from machines SM01 - SM04
+  // SECTION 1 DATA: Inbound from machines SM01 - SM04 & External Inbound
   // =========================================================================
   const smInboundRecords = useMemo(() => {
     const map = new Map<string, SlitBarcodeRecord>();
 
     // 1. Primary source: inboundList (all records received into warehouse via + รับเข้า)
-    // Do NOT exclude records even if their location or machine was later updated during outbound/issue on the same day
+    // Do NOT exclude records even if their orderNo/conditionText was later updated during outbound preparation
     for (const item of inboundList) {
       if (!item.batch) continue;
+      if (item.mode === "outbound") continue;
       const bKey = item.batch.trim().toUpperCase();
 
       if (!isRecordInSelectedShift(item.scanTimestamp)) continue;
 
-      const isExternal = item.inboundType === "external" || item.machine === "EXTERNAL" || item.conditionText?.includes("ภายนอก");
-      const rawMachine = (item.machine || "SM01").trim().toUpperCase();
-      const machine = isExternal ? "EXTERNAL" : (rawMachine.startsWith("SM") ? rawMachine : "SM01");
+      const machine = resolveInboundMachine(item);
 
       if (!map.has(bKey)) {
         const sapMatch = sapMasterMap.get(bKey);
+        const weightKg = resolveRecordWeightKg(
+          item.weightKg,
+          item.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        );
         map.set(bKey, {
           ...item,
           machine,
-          weightKg: item.weightKg || sapMatch?.weightKg || 0,
+          weightKg,
           grade: item.grade || sapMatch?.grade || "-",
           certThickness: formatDimension2Decimals(item.certThickness || sapMatch?.certThickness, "2.50 mm"),
           width: formatDimension2Decimals(item.width || sapMatch?.width, "100.00 mm"),
@@ -584,24 +782,30 @@ export function DailyReportView({
         continue;
       }
 
-      const isExternal = item.inboundType === "external" || item.machine === "EXTERNAL" || item.conditionText?.includes("ภายนอก");
-      const rawMachine = (item.machine || "SM01").trim().toUpperCase();
-      const machine = isExternal ? "EXTERNAL" : (!rawMachine || rawMachine === "-" ? "SM01" : rawMachine);
-      const isSmMachine =
+      const isExternal =
+        item.inboundType === "external" ||
+        (item.machine || "").trim().toUpperCase() === "EXTERNAL" ||
+        Boolean(item.conditionText && item.conditionText.includes("ภายนอก"));
+      const rawMachine = (item.machine || "").trim().toUpperCase();
+      const isSmOrInbound =
         isExternal ||
-        machine.startsWith("SM") ||
-        ["SM01", "SM02", "SM03", "SM04"].includes(machine) ||
+        rawMachine.startsWith("SM") ||
         item.mode === "inbound";
 
-      if (!isSmMachine) continue;
-
+      if (!isSmOrInbound) continue;
       if (!isRecordInSelectedShift(item.scanTimestamp)) continue;
 
       const sapMatch = sapMasterMap.get(bKey);
+      const weightKg = resolveRecordWeightKg(
+        item.weightKg,
+        item.unrestricted,
+        sapMatch?.weightKg,
+        batchWeightLookupMap.get(bKey)
+      );
       map.set(bKey, {
         ...item,
-        machine: isExternal ? "EXTERNAL" : (machine.startsWith("SM") ? machine : "SM01"),
-        weightKg: item.weightKg || sapMatch?.weightKg || 0,
+        machine: resolveInboundMachine(item),
+        weightKg,
         grade: item.grade || sapMatch?.grade || "-",
         certThickness: formatDimension2Decimals(item.certThickness || sapMatch?.certThickness, "2.50 mm"),
         width: formatDimension2Decimals(item.width || sapMatch?.width, "100.00 mm"),
@@ -609,7 +813,7 @@ export function DailyReportView({
     }
 
     return Array.from(map.values());
-  }, [inboundList, movementHistoryList, sapMasterMap, selectedDate, selectedShift]);
+  }, [inboundList, movementHistoryList, sapMasterMap, batchWeightLookupMap, selectedDate, selectedShift]);
 
   const totalSmInboundWeightKg = useMemo(() => {
     return smInboundRecords.reduce((sum, r) => sum + (r.weightKg || 0), 0);
@@ -652,6 +856,8 @@ export function DailyReportView({
     const results: {
       id: string;
       time: string;
+      rawTimestamp?: string;
+      fallbackDateStr?: string;
       orderNo: string;
       batch: string;
       destinationMachine: string;
@@ -665,17 +871,29 @@ export function DailyReportView({
     outboundList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
+      if (processedBatches.has(bKey)) return;
 
       if (!isRecordInSelectedShift(r.scanTimestamp)) return;
+
+      const sapMatch = sapMasterMap.get(bKey);
+      const weightKg = resolveRecordWeightKg(
+        r.weightKg,
+        r.unrestricted,
+        sapMatch?.weightKg,
+        batchWeightLookupMap.get(bKey)
+      );
 
       processedBatches.add(bKey);
       results.push({
         id: r.id || `DISP-${bKey}`,
         time: formatTimeDisplay(r.scanTimestamp),
+        rawTimestamp: r.scanTimestamp,
         orderNo: r.orderNo && r.orderNo !== "-" ? r.orderNo : "-",
         batch: r.batch,
-        destinationMachine: r.machine || r.location?.replace("เบิก", "") || "-",
-        weightKg: r.weightKg || 0,
+        destinationMachine: (r.machine || r.location?.replace(/^เบิก\s*/, "").replace(/^หน้าเครื่อง\s*/, "") || "-")
+          .trim()
+          .toUpperCase(),
+        weightKg,
         status: isThai ? "เบิกจ่ายสำเร็จ" : "Dispatched",
       });
     });
@@ -689,17 +907,27 @@ export function DailyReportView({
         if (processedBatches.has(bKey)) return;
 
         if (item.status === "verified" || item.machineIssued) {
-          const scanTime = item.machineIssuedAt || item.scannedAt || pl.createdAt;
-          if (!isRecordInSelectedShift(scanTime)) return;
+          const { rawTs, fallbackDateStr } = resolvePickListItemTimestamp(item, pl);
+          if (!isRecordInSelectedShift(rawTs, fallbackDateStr)) return;
+
+          const sapMatch = sapMasterMap.get(bKey);
+          const weightKg = resolveRecordWeightKg(
+            item.reqQty,
+            undefined,
+            sapMatch?.weightKg,
+            batchWeightLookupMap.get(bKey)
+          );
 
           processedBatches.add(bKey);
           results.push({
             id: item.id || `DISP-PL-${bKey}`,
-            time: formatTimeDisplay(scanTime),
+            time: formatTimeDisplay(rawTs, fallbackDateStr),
+            rawTimestamp: rawTs,
+            fallbackDateStr,
             orderNo: pl.orderNo,
             batch: item.batch,
-            destinationMachine: pl.machineId || "-",
-            weightKg: item.reqQty || 0,
+            destinationMachine: (pl.machineId || "-").trim().toUpperCase(),
+            weightKg,
             status: item.machineIssued
               ? (isThai ? "จ่ายเข้าเครื่องแล้ว" : "Issued at Machine")
               : (isThai ? "เตรียมแล้ว" : "Prepared"),
@@ -708,31 +936,49 @@ export function DailyReportView({
       });
     });
 
-    // 3. Collect from movementHistoryList where location indicates dispensing ("เบิก")
+    // 3. Collect from movementHistoryList where mode or location indicates dispensing
     movementHistoryList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
       if (processedBatches.has(bKey)) return;
 
       const loc = (r.location || "").trim();
-      if (loc.startsWith("เบิก") || loc.includes("เบิก") || ["CF", "ML", "ZF"].includes(loc.toUpperCase())) {
+      const upperLoc = loc.toUpperCase();
+      if (
+        r.mode === "outbound" ||
+        loc.startsWith("เบิก") ||
+        loc.includes("เบิก") ||
+        loc.includes("หน้าเครื่อง") ||
+        ["CF", "ML", "ZF"].includes(upperLoc)
+      ) {
         if (!isRecordInSelectedShift(r.scanTimestamp)) return;
+
+        const sapMatch = sapMasterMap.get(bKey);
+        const weightKg = resolveRecordWeightKg(
+          r.weightKg,
+          r.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        );
 
         processedBatches.add(bKey);
         results.push({
           id: r.id || `DISP-MH-${bKey}`,
           time: formatTimeDisplay(r.scanTimestamp),
+          rawTimestamp: r.scanTimestamp,
           orderNo: r.orderNo && r.orderNo !== "-" ? r.orderNo : "-",
           batch: r.batch,
-          destinationMachine: r.machine || loc.replace("เบิก", "") || "-",
-          weightKg: r.weightKg || 0,
+          destinationMachine: (r.machine || loc.replace(/^เบิก\s*/, "").replace(/^หน้าเครื่อง\s*/, "") || "-")
+            .trim()
+            .toUpperCase(),
+          weightKg,
           status: isThai ? "เบิกจ่ายสำเร็จ" : "Dispatched",
         });
       }
     });
 
     return results;
-  }, [outboundList, pickLists, movementHistoryList, selectedDate, selectedShift, isThai]);
+  }, [outboundList, pickLists, movementHistoryList, sapMasterMap, batchWeightLookupMap, selectedDate, selectedShift, isThai]);
 
   const totalDispensedWeightKg = useMemo(() => {
     return machineDispensingRecords.reduce((sum, r) => sum + (r.weightKg || 0), 0);
@@ -828,47 +1074,33 @@ export function DailyReportView({
 
   // Inbound vs Outbound Distribution for Chart 3 (Combined across BOTH shifts: Day + Night)
   const { inOutDistribution, bothShiftsSummary } = useMemo(() => {
-    const getRecordShiftOnSelectedDate = (timestampStr?: string): "day" | "night" | null => {
-      const dt = parseTimestampDate(timestampStr);
-      if (!dt) return "day";
-      const recDateStr = formatLocalDateStr(dt);
-      const recHour = dt.getHours();
-      const nextDayStr = getNextDayStr(selectedDate);
-
-      if (recDateStr === selectedDate) {
-        if (recHour >= 8 && recHour < 20) return "day";
-        return "night";
-      }
-      if (recDateStr === nextDayStr && recHour < 8) {
-        return "night";
-      }
-      return null;
+    const getRecordShiftOnSelectedDate = (
+      timestampStr?: string,
+      fallbackDateStr?: string
+    ): "day" | "night" | null => {
+      const info = getOperationalDateAndShift(timestampStr, fallbackDateStr);
+      if (!info || info.opDateStr !== selectedDate) return null;
+      return info.shift;
     };
 
-    // Map batch -> weight from inbound/history/SAP for lookup
-    const batchWeightMap = new Map<string, number>();
-    sapMasterMap.forEach((sap, bKey) => {
-      batchWeightMap.set(bKey.trim().toUpperCase(), sap.weightKg || 0);
-    });
-    [...inboundList, ...movementHistoryList, ...outboundList].forEach((r) => {
-      if (!r.batch) return;
-      const bKey = r.batch.trim().toUpperCase();
-      const existing = batchWeightMap.get(bKey) || 0;
-      batchWeightMap.set(bKey, r.weightKg || existing || 0);
-    });
-
-    // 1. Collect Inbound records across both shifts (SM machines)
+    // 1. Collect Inbound records across both shifts (SM machines + External)
     const inboundMap = new Map<string, { shift: "day" | "night"; weightKg: number }>();
     inboundList.forEach((item) => {
-      if (!item.batch) return;
+      if (!item.batch || item.mode === "outbound") return;
       const bKey = item.batch.trim().toUpperCase();
       const shift = getRecordShiftOnSelectedDate(item.scanTimestamp);
       if (!shift) return;
 
       if (!inboundMap.has(bKey)) {
+        const sapMatch = sapMasterMap.get(bKey);
         inboundMap.set(bKey, {
           shift,
-          weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
+          weightKg: resolveRecordWeightKg(
+            item.weightKg,
+            item.unrestricted,
+            sapMatch?.weightKg,
+            batchWeightLookupMap.get(bKey)
+          ),
         });
       }
     });
@@ -878,18 +1110,25 @@ export function DailyReportView({
       if (inboundMap.has(bKey)) return;
       const loc = (item.location || item.storageLocation || "").trim();
       if (item.mode === "outbound" || loc.startsWith("เบิก") || loc.includes("เบิก")) return;
-      const machine = (item.machine || "SM01").trim().toUpperCase();
-      const isSmMachine =
-        machine.startsWith("SM") ||
-        ["SM01", "SM02", "SM03", "SM04"].includes(machine) ||
-        item.mode === "inbound";
-      if (!isSmMachine) return;
+      const isExternal =
+        item.inboundType === "external" ||
+        (item.machine || "").trim().toUpperCase() === "EXTERNAL" ||
+        Boolean(item.conditionText && item.conditionText.includes("ภายนอก"));
+      const rawMachine = (item.machine || "").trim().toUpperCase();
+      const isSmOrInbound = isExternal || rawMachine.startsWith("SM") || item.mode === "inbound";
+      if (!isSmOrInbound) return;
       const shift = getRecordShiftOnSelectedDate(item.scanTimestamp);
       if (!shift) return;
 
+      const sapMatch = sapMasterMap.get(bKey);
       inboundMap.set(bKey, {
         shift,
-        weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
+        weightKg: resolveRecordWeightKg(
+          item.weightKg,
+          item.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        ),
       });
     });
 
@@ -898,11 +1137,18 @@ export function DailyReportView({
     outboundList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
+      if (outboundMap.has(bKey)) return;
       const shift = getRecordShiftOnSelectedDate(r.scanTimestamp);
       if (!shift) return;
+      const sapMatch = sapMasterMap.get(bKey);
       outboundMap.set(bKey, {
         shift,
-        weightKg: r.weightKg || batchWeightMap.get(bKey) || 0,
+        weightKg: resolveRecordWeightKg(
+          r.weightKg,
+          r.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        ),
       });
     });
 
@@ -912,12 +1158,18 @@ export function DailyReportView({
         const bKey = item.batch.trim().toUpperCase();
         if (outboundMap.has(bKey)) return;
         if (item.status === "verified" || item.machineIssued) {
-          const scanTime = item.machineIssuedAt || item.scannedAt || pl.createdAt;
-          const shift = getRecordShiftOnSelectedDate(scanTime);
+          const { rawTs, fallbackDateStr } = resolvePickListItemTimestamp(item, pl);
+          const shift = getRecordShiftOnSelectedDate(rawTs, fallbackDateStr);
           if (!shift) return;
+          const sapMatch = sapMasterMap.get(bKey);
           outboundMap.set(bKey, {
             shift,
-            weightKg: item.reqQty || batchWeightMap.get(bKey) || 0,
+            weightKg: resolveRecordWeightKg(
+              item.reqQty,
+              undefined,
+              sapMatch?.weightKg,
+              batchWeightLookupMap.get(bKey)
+            ),
           });
         }
       });
@@ -928,12 +1180,24 @@ export function DailyReportView({
       const bKey = r.batch.trim().toUpperCase();
       if (outboundMap.has(bKey)) return;
       const loc = (r.location || "").trim();
-      if (loc.startsWith("เบิก") || loc.includes("เบิก") || ["CF", "ML", "ZF"].includes(loc.toUpperCase())) {
+      if (
+        r.mode === "outbound" ||
+        loc.startsWith("เบิก") ||
+        loc.includes("เบิก") ||
+        loc.includes("หน้าเครื่อง") ||
+        ["CF", "ML", "ZF"].includes(loc.toUpperCase())
+      ) {
         const shift = getRecordShiftOnSelectedDate(r.scanTimestamp);
         if (!shift) return;
+        const sapMatch = sapMasterMap.get(bKey);
         outboundMap.set(bKey, {
           shift,
-          weightKg: r.weightKg || batchWeightMap.get(bKey) || 0,
+          weightKg: resolveRecordWeightKg(
+            r.weightKg,
+            r.unrestricted,
+            sapMatch?.weightKg,
+            batchWeightLookupMap.get(bKey)
+          ),
         });
       }
     });
@@ -1035,7 +1299,7 @@ export function DailyReportView({
         outboundPercent,
       },
     };
-  }, [inboundList, outboundList, movementHistoryList, pickLists, sapMasterMap, selectedDate]);
+  }, [inboundList, outboundList, movementHistoryList, pickLists, sapMasterMap, batchWeightLookupMap, selectedDate]);
 
   // Hourly timeline activity for Chart 4
   const hourlyActivityData = useMemo(() => {
@@ -1060,7 +1324,7 @@ export function DailyReportView({
     });
 
     machineDispensingRecords.forEach((r) => {
-      const dt = parseTimestampDate(r.time);
+      const dt = parseTimestampDate(r.rawTimestamp || r.time, r.fallbackDateStr || selectedDate);
       if (dt) {
         const h = dt.getHours();
         if (hourlyMap[h]) {
@@ -1077,7 +1341,7 @@ export function DailyReportView({
       dispensed: hourlyMap[h]?.dispensed || 0,
       dispensedCoils: hourlyMap[h]?.dispensedCoils || 0,
     }));
-  }, [smInboundRecords, machineDispensingRecords, selectedShift]);
+  }, [smInboundRecords, machineDispensingRecords, selectedDate, selectedShift]);
 
   const maxHourlyKg = useMemo(() => {
     let max = 500;
@@ -1138,45 +1402,13 @@ export function DailyReportView({
   // MONTHLY REPORT AGGREGATION ENGINE (Cumulative Daily & Machine Analytics)
   // =========================================================================
   const monthlyAnalytics = useMemo(() => {
-    const [yearStr, monthStr] = (selectedMonth || todayStr.slice(0, 7)).split("-");
+    const targetMonth = selectedMonth || operationalTodayStr.slice(0, 7);
+    const [yearStr, monthStr] = targetMonth.split("-");
     const yearNum = parseInt(yearStr, 10) || new Date().getFullYear();
     const monthNum = parseInt(monthStr, 10) || new Date().getMonth() + 1;
     const daysInMonth = new Date(yearNum, monthNum, 0).getDate();
 
-    const formatLocalYYYYMMDD = (d: Date): string => {
-      const yy = d.getFullYear();
-      const mm = String(d.getMonth() + 1).padStart(2, "0");
-      const dd = String(d.getDate()).padStart(2, "0");
-      return `${yy}-${mm}-${dd}`;
-    };
-
-    const getOperationalDateAndShift = (
-      timestampStr?: string
-    ): { opDateStr: string; shift: "day" | "night" } => {
-      const dt = parseTimestampDate(timestampStr);
-      if (!dt) {
-        return { opDateStr: selectedDate || todayStr, shift: "day" };
-      }
-      const hour = dt.getHours();
-      if (hour < 8 || hour >= 20) {
-        return { opDateStr: formatLocalYYYYMMDD(dt), shift: "night" };
-      }
-      return { opDateStr: formatLocalYYYYMMDD(dt), shift: "day" };
-    };
-
-    // Build Batch -> Weight Lookup Map
-    const batchWeightMap = new Map<string, number>();
-    sapMasterMap.forEach((sap, bKey) => {
-      batchWeightMap.set(bKey.trim().toUpperCase(), sap.weightKg || 0);
-    });
-    [...inboundList, ...movementHistoryList, ...outboundList].forEach((r) => {
-      if (!r.batch) return;
-      const bKey = r.batch.trim().toUpperCase();
-      const existing = batchWeightMap.get(bKey) || 0;
-      batchWeightMap.set(bKey, r.weightKg || existing || 0);
-    });
-
-    // 1. Collect Monthly Inbound Records (SM Machines)
+    // 1. Collect Monthly Inbound Records (SM Machines + External Inbound)
     const monthlyInboundMap = new Map<
       string,
       {
@@ -1190,25 +1422,30 @@ export function DailyReportView({
     >();
 
     inboundList.forEach((item) => {
-      if (!item.batch) return;
+      if (!item.batch || item.mode === "outbound") return;
       const bKey = item.batch.trim().toUpperCase();
-      const rawMachine = (item.machine || "SM01").trim().toUpperCase();
-      const machine = rawMachine.startsWith("SM") ? rawMachine : "SM01";
+      if (monthlyInboundMap.has(bKey)) return;
 
-      const { opDateStr, shift } = getOperationalDateAndShift(item.scanTimestamp);
-      if (!opDateStr.startsWith(selectedMonth)) return;
+      const opInfo = getOperationalDateAndShift(item.scanTimestamp);
+      if (!opInfo) return;
+      const { opDateStr, shift } = opInfo;
+      if (!opDateStr.startsWith(targetMonth)) return;
       if (monthlyShiftFilter !== "all" && shift !== monthlyShiftFilter) return;
 
-      if (!monthlyInboundMap.has(bKey)) {
-        monthlyInboundMap.set(bKey, {
-          batch: item.batch,
-          opDateStr,
-          shift,
-          machine,
-          weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
-          grade: item.grade || "-",
-        });
-      }
+      const sapMatch = sapMasterMap.get(bKey);
+      monthlyInboundMap.set(bKey, {
+        batch: item.batch,
+        opDateStr,
+        shift,
+        machine: resolveInboundMachine(item),
+        weightKg: resolveRecordWeightKg(
+          item.weightKg,
+          item.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        ),
+        grade: item.grade || sapMatch?.grade || "-",
+      });
     });
 
     movementHistoryList.forEach((item) => {
@@ -1217,22 +1454,33 @@ export function DailyReportView({
       if (monthlyInboundMap.has(bKey)) return;
       const loc = (item.location || item.storageLocation || "").trim();
       if (item.mode === "outbound" || loc.startsWith("เบิก") || loc.includes("เบิก")) return;
-      const machine = (item.machine || "").trim().toUpperCase();
-      const isSmMachine =
-        machine.startsWith("SM") || ["SM01", "SM02", "SM03", "SM04"].includes(machine);
-      if (!isSmMachine) return;
+      const isExternal =
+        item.inboundType === "external" ||
+        (item.machine || "").trim().toUpperCase() === "EXTERNAL" ||
+        Boolean(item.conditionText && item.conditionText.includes("ภายนอก"));
+      const rawMachine = (item.machine || "").trim().toUpperCase();
+      const isSmOrInbound = isExternal || rawMachine.startsWith("SM") || item.mode === "inbound";
+      if (!isSmOrInbound) return;
 
-      const { opDateStr, shift } = getOperationalDateAndShift(item.scanTimestamp);
-      if (!opDateStr.startsWith(selectedMonth)) return;
+      const opInfo = getOperationalDateAndShift(item.scanTimestamp);
+      if (!opInfo) return;
+      const { opDateStr, shift } = opInfo;
+      if (!opDateStr.startsWith(targetMonth)) return;
       if (monthlyShiftFilter !== "all" && shift !== monthlyShiftFilter) return;
 
+      const sapMatch = sapMasterMap.get(bKey);
       monthlyInboundMap.set(bKey, {
         batch: item.batch,
         opDateStr,
         shift,
-        machine: machine || "SM01",
-        weightKg: item.weightKg || batchWeightMap.get(bKey) || 0,
-        grade: item.grade || "-",
+        machine: resolveInboundMachine(item),
+        weightKg: resolveRecordWeightKg(
+          item.weightKg,
+          item.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        ),
+        grade: item.grade || sapMatch?.grade || "-",
       });
     });
 
@@ -1253,19 +1501,32 @@ export function DailyReportView({
     outboundList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
-      const { opDateStr, shift } = getOperationalDateAndShift(r.scanTimestamp);
-      if (!opDateStr.startsWith(selectedMonth)) return;
+      if (monthlyOutboundMap.has(bKey)) return;
+      const opInfo = getOperationalDateAndShift(r.scanTimestamp);
+      if (!opInfo) return;
+      const { opDateStr, shift } = opInfo;
+      if (!opDateStr.startsWith(targetMonth)) return;
       if (monthlyShiftFilter !== "all" && shift !== monthlyShiftFilter) return;
 
+      const sapMatch = sapMasterMap.get(bKey);
       monthlyOutboundMap.set(bKey, {
         batch: r.batch,
         orderNo: r.orderNo && r.orderNo !== "-" ? r.orderNo : "-",
         opDateStr,
         shift,
-        destinationMachine: (r.machine || r.location?.replace("เบิก", "") || "TM01")
+        destinationMachine: (
+          r.machine ||
+          r.location?.replace(/^เบิก\s*/, "").replace(/^หน้าเครื่อง\s*/, "") ||
+          "TM01"
+        )
           .trim()
           .toUpperCase(),
-        weightKg: r.weightKg || batchWeightMap.get(bKey) || 0,
+        weightKg: resolveRecordWeightKg(
+          r.weightKg,
+          r.unrestricted,
+          sapMatch?.weightKg,
+          batchWeightLookupMap.get(bKey)
+        ),
         status: isThai ? "เบิกจ่ายสำเร็จ" : "Dispatched",
       });
     });
@@ -1276,18 +1537,26 @@ export function DailyReportView({
         const bKey = item.batch.trim().toUpperCase();
         if (monthlyOutboundMap.has(bKey)) return;
         if (item.status === "verified" || item.machineIssued) {
-          const scanTime = item.machineIssuedAt || item.scannedAt || pl.createdAt;
-          const { opDateStr, shift } = getOperationalDateAndShift(scanTime);
-          if (!opDateStr.startsWith(selectedMonth)) return;
+          const { rawTs, fallbackDateStr } = resolvePickListItemTimestamp(item, pl);
+          const opInfo = getOperationalDateAndShift(rawTs, fallbackDateStr);
+          if (!opInfo) return;
+          const { opDateStr, shift } = opInfo;
+          if (!opDateStr.startsWith(targetMonth)) return;
           if (monthlyShiftFilter !== "all" && shift !== monthlyShiftFilter) return;
 
+          const sapMatch = sapMasterMap.get(bKey);
           monthlyOutboundMap.set(bKey, {
             batch: item.batch,
             orderNo: pl.orderNo || "-",
             opDateStr,
             shift,
             destinationMachine: (pl.machineId || "TM01").trim().toUpperCase(),
-            weightKg: item.reqQty || batchWeightMap.get(bKey) || 0,
+            weightKg: resolveRecordWeightKg(
+              item.reqQty,
+              undefined,
+              sapMatch?.weightKg,
+              batchWeightLookupMap.get(bKey)
+            ),
             status: item.machineIssued
               ? isThai
                 ? "จ่ายเข้าเครื่องแล้ว"
@@ -1306,23 +1575,37 @@ export function DailyReportView({
       if (monthlyOutboundMap.has(bKey)) return;
       const loc = (r.location || "").trim();
       if (
+        r.mode === "outbound" ||
         loc.startsWith("เบิก") ||
         loc.includes("เบิก") ||
+        loc.includes("หน้าเครื่อง") ||
         ["CF", "ML", "ZF"].includes(loc.toUpperCase())
       ) {
-        const { opDateStr, shift } = getOperationalDateAndShift(r.scanTimestamp);
-        if (!opDateStr.startsWith(selectedMonth)) return;
+        const opInfo = getOperationalDateAndShift(r.scanTimestamp);
+        if (!opInfo) return;
+        const { opDateStr, shift } = opInfo;
+        if (!opDateStr.startsWith(targetMonth)) return;
         if (monthlyShiftFilter !== "all" && shift !== monthlyShiftFilter) return;
 
+        const sapMatch = sapMasterMap.get(bKey);
         monthlyOutboundMap.set(bKey, {
           batch: r.batch,
           orderNo: r.orderNo && r.orderNo !== "-" ? r.orderNo : "-",
           opDateStr,
           shift,
-          destinationMachine: (r.machine || loc.replace("เบิก", "") || "TM01")
+          destinationMachine: (
+            r.machine ||
+            loc.replace(/^เบิก\s*/, "").replace(/^หน้าเครื่อง\s*/, "") ||
+            "TM01"
+          )
             .trim()
             .toUpperCase(),
-          weightKg: r.weightKg || batchWeightMap.get(bKey) || 0,
+          weightKg: resolveRecordWeightKg(
+            r.weightKg,
+            r.unrestricted,
+            sapMatch?.weightKg,
+            batchWeightLookupMap.get(bKey)
+          ),
           status: isThai ? "เบิกจ่ายสำเร็จ" : "Dispatched",
         });
       }
@@ -1346,7 +1629,7 @@ export function DailyReportView({
     >();
 
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${selectedMonth}-${String(d).padStart(2, "0")}`;
+      const dateStr = `${targetMonth}-${String(d).padStart(2, "0")}`;
       dailyMap.set(dateStr, {
         dayNumber: d,
         dateStr,
@@ -1369,6 +1652,7 @@ export function DailyReportView({
       SM02: { totalKg: 0, coils: 0, dayKg: 0, nightKg: 0 },
       SM03: { totalKg: 0, coils: 0, dayKg: 0, nightKg: 0 },
       SM04: { totalKg: 0, coils: 0, dayKg: 0, nightKg: 0 },
+      EXTERNAL: { totalKg: 0, coils: 0, dayKg: 0, nightKg: 0 },
     };
 
     const dispensingMachineMap: Record<
@@ -1482,7 +1766,8 @@ export function DailyReportView({
       ) * 1.15;
 
     const smMachineList = Object.entries(smMachineMap).map(([machine, stats]) => ({
-      machine,
+      machine: machine === "EXTERNAL" ? (isThai ? "รับเข้าภายนอก" : "EXTERNAL") : machine,
+      machineKey: machine,
       ...stats,
     }));
     const maxSmMonthlyKg =
@@ -1515,8 +1800,8 @@ export function DailyReportView({
 
     const activeDaysCount = dailySeries.filter((d) => d.hasActivity).length;
     const activeMachinesCount =
-      smMachineList.filter((m) => m.totalKg > 0).length +
-      dispensingMachineList.filter((m) => m.totalKg > 0).length;
+      smMachineList.filter((m) => m.coils > 0 || m.totalKg > 0).length +
+      dispensingMachineList.filter((m) => m.coils > 0 || m.totalKg > 0).length;
 
     const monthlyDistribution = [
       {
@@ -1583,10 +1868,10 @@ export function DailyReportView({
     movementHistoryList,
     pickLists,
     sapMasterMap,
+    batchWeightLookupMap,
     selectedMonth,
     monthlyShiftFilter,
-    selectedDate,
-    todayStr,
+    operationalTodayStr,
     isThai,
   ]);
 

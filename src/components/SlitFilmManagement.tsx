@@ -854,6 +854,11 @@ export function generate3000SapRecords(): SapMasterItem[] {
   return [];
 }
 
+// Format a Date object as local YYYY-MM-DD (avoiding UTC day-shift during 00:00-06:59 local time)
+function formatLocalYMD(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // Generate record from shopfloor scan (Defaults to 3 shopfloor columns: Batch, Machine, Location; hasSapData: false)
 function generateRecordFromBatch(
   batch: string,
@@ -864,7 +869,7 @@ function generateRecordFromBatch(
 ): SlitBarcodeRecord {
   const now = new Date();
   const timestamp = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const dateStr = formatLocalYMD(now);
   
   const matchedSap = sapMap?.get(batch.trim().toUpperCase());
 
@@ -1632,20 +1637,9 @@ export function SlitFilmManagement({
       inboundQueryOpts.dateFilter = historyDateFilter;
       outboundQueryOpts.dateFilter = historyDateFilter;
       pickListQueryOpts.dateFilter = historyDateFilter;
-    } else if (activeMode === "daily_report" && dailyReportDate) {
-      // Rule 4: For daily report, fetch records for the selected date (and next day for night shift 20:00-08:00)
-      const parts = dailyReportDate.split("-").map(Number);
-      let nextDayStr = dailyReportDate;
-      if (parts.length === 3 && !parts.some(isNaN)) {
-        const nextD = new Date(parts[0], parts[1] - 1, parts[2] + 1);
-        nextDayStr = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, "0")}-${String(nextD.getDate()).padStart(2, "0")}`;
-      }
-      inboundQueryOpts.dateFilter = dailyReportDate;
-      inboundQueryOpts.endDateFilter = nextDayStr;
-      outboundQueryOpts.dateFilter = dailyReportDate;
-      outboundQueryOpts.endDateFilter = nextDayStr;
-      pickListQueryOpts.dateFilter = dailyReportDate;
-      pickListQueryOpts.endDateFilter = nextDayStr;
+    } else if (activeMode === "daily_report") {
+      // Load full active inbound, outbound, and picklist records so Daily, Monthly, and Space reports
+      // accurately filter all date formats (ISO, YYYY-MM-DD, Thai BE DD/MM/YYYY) and cross-day shifts/picklists
     }
 
     // Subscribe to Inbound collection (or one-time getDocs when Cloud Real-time is OFF)
@@ -1750,7 +1744,7 @@ export function SlitFilmManagement({
       unsubscribePickLists();
       unsubscribeSapMaster();
     };
-  }, [activeMode, isCloudRealtime, historyDateFilter, dailyReportDate, manualRefreshTick]);
+  }, [activeMode, isCloudRealtime, historyDateFilter, manualRefreshTick]);
 
   // Outbound active machine category & active machine selection
   const [activeCategory, setActiveCategory] = useState<string>("pipe");
@@ -2425,7 +2419,7 @@ export function SlitFilmManagement({
       machineId: emergencyMachineId,
       machineType: mType,
       createdAt: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-      createdDate: new Date().toISOString().slice(0, 10),
+      createdDate: formatLocalYMD(),
       status: "in_progress",
       isTemporary: true,
       items: emergencyScannedBatches.map((b, idx) => ({
@@ -2629,7 +2623,7 @@ export function SlitFilmManagement({
         machineId: importMachineId,
         machineType: mType,
         createdAt: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-        createdDate: new Date().toISOString().slice(0, 10),
+        createdDate: formatLocalYMD(),
         status: "pending",
         items: formattedItems,
       });
@@ -2646,7 +2640,7 @@ export function SlitFilmManagement({
             machineId: importMachineId,
             machineType: mType,
             createdAt: new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
-            createdDate: new Date().toISOString().slice(0, 10),
+            createdDate: formatLocalYMD(),
             status: "pending",
             items: chunkItems,
           });
@@ -4198,7 +4192,7 @@ export function SlitFilmManagement({
 
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Stock_Balance");
-    const dateStr = new Date().toISOString().slice(0, 10);
+    const dateStr = formatLocalYMD();
     XLSX.writeFile(workbook, `Stock_Balance_${dateStr}.xlsx`);
   }, [filteredStockList, isThai]);
 
@@ -4364,7 +4358,7 @@ export function SlitFilmManagement({
       cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
     }).then((result) => {
       if (result.isConfirmed) {
-        const timestamp = `${new Date().toISOString().slice(0, 10)} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+        const timestamp = `${formatLocalYMD()} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
 
         const relocatedRecordsForCloud: SlitBarcodeRecord[] = [];
         setInboundList((prevInbound) => {
@@ -5636,7 +5630,7 @@ export function SlitFilmManagement({
       const totalKg = inboundMatch?.weightKg || foundItem?.reqQty || 0;
       const totalTon = (totalKg / 1000).toFixed(3);
       const machineLoc = `เบิก${targetMachine}`;
-      const nowTimestampStr = `${new Date().toISOString().slice(0, 10)} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+      const nowTimestampStr = `${formatLocalYMD()} ${new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
 
       const matchedSap = sapMasterMap.get(trimmed);
       const sourceBasketLoc =
@@ -11443,7 +11437,7 @@ export function SlitFilmManagement({
                       const newM = e.target.value;
                       setEmergencyMachineId(newM);
                       if (newM) {
-                        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+                        const dateStr = formatLocalYMD().replace(/-/g, "");
                         const rand4 = Math.floor(1000 + Math.random() * 9000);
                         setEmergencyTempOrderNo(`TEMP-${newM}-${dateStr}-${rand4}`);
                         setTimeout(() => emergencyBarcodeRef.current?.focus(), 100);
