@@ -1626,8 +1626,7 @@ export function SlitFilmManagement({
     const pickListQueryOpts: SlitQueryOptions = {};
 
     if (activeMode === "stock_balance") {
-      // Rule 4: For remaining stock balance, fetch only items with remaining balance > 0
-      inboundQueryOpts.onlyPositiveStock = true;
+      // Load all active inbound records (including newly scanned shopfloor batches awaiting SAP weight data)
     } else if (activeMode === "movement_history" && historyDateFilter) {
       // Rule 4: For daily history, fetch only records for the selected date
       inboundQueryOpts.dateFilter = historyDateFilter;
@@ -3623,27 +3622,58 @@ export function SlitFilmManagement({
   const [stockCurrentPage, setStockCurrentPage] = useState<number>(1);
 
   const stockList = useMemo(() => {
+    const normalizeTsForCompare = (rawTs?: string): string => {
+      const s = (rawTs || "").trim();
+      if (!s || s === "-") return "";
+      const mIso = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(.*)$/);
+      if (mIso) {
+        let y = parseInt(mIso[1], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${String(parseInt(mIso[2], 10)).padStart(2, "0")}-${String(parseInt(mIso[3], 10)).padStart(2, "0")}${(mIso[4] || "").trim() ? ` ${(mIso[4] || "").trim()}` : ""}`;
+      }
+      const mDmy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(.*)$/);
+      if (mDmy) {
+        let y = parseInt(mDmy[3], 10);
+        if (y > 2400) y -= 543;
+        return `${y}-${String(parseInt(mDmy[2], 10)).padStart(2, "0")}-${String(parseInt(mDmy[1], 10)).padStart(2, "0")}${(mDmy[4] || "").trim() ? ` ${(mDmy[4] || "").trim()}` : ""}`;
+      }
+      return s;
+    };
+
+    const isOutboundLocationStr = (rawLoc?: string): boolean => {
+      const loc = (rawLoc || "").trim();
+      if (!loc) return false;
+      const upperLoc = loc.toUpperCase();
+      return loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc);
+    };
+
     // Set of batches that have been dispatched to machines (Location contains "เบิก" in Movement History or lists)
     const dispatchedBatchSet = new Set<string>();
+    const latestOutboundTsMap = new Map<string, string>();
     const outboundBatchOrderSet = new Set<string>();
+
+    const markDispatched = (bKey: string, ts?: string) => {
+      dispatchedBatchSet.add(bKey);
+      const norm = normalizeTsForCompare(ts);
+      const prevTs = latestOutboundTsMap.get(bKey) || "";
+      if (norm && norm > prevTs) {
+        latestOutboundTsMap.set(bKey, norm);
+      }
+    };
 
     movementHistoryList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
-      const loc = (r.location || "").trim();
-      const upperLoc = loc.toUpperCase();
-      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
-        dispatchedBatchSet.add(bKey);
+      if (isOutboundLocationStr(r.location)) {
+        markDispatched(bKey, r.scanTimestamp);
       }
     });
 
     inboundList.forEach((r) => {
       if (!r.batch) return;
       const bKey = r.batch.trim().toUpperCase();
-      const loc = (r.location || "").trim();
-      const upperLoc = loc.toUpperCase();
-      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
-        dispatchedBatchSet.add(bKey);
+      if (isOutboundLocationStr(r.location)) {
+        markDispatched(bKey, r.scanTimestamp);
       }
     });
 
@@ -3654,11 +3684,9 @@ export function SlitFilmManagement({
         outboundBatchOrderSet.add(`${bKey}::${r.orderNo}`);
       }
       const isTempEmergency = Boolean((r.isTemporaryOrder || r.orderNo?.startsWith("TEMP-")) && !r.matchedOrderNo);
-      const loc = (r.location || "").trim();
-      const upperLoc = loc.toUpperCase();
-      if (loc.includes("เบิก") || loc.startsWith("เบิก") || ["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) {
+      if (isOutboundLocationStr(r.location)) {
         if (!isTempEmergency) {
-          dispatchedBatchSet.add(bKey);
+          markDispatched(bKey, r.scanTimestamp);
         }
       }
     });
@@ -3671,7 +3699,7 @@ export function SlitFilmManagement({
         if (!item.batch) return;
         const bKey = item.batch.trim().toUpperCase();
         if (item.machineIssued && !isPlTemp) {
-          dispatchedBatchSet.add(bKey);
+          markDispatched(bKey, item.machineIssuedAt || pl.createdDate);
           outboundBatchOrderSet.add(`${bKey}::${pl.orderNo}`);
         }
         if (item.status === "verified" || isPlTemp) {
@@ -3691,21 +3719,38 @@ export function SlitFilmManagement({
       });
     });
 
-    // Map of active shopfloor inbound scans by Batch (excluding dispatched/outbound items)
+    // Map of active shopfloor inbound scans by Batch (keep newest inbound record per batch; re-enable returned or newer inbound scans)
     const activeInboundMap = new Map<string, SlitBarcodeRecord>();
     inboundList.forEach((item) => {
-      if (!item.location) return;
+      if (!item.batch || !item.location) return;
+      const loc = item.location.trim();
+      if (!loc || isOutboundLocationStr(loc)) return;
+
       const bKey = item.batch.trim().toUpperCase();
       const isReturnedToWarehouse = Boolean(
         item.conditionText && String(item.conditionText).includes("คืนคลัง")
       );
-      if (dispatchedBatchSet.has(bKey) && !isReturnedToWarehouse) return;
-      const loc = item.location.trim();
-      const upperLoc = loc.toUpperCase();
-      if (loc.startsWith("เบิก") || loc.includes("เบิก")) return;
-      if (["CF", "ML", "ZF", "เบิกTM01"].includes(upperLoc)) return;
+      const inboundNormTs = normalizeTsForCompare(item.scanTimestamp);
+      const outboundNormTs = latestOutboundTsMap.get(bKey) || "";
+      const isNewerThanOutbound = Boolean(inboundNormTs && (!outboundNormTs || inboundNormTs >= outboundNormTs));
 
-      activeInboundMap.set(bKey, item);
+      if (dispatchedBatchSet.has(bKey)) {
+        if (isReturnedToWarehouse || isNewerThanOutbound) {
+          dispatchedBatchSet.delete(bKey);
+        } else {
+          return;
+        }
+      }
+
+      const existing = activeInboundMap.get(bKey);
+      if (!existing) {
+        activeInboundMap.set(bKey, item);
+      } else {
+        const existingNormTs = normalizeTsForCompare(existing.scanTimestamp);
+        if (inboundNormTs && inboundNormTs > existingNormTs) {
+          activeInboundMap.set(bKey, item);
+        }
+      }
     });
 
     const resultList: (SlitBarcodeRecord & {
@@ -3744,6 +3789,7 @@ export function SlitFilmManagement({
         batch: sapItem.batch,
         machine: isTempStaged ? (prepInfo?.machineId || "-") : (matchedInbound?.machine || "-"),
         location: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (matchedInbound?.location || "-"),
+        ...(matchedInbound?.transferDocNo ? { transferDocNo: matchedInbound.transferDocNo } : {}),
         hasSapData: true,
         salesDoc: sapItem.salesDoc,
         materialNo: sapItem.materialNo,
@@ -3795,7 +3841,7 @@ export function SlitFilmManagement({
           ...inboundItem,
           location: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (inboundItem.location || "-"),
           storageLocation: isTempStaged ? `หน้าเครื่อง ${prepInfo?.machineId || "-"}` : (inboundItem.storageLocation || inboundItem.location || "-"),
-          hasSapData: false,
+          hasSapData: Boolean(inboundItem.hasSapData),
           stockStatus: currentStatus,
           preparedOrderNo: prepInfo?.orderNo,
           preparedMachineId: prepInfo?.machineId,
@@ -3907,8 +3953,31 @@ export function SlitFilmManagement({
       });
     });
 
-    // Rule 4: Only return items with remaining stock balance > 0
-    return resultList.filter((item) => (Number(item.weightKg) || 0) > 0);
+    // Keep items with remaining stock balance > 0 OR active shopfloor inbound scans / prepared items (including newly received coils awaiting SAP weight)
+    const visibleStock = resultList.filter((item) => {
+      const cleanKey = (item.batch || "").trim().toUpperCase();
+      if ((Number(item.weightKg) || 0) > 0) return true;
+      if (activeInboundMap.has(cleanKey)) return true;
+      if (item.stockStatus === "preparing") return true;
+      return false;
+    });
+
+    // Surface newly scanned shopfloor inbound items first (newest scanTimestamp on top) so new inbound rounds appear immediately in Stock Balance
+    const scannedInboundItems: typeof visibleStock = [];
+    const otherStockItems: typeof visibleStock = [];
+    visibleStock.forEach((item) => {
+      const cleanKey = (item.batch || "").trim().toUpperCase();
+      if (activeInboundMap.has(cleanKey)) {
+        scannedInboundItems.push(item);
+      } else {
+        otherStockItems.push(item);
+      }
+    });
+    scannedInboundItems.sort((a, b) =>
+      normalizeTsForCompare(b.scanTimestamp).localeCompare(normalizeTsForCompare(a.scanTimestamp))
+    );
+
+    return [...scannedInboundItems, ...otherStockItems];
   }, [inboundList, sapMasterMap, pickLists, outboundList, movementHistoryList]);
 
   const filteredStockList = useMemo(() => {
@@ -3959,7 +4028,8 @@ export function SlitFilmManagement({
         const matchMat = (item.materialNo || "").toLowerCase().includes(q);
         const matchDesc = (item.description || "").toLowerCase().includes(q);
         const matchOrder = (item.preparedOrderNo || "").toLowerCase().includes(q);
-        return matchBatch || matchLoc || matchGrade || matchMat || matchDesc || matchOrder;
+        const matchTransfer = (item.transferDocNo || "").toLowerCase().includes(q);
+        return matchBatch || matchLoc || matchGrade || matchMat || matchDesc || matchOrder || matchTransfer;
       }
 
       return true;
@@ -5290,6 +5360,7 @@ export function SlitFilmManagement({
 
     // Cloud Firestore Sync
     await batchSaveInboundToCloud([newRecord]);
+    setStockCurrentPage(1);
 
     playScanSound(true);
     setExternalBatchError(null);
@@ -6107,7 +6178,8 @@ export function SlitFilmManagement({
         }
         return updated;
       });
-      batchSaveInboundToCloud(committedBatches);
+      await batchSaveInboundToCloud(committedBatches);
+      setStockCurrentPage(1);
     } else {
       setOutboundList((prev) => {
         let updated = [...prev];
@@ -6122,7 +6194,7 @@ export function SlitFilmManagement({
         }
         return updated;
       });
-      batchSaveOutboundToCloud(committedBatches);
+      await batchSaveOutboundToCloud(committedBatches);
     }
 
     setSelectedLocation(finalLocation);
@@ -9977,7 +10049,12 @@ export function SlitFilmManagement({
 
                         {/* Batch */}
                         <td className="!py-2 !px-3 !text-center font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/10 text-[11px] align-middle">
-                          {row.batch}
+                          <div>{row.batch}</div>
+                          {row.transferDocNo && (
+                            <div className="mt-0.5 text-[9.5px] font-semibold text-indigo-600 dark:text-indigo-300 font-sans">
+                              {isThai ? `ใบโอนย้าย: ${row.transferDocNo}` : `Transfer: ${row.transferDocNo}`}
+                            </div>
+                          )}
                         </td>
 
                         {/* Status Column */}
