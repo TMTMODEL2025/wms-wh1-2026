@@ -485,6 +485,7 @@ function sanitizeRecordPayload(r: SlitBarcodeRecord): Record<string, unknown> {
 
   payload.previousLocation = r.previousLocation ? String(r.previousLocation).slice(0, 64) : "";
   payload.orderNo = r.orderNo ? String(r.orderNo).slice(0, 64) : "";
+  if (r.transferDocNo) payload.transferDocNo = String(r.transferDocNo).trim().slice(0, 64);
   if (r.certThickness) payload.certThickness = String(r.certThickness).slice(0, 32);
   if (r.width) payload.width = String(r.width).slice(0, 32);
   if (r.unrestricted) payload.unrestricted = String(r.unrestricted).slice(0, 64);

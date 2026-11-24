@@ -142,6 +142,7 @@ export interface SlitBarcodeRecord {
   location: string; // 9. Location (e.g. H2/A1)
   previousLocation?: string; // Location เดิมก่อนย้าย (Previous Location)
   orderNo?: string; // เลขที่ใบสั่งเบิก (Order No.)
+  transferDocNo?: string; // เลขที่ใบโอนย้าย (Transfer Document No.)
   hasSapData?: boolean; // True if mapped with SAP Master Data
   certThickness?: string; // 3. หนา Certificated.(mm)
   width?: string; // 4. กว้าง(mm)
@@ -291,6 +292,15 @@ const MACHINE_FAC_MAP: Record<string, string> = {
   TM11: "FAC F",
   TM12: "FAC F",
   TM14: "FAC A",
+  CF01: "FAC G",
+  CF02: "FAC G",
+  CF03: "FAC G",
+  CF04: "FAC G",
+  CF05: "FAC G",
+  ML01: "FAC 21",
+  ML02: "FAC 21",
+  ZF01: "FAC 21",
+  ZF02: "FAC 21",
 };
 
 export const MACHINE_CATEGORIES = [
@@ -934,8 +944,9 @@ export function mergeSlitBarcodeRecords(
   }
   const finalLoc = incomingLoc || existingLoc || "-";
 
-  // Order No: prefer non-empty
+  // Order No & Transfer Document No: prefer non-empty
   const finalOrderNo = incoming.orderNo || existing.orderNo;
+  const finalTransferDocNo = incoming.transferDocNo || existing.transferDocNo;
 
   return {
     ...existing,
@@ -943,6 +954,7 @@ export function mergeSlitBarcodeRecords(
     id: existing.id || incoming.id || `SLIT-${Date.now()}-${bKey}`,
     batch: bKey,
     orderNo: finalOrderNo,
+    ...(finalTransferDocNo ? { transferDocNo: finalTransferDocNo } : {}),
     mode: incoming.mode || existing.mode || "inbound",
     location: finalLoc,
     storageLocation: incoming.storageLocation || existing.storageLocation || finalLoc,
@@ -1122,6 +1134,7 @@ export function SlitFilmManagement({
 
   // Current session batches (isolated scan round before committing to storage)
   const [currentSessionBatches, setCurrentSessionBatches] = useState<SlitBarcodeRecord[]>([]);
+  const [inboundTransferDocNo, setInboundTransferDocNo] = useState<string>("");
 
   // Mandatory Location Scanner Modal State (Chained Modal Workflow)
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(false);
@@ -5296,6 +5309,7 @@ export function SlitFilmManagement({
     setBarcodeInput("");
     setScanStatus(null);
     setCurrentSessionBatches([]); // Fresh isolated session
+    setInboundTransferDocNo("");
     setSelectedBatchIds([]);
     setIsInboundWidthLimitLocked(false);
     setIsScannerModalOpen(true);
@@ -6028,8 +6042,9 @@ export function SlitFilmManagement({
     const totalKg = currentSessionBatches.reduce((sum, item) => sum + (item.weightKg || 0), 0);
     const totalTon = (totalKg / 1000).toFixed(3);
     const finalizedMachine = selectedMachine || "SM01";
+    const cleanTransferDocNo = activeMode === "inbound" ? inboundTransferDocNo.trim().slice(0, 64) : "";
 
-    // Bind this Location to all batches in current inbound round
+    // Bind this Location (and Transfer Document No. if provided) to all batches in current inbound round
     const committedBatches: SlitBarcodeRecord[] = currentSessionBatches.map((item) => {
       const sapMatch = !item.hasSapData && sapMasterMap ? sapMasterMap.get(item.batch.trim().toUpperCase()) : null;
       const cleanConditionText =
@@ -6056,6 +6071,7 @@ export function SlitFilmManagement({
           location: finalLocation,
           storageLocation: finalLocation,
           machine: item.machine || finalizedMachine,
+          ...(cleanTransferDocNo ? { transferDocNo: cleanTransferDocNo } : {}),
           status: "Inbound Completed",
         };
       }
@@ -6065,6 +6081,7 @@ export function SlitFilmManagement({
         location: finalLocation,
         storageLocation: finalLocation,
         machine: item.machine || finalizedMachine,
+        ...(cleanTransferDocNo ? { transferDocNo: cleanTransferDocNo } : {}),
         status: "Inbound Completed",
       };
     });
@@ -6121,7 +6138,9 @@ export function SlitFilmManagement({
 
     // Log transaction
     onLogTransaction?.(
-      `Confirmed Inbound: Machine ${finalizedMachine}, ${committedBatches.length} Batches (${totalKg.toLocaleString()} kg) stored to Location ${finalLocation}`,
+      `Confirmed Inbound: Machine ${finalizedMachine}, ${committedBatches.length} Batches (${totalKg.toLocaleString()} kg) stored to Location ${finalLocation}${
+        cleanTransferDocNo ? ` [Transfer Doc: ${cleanTransferDocNo}]` : ""
+      }`,
       `INBOUND-${Date.now()}`,
       "Completed"
     );
@@ -6130,12 +6149,17 @@ export function SlitFilmManagement({
     showSuccessAlert(
       isThai ? "บันทึกจัดเก็บสำเร็จ!" : "Stored Successfully!",
       isThai
-        ? `บันทึกจัดเก็บเหล็กสลิตจำนวน ${committedBatches.length} รายการ (${totalKg.toLocaleString()} kg / ${totalTon} ตัน) เข้า Location [${finalLocation}] เรียบร้อยแล้ว`
-        : `Successfully stored ${committedBatches.length} items (${totalKg.toLocaleString()} kg / ${totalTon} tons) to [${finalLocation}].`
+        ? `บันทึกจัดเก็บเหล็กสลิตจำนวน ${committedBatches.length} รายการ (${totalKg.toLocaleString()} kg / ${totalTon} ตัน) เข้า Location [${finalLocation}]${
+            cleanTransferDocNo ? ` · เลขที่ใบโอนย้าย: ${cleanTransferDocNo}` : ""
+          } เรียบร้อยแล้ว`
+        : `Successfully stored ${committedBatches.length} items (${totalKg.toLocaleString()} kg / ${totalTon} tons) to [${finalLocation}]${
+            cleanTransferDocNo ? ` · Transfer Doc: ${cleanTransferDocNo}` : ""
+          }.`
     );
 
     // Clear session
     setCurrentSessionBatches([]);
+    setInboundTransferDocNo("");
     setSelectedBatchIds([]);
     setLocationBarcode("");
   };
@@ -6194,6 +6218,7 @@ export function SlitFilmManagement({
       return (
         r.batch.toLowerCase().includes(query) ||
         getOrderNoForRecord(r).toLowerCase().includes(query) ||
+        (r.transferDocNo || "").toLowerCase().includes(query) ||
         (r.grade || "").toLowerCase().includes(query) ||
         (r.manufacturer || "").toLowerCase().includes(query) ||
         (r.location || "").toLowerCase().includes(query) ||
@@ -8629,22 +8654,60 @@ export function SlitFilmManagement({
             </div>
 
             {/* 6. Bottom Primary Buttons: Sticky, tidy bottom bar */}
-            <div className="p-3 sm:p-4 border-t flex items-center justify-between gap-2.5 bg-slate-50 dark:bg-[#0a1526] border-slate-200 dark:border-slate-800/80 flex-shrink-0 mt-auto">
-              <button
-                type="button"
-                onClick={() => setIsScannerModalOpen(false)}
-                className="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold dark:font-medium text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white hover:bg-slate-100 dark:bg-slate-800/90 dark:hover:bg-slate-700/90 border border-slate-300 dark:border-slate-700/60 transition-all cursor-pointer text-center active:scale-98"
-              >
-                {isThai ? "ปิด / ยกเลิก" : "Close / Cancel"}
-              </button>
-              <button
-                type="button"
-                onClick={handleDoneBatchScanning}
-                className="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md dark:shadow-lg shadow-emerald-600/20 dark:shadow-emerald-950/40 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-98"
-              >
-                <Check size={16} className="stroke-[2.5]" />
-                <span>{isThai ? "เสร็จสิ้นการสแกน" : "Finish Scanning"}</span>
-              </button>
+            <div className="p-3 sm:p-4 border-t bg-slate-50 dark:bg-[#0a1526] border-slate-200 dark:border-slate-800/80 flex-shrink-0 mt-auto space-y-2.5">
+              {activeMode === "inbound" && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="slit-inbound-transfer-doc-no"
+                      className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5"
+                    >
+                      <FileText size={13} className="text-cyan-600 dark:text-cyan-400 shrink-0" />
+                      <span>{isThai ? "เลขที่ใบโอนย้าย" : "Transfer Document No."}</span>
+                    </label>
+                    {inboundTransferDocNo.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setInboundTransferDocNo("")}
+                        className="text-[10px] font-semibold text-slate-400 hover:text-rose-500 cursor-pointer"
+                      >
+                        {isThai ? "ล้าง" : "Clear"}
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    id="slit-inbound-transfer-doc-no"
+                    type="text"
+                    maxLength={64}
+                    value={inboundTransferDocNo}
+                    onChange={(e) => setInboundTransferDocNo(e.target.value)}
+                    placeholder={
+                      isThai
+                        ? "กรอกเลขที่ใบโอนย้ายของรอบนี้..."
+                        : "Enter transfer document no. for this round..."
+                    }
+                    className="w-full px-3 py-2 rounded-lg text-xs sm:text-sm font-mono font-bold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-white placeholder:font-sans placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsScannerModalOpen(false)}
+                  className="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold dark:font-medium text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white hover:bg-slate-100 dark:bg-slate-800/90 dark:hover:bg-slate-700/90 border border-slate-300 dark:border-slate-700/60 transition-all cursor-pointer text-center active:scale-98"
+                >
+                  {isThai ? "ปิด / ยกเลิก" : "Close / Cancel"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDoneBatchScanning}
+                  className="flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md dark:shadow-lg shadow-emerald-600/20 dark:shadow-emerald-950/40 flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-98"
+                >
+                  <Check size={16} className="stroke-[2.5]" />
+                  <span>{isThai ? "เสร็จสิ้นการสแกน" : "Finish Scanning"}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -9068,9 +9131,14 @@ export function SlitFilmManagement({
                             {startIndex + idx + 1}
                           </td>
 
-                          {/* 2. Batch (10 หลัก) + Mobile grouped Order No */}
+                          {/* 2. Batch (10 หลัก) + Mobile grouped Order No & Transfer Doc No */}
                           <td className="!px-2 !py-2 md:!py-0 md:!px-1 font-mono font-bold text-cyan-600 dark:text-cyan-400 bg-cyan-50/40 dark:bg-cyan-950/10 text-xs md:text-[11px] leading-tight whitespace-nowrap align-middle">
                             <div>{row.batch}</div>
+                            {row.transferDocNo && (
+                              <div className="mt-0.5 text-[9.5px] font-semibold text-indigo-600 dark:text-indigo-300">
+                                {isThai ? `ใบโอนย้าย: ${row.transferDocNo}` : `Transfer: ${row.transferDocNo}`}
+                              </div>
+                            )}
                             {rowOrderNo && rowOrderNo !== "-" && (
                               <div className="md:hidden mt-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                                 {rowOrderNo}
