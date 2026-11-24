@@ -51,6 +51,7 @@ import {
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { CoilWarehouse3DView } from "./coil3d/CoilWarehouse3DView";
 import {
+  BUILDING_GROUPS,
   DEFAULT_BASE_SLOTS_PER_ROW,
   MAX_BASE_SLOTS_PER_ROW,
   MAX_STACK_LEVEL,
@@ -275,7 +276,7 @@ function parseRawCoilPickListText(text: string): ParsedCoilPickListItem[] {
 
 const COMMON_GRADES = ["SS400", "SPCC", "SGCC", "SAPH440", "SPHC", "STKR400"];
 const COMMON_MANUFACTURERS = ["SSI", "GJ", "POSCO", "JFE", "NIPPON", "SYS", "CSC"];
-const INBOUND_BUILDINGS = ["E7", "E8", "H7", "H8", "05", "21"];
+const INBOUND_BUILDINGS = BUILDING_GROUPS.flatMap((g) => g.doors);
 const INBOUND_QUICK_ROWS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const WAREHOUSE_BASE_SLOTS_KEY = "tmt_wms_coil_base_slots_per_row_v1";
 
@@ -3629,7 +3630,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
 
             {/* STEPS 2, 3, 4: Guided Door -> Row -> Level (Sequential Selection) */}
             <div className="p-3.5 rounded-xl bg-slate-50/90 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] space-y-3.5">
-              {/* STEP 2: Select Door (E7, E8, H7, H8, 05, 21) */}
+              {/* STEP 2: Select Door (Synced with 3D Warehouse: E7, E8, H9, H10, H7, 05, 21) */}
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
                   <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
@@ -3666,7 +3667,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     </span>
                   </span>
                 </div>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
                   {INBOUND_BUILDINGS.map((doorCode) => {
                     const isSelected = hasSelectedInboundDoor && inboundBuilding.toUpperCase() === doorCode;
                     const doorCount = inboundDoorCoilCounts[doorCode] || 0;
