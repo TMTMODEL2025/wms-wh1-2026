@@ -1025,6 +1025,63 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       ? inboundManualLocationOverride.trim().toUpperCase()
       : autoComposedInboundLocation;
 
+  // Two-way synced active coordinates (Door / Row / Level / Seq) derived from effectiveInboundLocation
+  const selectedInboundCoords = useMemo(() => {
+    const raw = (effectiveInboundLocation || "").trim().toUpperCase();
+    const parsed = parseCoilLocationTo3D(raw);
+    const parts = raw.includes("/") ? raw.split("/").map((p) => p.trim()) : [];
+    const rawLvNum = parts[2] ? parseInt(parts[2].replace(/\D/g, ""), 10) : NaN;
+    const rawSeqNum = parts[3] ? parseInt(parts[3].replace(/\D/g, ""), 10) : NaN;
+
+    const levelNum =
+      Number.isFinite(rawLvNum) && rawLvNum >= 1
+        ? rawLvNum
+        : parsed.explicitLevel ?? effectiveInboundLevel;
+
+    const validLevel: StackLevel | null =
+      levelNum >= 1 && levelNum <= MAX_STACK_LEVEL ? (levelNum as StackLevel) : null;
+
+    const seqNum =
+      Number.isFinite(rawSeqNum) && rawSeqNum >= 1
+        ? rawSeqNum
+        : parsed.explicitSlotIndex ??
+          (validLevel
+            ? inboundRowOccupancy.levels[validLevel].nextSeq ?? effectiveInboundSeq
+            : null);
+
+    const matchesCurrentRow =
+      parsed.door === inboundRowOccupancy.door && parsed.row === inboundRowOccupancy.row;
+
+    const isAutoRecommended =
+      matchesCurrentRow &&
+      validLevel === inboundRowOccupancy.recommendedLevel &&
+      seqNum === inboundRowOccupancy.recommendedSeq;
+
+    const isOccupiedSlot =
+      matchesCurrentRow &&
+      validLevel !== null &&
+      seqNum !== null &&
+      inboundRowOccupancy.levels[validLevel].occupiedSlots.includes(seqNum);
+
+    return {
+      door: parsed.door,
+      row: parsed.row,
+      level: levelNum,
+      validLevel,
+      seq: seqNum,
+      matchesCurrentRow,
+      isAutoRecommended,
+      isOccupiedSlot,
+      fullCode: raw || autoComposedInboundLocation,
+    };
+  }, [
+    effectiveInboundLocation,
+    autoComposedInboundLocation,
+    effectiveInboundLevel,
+    effectiveInboundSeq,
+    inboundRowOccupancy,
+  ]);
+
   const inboundPlacementValidation = useMemo(
     () =>
       validateCoilPlacementLocation(
@@ -3301,6 +3358,10 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                        <span className="inline-flex items-center gap-1 font-extrabold text-fuchsia-700 dark:text-fuchsia-300">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-fuchsia-600 ring-1 ring-fuchsia-300" />
+                          {isThai ? "กำลังเลือก" : "Selected"}
+                        </span>
                         <span className="inline-flex items-center gap-1">
                           <span className="w-2 h-2 rounded-xs bg-sky-500" />
                           {isThai ? "มีม้วน" : "Used"}
@@ -3324,17 +3385,21 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     {([4, 3, 2, 1] as StackLevel[]).map((lv) => {
                       const lvInfo = inboundRowOccupancy.levels[lv];
                       const lowerInfo = lv >= 2 ? inboundRowOccupancy.levels[(lv - 1) as StackLevel] : null;
-                      const labelColorClass =
-                        lv === 1
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : lv === 2
-                          ? "text-indigo-500"
-                          : lv === 3
-                          ? "text-violet-500"
-                          : "text-amber-500";
+                      const isActiveSelectedTier =
+                        selectedInboundCoords.matchesCurrentRow &&
+                        selectedInboundCoords.validLevel === lv;
+                      const labelColorClass = isActiveSelectedTier
+                        ? "text-fuchsia-700 dark:text-fuchsia-300 font-black"
+                        : lv === 1
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : lv === 2
+                        ? "text-indigo-500"
+                        : lv === 3
+                        ? "text-violet-500"
+                        : "text-amber-500";
                       const readySlotClass =
                         lv === 1
-                          ? "bg-slate-100 dark:bg-[#0a1428] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-emerald-400 cursor-pointer"
+                          ? "bg-slate-100 dark:bg-[#0a1428] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-fuchsia-400 cursor-pointer"
                           : lv === 2
                           ? "bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300 border-indigo-400 dark:border-indigo-600 hover:bg-indigo-100 cursor-pointer"
                           : lv === 3
@@ -3343,7 +3408,14 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                       const indentPx = (lv - 1) * 14;
 
                       return (
-                        <div key={`tier-${lv}`} className="flex items-center gap-1.5">
+                        <div
+                          key={`tier-${lv}`}
+                          className={`flex items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors ${
+                            isActiveSelectedTier
+                              ? "bg-fuchsia-50/75 dark:bg-fuchsia-950/25"
+                              : ""
+                          }`}
+                        >
                           <span className={`w-10 text-[10px] font-bold shrink-0 ${labelColorClass}`}>
                             {isThai ? `ชั้น ${lv}` : `L${lv}`}
                           </span>
@@ -3354,9 +3426,13 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                             {Array.from({ length: lvInfo.capacity }, (_, i) => i + 1).map((slotNum) => {
                               const isUsed = lvInfo.occupiedSlots.includes(slotNum);
                               const isSupported = lv === 1 || lvInfo.supportedSlots.includes(slotNum);
+                              const isSelectedSlot =
+                                selectedInboundCoords.matchesCurrentRow &&
+                                selectedInboundCoords.validLevel === lv &&
+                                selectedInboundCoords.seq === slotNum;
                               const isNextTarget =
-                                effectiveInboundLevel === lv &&
-                                effectiveInboundSeq === slotNum &&
+                                inboundRowOccupancy.recommendedLevel === lv &&
+                                inboundRowOccupancy.recommendedSeq === slotNum &&
                                 isSupported;
                               const isLockedSlot = lv >= 2 && !isUsed && !isSupported;
                               const missingBase =
@@ -3366,10 +3442,23 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                                     )
                                   : [];
 
+                              const slotStateClass = isSelectedSlot
+                                ? inboundPlacementValidation.valid
+                                  ? "bg-fuchsia-600 text-white border-fuchsia-300 ring-2 ring-fuchsia-400/75 ring-offset-1 ring-offset-white dark:ring-offset-[#111e38] shadow-sm scale-105 z-10 cursor-pointer"
+                                  : "bg-red-600 text-white border-red-300 ring-2 ring-red-400/75 ring-offset-1 ring-offset-white dark:ring-offset-[#111e38] shadow-sm scale-105 z-10 cursor-pointer"
+                                : isNextTarget
+                                ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30 cursor-pointer"
+                                : isUsed
+                                ? "bg-sky-600 text-white border-sky-500 cursor-pointer"
+                                : isSupported
+                                ? readySlotClass
+                                : "bg-slate-100/70 dark:bg-[#091224] text-slate-400/70 border-dashed border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-65";
+
                               return (
                                 <button
                                   key={`L${lv}-${slotNum}`}
                                   type="button"
+                                  aria-pressed={isSelectedSlot}
                                   aria-disabled={isLockedSlot}
                                   onClick={() => {
                                     if (lv >= 2 && !isSupported) {
@@ -3383,31 +3472,39 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                                       focusInboundBatchInput();
                                       return;
                                     }
+                                    const nextLoc = `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}`;
                                     setInboundLevel(lv);
                                     setInboundLevelManualOverride(true);
-                                    setInboundManualLocationOverride(
-                                      `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}`
-                                    );
+                                    setInboundManualLocationOverride(nextLoc);
+                                    setInboundLocation(nextLoc);
                                     focusInboundBatchInput();
                                   }}
                                   title={
-                                    isLockedSlot
+                                    isSelectedSlot
+                                      ? isThai
+                                        ? `กำลังเลือก: ${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum} (ชั้น ${lv} ลำดับ ${slotNum})`
+                                        : `Selected: ${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}`
+                                      : isLockedSlot
                                       ? isThai
                                         ? `วางไม่ได้: ชั้น ${lv} ลูกที่ ${slotNum} ต้องมีฐานชั้น ${lv - 1} ลูกที่ ${slotNum} และลูกที่ ${slotNum + 1} รองรับก่อน`
                                         : `Locked: L${lv} #${slotNum} requires L${lv - 1} #${slotNum} & #${slotNum + 1}`
                                       : `${inboundRowOccupancy.door}/${inboundRowOccupancy.row}/${lv}/${slotNum}`
                                   }
-                                  className={`w-7 h-6 rounded text-[10px] font-mono font-black border transition-all inline-flex items-center justify-center ${
-                                    isNextTarget
-                                      ? "bg-emerald-600 text-white border-emerald-400 ring-2 ring-emerald-500/30 cursor-pointer"
-                                      : isUsed
-                                      ? "bg-sky-600 text-white border-sky-500 cursor-pointer"
-                                      : isSupported
-                                      ? readySlotClass
-                                      : "bg-slate-100/70 dark:bg-[#091224] text-slate-400/70 border-dashed border-slate-300 dark:border-slate-700 cursor-not-allowed opacity-65"
-                                  }`}
+                                  className={`relative w-7 h-6 rounded text-[10px] font-mono font-black border transition-all inline-flex items-center justify-center ${slotStateClass}`}
                                 >
                                   {slotNum}
+                                  {isSelectedSlot && isNextTarget && inboundPlacementValidation.valid && (
+                                    <span
+                                      className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 border border-white dark:border-[#111e38]"
+                                      title={isThai ? "ตรงกับตำแหน่งถัดไป" : "Auto next slot"}
+                                    />
+                                  )}
+                                  {isSelectedSlot && isUsed && inboundPlacementValidation.valid && (
+                                    <span
+                                      className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-sky-300 border border-white dark:border-[#111e38]"
+                                      title={isThai ? "ช่องนี้มีม้วนอยู่แล้ว" : "Slot already occupied"}
+                                    />
+                                  )}
                                 </button>
                               );
                             })}
@@ -3415,6 +3512,68 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                         </div>
                       );
                     })}
+
+                    {/* Selected Coordinate Summary Strip */}
+                    <div
+                      className={`mt-1 px-2.5 py-1.5 rounded-lg border flex flex-wrap items-center justify-between gap-2 text-[11px] ${
+                        !inboundPlacementValidation.valid
+                          ? "bg-red-50/90 dark:bg-red-950/35 border-red-200 dark:border-red-800/80 text-red-700 dark:text-red-300"
+                          : "bg-fuchsia-50/90 dark:bg-fuchsia-950/30 border-fuchsia-300/80 dark:border-fuchsia-700/70 text-fuchsia-900 dark:text-fuchsia-100"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black text-white ${
+                            !inboundPlacementValidation.valid ? "bg-red-600" : "bg-fuchsia-600"
+                          }`}
+                        >
+                          <MapPin size={10} />
+                          {isThai ? "กำลังเลือก" : "Selected"}
+                        </span>
+                        <span className="font-mono font-black text-xs">
+                          {selectedInboundCoords.fullCode}
+                        </span>
+                        <span className="text-[10.5px] opacity-90">
+                          {isThai
+                            ? `(ประตู ${selectedInboundCoords.door} · แถว ${selectedInboundCoords.row} · ชั้น ${selectedInboundCoords.level} · ลำดับ ${selectedInboundCoords.seq ?? "-"})`
+                            : `(Door ${selectedInboundCoords.door} · Row ${selectedInboundCoords.row} · L${selectedInboundCoords.level} · #${selectedInboundCoords.seq ?? "-"})`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {!inboundPlacementValidation.valid ? (
+                          <span className="px-1.5 py-0.5 rounded bg-red-600/15 text-red-700 dark:text-red-300 text-[10px] font-extrabold">
+                            {isThai ? "พิกัดไม่ผ่านเงื่อนไข" : "Invalid Slot"}
+                          </span>
+                        ) : selectedInboundCoords.isOccupiedSlot ? (
+                          <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-700 dark:text-sky-300 text-[10px] font-extrabold">
+                            {isThai ? "ช่องนี้มีม้วนอยู่แล้ว" : "Occupied"}
+                          </span>
+                        ) : selectedInboundCoords.isAutoRecommended ? (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] font-extrabold">
+                            {isThai ? "ตำแหน่งถัดไปอัตโนมัติ" : "Auto Next"}
+                          </span>
+                        ) : (
+                          <>
+                            <span className="px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-300 text-[10px] font-extrabold">
+                              {isThai ? "เลือกช่องเอง" : "Custom Slot"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInboundLevelManualOverride(false);
+                                setInboundManualLocationOverride(null);
+                                focusInboundBatchInput();
+                              }}
+                              className="text-[10px] font-extrabold underline text-emerald-700 dark:text-emerald-300 hover:opacity-80 cursor-pointer"
+                            >
+                              {isThai
+                                ? `กลับตำแหน่งถัดไป (${inboundRowOccupancy.recommendedLocation})`
+                                : `Use Next (${inboundRowOccupancy.recommendedLocation})`}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
 
                     <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-0.5 flex items-center gap-1">
                       <ShieldCheck size={11} className="text-indigo-500 shrink-0" />
@@ -3437,7 +3596,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                       <MapPin
                         size={15}
                         className={`absolute left-3 ${
-                          inboundPlacementValidation.valid ? "text-emerald-500" : "text-red-500"
+                          inboundPlacementValidation.valid ? "text-fuchsia-500" : "text-red-500"
                         }`}
                       />
                       <input
@@ -3447,7 +3606,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                         placeholder="เช่น E7/1/2/3"
                         className={`w-full h-10 pl-9 pr-3 rounded-lg text-sm font-mono font-black border bg-white dark:bg-[#111e38] ${
                           inboundPlacementValidation.valid
-                            ? "border-emerald-400 dark:border-emerald-600 text-emerald-700 dark:text-emerald-300"
+                            ? "border-fuchsia-400 dark:border-fuchsia-600 text-fuchsia-700 dark:text-fuchsia-300 focus:ring-2 focus:ring-fuchsia-500/25"
                             : "border-red-500 dark:border-red-500 text-red-600 dark:text-red-400 ring-2 ring-red-500/20"
                         }`}
                       />
@@ -3479,19 +3638,19 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                     ) : (
                       <div className="text-[10.5px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span>
-                          <strong className="text-slate-700 dark:text-slate-200">{inboundRowOccupancy.door}</strong> = {isThai ? "ประตู" : "Door"}
+                          <strong className="text-slate-700 dark:text-slate-200">{selectedInboundCoords.door}</strong> = {isThai ? "ประตู" : "Door"}
                         </span>
                         <span>·</span>
                         <span>
-                          <strong className="text-slate-700 dark:text-slate-200">/{inboundRowOccupancy.row}</strong> = {isThai ? "แถว" : "Row"}
+                          <strong className="text-slate-700 dark:text-slate-200">/{selectedInboundCoords.row}</strong> = {isThai ? "แถว" : "Row"}
                         </span>
                         <span>·</span>
                         <span>
-                          <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundLevel}</strong> = {isThai ? "ชั้น" : "Level"}
+                          <strong className="text-fuchsia-700 dark:text-fuchsia-300">/{selectedInboundCoords.level}</strong> = {isThai ? "ชั้น" : "Level"}
                         </span>
                         <span>·</span>
                         <span>
-                          <strong className="text-slate-700 dark:text-slate-200">/{effectiveInboundSeq}</strong> = {isThai ? "ลำดับวางต่อ" : "Seq"}
+                          <strong className="text-fuchsia-700 dark:text-fuchsia-300">/{selectedInboundCoords.seq ?? "-"}</strong> = {isThai ? "ลำดับวางต่อ" : "Seq"}
                         </span>
                       </div>
                     )}
