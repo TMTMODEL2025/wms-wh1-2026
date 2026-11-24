@@ -276,6 +276,23 @@ export const OUTBOUND_MACHINES: MachineDef[] = [
   { id: "ZF02", name: "ZF02", type: "lip_channel", categoryTh: "ตัวซีมีขอบ", categoryEn: "Lip Channel" },
 ];
 
+// Factory location (FAC) mapping for machine cards
+const MACHINE_FAC_MAP: Record<string, string> = {
+  TM01: "FAC G",
+  TM02: "FAC G",
+  TM03: "FAC G",
+  TM04: "FAC G",
+  TM05: "FAC P",
+  TM06: "FAC G",
+  TM07: "FAC D",
+  TM08: "FAC D",
+  TM09: "FAC D",
+  TM10: "FAC D",
+  TM11: "FAC F",
+  TM12: "FAC F",
+  TM14: "FAC A",
+};
+
 export const MACHINE_CATEGORIES = [
   { key: "pipe" as const, labelTh: "TM", labelEn: "TM (14)", count: 14 },
   { key: "c_channel" as const, labelTh: "CF", labelEn: "CF (4)", count: 4 },
@@ -7073,6 +7090,7 @@ export function SlitFilmManagement({
                 const mOrders = outboundPickLists.filter((o) => o.machineId === m.id);
                 const activeOrdersCount = mOrders.length;
                 const isCustomOutboundMachine = !OUTBOUND_MACHINES.some((def) => def.id === m.id);
+                const facLabel = MACHINE_FAC_MAP[m.id.trim().toUpperCase()];
 
                 return (
                   <button
@@ -7081,7 +7099,7 @@ export function SlitFilmManagement({
                     onClick={() => {
                       setSelectedOutboundMachine(m.id);
                     }}
-                    className={`relative py-1.5 px-1 sm:px-2 rounded-lg border transition-all active:scale-95 cursor-pointer text-center min-h-[50px] flex flex-col justify-center items-center ${
+                    className={`relative py-1.5 px-1 sm:px-2 rounded-lg border transition-all active:scale-95 cursor-pointer text-center min-h-[58px] flex flex-col justify-center items-center gap-0.5 ${
                       isMSelected
                         ? "bg-amber-600 text-white border-amber-500 shadow-xs ring-1 ring-amber-400/50"
                         : "bg-white dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 hover:border-amber-500 hover:bg-amber-50/30 dark:hover:bg-[#152646]"
@@ -7112,8 +7130,20 @@ export function SlitFilmManagement({
                       {m.id}
                     </div>
 
+                    {facLabel && (
+                      <div
+                        className={`text-[9px] sm:text-[10px] font-extrabold tracking-tight leading-none truncate max-w-full ${
+                          isMSelected
+                            ? "text-amber-100"
+                            : "text-indigo-600 dark:text-cyan-400"
+                        }`}
+                      >
+                        {facLabel}
+                      </div>
+                    )}
+
                     {/* Badge for Order Count */}
-                    <div className="mt-1 flex items-center justify-center">
+                    <div className="mt-0.5 flex items-center justify-center">
                       <span
                         className={`px-1 py-0.2 rounded-full text-[9px] font-bold leading-tight ${
                           activeOrdersCount > 0
@@ -7481,7 +7511,7 @@ export function SlitFilmManagement({
                                     <col className="w-32 sm:w-44" />
                                     <col className="w-20 sm:w-28" />
                                     <col className="w-24 sm:w-32" />
-                                    <col className="w-20 sm:w-28" />
+                                    <col className="w-28 sm:w-36" />
                                   </colgroup>
                                   <thead>
                                     <tr className="bg-slate-100/80 dark:bg-[#0d1b33] text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-[#1e3a5f] font-bold uppercase tracking-wider text-[10px] sm:text-xs">
@@ -7580,7 +7610,7 @@ export function SlitFilmManagement({
                                               {isVerified ? (
                                                 <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
                                                   <Check size={11} />
-                                                  <span>{isThai ? "เตรียมแล้ว" : "Prepared"}</span>
+                                                  <span>{isThai ? "อยู่ระหว่างการขนส่ง" : "In Transit"}</span>
                                                 </span>
                                               ) : (
                                                 <span className="px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-medium bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">

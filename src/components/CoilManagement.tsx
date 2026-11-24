@@ -47,6 +47,7 @@ import {
   ScanLine,
   Box,
   Minus,
+  Keyboard,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { CoilWarehouse3DView } from "./coil3d/CoilWarehouse3DView";
@@ -1205,6 +1206,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   const [inboundSourceType, setInboundSourceType] = useState<"external" | "internal">("external");
   const [inboundMachine, setInboundMachine] = useState<string>("CL01");
   const [inboundScanInput, setInboundScanInput] = useState<string>("");
+  const [showInboundManualBatchInput, setShowInboundManualBatchInput] = useState<boolean>(false);
   const [inboundLocation, setInboundLocation] = useState<string>("");
   const [inboundBuilding, setInboundBuilding] = useState<string>("");
   const [inboundRow, setInboundRow] = useState<string>("");
@@ -1239,10 +1241,10 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   };
 
   useEffect(() => {
-    if (activeMode === "inbound" && !isCameraOpen) {
+    if (activeMode === "inbound" && !isCameraOpen && showInboundManualBatchInput) {
       focusInboundBatchInput();
     }
-  }, [activeMode, inboundSourceType, isCameraOpen]);
+  }, [activeMode, inboundSourceType, isCameraOpen, showInboundManualBatchInput]);
 
   const handleSelectInboundBuilding = (building: string) => {
     const cleanB = building.trim().toUpperCase();
@@ -3492,16 +3494,6 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCameraOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 cursor-pointer"
-                >
-                  <Camera size={13} />
-                  <span>{isThai ? "สแกนด้วยกล้อง" : "Camera Scan"}</span>
-                </button>
-              </div>
             </div>
 
             {/* Machine Selector when in Return to Warehouse ("คืนคลัง") mode */}
@@ -3533,8 +3525,8 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               </div>
             )}
 
-            {/* STEP 1: Barcode / Batch Scanner Input */}
-            <form onSubmit={(e) => handleInboundSubmit(e)} className="pt-0.5 space-y-2">
+            {/* STEP 1: Barcode Scan Primary + Optional Manual Batch Entry */}
+            <form onSubmit={(e) => handleInboundSubmit(e)} className="pt-0.5 space-y-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-xs font-extrabold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-black inline-flex items-center justify-center">
@@ -3576,56 +3568,173 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 </div>
               </div>
 
+              {/* Primary Action Row: Scan Button First + Optional Manual Key-in Toggle */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <div className="relative flex-1 flex items-center">
-                  <Barcode size={18} className="absolute left-3.5 text-emerald-500" />
-                  <input
-                    ref={inboundBatchInputRef}
-                    type="text"
-                    autoFocus
-                    maxLength={10}
-                    value={inboundScanInput}
-                    onChange={(e) => setInboundScanInput(e.target.value.toUpperCase())}
-                    placeholder={
-                      isInboundLocationComplete
-                        ? isThai
-                          ? `ยิงบาร์โค้ด หรือพิมพ์รหัส Batch (A-Z, 0-9 ไม่เกิน 10 หลัก) เข้าที่ ${effectiveInboundLocation}...`
-                          : `Scan or type Batch (A-Z, 0-9 max 10 chars) into ${effectiveInboundLocation}...`
-                        : isThai
-                        ? "สแกนหรือพิมพ์รหัส Batch แล้วเลือก ประตู → แถว → ชั้น ด้านล่างให้ครบก่อนบันทึก..."
-                        : "Scan or type Batch, then select Door → Row → Level below before saving..."
-                    }
-                    className="w-full pl-10 pr-4 py-3 rounded-xl text-sm sm:text-base font-mono font-black border-2 border-emerald-500 dark:border-emerald-500 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                  />
-                </div>
                 <button
-                  type="submit"
-                  disabled={!isInboundLocationComplete}
-                  title={
-                    !isInboundLocationComplete
-                      ? isThai
-                        ? "กรุณาเลือก ประตู แถว และชั้น ให้ครบก่อนบันทึกรับเข้า"
-                        : "Select Door, Row, and Level before saving"
-                      : undefined
-                  }
-                  className={`py-3 px-5 rounded-xl text-xs sm:text-sm font-extrabold shadow-sm flex items-center justify-center gap-1.5 shrink-0 transition-all ${
-                    isInboundLocationComplete
-                      ? "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
-                      : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 cursor-not-allowed"
-                  }`}
+                  type="button"
+                  onClick={() => setIsCameraOpen(true)}
+                  className="flex-1 py-3 px-4 rounded-xl text-sm sm:text-base font-extrabold bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  {isInboundLocationComplete ? <Plus size={16} /> : <Lock size={15} />}
+                  <Camera size={18} />
                   <span>
                     {isInboundLocationComplete
                       ? isThai
-                        ? `บันทึกรับเข้า (${effectiveInboundLocation})`
-                        : `Save (${effectiveInboundLocation})`
+                        ? `สแกนบาร์โค้ด Batch (เข้าที่ ${effectiveInboundLocation})`
+                        : `Scan Batch Barcode (${effectiveInboundLocation})`
                       : isThai
-                      ? "กรุณาเลือกพิกัดให้ครบ"
-                      : "Select Location First"}
+                      ? "สแกนบาร์โค้ด Batch"
+                      : "Scan Batch Barcode"}
                   </span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showInboundManualBatchInput;
+                    setShowInboundManualBatchInput(next);
+                    if (next) {
+                      focusInboundBatchInput();
+                    }
+                  }}
+                  className={`py-3 px-4 rounded-xl text-xs sm:text-sm font-bold border flex items-center justify-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                    showInboundManualBatchInput
+                      ? "bg-slate-200/80 dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-slate-300 dark:border-slate-600"
+                      : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-[#1e3a5f] hover:border-emerald-400 hover:text-emerald-600 dark:hover:text-emerald-400"
+                  }`}
+                >
+                  <Keyboard size={15} />
+                  <span>
+                    {showInboundManualBatchInput
+                      ? isThai
+                        ? "ซ่อนช่องคีย์มือ"
+                        : "Hide Manual Input"
+                      : isThai
+                      ? "คีย์มือ (บาร์โค้ดชำรุด)"
+                      : "Manual Key-in"}
+                  </span>
+                  {showInboundManualBatchInput ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </button>
               </div>
+
+              {/* Pending Scanned Batch Bar (when scanned before selecting location while manual input is hidden) */}
+              {!showInboundManualBatchInput && inboundScanInput.trim() && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/70">
+                  <div className="flex items-center justify-between sm:justify-start gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Barcode size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 shrink-0">
+                        {isThai ? "Batch ที่สแกนได้:" : "Scanned Batch:"}
+                      </span>
+                      <span className="font-mono text-sm font-black text-emerald-700 dark:text-emerald-300 truncate">
+                        {inboundScanInput}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInboundScanInput("")}
+                      title={isThai ? "ล้างรหัส Batch" : "Clear Batch"}
+                      className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 cursor-pointer shrink-0"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={!isInboundLocationComplete}
+                    className={`py-2 px-4 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 shrink-0 transition-all ${
+                      isInboundLocationComplete
+                        ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs cursor-pointer"
+                        : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 cursor-not-allowed"
+                    }`}
+                  >
+                    {isInboundLocationComplete ? <Plus size={14} /> : <Lock size={13} />}
+                    <span>
+                      {isInboundLocationComplete
+                        ? isThai
+                          ? `บันทึกรับเข้า (${effectiveInboundLocation})`
+                          : `Save (${effectiveInboundLocation})`
+                        : isThai
+                        ? "กรุณาเลือกพิกัดให้ครบ"
+                        : "Select Location First"}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* Collapsible Manual Batch Key-in Panel (for damaged / unreadable barcodes) */}
+              {showInboundManualBatchInput && (
+                <div className="p-3 rounded-xl bg-slate-50/90 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] space-y-2">
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="flex items-center gap-1.5 font-semibold">
+                      <Keyboard size={12} className="text-emerald-500" />
+                      {isThai
+                        ? "โหมดคีย์รหัส Batch ด้วยมือ (ใช้เมื่อบาร์โค้ดชำรุดหรือสแกนไม่ติด)"
+                        : "Manual Batch Entry (for damaged or unreadable barcodes)"}
+                    </span>
+                    {inboundScanInput && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInboundScanInput("");
+                          focusInboundBatchInput();
+                        }}
+                        className="text-[11px] font-bold text-slate-400 hover:text-red-500 cursor-pointer"
+                      >
+                        {isThai ? "ล้างช่อง" : "Clear"}
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1 flex items-center">
+                      <Barcode size={18} className="absolute left-3.5 text-emerald-500" />
+                      <input
+                        ref={inboundBatchInputRef}
+                        type="text"
+                        maxLength={10}
+                        value={inboundScanInput}
+                        onChange={(e) => setInboundScanInput(e.target.value.toUpperCase())}
+                        placeholder={
+                          isInboundLocationComplete
+                            ? isThai
+                              ? `พิมพ์รหัส Batch (A-Z, 0-9 ไม่เกิน 10 หลัก) เข้าที่ ${effectiveInboundLocation}...`
+                              : `Type Batch (A-Z, 0-9 max 10 chars) into ${effectiveInboundLocation}...`
+                            : isThai
+                            ? "พิมพ์รหัส Batch แล้วเลือก ประตู → แถว → ชั้น ด้านล่างให้ครบก่อนบันทึก..."
+                            : "Type Batch, then select Door → Row → Level below before saving..."
+                        }
+                        className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm sm:text-base font-mono font-black border-2 border-emerald-500 dark:border-emerald-500 bg-white dark:bg-[#111e38] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={!isInboundLocationComplete}
+                      title={
+                        !isInboundLocationComplete
+                          ? isThai
+                            ? "กรุณาเลือก ประตู แถว และชั้น ให้ครบก่อนบันทึกรับเข้า"
+                            : "Select Door, Row, and Level before saving"
+                          : undefined
+                      }
+                      className={`py-2.5 px-5 rounded-xl text-xs sm:text-sm font-extrabold shadow-sm flex items-center justify-center gap-1.5 shrink-0 transition-all ${
+                        isInboundLocationComplete
+                          ? "bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer"
+                          : "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700 cursor-not-allowed"
+                      }`}
+                    >
+                      {isInboundLocationComplete ? <Plus size={16} /> : <Lock size={15} />}
+                      <span>
+                        {isInboundLocationComplete
+                          ? isThai
+                            ? `บันทึกรับเข้า (${effectiveInboundLocation})`
+                            : `Save (${effectiveInboundLocation})`
+                          : isThai
+                          ? "กรุณาเลือกพิกัดให้ครบ"
+                          : "Select Location First"}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </form>
 
             {/* STEPS 2, 3, 4: Guided Door -> Row -> Level (Sequential Selection) */}
@@ -7163,10 +7272,21 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
 
       {/* General Camera Barcode Scanner Modal (Inbound / Relocate / Stock Search) */}
       {isCameraOpen && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md">
+        <div
+          className={`fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex justify-center overflow-y-auto ${
+            activeMode === "inbound"
+              ? "items-start pt-3 sm:pt-5 px-3 sm:px-4 pb-6"
+              : "items-center p-4"
+          }`}
+        >
+          <div
+            className={`w-full max-w-md ${
+              activeMode === "inbound" ? "max-h-[calc(100dvh-1.5rem)] flex flex-col" : ""
+            }`}
+          >
             <CameraBarcodeScanner
               isThai={isThai}
+              compactTopLayout={activeMode === "inbound"}
               onClose={() => setIsCameraOpen(false)}
               onScan={(decodedText) => {
                 setIsCameraOpen(false);
