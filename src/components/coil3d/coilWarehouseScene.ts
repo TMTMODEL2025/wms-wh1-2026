@@ -428,8 +428,8 @@ export class CoilWarehouseSceneEngine {
     this.container = container;
     this.callbacks = callbacks;
 
-    const width = Math.max(container.clientWidth, 320);
-    const height = Math.max(container.clientHeight, 320);
+    const width = Math.max(container.clientWidth, 1);
+    const height = Math.max(container.clientHeight, 1);
 
     // 1. Renderer setup with Software WebGL detection
     this.renderer = new THREE.WebGLRenderer({
@@ -441,7 +441,7 @@ export class CoilWarehouseSceneEngine {
     this.renderer.setPixelRatio(
       Math.min(window.devicePixelRatio || 1, this.isSoftwareGl ? 1 : 2)
     );
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.08;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -455,6 +455,7 @@ export class CoilWarehouseSceneEngine {
     canvas.style.outline = "none";
     container.innerHTML = "";
     container.appendChild(canvas);
+    requestAnimationFrame(() => this.handleResize());
 
     // 2. Scene, atmosphere, and IBL RoomEnvironment
     this.scene = new THREE.Scene();
@@ -1329,11 +1330,12 @@ export class CoilWarehouseSceneEngine {
 
   private handleResize() {
     if (this.disposed) return;
-    const width = Math.max(this.container.clientWidth, 200);
-    const height = Math.max(this.container.clientHeight, 200);
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    if (width <= 0 || height <= 0) return;
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
+    this.renderer.setSize(width, height, false);
     this.requestRender();
   }
 

@@ -1375,6 +1375,16 @@ const CSS = `
     padding: 8px 10px 24px 10px !important;
   }
 
+  .main.main-3d-viewport {
+    max-width: none !important;
+    padding: 10px 14px 10px 14px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
   @media (max-width: 768px) {
     .main {
       padding: 12px 12px 76px 12px !important;
@@ -1382,6 +1392,10 @@ const CSS = `
 
     .main.main-flush {
       padding: 6px 6px 76px 6px !important;
+    }
+
+    .main.main-3d-viewport {
+      padding: 6px 8px 66px 8px !important;
     }
   }
 
@@ -6568,9 +6582,17 @@ function WmsApp({
             </div>
           </aside>
 
-          <main className={`main ${active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report") ? "main-flush" : ""}`}>
+          <main
+            className={`main ${
+              active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")
+                ? "main-flush"
+                : active === "coil" && coilMode === "warehouse_3d"
+                ? "main-3d-viewport"
+                : ""
+            }`}
+          >
             {!(active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")) && active !== "manpower-planning" && (
-              <div className={`page-heading ${active === "slit" || active === "coil" || active === "rm" ? "relative min-h-[32px] !mb-2 !flex-row !items-center" : active === "transport" ? "!items-center" : ""}`}>
+              <div className={`page-heading ${active === "slit" || active === "coil" || active === "rm" ? "relative min-h-[32px] !mb-2 !flex-row !items-center shrink-0" : active === "transport" ? "!items-center" : ""}`}>
                 <div>
                   <h1>{pageTitle}</h1>
                   {active !== "slit" &&

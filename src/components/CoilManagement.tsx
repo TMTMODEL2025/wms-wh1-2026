@@ -2703,9 +2703,15 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   ];
 
   return (
-    <div className="space-y-3 pb-16">
+    <div
+      className={
+        activeMode === "warehouse_3d"
+          ? "flex-1 min-h-0 flex flex-col gap-2 overflow-hidden"
+          : "space-y-3 pb-16"
+      }
+    >
       {/* Top Control Bar: Sub-Tabs + Isolated Cloud DB Status & Real-Time Toggle */}
-      <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-2.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
+      <div className="shrink-0 bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-2.5 shadow-xs flex flex-wrap items-center justify-between gap-2">
         {/* Primary Sub-Tabs */}
         <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 w-full lg:w-auto">
           {TABS.map((tab) => {

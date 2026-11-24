@@ -111,7 +111,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
   const [onlyPendingSap, setOnlyPendingSap] = useState<boolean>(false);
   const [activeCameraPreset, setActiveCameraPreset] = useState<CameraPreset>("isometric");
   const [craneDemoEnabled, setCraneDemoEnabled] = useState<boolean>(false);
-  const [dockVisible, setDockVisible] = useState<boolean>(true);
+  const [dockVisible, setDockVisible] = useState<boolean>(false);
 
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [focusedSlotKey, setFocusedSlotKey] = useState<string | null>(null);
@@ -395,9 +395,9 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
       : 0;
 
   return (
-    <div className="space-y-2.5">
+    <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
       {/* Top Bar: Building Group Switcher + Live Batch Search + Live Bay KPIs */}
-      <div className="bg-[#0d1629] border border-[#1e3154] rounded-xl p-2.5 shadow-sm flex flex-wrap items-center justify-between gap-2.5">
+      <div className="shrink-0 bg-[#0d1629] border border-[#1e3154] rounded-xl p-2 shadow-sm flex flex-wrap items-center justify-between gap-2">
         {/* 4 Building Group Tabs */}
         <div className="flex flex-wrap items-center gap-1.5">
           {BUILDING_GROUPS.map((grp) => {
@@ -537,7 +537,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
       {/* Inline Search Feedback Strip (if any) */}
       {searchFeedback && (
         <div
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between border ${
+          className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-between border ${
             searchFeedback.type === "found"
               ? "bg-purple-950/80 border-purple-500/50 text-purple-200"
               : "bg-red-950/80 border-red-500/50 text-red-200"
@@ -562,11 +562,11 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
       )}
 
       {/* =====================================================================
-          MAIN 3D VIEWPORT CONTAINER (Zero backdrop-filter over WebGL)
+          MAIN 3D VIEWPORT CONTAINER (Fits remaining screen height, zero overflow)
          ===================================================================== */}
-      <div className="relative w-full h-[640px] lg:h-[700px] rounded-xl overflow-hidden border border-[#1e3154] bg-[#0b1324] shadow-lg select-none">
+      <div className="relative flex-1 min-h-0 w-full rounded-xl overflow-hidden border border-[#1e3154] bg-[#0b1324] shadow-lg select-none">
         {/* WebGL Canvas Mount */}
-        <div ref={canvasHostRef} className="w-full h-full" />
+        <div ref={canvasHostRef} className="absolute inset-0 w-full h-full overflow-hidden" />
 
         {/* Graceful Fallback if WebGL unavailable */}
         {webglError && (
@@ -606,7 +606,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
 
         {/* Right Floating Inspector Card (when a coil or floor slot is selected) */}
         {selectedSlot && (
-          <div className="absolute top-3 right-3 z-20 w-80 max-w-[calc(100%-24px)] bg-[#0d1629]/95 border border-[#2b426d] rounded-xl shadow-2xl text-slate-100 overflow-hidden">
+          <div className="absolute top-3 right-3 z-20 w-80 max-w-[calc(100%-24px)] max-h-[calc(100%-24px)] overflow-y-auto bg-[#0d1629]/95 border border-[#2b426d] rounded-xl shadow-2xl text-slate-100">
             <div className="px-3.5 py-2.5 bg-[#13203b] border-b border-[#23375e] flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0">
                 <span
@@ -818,12 +818,12 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
         {/* ===================================================================
             BOTTOM COLLAPSIBLE 3D CONTROL DOCK (Faithful to Reference Image)
            =================================================================== */}
-        <div className="absolute left-3 right-3 bottom-3 z-20 flex flex-col items-start gap-2 pointer-events-none">
+        <div className="absolute left-3 right-3 bottom-3 z-20 flex flex-col items-start gap-2 pointer-events-none max-h-[calc(100%-24px)]">
           {/* Collapse / Expand Toggle Pill */}
           <button
             type="button"
             onClick={() => setDockVisible((v) => !v)}
-            className="pointer-events-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0d1629]/95 hover:bg-[#152442] border border-[#273d66] text-slate-200 text-xs font-bold shadow-md cursor-pointer transition-colors"
+            className="pointer-events-auto shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0d1629]/95 hover:bg-[#152442] border border-[#273d66] text-slate-200 text-xs font-bold shadow-md cursor-pointer transition-colors"
           >
             {dockVisible ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
             <span>
@@ -839,7 +839,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
 
           {/* Main Dock Panel */}
           {dockVisible && (
-            <div className="pointer-events-auto w-full bg-[#0d1629]/95 border border-[#24385f] rounded-xl px-3.5 py-3 shadow-2xl space-y-2.5">
+            <div className="pointer-events-auto w-full max-h-[60vh] overflow-y-auto bg-[#0d1629]/95 border border-[#24385f] rounded-xl px-3.5 py-3 shadow-2xl space-y-2.5">
               {/* Row 1: Camera Presets (Left) + Filters, Pending SAP, Crane Demo (Right) */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {/* Camera Presets */}
