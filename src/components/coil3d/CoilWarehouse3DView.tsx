@@ -18,6 +18,7 @@ import {
   Box,
   Minus,
   Plus,
+  Info,
 } from "lucide-react";
 import {
   CoilSapMasterItem,
@@ -112,6 +113,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
   const [activeCameraPreset, setActiveCameraPreset] = useState<CameraPreset>("isometric");
   const [craneDemoEnabled, setCraneDemoEnabled] = useState<boolean>(false);
   const [dockVisible, setDockVisible] = useState<boolean>(false);
+  const [legendVisible, setLegendVisible] = useState<boolean>(false);
 
   const [selectedSlotKey, setSelectedSlotKey] = useState<string | null>(null);
   const [focusedSlotKey, setFocusedSlotKey] = useState<string | null>(null);
@@ -839,11 +841,11 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
 
           {/* Main Dock Panel */}
           {dockVisible && (
-            <div className="pointer-events-auto w-full max-h-[60vh] overflow-y-auto bg-[#0d1629]/95 border border-[#24385f] rounded-xl px-3.5 py-3 shadow-2xl space-y-2.5">
-              {/* Row 1: Camera Presets (Left) + Filters, Pending SAP, Crane Demo (Right) */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="pointer-events-auto w-full max-h-[55vh] overflow-y-auto bg-[#0d1629]/95 border border-[#24385f] rounded-xl px-3 py-2 shadow-2xl space-y-2">
+              {/* Row 1: Camera Presets (Left) + Compact Filters, Pending SAP, Crane Demo, Color Legend Toggle (Right) */}
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
                 {/* Camera Presets */}
-                <div className="inline-flex items-center bg-[#091020] border border-[#1f3255] rounded-lg p-1 gap-0.5">
+                <div className="inline-flex items-center bg-[#091020] border border-[#1f3255] rounded-lg p-0.5 gap-0.5">
                   {(
                     [
                       { id: "isometric", label: "Isometric" },
@@ -856,7 +858,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                       key={cam.id}
                       type="button"
                       onClick={() => handleCameraPreset(cam.id)}
-                      className={`px-2.5 py-1 rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
                         activeCameraPreset === cam.id
                           ? "bg-[#1e3358] text-white border border-[#38578f]"
                           : "text-slate-300 hover:text-white hover:bg-[#142340] border border-transparent"
@@ -868,21 +870,21 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleCameraPreset("reset")}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold text-slate-300 hover:text-white hover:bg-[#142340] cursor-pointer transition-colors"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-bold text-slate-300 hover:text-white hover:bg-[#142340] cursor-pointer transition-colors"
                   >
-                    <RotateCcw size={12} />
+                    <RotateCcw size={11} />
                     <span>Reset</span>
                   </button>
                 </div>
 
-                {/* Filters + Pending SAP + Crane Demo */}
-                <div className="flex flex-wrap items-center gap-2">
+                {/* Filters + Pending SAP + Crane Demo + Legend Toggle */}
+                <div className="flex flex-wrap items-center gap-1.5">
                   {/* Door Filter */}
                   <select
                     value={doorFilter}
                     onChange={(e) => setDoorFilter(e.target.value)}
                     aria-label="Filter by Door"
-                    className="px-2.5 py-1.5 rounded-lg bg-[#091020] border border-[#243961] text-xs font-semibold text-slate-200 focus:outline-none focus:border-blue-400 cursor-pointer"
+                    className="px-2 py-1 rounded-lg bg-[#091020] border border-[#243961] text-[11px] font-semibold text-slate-200 focus:outline-none focus:border-blue-400 cursor-pointer"
                   >
                     <option value="ALL">
                       {isThai ? "Door ทั้งหมด" : "All Doors"}
@@ -899,7 +901,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                     value={rowFilter}
                     onChange={(e) => setRowFilter(e.target.value)}
                     aria-label="Filter by Row"
-                    className="px-2.5 py-1.5 rounded-lg bg-[#091020] border border-[#243961] text-xs font-semibold text-slate-200 focus:outline-none focus:border-blue-400 cursor-pointer"
+                    className="px-2 py-1 rounded-lg bg-[#091020] border border-[#243961] text-[11px] font-semibold text-slate-200 focus:outline-none focus:border-blue-400 cursor-pointer"
                   >
                     <option value="ALL">
                       {isThai ? "Row ทั้งหมด" : "All Rows"}
@@ -916,7 +918,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                     value={levelFilter}
                     onChange={(e) => setLevelFilter(e.target.value)}
                     aria-label="Filter by Level"
-                    className="px-2.5 py-1.5 rounded-lg bg-[#091020] border border-[#243961] text-xs font-semibold text-slate-200 focus:outline-none focus:border-blue-400 cursor-pointer"
+                    className="px-2 py-1 rounded-lg bg-[#091020] border border-[#243961] text-[11px] font-semibold text-slate-200 focus:outline-none focus:border-blue-400 cursor-pointer"
                   >
                     <option value="ALL">
                       {isThai ? "Level ทั้งหมด" : "All Levels"}
@@ -930,7 +932,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
 
                   {/* Base Coils Per Row Stepper (Expandable 6..30 coils/row) */}
                   <div
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#091020] border border-[#243961] text-xs text-slate-200"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#091020] border border-[#243961] text-[11px] text-slate-200"
                     title={
                       isThai
                         ? "ปรับจำนวนม้วนฐานชั้นที่ 1 ต่อ 1 แถว (ขยายได้ 6 - 30 ลูก/แถว)"
@@ -953,7 +955,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                       value={effectiveBaseSlotsPerRow}
                       onChange={(e) => handleUpdateBaseSlots(Number(e.target.value))}
                       aria-label="Coils per row"
-                      className="bg-transparent text-xs font-mono font-extrabold text-emerald-300 focus:outline-none cursor-pointer px-0.5"
+                      className="bg-transparent text-[11px] font-mono font-extrabold text-emerald-300 focus:outline-none cursor-pointer px-0.5"
                     >
                       {Array.from(
                         { length: MAX_BASE_SLOTS_PER_ROW - MIN_BASE_SLOTS_PER_ROW + 1 },
@@ -979,7 +981,7 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setOnlyPendingSap((v) => !v)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer transition-colors ${
                       onlyPendingSap
                         ? "bg-amber-500 text-slate-950 border-amber-300"
                         : "bg-amber-500/15 text-amber-300 border-amber-500/45 hover:bg-amber-500/25"
@@ -1001,72 +1003,99 @@ export const CoilWarehouse3DView: React.FC<CoilWarehouse3DViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setCraneDemoEnabled((v) => !v)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition-colors ${
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer transition-colors ${
                       craneDemoEnabled
                         ? "bg-yellow-500 text-slate-950 border-yellow-300"
                         : "bg-[#111e38] text-slate-200 border-[#2b426d] hover:bg-[#1a2c4f]"
                     }`}
                   >
                     {craneDemoEnabled ? (
-                      <Square size={11} className="fill-current" />
+                      <Square size={10} className="fill-current" />
                     ) : (
-                      <Play size={11} />
+                      <Play size={10} />
                     )}
-                    <span>Crane Demo (Visual Only)</span>
+                    <span>Crane Demo</span>
+                  </button>
+
+                  {/* Compact Toggle Button for Color Status Legend */}
+                  <button
+                    type="button"
+                    onClick={() => setLegendVisible((v) => !v)}
+                    aria-expanded={legendVisible}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold border cursor-pointer transition-colors ${
+                      legendVisible
+                        ? "bg-sky-500/20 text-sky-200 border-sky-400/50"
+                        : "bg-[#111e38] text-slate-300 border-[#2b426d] hover:bg-[#1a2c4f] hover:text-white"
+                    }`}
+                    title={
+                      isThai
+                        ? "เปิด/ปิดคำอธิบายสถานะสี"
+                        : "Toggle color status legend"
+                    }
+                  >
+                    <Info size={12} className="shrink-0 text-sky-400" />
+                    <span>{isThai ? "สถานะสี" : "Legend"}</span>
+                    {legendVisible ? (
+                      <ChevronUp size={12} className="shrink-0" />
+                    ) : (
+                      <ChevronDown size={12} className="shrink-0" />
+                    )}
                   </button>
                 </div>
               </div>
 
-              {/* Row 2: Color Status Legend */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1 border-t border-[#1b2c4c] text-[11px]">
-                {(
-                  [
-                    {
-                      color: "bg-emerald-500",
-                      code: "EMPTY",
-                      text: isThai ? "ว่างพร้อมจัดเก็บ" : "Available",
-                    },
-                    {
-                      color: "bg-blue-500",
-                      code: "OCCUPIED",
-                      text: isThai ? "มีเหล็กม้วนจัดเก็บ" : "Stored Coil",
-                    },
-                    {
-                      color: "bg-orange-500",
-                      code: "RESERVED",
-                      text: isThai ? "จองตำแหน่ง (Active)" : "Staged / Reserved",
-                    },
-                    {
-                      color: "bg-red-500",
-                      code: "BLOCKED",
-                      text: isThai ? "ปิดใช้งาน / กักกัน" : "Blocked / Hold",
-                    },
-                    {
-                      color: "bg-purple-500",
-                      code: "RECOMMENDED / FOCUS",
-                      text: isThai ? "ตำแหน่งที่เลือก / ค้นพบ" : "Selected / Found",
-                    },
-                    {
-                      color: "bg-amber-400",
-                      code: "PENDING SAP",
-                      text: isThai ? "รอข้อมูล SAP" : "Pending SAP",
-                    },
-                  ] as const
-                ).map((item) => (
-                  <div key={item.code} className="inline-flex items-center gap-1.5">
-                    <span className={`w-2.5 h-2.5 rounded-full ${item.color}`} />
-                    <span className="font-extrabold text-slate-100">{item.code}</span>
-                    <span className="text-slate-400">{item.text}</span>
+              {/* Row 2 (Collapsible, hidden by default): Color Status Legend + Helper Hint */}
+              {legendVisible && (
+                <div className="space-y-1.5 pt-1.5 border-t border-[#1b2c4c]">
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px]">
+                    {(
+                      [
+                        {
+                          color: "bg-emerald-500",
+                          code: "EMPTY",
+                          text: isThai ? "ว่างพร้อมจัดเก็บ" : "Available",
+                        },
+                        {
+                          color: "bg-blue-500",
+                          code: "OCCUPIED",
+                          text: isThai ? "มีเหล็กม้วนจัดเก็บ" : "Stored Coil",
+                        },
+                        {
+                          color: "bg-orange-500",
+                          code: "RESERVED",
+                          text: isThai ? "จองตำแหน่ง (Active)" : "Staged / Reserved",
+                        },
+                        {
+                          color: "bg-red-500",
+                          code: "BLOCKED",
+                          text: isThai ? "ปิดใช้งาน / กักกัน" : "Blocked / Hold",
+                        },
+                        {
+                          color: "bg-purple-500",
+                          code: "RECOMMENDED / FOCUS",
+                          text: isThai ? "ตำแหน่งที่เลือก / ค้นพบ" : "Selected / Found",
+                        },
+                        {
+                          color: "bg-amber-400",
+                          code: "PENDING SAP",
+                          text: isThai ? "รอข้อมูล SAP" : "Pending SAP",
+                        },
+                      ] as const
+                    ).map((item) => (
+                      <div key={item.code} className="inline-flex items-center gap-1.5">
+                        <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                        <span className="font-extrabold text-slate-100">{item.code}</span>
+                        <span className="text-slate-400">{item.text}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-
-              {/* Row 3: Helper Hint */}
-              <div className="text-[11px] text-slate-400">
-                {isThai
-                  ? "คลิกตำแหน่งหรือม้วนเหล็กเพื่อดูรายละเอียด · ลากเพื่อหมุนมุมมอง · เลื่อนลูกกลิ้งเพื่อซูมเข้า-ออก"
-                  : "Click any slot or steel coil to inspect details · Drag to orbit · Scroll to zoom"}
-              </div>
+                  <div className="text-[10.5px] text-slate-400">
+                    {isThai
+                      ? "คลิกตำแหน่งหรือม้วนเหล็กเพื่อดูรายละเอียด · ลากเพื่อหมุนมุมมอง · เลื่อนลูกกลิ้งเพื่อซูมเข้า-ออก"
+                      : "Click any slot or steel coil to inspect details · Drag to orbit · Scroll to zoom"}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

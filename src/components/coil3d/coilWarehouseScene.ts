@@ -125,7 +125,8 @@ function createWarehouseFloorTexture(
   doors: string[],
   rowCount: number,
   isFrontDoors = false,
-  baseSlotsPerRow = DEFAULT_BASE_SLOTS_PER_ROW
+  baseSlotsPerRow = DEFAULT_BASE_SLOTS_PER_ROW,
+  showLaneArrows = false
 ): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -239,6 +240,36 @@ function createWarehouseFloorTexture(
   ctx.lineTo(1024 - 12, laneMidY);
   ctx.stroke();
   ctx.setLineDash([]);
+
+  // Crisp lane direction arrows for Building H7 front road (clear of center ZONE H7 stencil)
+  if (showLaneArrows) {
+    const upperLaneY = Math.round((laneTopY + laneMidY) / 2);
+    const lowerLaneY = Math.round((laneMidY + laneBottomY) / 2);
+    const drawLaneArrow = (cx: number, cy: number, dir: 1 | -1) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(dir, 1);
+      ctx.fillStyle = "rgba(241, 245, 249, 0.72)";
+      ctx.beginPath();
+      // Shaft
+      ctx.moveTo(-34, -5);
+      ctx.lineTo(10, -5);
+      // Arrowhead
+      ctx.lineTo(10, -13);
+      ctx.lineTo(36, 0);
+      ctx.lineTo(10, 13);
+      ctx.lineTo(10, 5);
+      ctx.lineTo(-34, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    };
+
+    for (const ax of [176, 848]) {
+      drawLaneArrow(ax, upperLaneY, 1); // Upper lane -> right toward Door H7
+      drawLaneArrow(ax, lowerLaneY, -1); // Lower lane <- left away from Door H7
+    }
+  }
 
   // Door zone divider line if dual-door
   if (doors.length >= 2) {
@@ -786,6 +817,7 @@ export class CoilWarehouseSceneEngine {
     const railY = 8.0;
 
     const isFrontDoorBay = layout.group.id === "H9-H10";
+    const isH7Bay = layout.group.id === "H7";
 
     // 1. Concrete Warehouse Slab
     const floorTex = createWarehouseFloorTexture(
@@ -794,7 +826,8 @@ export class CoilWarehouseSceneEngine {
       layout.doors,
       layout.rows.length,
       isFrontDoorBay,
-      layout.group.baseSlotsPerRow
+      layout.group.baseSlotsPerRow,
+      isH7Bay
     );
     const slabTopMat = new THREE.MeshStandardMaterial({
       map: floorTex,
@@ -851,7 +884,11 @@ export class CoilWarehouseSceneEngine {
 
     // Columns along storage bay depth + corner column clear of road opening
     const storageColStartZ = isFrontDoorBay ? backRoadInnerZ + 0.55 : -D / 2 + 1.2;
-    const storageColEndZ = isFrontDoorBay ? frontCornerColZ : roadMinZ - 0.55;
+    const storageColEndZ = isFrontDoorBay
+      ? frontCornerColZ
+      : isH7Bay
+      ? roadMinZ - 0.72
+      : roadMinZ - 0.55;
     const storageColSpanZ = Math.max(4, storageColEndZ - storageColStartZ);
     const storageColCount = Math.max(4, Math.round(storageColSpanZ / 4.8) + 1);
 
@@ -934,7 +971,8 @@ export class CoilWarehouseSceneEngine {
     this.structureGroup.add(backHeader);
 
     // 3. Blue Industrial Door Portals
-    // - Bay H9-H10: Front-mounted portals along +Z front edge (in front of drive aisle, zero row obstruction)
+    // - Bay H9-H10: Front-mounted portals along +Z front edge (in front of storage rows, zero row obstruction)
+    // - Bay H7: Single left-side portal (-X) along front road, facing camera cleanly with zero row overlap
     // - Other Bays (E7-E8, 05, 21): Side road entrances at Left (-X) and Right (+X)
     const doorPortalBlueMat = new THREE.MeshStandardMaterial({
       color: 0x1d4ed8,
@@ -963,6 +1001,16 @@ export class CoilWarehouseSceneEngine {
             z: frontCornerColZ,
             rotY: 0,
             width: 5.4,
+          },
+        ]
+      : isH7Bay
+      ? [
+          {
+            doorCode: layout.doors[0] || "H7",
+            x: -colSpanX,
+            z: roadCenterZ,
+            rotY: Math.PI / 2,
+            width: Math.max(4.6, roadWidth + 0.2),
           },
         ]
       : layout.doors.length >= 2
@@ -1000,9 +1048,10 @@ export class CoilWarehouseSceneEngine {
       portalGroup.rotation.y = rotY;
 
       // Left & Right blue steel portal legs framing the doorway
-      const legGeo = isFrontDoorBay
-        ? new THREE.BoxGeometry(0.38, portalH, 0.46)
-        : new THREE.BoxGeometry(0.46, portalH, 0.56);
+      const legGeo =
+        isFrontDoorBay || isH7Bay
+          ? new THREE.BoxGeometry(0.38, portalH, 0.46)
+          : new THREE.BoxGeometry(0.46, portalH, 0.56);
       const leftLeg = new THREE.Mesh(legGeo, doorPortalBlueMat);
       leftLeg.position.set(-portalW / 2, portalH / 2, 0);
       leftLeg.castShadow = !this.isSoftwareGl;

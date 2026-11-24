@@ -1,6 +1,6 @@
 import { CoilStockRecord, CoilSapMasterItem } from "../../services/coilDataService";
 
-export type BuildingGroupId = "E7-E8" | "H9-H10" | "05" | "21";
+export type BuildingGroupId = "E7-E8" | "H9-H10" | "H7" | "05" | "21";
 
 export type SlotVisualStatus =
   | "EMPTY"
@@ -72,6 +72,18 @@ export const BUILDING_GROUPS: BuildingGroupConfig[] = [
     defaultRowsPerDoor: 8,
     baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
     slabWidth: 42,
+    slabDepth: 28,
+  },
+  {
+    id: "H7",
+    labelTh: "อาคาร H7",
+    labelEn: "Building H7",
+    subtitleTh: "คลังจัดเก็บอาคาร H7 (1 ประตู)",
+    subtitleEn: "Storage Building H7 (1 Door)",
+    doors: ["H7"],
+    defaultRowsPerDoor: 10,
+    baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
+    slabWidth: 32,
     slabDepth: 28,
   },
   {
@@ -165,7 +177,7 @@ const KNOWN_BUILDING_TO_GROUP: Record<string, BuildingGroupId> = {
   E8: "E7-E8",
   H9: "H9-H10",
   H10: "H9-H10",
-  H7: "H9-H10",
+  H7: "H7",
   H8: "H9-H10",
   "05": "05",
   "5": "05",
@@ -196,8 +208,6 @@ export function parseCoilLocationTo3D(rawLocation?: string): ParsedCoilLocation 
     door =
       first === "5"
         ? "05"
-        : first === "H7"
-        ? "H9"
         : first === "H8"
         ? "H10"
         : first;
@@ -214,8 +224,8 @@ export function parseCoilLocationTo3D(rawLocation?: string): ParsedCoilLocation 
     groupId = "H9-H10";
     door = "H9";
   } else if (/^H7/.test(cleaned)) {
-    groupId = "H9-H10";
-    door = "H9";
+    groupId = "H7";
+    door = "H7";
   } else if (/^H8/.test(cleaned)) {
     groupId = "H9-H10";
     door = "H10";
@@ -888,6 +898,7 @@ export function getGroupCoilCounts(
   const result: Record<BuildingGroupId, { count: number; weightTons: number }> = {
     "E7-E8": { count: 0, weightTons: 0 },
     "H9-H10": { count: 0, weightTons: 0 },
+    H7: { count: 0, weightTons: 0 },
     "05": { count: 0, weightTons: 0 },
     "21": { count: 0, weightTons: 0 },
   };
