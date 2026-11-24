@@ -24,10 +24,12 @@ export interface SlitWorkforceAssignment {
   workingDate: string; // YYYY-MM-DD
   employeeId?: string;
   employeeName: string;
+  department?: string;
   shift: SlitWorkforceShift;
   area: string;
   machineGroup: SlitWorkforceMachineGroup;
-  machines?: string[]; // Optional specific machines within group e.g. ["TM01", "TM02"]
+  machineGroups?: SlitWorkforceMachineGroup[]; // Multi-group selection e.g. ["TM", "CF"]
+  machines?: string[]; // Specific machines across any groups e.g. ["TM01", "CF01", "ML02"]
   duty: string;
   status: SlitWorkforceStatus;
   notes?: string;
@@ -36,12 +38,44 @@ export interface SlitWorkforceAssignment {
   updatedAt?: string;
 }
 
-const VALID_MACHINE_GROUPS: ReadonlySet<SlitWorkforceMachineGroup> = new Set([
-  "TM",
-  "CF",
-  "ML",
-  "ZF",
-]);
+const CANONICAL_MACHINE_GROUPS: SlitWorkforceMachineGroup[] = ["TM", "CF", "ML", "ZF"];
+
+const VALID_MACHINE_GROUPS: ReadonlySet<SlitWorkforceMachineGroup> = new Set(
+  CANONICAL_MACHINE_GROUPS
+);
+
+export function inferMachineGroupFromCode(code: string): SlitWorkforceMachineGroup | null {
+  const upper = String(code || "").trim().toUpperCase();
+  if (upper.startsWith("TM")) return "TM";
+  if (upper.startsWith("CF")) return "CF";
+  if (upper.startsWith("ML")) return "ML";
+  if (upper.startsWith("ZF")) return "ZF";
+  return null;
+}
+
+export function getAssignmentMachineGroups(
+  item: Pick<SlitWorkforceAssignment, "machineGroup" | "machineGroups" | "machines">
+): SlitWorkforceMachineGroup[] {
+  const set = new Set<SlitWorkforceMachineGroup>();
+  if (Array.isArray(item.machineGroups)) {
+    item.machineGroups.forEach((g) => {
+      const upper = String(g || "").trim().toUpperCase() as SlitWorkforceMachineGroup;
+      if (VALID_MACHINE_GROUPS.has(upper)) set.add(upper);
+    });
+  }
+  if (Array.isArray(item.machines)) {
+    item.machines.forEach((code) => {
+      const inferred = inferMachineGroupFromCode(code);
+      if (inferred) set.add(inferred);
+    });
+  }
+  if (set.size === 0 && item.machineGroup) {
+    const upper = String(item.machineGroup).trim().toUpperCase() as SlitWorkforceMachineGroup;
+    if (VALID_MACHINE_GROUPS.has(upper)) set.add(upper);
+  }
+  if (set.size === 0) set.add("TM");
+  return CANONICAL_MACHINE_GROUPS.filter((g) => set.has(g));
+}
 
 const VALID_STATUSES: ReadonlySet<SlitWorkforceStatus> = new Set([
   "active",
@@ -108,8 +142,14 @@ export function normalizeSlitWorkforcePayload(
             .map((m) => String(m || "").trim().toUpperCase().slice(0, 32))
             .filter(Boolean)
         )
-      ).slice(0, 30)
+      ).slice(0, 50)
     : [];
+
+  const safeMachineGroups = getAssignmentMachineGroups({
+    machineGroup: normalizeMachineGroup(record.machineGroup),
+    machineGroups: record.machineGroups,
+    machines: safeMachines,
+  });
 
   const base: SlitWorkforceAssignment & { updatedAt: string } = {
     id: docId,
@@ -117,7 +157,8 @@ export function normalizeSlitWorkforcePayload(
     employeeName: String(record.employeeName || "").trim().slice(0, 128) || "-",
     shift: safeShift,
     area: String(record.area || "").trim().slice(0, 128) || "-",
-    machineGroup: normalizeMachineGroup(record.machineGroup),
+    machineGroup: safeMachineGroups[0] || normalizeMachineGroup(record.machineGroup),
+    machineGroups: safeMachineGroups,
     machines: safeMachines,
     duty: String(record.duty || "").trim().slice(0, 128) || "-",
     status: normalizeStatus(record.status),
@@ -127,6 +168,9 @@ export function normalizeSlitWorkforcePayload(
 
   if (record.employeeId !== undefined && String(record.employeeId).trim() !== "") {
     base.employeeId = String(record.employeeId).trim().toUpperCase().slice(0, 64);
+  }
+  if (record.department !== undefined && String(record.department).trim() !== "") {
+    base.department = String(record.department).trim().slice(0, 128);
   }
   if (record.notes !== undefined && String(record.notes).trim() !== "") {
     base.notes = String(record.notes).trim().slice(0, 500);
@@ -183,12 +227,19 @@ export function subscribeSlitWorkforceAssignments(
     (snapshot) => {
       const cloudItems: SlitWorkforceAssignment[] = snapshot.docs.map((d) => {
         const raw = d.data() as SlitWorkforceAssignment;
+        const safeMachines = Array.isArray(raw.machines) ? raw.machines : [];
+        const safeGroups = getAssignmentMachineGroups({
+          machineGroup: normalizeMachineGroup(raw.machineGroup),
+          machineGroups: raw.machineGroups,
+          machines: safeMachines,
+        });
         return {
           ...raw,
           id: raw.id || d.id,
           shift: raw.shift === "night" ? "night" : "day",
-          machineGroup: normalizeMachineGroup(raw.machineGroup),
-          machines: Array.isArray(raw.machines) ? raw.machines : [],
+          machineGroup: safeGroups[0] || normalizeMachineGroup(raw.machineGroup),
+          machineGroups: safeGroups,
+          machines: safeMachines,
           status: normalizeStatus(raw.status),
         };
       });

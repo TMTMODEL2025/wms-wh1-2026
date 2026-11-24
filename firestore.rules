@@ -253,7 +253,9 @@ service cloud.firestore {
         && data.status in ['active', 'standby', 'completed']
         && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64
         && (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() <= 64))
-        && (!('machines' in data) || (data.machines is list && data.machines.size() <= 30 && (data.machines.size() == 0 || data.machines[0] is string)))
+        && (!('department' in data) || (data.department is string && data.department.size() <= 128))
+        && (!('machineGroups' in data) || (data.machineGroups is list && data.machineGroups.size() <= 10 && (data.machineGroups.size() == 0 || data.machineGroups[0] is string)))
+        && (!('machines' in data) || (data.machines is list && data.machines.size() <= 50 && (data.machines.size() == 0 || data.machines[0] is string)))
         && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
         && (!('assignedBy' in data) || (data.assignedBy is string && data.assignedBy.size() <= 128))
         && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
