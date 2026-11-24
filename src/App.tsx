@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { VehicleManagement } from "./components/VehicleManagement";
 import { EmployeeManagement } from "./components/EmployeeManagement";
-import { AdminWorkforcePortal } from "./components/AdminWorkforcePortal";
+import { AdminWorkforcePortal, AdminWorkforceTab } from "./components/AdminWorkforcePortal";
 import { LoginGateModal } from "./components/LoginGateModal";
 import { TransportOperations } from "./components/TransportOperations";
 import { TransportStatisticsView } from "./components/TransportStatisticsView";
@@ -5392,6 +5392,7 @@ function WmsApp({
   const [slitMenuExpanded, setSlitMenuExpanded] = useState<boolean>(false);
   const [coilMenuExpanded, setCoilMenuExpanded] = useState<boolean>(false);
   const [rmMenuExpanded, setRmMenuExpanded] = useState<boolean>(false);
+  const [adminMenuExpanded, setAdminMenuExpanded] = useState<boolean>(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       if (typeof window.matchMedia === "function") {
@@ -5401,9 +5402,10 @@ function WmsApp({
     }
     return false;
   });
-  const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
+  const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "workforce_management" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
   const [coilMode, setCoilMode] = useState<CoilModeTab>("inbound");
   const [rmMode, setRmMode] = useState<RmModeTab>("inbound");
+  const [adminTab, setAdminTab] = useState<AdminWorkforceTab>("workforce");
 
   // Guard active route against logged-in user's permitted sections
   useEffect(() => {
@@ -6499,6 +6501,26 @@ function WmsApp({
                                          <button
                                            type="button"
                                            tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "workforce_management" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("workforce_management");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "จัดการกำลังพล" : "Workforce Management"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#6366f1" }}>
+                                             <Users size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "จัดการกำลังพล" : "Workforce Management"}</span>
+                                         </button>
+
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
                                            className={`nav-sub-btn ${slitMode === "tmt_recheck" ? "active" : ""}`}
                                            onClick={() => {
                                              setActive("slit");
@@ -6551,27 +6573,113 @@ function WmsApp({
                       {administrationItems.map((item) => {
                         const Icon = item.icon;
                         const isActive = active === item.id;
+                        const isAdmin = item.id === "admin";
                         return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            className={`nav-card-btn ${isActive ? "active" : ""}`}
-                            onClick={() => {
-                              setActive(item.id);
-                              setSelectedRecord(null);
-                              if (typeof window !== "undefined" && window.innerWidth <= 768) {
-                                setSidebarCollapsed(true);
-                              }
-                            }}
-                            title={item.label}
-                          >
-                            <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                              <span className="nav-icon">
-                                <Icon size={16} />
-                              </span>
-                              <span>{item.label}</span>
-                            </div>
-                          </button>
+                          <div key={item.id}>
+                            <button
+                              type="button"
+                              className={`nav-card-btn ${isActive ? "active" : ""}`}
+                              onClick={() => {
+                                if (isAdmin) {
+                                  if (active !== "admin") {
+                                    setActive("admin");
+                                    setAdminMenuExpanded(true);
+                                  } else {
+                                    setAdminMenuExpanded((prev) => !prev);
+                                  }
+                                  setSelectedRecord(null);
+                                  return;
+                                }
+                                setActive(item.id);
+                                setSelectedRecord(null);
+                                if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                  setSidebarCollapsed(true);
+                                }
+                              }}
+                              title={item.label}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+                                <span className="nav-icon">
+                                  <Icon size={16} />
+                                </span>
+                                <span>{item.label}</span>
+                              </div>
+                              {isAdmin && (
+                                <span
+                                  className="nav-arrow-icon"
+                                  style={{
+                                    transform: adminMenuExpanded ? "rotate(0deg)" : "rotate(-90deg)",
+                                  }}
+                                >
+                                  <ChevronDown size={14} />
+                                </span>
+                              )}
+                            </button>
+
+                            {isAdmin && (
+                              <div
+                                className={`nav-submenu-collapse ${adminMenuExpanded ? "open" : ""}`}
+                                aria-hidden={!adminMenuExpanded}
+                              >
+                                <div className="nav-submenu-inner">
+                                  <div className="nav-submenu">
+                                    {[
+                                      {
+                                        id: "workforce" as AdminWorkforceTab,
+                                        labelTh: "ทะเบียนพนักงาน & สิทธิ์ส่วนงาน",
+                                        labelEn: "Employee Roster & Access",
+                                        icon: Users,
+                                        color: "#38bdf8",
+                                      },
+                                      {
+                                        id: "shift_schedule" as AdminWorkforceTab,
+                                        labelTh: "จัดตารางกะทำงาน",
+                                        labelEn: "Shift Schedule",
+                                        icon: CalendarClock,
+                                        color: "#f59e0b",
+                                      },
+                                      {
+                                        id: "audit_logs" as AdminWorkforceTab,
+                                        labelTh: "ประวัติกิจกรรมผู้ล็อกอิน",
+                                        labelEn: "Activity Logs",
+                                        icon: Activity,
+                                        color: "#10b981",
+                                      },
+                                    ].map((sub) => {
+                                      const SubIcon = sub.icon;
+                                      return (
+                                        <button
+                                          key={sub.id}
+                                          type="button"
+                                          tabIndex={adminMenuExpanded ? 0 : -1}
+                                          className={`nav-sub-btn ${
+                                            active === "admin" && adminTab === sub.id ? "active" : ""
+                                          }`}
+                                          onClick={() => {
+                                            setActive("admin");
+                                            setAdminTab(sub.id);
+                                            setSelectedRecord(null);
+                                            if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                              setSidebarCollapsed(true);
+                                            }
+                                          }}
+                                          title={language === "th" ? sub.labelTh : sub.labelEn}
+                                        >
+                                          <span
+                                            className="nav-icon"
+                                            style={{ width: 16, height: 16, color: sub.color }}
+                                          >
+                                            <SubIcon size={14} />
+                                          </span>
+                                          <span>{language === "th" ? sub.labelTh : sub.labelEn}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         );
                       })}
                     </div>
@@ -6672,6 +6780,8 @@ function WmsApp({
                 onLogTransaction={(activity, reference, status) => {
                   logModuleActivity("Admin & Workforce", activity, reference, status, "admin");
                 }}
+                activeTab={adminTab}
+                onTabChange={setAdminTab}
               />
             ) : active === "vehicles" ? (
               <VehicleManagement

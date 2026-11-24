@@ -177,6 +177,7 @@ service cloud.firestore {
         && data.role is string && data.role.size() <= 32
         && data.employmentStatus in ['Active', 'Inactive']
         && (!('allowedSections' in data) || (data.allowedSections is list && data.allowedSections.size() <= 10))
+        && (!('workShift' in data) || data.workShift in ['day', 'night'])
         && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 350000));
     }
 
@@ -241,6 +242,33 @@ service cloud.firestore {
         && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
+    function isValidSlitWorkforceAssignment(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.workingDate is string && data.workingDate.size() > 0 && data.workingDate.size() <= 32
+        && data.employeeName is string && data.employeeName.size() > 0 && data.employeeName.size() <= 128
+        && data.shift in ['day', 'night']
+        && data.area is string && data.area.size() > 0 && data.area.size() <= 128
+        && data.machineGroup in ['TM', 'CF', 'ML', 'ZF']
+        && data.duty is string && data.duty.size() > 0 && data.duty.size() <= 128
+        && data.status in ['active', 'standby', 'completed']
+        && data.createdAt is string && data.createdAt.size() > 0 && data.createdAt.size() <= 64
+        && (!('employeeId' in data) || (data.employeeId is string && data.employeeId.size() <= 64))
+        && (!('machines' in data) || (data.machines is list && data.machines.size() <= 30 && (data.machines.size() == 0 || data.machines[0] is string)))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('assignedBy' in data) || (data.assignedBy is string && data.assignedBy.size() <= 128))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
+    }
+
+    function isValidWmsWeeklyShiftSchedule(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 32
+        && data.weekStartYmd is string && data.weekStartYmd.size() == 10
+        && data.weekEndYmd is string && data.weekEndYmd.size() == 10
+        && data.workPattern in ['mon_sat', 'mon_sun']
+        && data.entries is map && data.entries.size() <= 1000
+        && data.updatedAt is string && data.updatedAt.size() <= 64
+        && (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128));
+    }
+
     match /slit_inbound/{recordId} {
       allow read: if true;
       allow create, update: if isValidId(recordId) && isValidInboundRecord(request.resource.data);
@@ -281,6 +309,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(logId) && isValidSlitEquipmentLog(request.resource.data);
       allow delete: if isValidId(logId);
+    }
+
+    match /slit_workforce_assignments/{assignmentId} {
+      allow read: if true;
+      allow create, update: if isValidId(assignmentId) && isValidSlitWorkforceAssignment(request.resource.data);
+      allow delete: if isValidId(assignmentId);
     }
 
     match /coil_stock/{recordId} {
@@ -413,6 +447,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(logId) && isValidWmsActivityLog(request.resource.data);
       allow delete: if isValidId(logId);
+    }
+
+    match /wms_weekly_shift_schedules/{weekId} {
+      allow read: if true;
+      allow create, update: if isValidId(weekId) && isValidWmsWeeklyShiftSchedule(request.resource.data);
+      allow delete: if isValidId(weekId);
     }
 
     match /test/{docId} {

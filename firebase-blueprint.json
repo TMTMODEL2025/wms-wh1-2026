@@ -437,6 +437,7 @@
         "phoneNumber": { "type": "string", "maxLength": 32 },
         "employmentStatus": { "type": "string", "maxLength": 32 },
         "allowedSections": { "type": "array", "items": { "type": "string" } },
+        "workShift": { "type": "string", "enum": ["day", "night"], "maxLength": 16 },
         "photoUrl": { "type": "string", "maxLength": 350000 },
         "licenseType": { "type": "string", "maxLength": 128 },
         "notes": { "type": "string", "maxLength": 500 },
@@ -551,6 +552,43 @@
         "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "equipmentId", "equipmentName", "equipmentCode", "area", "inspectionDate", "shift", "status", "inspector", "timestamp"]
+    },
+    "SlitWorkforceAssignment": {
+      "title": "Slit & Film Workforce Duty Assignment",
+      "description": "Workforce responsibility assignment for Slit/Film section mapping employee, shift, area/building, machine group (TM/CF/ML/ZF), specific machines, and duty",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "workingDate": { "type": "string", "maxLength": 32 },
+        "employeeId": { "type": "string", "maxLength": 64 },
+        "employeeName": { "type": "string", "maxLength": 128 },
+        "shift": { "type": "string", "maxLength": 16 },
+        "area": { "type": "string", "maxLength": 128 },
+        "machineGroup": { "type": "string", "maxLength": 16 },
+        "machines": { "type": "array", "items": { "type": "string" } },
+        "duty": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "assignedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
+      },
+      "required": ["id", "workingDate", "employeeName", "shift", "area", "machineGroup", "duty", "status", "createdAt"]
+    },
+    "WmsWeeklyShiftSchedule": {
+      "title": "WMS Weekly Shift Schedule",
+      "description": "Weekly workforce shift schedule (Mon-Sun) grouped by section, storing primary Day/Night shift and per-day overrides per employee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 32 },
+        "weekStartYmd": { "type": "string", "maxLength": 16 },
+        "weekEndYmd": { "type": "string", "maxLength": 16 },
+        "workPattern": { "type": "string", "enum": ["mon_sat", "mon_sun"], "maxLength": 16 },
+        "entries": { "type": "object" },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "weekStartYmd", "weekEndYmd", "workPattern", "entries", "updatedAt"]
     },
     "RmStockRecord": {
       "title": "RM Steel Sheet Stock Record",
@@ -777,6 +815,14 @@
     "/slit_equipment_logs/{logId}": {
       "schema": "SlitEquipmentLog",
       "description": "Centralized shared shift inspection logs for Slit/Film equipment synced in real-time across all devices"
+    },
+    "/slit_workforce_assignments/{assignmentId}": {
+      "schema": "SlitWorkforceAssignment",
+      "description": "Centralized shared workforce duty assignments for Slit/Film section (employee, shift, area/building, TM/CF/ML/ZF machine, duty)"
+    },
+    "/wms_weekly_shift_schedules/{weekId}": {
+      "schema": "WmsWeeklyShiftSchedule",
+      "description": "Centralized weekly shift schedules (Mon-Sun) keyed by week start Monday YYYY-MM-DD for Admin & Workforce"
     }
   }
 }

@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   Calendar,
+  CalendarClock,
   History,
   RotateCcw,
   Search,
@@ -21,7 +22,10 @@ import {
   WmsSectionId,
 } from "../types/officer";
 import { EmployeeManagement } from "./EmployeeManagement";
+import { WorkforceShiftScheduleView } from "./WorkforceShiftScheduleView";
 import { WMS_SECTIONS } from "../utils/sectionPermissions";
+
+export type AdminWorkforceTab = "workforce" | "shift_schedule" | "audit_logs";
 
 interface AdminWorkforcePortalProps {
   employees: Employee[];
@@ -33,6 +37,8 @@ interface AdminWorkforcePortalProps {
   onNavigateToAssignment?: () => void;
   onNavigateToVehicles?: () => void;
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
+  activeTab?: AdminWorkforceTab;
+  onTabChange?: (tab: AdminWorkforceTab) => void;
 }
 
 export function AdminWorkforcePortal({
@@ -45,8 +51,15 @@ export function AdminWorkforcePortal({
   onNavigateToAssignment,
   onNavigateToVehicles,
   onLogTransaction,
+  activeTab: controlledTab,
+  onTabChange,
 }: AdminWorkforcePortalProps) {
-  const [activeTab, setActiveTab] = useState<"workforce" | "audit_logs">("workforce");
+  const [internalTab, setInternalTab] = useState<AdminWorkforceTab>("workforce");
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: AdminWorkforceTab) => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sectionFilter, setSectionFilter] = useState<WmsSectionId | "all">("all");
   const [dateFilter, setDateFilter] = useState<string>("");
@@ -135,6 +148,21 @@ export function AdminWorkforcePortal({
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === "shift_schedule"}
+            onClick={() => setActiveTab("shift_schedule")}
+            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3.5 py-2 text-xs font-bold transition ${
+              activeTab === "shift_schedule"
+                ? "bg-white text-sky-700 shadow-sm dark:bg-[#162749] dark:text-sky-300"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+            }`}
+          >
+            <CalendarClock size={14} />
+            <span>จัดตารางกะทำงาน</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === "audit_logs"}
             onClick={() => setActiveTab("audit_logs")}
             className={`inline-flex items-center gap-2 whitespace-nowrap rounded-md px-3.5 py-2 text-xs font-bold transition ${
@@ -165,6 +193,12 @@ export function AdminWorkforcePortal({
           onNavigateToVehicles={onNavigateToVehicles}
           onLogTransaction={onLogTransaction}
           hideSubTabs
+        />
+      ) : activeTab === "shift_schedule" ? (
+        <WorkforceShiftScheduleView
+          employees={employees}
+          onUpdateEmployees={onUpdateEmployees}
+          onLogTransaction={onLogTransaction}
         />
       ) : (
         <div className="space-y-4">
