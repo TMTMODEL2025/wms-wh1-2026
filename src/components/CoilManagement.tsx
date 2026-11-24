@@ -3323,18 +3323,105 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
             onClick={() => {
               Swal.fire({
                 title: isThai ? "ล้างข้อมูลส่วนงานเหล็กม้วนทั้งหมด?" : "Reset All Coil Data?",
-                text: isThai
-                  ? "จะลบเฉพาะข้อมูลในฐานข้อมูลเหล็กม้วน (coil_stock, coil_transactions, coil_staging) โดยไม่กระทบส่วนงานเหล็กสลิต"
-                  : "Clears only Coil collections without affecting Slit data.",
+                html: isThai
+                  ? `<div style="text-align:left;font-size:13px;line-height:1.6;">
+                      <div>จะลบข้อมูลในฐานข้อมูล <b>dbCoil</b> (<code>coil_stock</code>, <code>coil_transactions</code>, <code>coil_staging</code>) ทั้งหมดเพื่อเริ่มต้นทดสอบระบบใหม่ โดยไม่กระทบส่วนงานเหล็กสลิต</div>
+                      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;padding:8px 10px;border-radius:8px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);cursor:pointer;font-weight:600;">
+                        <input id="swal-reset-include-sap" type="checkbox" style="width:15px;height:15px;cursor:pointer;" />
+                        <span>ล้างข้อมูลฐาน SAP Master (<code>coil_sap_chunks</code>) ด้วย</span>
+                      </label>
+                    </div>`
+                  : `<div style="text-align:left;font-size:13px;line-height:1.6;">
+                      <div>Clears <b>dbCoil</b> collections (<code>coil_stock</code>, <code>coil_transactions</code>, <code>coil_staging</code>) without affecting Slit data.</div>
+                      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer;font-weight:600;">
+                        <input id="swal-reset-include-sap" type="checkbox" />
+                        <span>Also clear SAP Master (<code>coil_sap_chunks</code>)</span>
+                      </label>
+                    </div>`,
                 icon: "warning",
                 showCancelButton: true,
                 confirmButtonColor: "#dc2626",
                 confirmButtonText: isThai ? "ยืนยันล้างข้อมูล" : "Reset Coil DB",
                 cancelButtonText: isThai ? "ยกเลิก" : "Cancel",
+                preConfirm: () => {
+                  const cb = document.getElementById("swal-reset-include-sap") as HTMLInputElement | null;
+                  return { includeSapChunks: Boolean(cb?.checked) };
+                },
               }).then(async (res) => {
-                if (res.isConfirmed) {
-                  await clearAllCoilDataFromCloud();
-                  showToast(isThai ? "ล้างข้อมูลเหล็กม้วนเรียบร้อย" : "Coil data cleared", "success");
+                if (!res.isConfirmed) return;
+                const includeSapChunks = Boolean(res.value?.includeSapChunks);
+
+                Swal.fire({
+                  title: isThai ? "กำลังล้างข้อมูล dbCoil..." : "Clearing dbCoil...",
+                  text: isThai
+                    ? "กำลังลบข้อมูลทีละชุดจากฐานข้อมูล กรุณารอสักครู่"
+                    : "Deleting documents in batches, please wait...",
+                  allowOutsideClick: false,
+                  allowEscapeKey: false,
+                  didOpen: () => {
+                    Swal.showLoading();
+                  },
+                });
+
+                try {
+                  const result = await clearAllCoilDataFromCloud({ includeSapChunks });
+
+                  if (result.errors.length > 0 && result.totalDeleted === 0) {
+                    Swal.fire({
+                      icon: "error",
+                      title: isThai ? "ล้างข้อมูลไม่สำเร็จ" : "Reset Failed",
+                      text: result.errors[0],
+                    });
+                    return;
+                  }
+
+                  // Immediately sync local state (works in both Real-Time and Low-Read modes)
+                  if (result.errors.length === 0) {
+                    setCoilStock([]);
+                    setCoilTransactions([]);
+                    setStagingOrders([]);
+                    if (includeSapChunks) {
+                      setCoilSapMap(new Map());
+                      setCoilSapChunkCount(0);
+                    }
+                  }
+                  setManualRefreshTick((t) => t + 1);
+
+                  Swal.fire({
+                    icon: result.errors.length > 0 ? "warning" : "success",
+                    title:
+                      result.errors.length > 0
+                        ? isThai
+                          ? "ล้างข้อมูลเสร็จสิ้นบางส่วน"
+                          : "Partial Reset Completed"
+                        : isThai
+                        ? "ล้างข้อมูลเหล็กม้วนเรียบร้อย"
+                        : "Coil DB Cleared",
+                    html: isThai
+                      ? `<div style="text-align:left;font-size:13px;line-height:1.7;">
+                          <div>• สต๊อกเหล็กม้วน (<code>coil_stock</code>): <b>${result.deletedCounts.stock.toLocaleString()}</b> รายการ</div>
+                          <div>• ประวัติเคลื่อนไหว (<code>coil_transactions</code>): <b>${result.deletedCounts.transactions.toLocaleString()}</b> รายการ</div>
+                          <div>• รายการเตรียมเบิก (<code>coil_staging</code>): <b>${result.deletedCounts.staging.toLocaleString()}</b> รายการ</div>
+                          ${
+                            includeSapChunks
+                              ? `<div>• ฐาน SAP Master (<code>coil_sap_chunks</code>): <b>${result.deletedCounts.sapChunks.toLocaleString()}</b> ชุด</div>`
+                              : ""
+                          }
+                          ${
+                            result.errors.length > 0
+                              ? `<div style="margin-top:8px;color:#dc2626;font-size:12px;">พบข้อผิดพลาด ${result.errors.length} รายการ: ${String(result.errors[0]).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`
+                              : `<div style="margin-top:8px;color:#10b981;font-weight:600;">พร้อมเริ่มต้นทดสอบระบบใหม่ตั้งแต่รับเข้าจนถึงผังคลัง 3D แล้ว</div>`
+                          }
+                        </div>`
+                      : `Deleted Stock: <b>${result.deletedCounts.stock}</b>, Transactions: <b>${result.deletedCounts.transactions}</b>, Staging: <b>${result.deletedCounts.staging}</b>`,
+                  });
+                } catch (err) {
+                  console.error("Failed to reset coil DB:", err);
+                  Swal.fire({
+                    icon: "error",
+                    title: isThai ? "เกิดข้อผิดพลาดในการรีเซ็ตข้อมูล" : "Reset Error",
+                    text: err instanceof Error ? err.message : String(err),
+                  });
                 }
               });
             }}

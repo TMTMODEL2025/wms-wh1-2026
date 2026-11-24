@@ -6,6 +6,7 @@ import {
   onSnapshot,
   writeBatch,
   getDocs,
+  getDocsFromServer,
   query,
   where,
 } from "firebase/firestore";
@@ -280,21 +281,22 @@ function markCoilWriteExhausted(): void {
 async function runCoilFirestoreWriteWithGuard(
   writeFn: () => Promise<void>,
   opType: OperationType,
-  path: string
+  path: string,
+  timeoutMs = 15000
 ): Promise<boolean> {
   if (isCoilWritePaused()) {
     return false;
   }
   try {
     const timeoutPromise = new Promise<"timeout">((resolve) =>
-      setTimeout(() => resolve("timeout"), 3000)
+      setTimeout(() => resolve("timeout"), timeoutMs)
     );
     const result = await Promise.race([
       writeFn().then(() => "ok" as const),
       timeoutPromise,
     ]);
     if (result === "timeout") {
-      markCoilWriteExhausted();
+      console.warn(`Firestore write timed out after ${timeoutMs}ms on ${path}`);
       return false;
     }
     return true;
@@ -1266,25 +1268,104 @@ export async function deleteCoilStockFromCloud(id: string): Promise<void> {
   );
 }
 
-export async function clearAllCoilDataFromCloud(): Promise<void> {
-  const collectionsToClear = [
-    COIL_STOCK_COLLECTION,
-    COIL_TRANSACTIONS_COLLECTION,
-    COIL_STAGING_COLLECTION,
-  ];
-  for (const colName of collectionsToClear) {
-    await runCoilFirestoreWriteWithGuard(
-      async () => {
-        const snap = await getDocs(collection(dbCoil, colName));
-        if (snap.empty) return;
-        const batch = writeBatch(dbCoil);
-        snap.forEach((d) => batch.delete(d.ref));
-        await batch.commit();
-      },
-      OperationType.DELETE,
-      colName
-    );
+export interface ClearCoilDataResult {
+  deletedCounts: {
+    stock: number;
+    transactions: number;
+    staging: number;
+    sapChunks: number;
+  };
+  totalDeleted: number;
+  errors: string[];
+}
+
+async function deleteCoilCollectionInChunks(
+  colName: string
+): Promise<{ deleted: number; errors: string[] }> {
+  const colRef = collection(dbCoil, colName);
+  let snap;
+  try {
+    snap = await getDocsFromServer(colRef);
+  } catch {
+    snap = await getDocs(colRef);
   }
+
+  if (snap.empty) {
+    return { deleted: 0, errors: [] };
+  }
+
+  const docs = snap.docs;
+  const CHUNK_LIMIT = 350;
+  let deleted = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < docs.length; i += CHUNK_LIMIT) {
+    const slice = docs.slice(i, i + CHUNK_LIMIT);
+    try {
+      const batch = writeBatch(dbCoil);
+      slice.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+      deleted += slice.length;
+    } catch (batchErr) {
+      const batchMsg = batchErr instanceof Error ? batchErr.message : String(batchErr);
+      if (
+        batchMsg.includes("resource-exhausted") ||
+        batchMsg.includes("RESOURCE_EXHAUSTED") ||
+        batchMsg.includes("Quota limit exceeded")
+      ) {
+        markCoilWriteExhausted();
+        errors.push(`${colName}: ${batchMsg}`);
+        break;
+      }
+      // Fallback per-doc delete so one malformed legacy doc ID never blocks wiping valid docs
+      for (const d of slice) {
+        try {
+          await deleteDoc(d.ref);
+          deleted += 1;
+        } catch (docErr) {
+          errors.push(
+            `${colName}/${d.id}: ${docErr instanceof Error ? docErr.message : String(docErr)}`
+          );
+        }
+      }
+    }
+  }
+
+  return { deleted, errors };
+}
+
+export async function clearAllCoilDataFromCloud(options?: {
+  includeSapChunks?: boolean;
+}): Promise<ClearCoilDataResult> {
+  // Reset any stale cooldown so user-initiated reset always executes cleanly
+  coilQuotaExhaustedUntil = 0;
+
+  const stockRes = await deleteCoilCollectionInChunks(COIL_STOCK_COLLECTION);
+  const txRes = await deleteCoilCollectionInChunks(COIL_TRANSACTIONS_COLLECTION);
+  const stagingRes = await deleteCoilCollectionInChunks(COIL_STAGING_COLLECTION);
+  const sapRes = options?.includeSapChunks
+    ? await deleteCoilCollectionInChunks(COIL_SAP_CHUNKS_COLLECTION)
+    : { deleted: 0, errors: [] };
+
+  const deletedCounts = {
+    stock: stockRes.deleted,
+    transactions: txRes.deleted,
+    staging: stagingRes.deleted,
+    sapChunks: sapRes.deleted,
+  };
+  const errors = [
+    ...stockRes.errors,
+    ...txRes.errors,
+    ...stagingRes.errors,
+    ...sapRes.errors,
+  ];
+  const totalDeleted =
+    deletedCounts.stock +
+    deletedCounts.transactions +
+    deletedCounts.staging +
+    deletedCounts.sapChunks;
+
+  return { deletedCounts, totalDeleted, errors };
 }
 
 // ============================================================================
@@ -1402,17 +1483,11 @@ export async function saveCoilSapChunksToCloud(items: CoilSapMasterItem[]): Prom
 }
 
 export async function clearCoilSapChunksFromCloud(): Promise<void> {
-  await runCoilFirestoreWriteWithGuard(
-    async () => {
-      const snap = await getDocs(collection(dbCoil, COIL_SAP_CHUNKS_COLLECTION));
-      if (snap.empty) return;
-      const batch = writeBatch(dbCoil);
-      snap.forEach((d) => batch.delete(d.ref));
-      await batch.commit();
-    },
-    OperationType.DELETE,
-    COIL_SAP_CHUNKS_COLLECTION
-  );
+  coilQuotaExhaustedUntil = 0;
+  const res = await deleteCoilCollectionInChunks(COIL_SAP_CHUNKS_COLLECTION);
+  if (res.errors.length > 0) {
+    throw new Error(res.errors[0]);
+  }
 }
 
 function isValidScannedCoilLocation(loc: unknown): boolean {
