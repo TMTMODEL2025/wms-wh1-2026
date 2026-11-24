@@ -284,6 +284,12 @@ const WAREHOUSE_BASE_SLOTS_KEY = "tmt_wms_coil_base_slots_per_row_v1";
 // ============================================================================
 function decodeCoilSapBuffer(buffer: ArrayBuffer): string {
   const uint8 = new Uint8Array(buffer);
+  if (uint8.length >= 2 && uint8[0] === 0xff && uint8[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(uint8);
+  }
+  if (uint8.length >= 2 && uint8[0] === 0xfe && uint8[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(uint8);
+  }
   if (uint8.length >= 3 && uint8[0] === 0xef && uint8[1] === 0xbb && uint8[2] === 0xbf) {
     return new TextDecoder("utf-8").decode(uint8);
   }
@@ -399,7 +405,7 @@ interface SapHeaderColumnMap {
 
 function normalizeSapHeaderCell(raw: string): string {
   return raw
-    .replace(/^\uFEFF/, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .toLowerCase()
     .replace(/[\r\n]+/g, " ")
     .replace(/\s+/g, " ")
@@ -560,7 +566,7 @@ function detectSapHeaderColumnMap(cells: string[]): SapHeaderColumnMap | null {
 
     if (
       map.conditionText === undefined &&
-      (h.includes("สภาพสินค้า") || h.includes("condition") || h.includes("หมายเหตุ"))
+      (h.includes("สภาพสินค้า") || h.includes("text สภาพ") || h.includes("สภาพ") || h.includes("condition") || h.includes("หมายเหตุ"))
     ) {
       map.conditionText = i;
       matchedCount++;
@@ -569,6 +575,12 @@ function detectSapHeaderColumnMap(cells: string[]): SapHeaderColumnMap | null {
 
     if (map.heatNo === undefined && (h.includes("heat no") || h === "heat")) {
       map.heatNo = i;
+      matchedCount++;
+      continue;
+    }
+
+    // Recognize scanned location header so header row detection stays strong without overwriting scanned locations
+    if (h.includes("ตำแหน่งที่สแกน") || h.includes("ตำแหน่งจัดเก็บ") || h === "location") {
       matchedCount++;
       continue;
     }
@@ -618,12 +630,12 @@ function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
 
   if (cleanRows.length === 0) return [];
 
-  // Scan top rows for a recognized SAP header row
+  // Scan top rows for a recognized SAP header row (up to 60 non-empty rows, including 2-row merged headers)
   let headerRowIdx = -1;
   let headerMap: SapHeaderColumnMap | null = null;
   let headerColCount = 0;
 
-  const scanLimit = Math.min(cleanRows.length, 10);
+  const scanLimit = Math.min(cleanRows.length, 60);
   for (let r = 0; r < scanLimit; r++) {
     const detected = detectSapHeaderColumnMap(cleanRows[r]);
     if (detected) {
@@ -631,6 +643,20 @@ function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
       headerMap = detected;
       headerColCount = cleanRows[r].length;
       break;
+    }
+    // Check 2-row combined headers (common when Excel wraps/merges header cells across 2 rows)
+    if (r + 1 < scanLimit) {
+      const maxCols = Math.max(cleanRows[r].length, cleanRows[r + 1].length);
+      const mergedRow = Array.from({ length: maxCols }, (_, ci) =>
+        `${cleanRows[r][ci] || ""} ${cleanRows[r + 1][ci] || ""}`.trim()
+      );
+      const mergedDetected = detectSapHeaderColumnMap(mergedRow);
+      if (mergedDetected) {
+        headerRowIdx = r + 1;
+        headerMap = mergedDetected;
+        headerColCount = maxCols;
+        break;
+      }
     }
   }
 
@@ -747,7 +773,7 @@ function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
     return items;
   }
 
-  // Mode 2: Legacy headerless 15-column SAP format ([0] to [14])
+  // Mode 2: Legacy headerless 15-column SAP format ([0] to [14]) — also supports 16-column shifted format with scanned location in [0]
   for (let r = 0; r < cleanRows.length; r++) {
     let cells = [...cleanRows[r]];
     if (cells.length < 3) continue;
@@ -755,6 +781,25 @@ function parseCoilSapRows(rawRows: unknown[][]): CoilSapMasterItem[] {
     // If Excel sheet has leading empty column(s) before Material No., shift left so [0] is Material No.
     while (cells.length > 15 && cells[0] === "") {
       cells = cells.slice(1);
+    }
+
+    // If leading column [0] is a scanned location (e.g. H7/6/3/1) shifting the 15 SAP columns right by 1, align to [0] = Material No.
+    if (cells.length >= 16) {
+      const c2Upper = (cells[2] || "").trim().toUpperCase();
+      const c3Clean = (cells[3] || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const c2LooksNonBatch =
+        !c2Upper ||
+        c2Upper.includes("-") ||
+        c2Upper.includes(" ") ||
+        /[\u0E00-\u0E7F]/.test(c2Upper);
+      const c3LooksBatch =
+        c3Clean.length >= 3 &&
+        c3Clean.length <= 12 &&
+        !(cells[3] || "").includes("-") &&
+        !/[\u0E00-\u0E7F]/.test(cells[3] || "");
+      if (c2LooksNonBatch && c3LooksBatch) {
+        cells = cells.slice(1);
+      }
     }
 
     // Skip header rows
@@ -902,14 +947,34 @@ function parseRawCoilSapText(rawText: string): CoilSapMasterItem[] {
   const parsedFromLines = parseCoilSapRows(rows);
   if (parsedFromLines.length > 0) return parsedFromLines;
 
-  // 3. Fallback via XLSX parser
+  // 3. Fallback via HTML table extraction (for SAP/Excel HTML exports) or XLSX parser
+  if (/<tr[\s>]/i.test(rawText) && /<t[dh][\s>]/i.test(rawText)) {
+    try {
+      const docHtml = new DOMParser().parseFromString(rawText, "text/html");
+      const trNodes = Array.from(docHtml.querySelectorAll("tr"));
+      if (trNodes.length > 0) {
+        const htmlRows = trNodes.map((tr) =>
+          Array.from(tr.querySelectorAll("td, th")).map((cell) =>
+            (cell.textContent || "").replace(/\s+/g, " ").trim()
+          )
+        );
+        const parsedHtml = parseCoilSapRows(htmlRows);
+        if (parsedHtml.length > 0) return parsedHtml;
+      }
+    } catch {
+      // ignore HTML fallback error
+    }
+  }
+
   try {
     const workbook = XLSX.read(rawText, { type: "string", raw: true });
-    if (workbook.SheetNames.length > 0) {
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      if (!sheet) continue;
       const sheetRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
       if (sheetRows && sheetRows.length > 0) {
-        return parseCoilSapRows(sheetRows);
+        const parsedSheet = parseCoilSapRows(sheetRows);
+        if (parsedSheet.length > 0) return parsedSheet;
       }
     }
   } catch {
@@ -917,6 +982,70 @@ function parseRawCoilSapText(rawText: string): CoilSapMasterItem[] {
   }
 
   return [];
+}
+
+function repairWorksheetRefRange(sheet: XLSX.WorkSheet): void {
+  let minR = Infinity;
+  let minC = Infinity;
+  let maxR = -1;
+  let maxC = -1;
+  for (const key of Object.keys(sheet)) {
+    if (key.startsWith("!")) continue;
+    const cell = XLSX.utils.decode_cell(key);
+    if (!Number.isFinite(cell.r) || !Number.isFinite(cell.c)) continue;
+    if (cell.r < minR) minR = cell.r;
+    if (cell.c < minC) minC = cell.c;
+    if (cell.r > maxR) maxR = cell.r;
+    if (cell.c > maxC) maxC = cell.c;
+  }
+  if (maxR >= 0 && maxC >= 0) {
+    const computedRef = XLSX.utils.encode_range({
+      s: { r: minR, c: minC },
+      e: { r: maxR, c: maxC },
+    });
+    if (!sheet["!ref"]) {
+      sheet["!ref"] = computedRef;
+    } else {
+      const existing = XLSX.utils.decode_range(sheet["!ref"]);
+      const merged = {
+        s: { r: Math.min(existing.s.r, minR), c: Math.min(existing.s.c, minC) },
+        e: { r: Math.max(existing.e.r, maxR), c: Math.max(existing.e.c, maxC) },
+      };
+      sheet["!ref"] = XLSX.utils.encode_range(merged);
+    }
+  }
+}
+
+function parseCoilSapWorkbook(workbook: XLSX.WorkBook): CoilSapMasterItem[] {
+  const allItems: CoilSapMasterItem[] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    repairWorksheetRefRange(sheet);
+
+    const formattedRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+      blankrows: false,
+    });
+    let sheetItems = parseCoilSapRows(formattedRows);
+
+    if (sheetItems.length === 0) {
+      const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+        blankrows: false,
+      });
+      sheetItems = parseCoilSapRows(rawRows);
+    }
+
+    if (sheetItems.length > 0) {
+      allItems.push(...sheetItems);
+    }
+  }
+  return allItems;
 }
 
 export const CoilManagement: React.FC<CoilManagementProps> = ({
@@ -2964,20 +3093,37 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
   const handleSapFileUpload = async (file: File) => {
     try {
       const lower = file.name.toLowerCase();
+      const buffer = await file.arrayBuffer();
+      const uint8 = new Uint8Array(buffer);
       let parsed: CoilSapMasterItem[] = [];
 
-      if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) {
-        const buffer = await file.arrayBuffer();
-        const workbook = XLSX.read(buffer, { type: "array", raw: true });
-        if (workbook.SheetNames.length > 0) {
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: "" });
-          parsed = parseCoilSapRows(rows);
+      const isExcelExt = /\.(xlsx|xls|xlsm|xlsb|ods)$/i.test(lower);
+      if (isExcelExt) {
+        try {
+          const workbook = XLSX.read(uint8, { type: "array" });
+          parsed = parseCoilSapWorkbook(workbook);
+        } catch (xlsxErr) {
+          console.warn("XLSX binary read failed, trying text/HTML fallback:", xlsxErr);
+        }
+
+        // Fallback for SAP .xls exports that are actually HTML tables or UTF-16/Windows-874/UTF-8 TSV
+        if (parsed.length === 0) {
+          const textFallback = decodeCoilSapBuffer(buffer);
+          parsed = parseRawCoilSapText(textFallback);
         }
       } else {
-        const buffer = await file.arrayBuffer();
         const text = decodeCoilSapBuffer(buffer);
         parsed = parseRawCoilSapText(text);
+
+        // If user renamed an Excel file to .csv/.txt, try XLSX binary read as fallback
+        if (parsed.length === 0) {
+          try {
+            const workbook = XLSX.read(uint8, { type: "array" });
+            parsed = parseCoilSapWorkbook(workbook);
+          } catch {
+            // ignore binary fallback error
+          }
+        }
       }
 
       await executeCoilSapImport(parsed, file.name);
@@ -5857,7 +6003,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                 <input
                   ref={sapFileInputRef}
                   type="file"
-                  accept=".xlsx,.xls,.csv,.tsv,.txt,.tab"
+                  accept=".xlsx,.xls,.xlsm,.xlsb,.ods,.csv,.tsv,.txt,.tab"
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
