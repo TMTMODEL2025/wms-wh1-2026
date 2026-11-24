@@ -6,9 +6,11 @@ import {
   COIL_INNER_RADIUS,
   COIL_OUTER_RADIUS,
   COIL_WIDTH,
+  DEFAULT_BASE_SLOTS_PER_ROW,
   DOOR_GAP_X,
   ROW_SPACING_X,
   SADDLE_HEIGHT,
+  SLOT_SPACING_Z,
   WarehouseSlot3D,
   SlotVisualStatus,
 } from "./coilWarehouseLayout";
@@ -90,18 +92,19 @@ function createDoorSignTexture(doorCode: string): THREE.CanvasTexture {
   ctx.lineWidth = 3;
   ctx.strokeRect(22, 24, 132, 114);
 
-  // Door code text
+  // Door code text (fit 3-character codes like H10 crisply inside blue badge)
+  const codeFontSize = doorCode.length >= 3 ? 48 : 62;
   ctx.fillStyle = "#ffffff";
-  ctx.font = "900 62px Inter, system-ui, sans-serif";
+  ctx.font = `900 ${codeFontSize}px Inter, system-ui, sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(doorCode, 88, 84);
+  ctx.fillText(doorCode, 88, 84, 118);
 
   // Right industrial door description
   ctx.textAlign = "left";
   ctx.fillStyle = "#f8fafc";
-  ctx.font = "800 32px Inter, system-ui, sans-serif";
-  ctx.fillText(`WAREHOUSE DOOR ${doorCode}`, 176, 62);
+  ctx.font = "800 30px Inter, system-ui, sans-serif";
+  ctx.fillText(`WAREHOUSE DOOR ${doorCode}`, 176, 62, 316);
 
   ctx.fillStyle = "#94a3b8";
   ctx.font = "700 22px Inter, system-ui, sans-serif";
@@ -120,7 +123,9 @@ function createWarehouseFloorTexture(
   slabWidth: number,
   slabDepth: number,
   doors: string[],
-  rowCount: number
+  rowCount: number,
+  isFrontDoors = false,
+  baseSlotsPerRow = DEFAULT_BASE_SLOTS_PER_ROW
 ): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
@@ -154,35 +159,68 @@ function createWarehouseFloorTexture(
     ctx.fillRect(px, py, 5, 5);
   }
 
-  // Front forklift/truck drive lane (bottom portion in UV = +Z front of slab)
+  // Forklift/truck drive lane:
+  // - Standard bays (E7-E8, 05, 21): at front (+Z, bottom of canvas UV)
+  // - Bay H9-H10 (isFrontDoors): moved to opposite/back side (-Z, top of canvas UV) while doors stay at front (+Z)
   const laneRatio = Math.min(0.26, 6.0 / slabDepth);
-  const laneTopY = Math.round(1024 * (1 - laneRatio));
-  const laneBottomY = 1024 - 44;
+  const laneTopY = isFrontDoors ? 44 : Math.round(1024 * (1 - laneRatio));
+  const laneBottomY = isFrontDoors ? Math.round(1024 * laneRatio) : 1024 - 44;
   const laneMidY = Math.round((laneTopY + laneBottomY) / 2);
 
-  // Yellow safety perimeter border (with clean openings at left & right road entrances)
+  const worldXToPx = (wx: number) => ((wx + slabWidth / 2) / slabWidth) * 1024;
+  const worldZToPx = (wz: number) => ((wz + slabDepth / 2) / slabDepth) * 1024;
+  const doorZoneWidthX = rowCount * ROW_SPACING_X;
+  const frontDoorCentersPx =
+    isFrontDoors && doors.length >= 2
+      ? [
+          worldXToPx(-(DOOR_GAP_X / 2 + doorZoneWidthX / 2)),
+          worldXToPx(DOOR_GAP_X / 2 + doorZoneWidthX / 2),
+        ]
+      : [];
+  const frontGateHalfPx = (5.4 / slabWidth) * 1024 * 0.5;
+
+  // Yellow safety perimeter border
   ctx.strokeStyle = "#eab308";
   ctx.lineWidth = 8;
   ctx.beginPath();
-  // Top back edge
-  ctx.moveTo(24, 24);
-  ctx.lineTo(1024 - 24, 24);
-  // Left wall edge above road
-  ctx.moveTo(24, 24);
-  ctx.lineTo(24, laneTopY);
-  // Right wall edge above road
-  ctx.moveTo(1024 - 24, 24);
-  ctx.lineTo(1024 - 24, laneTopY);
-  // Front curb edge below road
-  ctx.moveTo(24, 1024 - 20);
-  ctx.lineTo(1024 - 24, 1024 - 20);
+  if (isFrontDoors && frontDoorCentersPx.length === 2) {
+    // Back curb edge behind the -Z road
+    ctx.moveTo(24, 20);
+    ctx.lineTo(1024 - 24, 20);
+    // Left & right side walls below the -Z road (leaving left/right entrances of back road open)
+    ctx.moveTo(24, laneBottomY);
+    ctx.lineTo(24, 1024 - 20);
+    ctx.moveTo(1024 - 24, laneBottomY);
+    ctx.lineTo(1024 - 24, 1024 - 20);
+    // Front curb segments (+Z) with clean openings at Front Doors H9 and H10
+    const [leftCx, rightCx] = frontDoorCentersPx;
+    ctx.moveTo(24, 1024 - 20);
+    ctx.lineTo(Math.max(24, leftCx - frontGateHalfPx), 1024 - 20);
+    ctx.moveTo(leftCx + frontGateHalfPx, 1024 - 20);
+    ctx.lineTo(rightCx - frontGateHalfPx, 1024 - 20);
+    ctx.moveTo(Math.min(1024 - 24, rightCx + frontGateHalfPx), 1024 - 20);
+    ctx.lineTo(1024 - 24, 1024 - 20);
+  } else {
+    // Top back edge
+    ctx.moveTo(24, 24);
+    ctx.lineTo(1024 - 24, 24);
+    // Left wall edge above road
+    ctx.moveTo(24, 24);
+    ctx.lineTo(24, laneTopY);
+    // Right wall edge above road
+    ctx.moveTo(1024 - 24, 24);
+    ctx.lineTo(1024 - 24, laneTopY);
+    // Front curb edge below road
+    ctx.moveTo(24, 1024 - 20);
+    ctx.lineTo(1024 - 24, 1024 - 20);
+  }
   ctx.stroke();
 
-  // Darker asphalt-concrete drive aisle extending cleanly through both road entrances
+  // Darker asphalt-concrete drive aisle spanning cleanly from left to right
   ctx.fillStyle = "#3f495b";
   ctx.fillRect(0, laneTopY, 1024, laneBottomY - laneTopY);
 
-  // Solid white lane borders extending to both road entrances
+  // Solid white lane borders extending across the road
   ctx.strokeStyle = "rgba(226, 232, 240, 0.88)";
   ctx.lineWidth = 5;
   ctx.beginPath();
@@ -192,7 +230,7 @@ function createWarehouseFloorTexture(
   ctx.lineTo(1024, laneBottomY - 4);
   ctx.stroke();
 
-  // Dashed white road centerline spanning from left entrance to right entrance
+  // Dashed white road centerline
   ctx.setLineDash([28, 22]);
   ctx.lineWidth = 4;
   ctx.strokeStyle = "rgba(241, 245, 249, 0.9)";
@@ -208,8 +246,13 @@ function createWarehouseFloorTexture(
     ctx.lineWidth = 4;
     ctx.setLineDash([16, 14]);
     ctx.beginPath();
-    ctx.moveTo(512, 34);
-    ctx.lineTo(512, laneTopY - 8);
+    if (isFrontDoors) {
+      ctx.moveTo(512, laneBottomY + 8);
+      ctx.lineTo(512, 1024 - 34);
+    } else {
+      ctx.moveTo(512, 34);
+      ctx.lineTo(512, laneTopY - 8);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
   }
@@ -226,15 +269,22 @@ function createWarehouseFloorTexture(
     ctx.fillText(`ZONE ${doors[0]}`, 512, laneMidY);
   }
 
-  // Row index markings painted cleanly along the road edge in front of each row
+  // Row index markings painted cleanly in front of each row
   ctx.fillStyle = "rgba(226, 232, 240, 0.72)";
   ctx.font = "800 17px Inter, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const rowLabelY = laneTopY - 14;
-  const doorZoneWidthX = rowCount * ROW_SPACING_X;
 
-  const worldXToPx = (wx: number) => ((wx + slabWidth / 2) / slabWidth) * 1024;
+  let rowLabelY = laneTopY - 14;
+  if (isFrontDoors) {
+    const defaultFrontSlotZ = slabDepth / 2 - laneRatio * slabDepth - 1.55;
+    const backRoadInnerZ = -slabDepth / 2 + laneRatio * slabDepth;
+    const frontSlotZ = Math.max(
+      defaultFrontSlotZ,
+      backRoadInnerZ + 1.55 + Math.max(0, baseSlotsPerRow - 1) * SLOT_SPACING_Z
+    );
+    rowLabelY = Math.min(1024 - 44, Math.round(worldZToPx(frontSlotZ + 1.25)));
+  }
 
   if (doors.length >= 2) {
     const leftStartX = -DOOR_GAP_X / 2 - doorZoneWidthX + ROW_SPACING_X / 2;
@@ -735,12 +785,16 @@ export class CoilWarehouseSceneEngine {
     const bayH = 10.2;
     const railY = 8.0;
 
+    const isFrontDoorBay = layout.group.id === "H9-H10";
+
     // 1. Concrete Warehouse Slab
     const floorTex = createWarehouseFloorTexture(
       W,
       D,
       layout.doors,
-      layout.rows.length
+      layout.rows.length,
+      isFrontDoorBay,
+      layout.group.baseSlotsPerRow
     );
     const slabTopMat = new THREE.MeshStandardMaterial({
       map: floorTex,
@@ -791,26 +845,36 @@ export class CoilWarehouseSceneEngine {
     const roadCenterZ = (roadMinZ + roadMaxZ) / 2;
     const roadWidth = roadMaxZ - roadMinZ;
 
-    // Columns along storage bay depth + front corner column clear of road opening
-    const storageColStartZ = -D / 2 + 1.2;
-    const storageColEndZ = roadMinZ - 0.55;
+    const frontCornerColZ = D / 2 - 0.55;
+    const backCornerColZ = -D / 2 + 0.55;
+    const backRoadInnerZ = -D / 2 + laneRatio * D;
+
+    // Columns along storage bay depth + corner column clear of road opening
+    const storageColStartZ = isFrontDoorBay ? backRoadInnerZ + 0.55 : -D / 2 + 1.2;
+    const storageColEndZ = isFrontDoorBay ? frontCornerColZ : roadMinZ - 0.55;
     const storageColSpanZ = Math.max(4, storageColEndZ - storageColStartZ);
     const storageColCount = Math.max(4, Math.round(storageColSpanZ / 4.8) + 1);
-    const frontCornerColZ = D / 2 - 0.55;
 
     const colGeo = new THREE.BoxGeometry(0.42, bayH, 0.42);
     const baseGuardGeo = new THREE.BoxGeometry(0.62, 0.95, 0.62);
     const corbelGeo = new THREE.BoxGeometry(0.65, 0.35, 0.44);
 
     const colZList: number[] = [];
+    if (isFrontDoorBay) {
+      colZList.push(backCornerColZ);
+    }
     for (let i = 0; i < storageColCount; i++) {
       const t = i / (storageColCount - 1);
       colZList.push(storageColStartZ + t * storageColSpanZ);
     }
-    colZList.push(frontCornerColZ);
+    if (!isFrontDoorBay) {
+      colZList.push(frontCornerColZ);
+    }
 
-    const beamLengthZ = frontCornerColZ - storageColStartZ + 0.5;
-    const beamCenterZ = (storageColStartZ + frontCornerColZ) / 2;
+    const beamMinZ = isFrontDoorBay ? backCornerColZ : storageColStartZ;
+    const beamMaxZ = frontCornerColZ;
+    const beamLengthZ = beamMaxZ - beamMinZ + 0.5;
+    const beamCenterZ = (beamMinZ + beamMaxZ) / 2;
 
     for (const side of [-1, 1]) {
       const colX = side * colSpanX;
@@ -839,7 +903,7 @@ export class CoilWarehouseSceneEngine {
       eaveBeam.position.set(colX, bayH - 0.18, beamCenterZ);
       this.structureGroup.add(eaveBeam);
 
-      // Mid tie rail along storage zone only (leaves road doorway completely unobstructed)
+      // Mid tie rail along storage zone only (leaves road entrance completely unobstructed)
       const midRail = new THREE.Mesh(
         new THREE.BoxGeometry(0.18, 0.2, storageColSpanZ),
         steelMat
@@ -866,35 +930,79 @@ export class CoilWarehouseSceneEngine {
       new THREE.BoxGeometry(W - 2.0, 0.38, 0.34),
       steelMat
     );
-    backHeader.position.set(0, bayH - 0.18, storageColStartZ);
+    backHeader.position.set(0, bayH - 0.18, beamMinZ);
     this.structureGroup.add(backHeader);
 
-    // 3. Blue Industrial Door Portals at Left (-X) and Right (+X) road entrances
-    // Left entrance (-X) = doors[0] (e.g. E7, H7, 05, 21)
-    // Right entrance (+X) = doors[1] (e.g. E8, H8)
+    // 3. Blue Industrial Door Portals
+    // - Bay H9-H10: Front-mounted portals along +Z front edge (in front of drive aisle, zero row obstruction)
+    // - Other Bays (E7-E8, 05, 21): Side road entrances at Left (-X) and Right (+X)
     const doorPortalBlueMat = new THREE.MeshStandardMaterial({
       color: 0x1d4ed8,
       roughness: 0.38,
       metalness: 0.35,
     });
-    const portalConfigs: Array<{ doorCode: string; x: number; rotY: number }> =
-      layout.doors.length >= 2
-        ? [
-            { doorCode: layout.doors[0], x: -colSpanX, rotY: Math.PI / 2 },
-            { doorCode: layout.doors[1], x: colSpanX, rotY: -Math.PI / 2 },
-          ]
-        : [{ doorCode: layout.doors[0] || "05", x: -colSpanX, rotY: Math.PI / 2 }];
+    const doorZoneWidthX = layout.rows.length * ROW_SPACING_X;
+    const portalConfigs: Array<{
+      doorCode: string;
+      x: number;
+      z: number;
+      rotY: number;
+      width: number;
+    }> = isFrontDoorBay && layout.doors.length >= 2
+      ? [
+          {
+            doorCode: layout.doors[0],
+            x: -(DOOR_GAP_X / 2 + doorZoneWidthX / 2),
+            z: frontCornerColZ,
+            rotY: 0,
+            width: 5.4,
+          },
+          {
+            doorCode: layout.doors[1],
+            x: DOOR_GAP_X / 2 + doorZoneWidthX / 2,
+            z: frontCornerColZ,
+            rotY: 0,
+            width: 5.4,
+          },
+        ]
+      : layout.doors.length >= 2
+      ? [
+          {
+            doorCode: layout.doors[0],
+            x: -colSpanX,
+            z: roadCenterZ,
+            rotY: Math.PI / 2,
+            width: Math.max(4.6, roadWidth + 0.25),
+          },
+          {
+            doorCode: layout.doors[1],
+            x: colSpanX,
+            z: roadCenterZ,
+            rotY: -Math.PI / 2,
+            width: Math.max(4.6, roadWidth + 0.25),
+          },
+        ]
+      : [
+          {
+            doorCode: layout.doors[0] || "05",
+            x: -colSpanX,
+            z: roadCenterZ,
+            rotY: Math.PI / 2,
+            width: Math.max(4.6, roadWidth + 0.25),
+          },
+        ];
 
-    const portalW = Math.max(4.6, roadWidth + 0.25);
-    const portalH = 4.05;
+    const portalH = isFrontDoorBay ? 4.15 : 4.05;
 
-    portalConfigs.forEach(({ doorCode, x, rotY }) => {
+    portalConfigs.forEach(({ doorCode, x, z, rotY, width: portalW }) => {
       const portalGroup = new THREE.Group();
-      portalGroup.position.set(x, 0, roadCenterZ);
+      portalGroup.position.set(x, 0, z);
       portalGroup.rotation.y = rotY;
 
-      // Left & Right blue steel portal legs framing the road lane
-      const legGeo = new THREE.BoxGeometry(0.46, portalH, 0.56);
+      // Left & Right blue steel portal legs framing the doorway
+      const legGeo = isFrontDoorBay
+        ? new THREE.BoxGeometry(0.38, portalH, 0.46)
+        : new THREE.BoxGeometry(0.46, portalH, 0.56);
       const leftLeg = new THREE.Mesh(legGeo, doorPortalBlueMat);
       leftLeg.position.set(-portalW / 2, portalH / 2, 0);
       leftLeg.castShadow = !this.isSoftwareGl;
@@ -905,9 +1013,9 @@ export class CoilWarehouseSceneEngine {
       rightLeg.castShadow = !this.isSoftwareGl;
       portalGroup.add(rightLeg);
 
-      // Blue lintel header spanning over road
+      // Blue lintel header spanning over doorway
       const lintel = new THREE.Mesh(
-        new THREE.BoxGeometry(portalW + 0.85, 0.58, 0.68),
+        new THREE.BoxGeometry(portalW + 0.85, isFrontDoorBay ? 0.48 : 0.58, isFrontDoorBay ? 0.56 : 0.68),
         doorPortalBlueMat
       );
       lintel.position.set(0, portalH + 0.14, 0);

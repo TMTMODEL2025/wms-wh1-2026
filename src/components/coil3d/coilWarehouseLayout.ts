@@ -1,6 +1,6 @@
 import { CoilStockRecord, CoilSapMasterItem } from "../../services/coilDataService";
 
-export type BuildingGroupId = "E7-E8" | "H7-H8" | "05" | "21";
+export type BuildingGroupId = "E7-E8" | "H9-H10" | "05" | "21";
 
 export type SlotVisualStatus =
   | "EMPTY"
@@ -63,12 +63,12 @@ export const BUILDING_GROUPS: BuildingGroupConfig[] = [
     slabDepth: 28,
   },
   {
-    id: "H7-H8",
-    labelTh: "กลุ่มอาคาร H7 - H8",
-    labelEn: "Bay H7 - H8",
+    id: "H9-H10",
+    labelTh: "กลุ่มอาคาร H9 - H10",
+    labelEn: "Bay H9 - H10",
     subtitleTh: "คลังเหล็กม้วนสาย H (2 ประตู)",
     subtitleEn: "H-Line Coil Bay (2 Doors)",
-    doors: ["H7", "H8"],
+    doors: ["H9", "H10"],
     defaultRowsPerDoor: 8,
     baseSlotsPerRow: DEFAULT_BASE_SLOTS_PER_ROW,
     slabWidth: 42,
@@ -163,8 +163,10 @@ export interface ParsedCoilLocation {
 const KNOWN_BUILDING_TO_GROUP: Record<string, BuildingGroupId> = {
   E7: "E7-E8",
   E8: "E7-E8",
-  H7: "H7-H8",
-  H8: "H7-H8",
+  H9: "H9-H10",
+  H10: "H9-H10",
+  H7: "H9-H10",
+  H8: "H9-H10",
   "05": "05",
   "5": "05",
   "21": "21",
@@ -191,19 +193,32 @@ export function parseCoilLocationTo3D(rawLocation?: string): ParsedCoilLocation 
 
   if (KNOWN_BUILDING_TO_GROUP[first]) {
     groupId = KNOWN_BUILDING_TO_GROUP[first];
-    door = first === "5" ? "05" : first;
+    door =
+      first === "5"
+        ? "05"
+        : first === "H7"
+        ? "H9"
+        : first === "H8"
+        ? "H10"
+        : first;
   } else if (/^E7/.test(cleaned)) {
     groupId = "E7-E8";
     door = "E7";
   } else if (/^E8/.test(cleaned)) {
     groupId = "E7-E8";
     door = "E8";
+  } else if (/^H10/.test(cleaned)) {
+    groupId = "H9-H10";
+    door = "H10";
+  } else if (/^H9/.test(cleaned)) {
+    groupId = "H9-H10";
+    door = "H9";
   } else if (/^H7/.test(cleaned)) {
-    groupId = "H7-H8";
-    door = "H7";
+    groupId = "H9-H10";
+    door = "H9";
   } else if (/^H8/.test(cleaned)) {
-    groupId = "H7-H8";
-    door = "H8";
+    groupId = "H9-H10";
+    door = "H10";
   } else if (/^0?5\b/.test(cleaned)) {
     groupId = "05";
     door = "05";
@@ -872,7 +887,7 @@ export function getGroupCoilCounts(
 ): Record<BuildingGroupId, { count: number; weightTons: number }> {
   const result: Record<BuildingGroupId, { count: number; weightTons: number }> = {
     "E7-E8": { count: 0, weightTons: 0 },
-    "H7-H8": { count: 0, weightTons: 0 },
+    "H9-H10": { count: 0, weightTons: 0 },
     "05": { count: 0, weightTons: 0 },
     "21": { count: 0, weightTons: 0 },
   };
@@ -973,11 +988,19 @@ export function buildBuildingWarehouseLayout(
     baseSlotsPerRow: baseSlots,
   };
 
-  // Road top edge in world Z (matches floor texture laneRatio = min(0.26, 6.0 / D))
+  // Road edge in world Z (matches floor texture laneRatio = min(0.26, 6.0 / D))
   const laneRatio = Math.min(0.26, 6.0 / slabDepth);
   const roadMinZ = slabDepth / 2 - laneRatio * slabDepth;
-  // S1 sits facing the road just behind the white road line; S2..SB go back toward -Z
-  const frontSlotZ = roadMinZ - 1.55;
+  const defaultFrontSlotZ = roadMinZ - 1.55;
+  // For Bay H9-H10, the road is on the opposite (-Z) side while Doors H9/H10 remain at the front (+Z).
+  // Ensure the backmost slot clears the -Z road edge cleanly at any baseSlots setting.
+  const backRoadInnerZ = -slabDepth / 2 + laneRatio * slabDepth;
+  const minFrontSlotZForBackRoad =
+    backRoadInnerZ + 1.55 + Math.max(0, baseSlots - 1) * SLOT_SPACING_Z;
+  const frontSlotZ =
+    baseGroup.id === "H9-H10"
+      ? Math.max(defaultFrontSlotZ, minFrontSlotZForBackRoad)
+      : defaultFrontSlotZ;
 
   const getSlotWorldPosition = (
     doorIdx: number,
@@ -989,10 +1012,10 @@ export function buildBuildingWarehouseLayout(
     let blockStartX: number;
     if (isDualDoor) {
       if (doorIdx === 0) {
-        // Left door block (e.g. E7 or H7)
+        // Left door block (e.g. E7 or H9)
         blockStartX = -DOOR_GAP_X / 2 - doorZoneWidthX + ROW_SPACING_X / 2;
       } else {
-        // Right door block (e.g. E8 or H8)
+        // Right door block (e.g. E8 or H10)
         blockStartX = DOOR_GAP_X / 2 + ROW_SPACING_X / 2;
       }
     } else {
