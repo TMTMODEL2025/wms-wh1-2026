@@ -6638,13 +6638,6 @@ function WmsApp({
                                         icon: CalendarClock,
                                         color: "#f59e0b",
                                       },
-                                      {
-                                        id: "audit_logs" as AdminWorkforceTab,
-                                        labelTh: "ประวัติกิจกรรมผู้ล็อกอิน",
-                                        labelEn: "Activity Logs",
-                                        icon: Activity,
-                                        color: "#10b981",
-                                      },
                                     ].map((sub) => {
                                       const SubIcon = sub.icon;
                                       return (
