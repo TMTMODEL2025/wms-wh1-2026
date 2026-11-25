@@ -23,6 +23,14 @@ export function isCradleRackBuilding(
   return buildingId === "E10";
 }
 
+export const H2_OPPOSITE_GATE_ID = "H4";
+
+export function isDualRoadBuilding(
+  buildingId: BlueBasketBuildingId
+): boolean {
+  return buildingId === "H2";
+}
+
 export const MAX_BASKET_WIDTH_MM = 2000;
 export const MAX_STACK_LAYERS = 2;
 export const DEFAULT_SLOTS_PER_ROW = 10;
@@ -60,7 +68,7 @@ export const BLUE_BASKET_BUILDING_META: Record<
     nameTh: "อาคาร H2",
     nameEn: "Building H2",
     accentHex: "#0284c7",
-    subtitleTh: "โซนตะกร้าฟ้า H2 · แถว A–D",
+    subtitleTh: "โซนตะกร้าฟ้า ประตู H2 ↔ ประตู H4 (ถนนคั่นกลาง)",
     storageStyle: "blue_basket",
     maxLayers: 2,
   },
@@ -92,6 +100,8 @@ export interface BlueBasketRowConfig {
 export interface BlueBasketBuildingConfig {
   buildingId: BlueBasketBuildingId;
   rows: BlueBasketRowConfig[];
+  oppositeGateId?: string; // e.g. "H4" opposite Gate H2 across central road
+  oppositeRows?: BlueBasketRowConfig[];
 }
 
 export interface BlueBasketWarehouseConfig {
@@ -102,11 +112,12 @@ export interface BlueBasketWarehouseConfig {
 
 export interface ParsedBasketLocation {
   buildingId: BlueBasketBuildingId;
+  gateId: string; // e.g. "H2" or "H4" (maps to buildingId "H2"), "E9", "F", "E10"
   rowId: string;
   slotNumber: number; // 1-based
-  basketCode: string; // e.g. E9-A01
+  basketCode: string; // e.g. E9-A01, H2-A01, H4-A01
   layer: 1 | 2;
-  canonicalLocation: string; // e.g. E9-A01-L1
+  canonicalLocation: string; // e.g. E9-A01-L1, H4-A01-L1
 }
 
 export interface BasketCoilPlacement {
@@ -142,8 +153,10 @@ export interface BasketLayerState {
 }
 
 export interface BasketSlot3D {
-  basketCode: string; // e.g. E9-A01
+  basketCode: string; // e.g. E9-A01, H2-A01, H4-A01
   buildingId: BlueBasketBuildingId;
+  gateId: string; // e.g. "H2" or "H4" for dual-road Building H2
+  side: "primary" | "opposite";
   rowId: string;
   slotNumber: number; // 1-based
   slotIndex: number; // 0-based
@@ -158,12 +171,26 @@ export interface BasketSlot3D {
   highestActiveLayer: 0 | 1 | 2;
 }
 
+export interface DualRoadLayoutMeta {
+  roadCenterX: number;
+  roadWidth: number;
+  apronWidth: number;
+  primaryGateId: string; // "H2" (+X side)
+  oppositeGateId: string; // "H4" (-X side)
+  primarySlabCenterX: number;
+  primarySlabWidth: number;
+  oppositeSlabCenterX: number;
+  oppositeSlabWidth: number;
+}
+
 export interface BuildingBasketLayout3D {
   buildingId: BlueBasketBuildingId;
   config: BlueBasketBuildingConfig;
   slots: BasketSlot3D[];
   slotByCode: Map<string, BasketSlot3D>;
   rowPositions: Array<{
+    gateId: string;
+    side: "primary" | "opposite";
     rowId: string;
     rowIndex: number;
     worldZ: number;
@@ -173,6 +200,7 @@ export interface BuildingBasketLayout3D {
   }>;
   slabWidth: number;
   slabDepth: number;
+  dualRoadLayout?: DualRoadLayoutMeta;
   stats: {
     totalSlots: number;
     occupiedSlots: number;
@@ -231,7 +259,12 @@ export function createDefaultBlueBasketConfig(): BlueBasketWarehouseConfig {
     id: BLUE_BASKET_3D_DOC_ID,
     buildings: {
       E9: { buildingId: "E9", rows: defaultRows() },
-      H2: { buildingId: "H2", rows: defaultRows() },
+      H2: {
+        buildingId: "H2",
+        rows: defaultRows(),
+        oppositeGateId: H2_OPPOSITE_GATE_ID,
+        oppositeRows: defaultRows(),
+      },
       F: { buildingId: "F", rows: defaultRows() },
       E10: {
         buildingId: "E10",
@@ -240,6 +273,36 @@ export function createDefaultBlueBasketConfig(): BlueBasketWarehouseConfig {
     },
     updatedAt: new Date().toISOString(),
   };
+}
+
+function sanitizeRowsList(
+  rawRows: unknown,
+  fallbackRows: BlueBasketRowConfig[]
+): BlueBasketRowConfig[] {
+  const list = Array.isArray(rawRows) ? rawRows : [];
+  const seen = new Set<string>();
+  const cleanRows: BlueBasketRowConfig[] = [];
+
+  for (const r of list) {
+    const rowObj = r as Partial<BlueBasketRowConfig> | null;
+    const rowId = String(rowObj?.rowId || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 4);
+    if (!rowId || seen.has(rowId)) continue;
+    seen.add(rowId);
+    const count = Math.max(
+      MIN_SLOTS_PER_ROW,
+      Math.min(
+        MAX_SLOTS_PER_ROW,
+        Math.round(Number(rowObj?.slotCount) || DEFAULT_SLOTS_PER_ROW)
+      )
+    );
+    cleanRows.push({ rowId, slotCount: count });
+  }
+
+  return cleanRows.length > 0 ? cleanRows : fallbackRows;
 }
 
 export function normalizeBlueBasketConfig(
@@ -256,32 +319,28 @@ export function normalizeBlueBasketConfig(
 
   for (const bId of BLUE_BASKET_BUILDINGS) {
     const rawBuilding = src.buildings?.[bId];
-    const rawRows = Array.isArray(rawBuilding?.rows) ? rawBuilding.rows : [];
-    const seen = new Set<string>();
-    const cleanRows: BlueBasketRowConfig[] = [];
+    const cleanRows = sanitizeRowsList(
+      rawBuilding?.rows,
+      fallback.buildings[bId].rows
+    );
 
-    for (const r of rawRows) {
-      const rowId = String(r?.rowId || "")
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, "")
-        .slice(0, 4);
-      if (!rowId || seen.has(rowId)) continue;
-      seen.add(rowId);
-      const count = Math.max(
-        MIN_SLOTS_PER_ROW,
-        Math.min(
-          MAX_SLOTS_PER_ROW,
-          Math.round(Number(r?.slotCount) || DEFAULT_SLOTS_PER_ROW)
-        )
+    if (isDualRoadBuilding(bId)) {
+      const cleanOppositeRows = sanitizeRowsList(
+        rawBuilding?.oppositeRows,
+        fallback.buildings[bId].oppositeRows || fallback.buildings[bId].rows
       );
-      cleanRows.push({ rowId, slotCount: count });
+      buildingsOut[bId] = {
+        buildingId: bId,
+        rows: cleanRows,
+        oppositeGateId: H2_OPPOSITE_GATE_ID,
+        oppositeRows: cleanOppositeRows,
+      };
+    } else {
+      buildingsOut[bId] = {
+        buildingId: bId,
+        rows: cleanRows,
+      };
     }
-
-    buildingsOut[bId] = {
-      buildingId: bId,
-      rows: cleanRows.length > 0 ? cleanRows : fallback.buildings[bId].rows,
-    };
   }
 
   return {
@@ -295,13 +354,14 @@ export function normalizeBlueBasketConfig(
 }
 
 export function formatBasketCode(
-  buildingId: BlueBasketBuildingId,
+  gateOrBuildingId: string,
   rowId: string,
   slotNumber: number
 ): string {
+  const cleanPrefix = gateOrBuildingId.trim().toUpperCase();
   const cleanRow = rowId.trim().toUpperCase();
   const padded = String(Math.max(1, Math.floor(slotNumber))).padStart(2, "0");
-  return `${buildingId}-${cleanRow}${padded}`;
+  return `${cleanPrefix}-${cleanRow}${padded}`;
 }
 
 export function formatBasketLayerLocation(
@@ -329,7 +389,8 @@ export function parseWidthMm(raw?: string | number | null): number | null {
 /**
  * Parses blue-basket & E10 steel-cradle barcode / location codes into structured coordinates.
  * Accepts:
- *   "E9-A01", "E9-A01-L1", "E9-A01-L2", "H2-B10-L1", "F-C03", "E10-A01", "E10-A01-L1"
+ *   "E9-A01", "E9-A01-L1", "E9-A01-L2", "H2-B10-L1", "H4-A01", "H4-A01-L2", "F-C03", "E10-A01"
+ * Note: Gate "H4" is the opposite side of Building "H2" across the central road.
  */
 export function parseBasketLocation(
   rawLocation?: string | null
@@ -341,13 +402,16 @@ export function parseBasketLocation(
     .replace(/\s+/g, "");
   if (!cleaned) return null;
 
-  // Match building prefix (E10 before E9, plus H2, F), separator, row letters, slot digits, optional layer
+  // Match building/gate prefix (E10 before E9, plus H4, H2, F), separator, row letters, slot digits, optional layer
   const m = cleaned.match(
-    /^(E10|E9|H2|F)[-/_ ]?([A-Z]{1,2})[-/_]?(\d{1,2})(?:[-/_]?(?:L|LAYER|ชั้น)?([12]))?$/
+    /^(E10|E9|H4|H2|F)[-/_ ]?([A-Z]{1,2})[-/_]?(\d{1,2})(?:[-/_]?(?:L|LAYER|ชั้น)?([12]))?$/
   );
   if (!m) return null;
 
-  const buildingId = m[1] as BlueBasketBuildingId;
+  const rawGate = m[1];
+  const buildingId: BlueBasketBuildingId =
+    rawGate === H2_OPPOSITE_GATE_ID ? "H2" : (rawGate as BlueBasketBuildingId);
+  const gateId = rawGate;
   const rowId = m[2];
   const slotNumber = parseInt(m[3], 10);
   if (!Number.isFinite(slotNumber) || slotNumber < 1 || slotNumber > 99) {
@@ -356,10 +420,11 @@ export function parseBasketLocation(
   // Building E10 steel cradle racks are strictly ground-level single-tier (Layer 1 only)
   const layer: 1 | 2 =
     buildingId === "E10" ? 1 : m[4] === "2" ? 2 : 1;
-  const basketCode = formatBasketCode(buildingId, rowId, slotNumber);
+  const basketCode = formatBasketCode(gateId, rowId, slotNumber);
 
   return {
     buildingId,
+    gateId,
     rowId,
     slotNumber,
     basketCode,
@@ -588,16 +653,51 @@ export function buildBuildingBasketLayout3D(
   });
 
   const isE10 = isCradleRackBuilding(buildingId);
-  const maxSlotsInAnyRow = Math.max(
+  const isDualRoad = isDualRoadBuilding(buildingId);
+  const oppositeGateId = buildingConfig.oppositeGateId || H2_OPPOSITE_GATE_ID;
+  const oppositeRows = isDualRoad
+    ? buildingConfig.oppositeRows && buildingConfig.oppositeRows.length > 0
+      ? buildingConfig.oppositeRows
+      : rows
+    : [];
+
+  const maxPrimarySlots = Math.max(
     1,
     ...rows.map((r) => Math.max(1, r.slotCount))
   );
-  const rowCount = Math.max(1, rows.length);
+  const maxOppositeSlots = isDualRoad
+    ? Math.max(1, ...oppositeRows.map((r) => Math.max(1, r.slotCount)))
+    : 0;
 
-  const totalSpanX = (maxSlotsInAnyRow - 1) * SLOT_PITCH_X;
-  const totalSpanZ = isE10
-    ? (maxSlotsInAnyRow - 1) * E10_BAY_PITCH_Z
-    : (rowCount - 1) * ROW_PITCH_Z;
+  const primaryRowCount = Math.max(1, rows.length);
+  const oppositeRowCount = oppositeRows.length;
+
+  const primarySpanX = (maxPrimarySlots - 1) * SLOT_PITCH_X;
+  const oppositeSpanX = isDualRoad
+    ? (maxOppositeSlots - 1) * SLOT_PITCH_X
+    : 0;
+
+  const primarySpanZ = isE10
+    ? (maxPrimarySlots - 1) * E10_BAY_PITCH_Z
+    : (primaryRowCount - 1) * ROW_PITCH_Z;
+  const oppositeSpanZ = isDualRoad
+    ? (Math.max(1, oppositeRowCount) - 1) * ROW_PITCH_Z
+    : 0;
+
+  // Dual-road geometry for Building H2: Central asphalt road at X = 0 separating Gate H4 (-X) & Gate H2 (+X)
+  const roadWidth = 4.6;
+  const apronWidth = 1.25;
+  const halfCorridorX = roadWidth / 2 + apronWidth; // 3.55m from road center to each portal edge
+  const primarySlabWidthDual = Math.max(
+    18,
+    primarySpanX + BASKET_OUTER_WIDTH_X + 6.4
+  );
+  const oppositeSlabWidthDual = Math.max(
+    18,
+    oppositeSpanX + BASKET_OUTER_WIDTH_X + 6.4
+  );
+  const primarySlabCenterX = halfCorridorX + primarySlabWidthDual / 2;
+  const oppositeSlabCenterX = -(halfCorridorX + oppositeSlabWidthDual / 2);
 
   const slots: BasketSlot3D[] = [];
   const slotByCode = new Map<string, BasketSlot3D>();
@@ -613,103 +713,152 @@ export function buildBuildingBasketLayout3D(
   let utilizationSum = 0;
   let pendingSapCoils = 0;
 
-  rows.forEach((rowCfg, rowIndex) => {
-    const rowWorldZ = isE10 ? 0 : -totalSpanZ / 2 + rowIndex * ROW_PITCH_Z;
-    let rowOccupied = 0;
-    let rowCoils = 0;
+  const populateSideRows = (
+    sideRows: BlueBasketRowConfig[],
+    gateId: string,
+    side: "primary" | "opposite",
+    sideSpanZ: number
+  ) => {
+    sideRows.forEach((rowCfg, rowIndex) => {
+      const rowWorldZ = isE10 ? 0 : -sideSpanZ / 2 + rowIndex * ROW_PITCH_Z;
+      let rowOccupied = 0;
+      let rowCoils = 0;
 
-    for (let slotIndex = 0; slotIndex < rowCfg.slotCount; slotIndex++) {
-      const slotNumber = slotIndex + 1;
-      const basketCode = formatBasketCode(buildingId, rowCfg.rowId, slotNumber);
+      for (let slotIndex = 0; slotIndex < rowCfg.slotCount; slotIndex++) {
+        const slotNumber = slotIndex + 1;
+        const basketCode = formatBasketCode(gateId, rowCfg.rowId, slotNumber);
 
-      // In E10, ROW A cradle racks line up in a single column along Z snug against the left wall (-X).
-      // If additional rows are ever added in E10, shift them along Z after the previous row cleanly.
-      const worldX = isE10
-        ? E10_RACK_CENTER_X
-        : -totalSpanX / 2 + 0.95 + slotIndex * SLOT_PITCH_X;
-      const worldZ = isE10
-        ? -totalSpanZ / 2 + slotIndex * E10_BAY_PITCH_Z
-        : rowWorldZ;
+        let worldX: number;
+        let worldZ: number;
+        if (isE10) {
+          worldX = E10_RACK_CENTER_X;
+          worldZ = -sideSpanZ / 2 + slotIndex * E10_BAY_PITCH_Z;
+        } else if (isDualRoad) {
+          // Mirror across central road at X = 0: slot 01 sits nearest the road on both H2 (+X) and H4 (-X)
+          const firstSlotOffsetFromPortal = 4.15;
+          worldX =
+            side === "primary"
+              ? halfCorridorX +
+                firstSlotOffsetFromPortal +
+                slotIndex * SLOT_PITCH_X
+              : -(
+                  halfCorridorX +
+                  firstSlotOffsetFromPortal +
+                  slotIndex * SLOT_PITCH_X
+                );
+          worldZ = rowWorldZ;
+        } else {
+          worldX = -primarySpanX / 2 + 0.95 + slotIndex * SLOT_PITCH_X;
+          worldZ = rowWorldZ;
+        }
 
-      const l1Coils = coilsByKey.get(`${basketCode}#L1`) || [];
-      const l2Coils = isE10 ? [] : coilsByKey.get(`${basketCode}#L2`) || [];
+        const l1Coils = coilsByKey.get(`${basketCode}#L1`) || [];
+        const l2Coils = isE10 ? [] : coilsByKey.get(`${basketCode}#L2`) || [];
 
-      const layer1 = buildLayerState(basketCode, 1, l1Coils);
-      const layer2 = buildLayerState(basketCode, 2, l2Coils);
+        const layer1 = buildLayerState(basketCode, 1, l1Coils);
+        const layer2 = buildLayerState(basketCode, 2, l2Coils);
 
-      const slotTotalCoils = l1Coils.length + l2Coils.length;
-      const hasAnyCoil = slotTotalCoils > 0;
-      const highestActiveLayer: 0 | 1 | 2 =
-        l2Coils.length > 0 ? 2 : l1Coils.length > 0 ? 1 : 0;
+        const slotTotalCoils = l1Coils.length + l2Coils.length;
+        const hasAnyCoil = slotTotalCoils > 0;
+        const highestActiveLayer: 0 | 1 | 2 =
+          l2Coils.length > 0 ? 2 : l1Coils.length > 0 ? 1 : 0;
 
-      const slot: BasketSlot3D = {
-        basketCode,
-        buildingId,
+        const slot: BasketSlot3D = {
+          basketCode,
+          buildingId,
+          gateId,
+          side,
+          rowId: rowCfg.rowId,
+          slotNumber,
+          slotIndex,
+          rowIndex,
+          worldX,
+          worldZ,
+          layer1,
+          layer2,
+          hasAnyCoil,
+          totalCoils: slotTotalCoils,
+          totalWeightKg: layer1.totalWeightKg + layer2.totalWeightKg,
+          highestActiveLayer,
+        };
+
+        slots.push(slot);
+        slotByCode.set(basketCode, slot);
+
+        if (hasAnyCoil) {
+          occupiedSlots += 1;
+          rowOccupied += 1;
+        }
+        if (l1Coils.length > 0) {
+          activeBasketLayers += 1;
+          utilizationSum += layer1.utilizationPercent;
+          if (layer1.status === "FULL" || layer1.status === "OVERFLOW") {
+            fullLayers += 1;
+          } else if (layer1.status === "NEAR_FULL") {
+            nearFullLayers += 1;
+          }
+        }
+        if (l2Coils.length > 0) {
+          activeBasketLayers += 1;
+          stacked2LayerCount += 1;
+          utilizationSum += layer2.utilizationPercent;
+          if (layer2.status === "FULL" || layer2.status === "OVERFLOW") {
+            fullLayers += 1;
+          } else if (layer2.status === "NEAR_FULL") {
+            nearFullLayers += 1;
+          }
+        }
+
+        rowCoils += slotTotalCoils;
+        totalCoils += slotTotalCoils;
+        totalWeightKgAll += slot.totalWeightKg;
+        for (const c of [...l1Coils, ...l2Coils]) {
+          if (!c.hasSapData) pendingSapCoils += 1;
+        }
+      }
+
+      rowPositions.push({
+        gateId,
+        side,
         rowId: rowCfg.rowId,
-        slotNumber,
-        slotIndex,
         rowIndex,
-        worldX,
-        worldZ,
-        layer1,
-        layer2,
-        hasAnyCoil,
-        totalCoils: slotTotalCoils,
-        totalWeightKg: layer1.totalWeightKg + layer2.totalWeightKg,
-        highestActiveLayer,
-      };
-
-      slots.push(slot);
-      slotByCode.set(basketCode, slot);
-
-      if (hasAnyCoil) {
-        occupiedSlots += 1;
-        rowOccupied += 1;
-      }
-      if (l1Coils.length > 0) {
-        activeBasketLayers += 1;
-        utilizationSum += layer1.utilizationPercent;
-        if (layer1.status === "FULL" || layer1.status === "OVERFLOW") {
-          fullLayers += 1;
-        } else if (layer1.status === "NEAR_FULL") {
-          nearFullLayers += 1;
-        }
-      }
-      if (l2Coils.length > 0) {
-        activeBasketLayers += 1;
-        stacked2LayerCount += 1;
-        utilizationSum += layer2.utilizationPercent;
-        if (layer2.status === "FULL" || layer2.status === "OVERFLOW") {
-          fullLayers += 1;
-        } else if (layer2.status === "NEAR_FULL") {
-          nearFullLayers += 1;
-        }
-      }
-
-      rowCoils += slotTotalCoils;
-      totalCoils += slotTotalCoils;
-      totalWeightKgAll += slot.totalWeightKg;
-      for (const c of [...l1Coils, ...l2Coils]) {
-        if (!c.hasSapData) pendingSapCoils += 1;
-      }
-    }
-
-    rowPositions.push({
-      rowId: rowCfg.rowId,
-      rowIndex,
-      worldZ: rowWorldZ,
-      slotCount: rowCfg.slotCount,
-      occupiedSlots: rowOccupied,
-      totalCoils: rowCoils,
+        worldZ: rowWorldZ,
+        slotCount: rowCfg.slotCount,
+        occupiedSlots: rowOccupied,
+        totalCoils: rowCoils,
+      });
     });
-  });
+  };
+
+  populateSideRows(rows, buildingId, "primary", primarySpanZ);
+  if (isDualRoad) {
+    populateSideRows(oppositeRows, oppositeGateId, "opposite", oppositeSpanZ);
+  }
 
   const slabWidth = isE10
     ? E10_SLAB_WIDTH
-    : Math.max(18, totalSpanX + BASKET_OUTER_WIDTH_X + 6.4);
+    : isDualRoad
+    ? oppositeSlabWidthDual + halfCorridorX * 2 + primarySlabWidthDual
+    : Math.max(18, primarySpanX + BASKET_OUTER_WIDTH_X + 6.4);
+
+  const maxSpanZ = Math.max(primarySpanZ, oppositeSpanZ);
   const slabDepth = isE10
-    ? Math.max(21.5, totalSpanZ + E10_BAY_PITCH_Z + 5.2)
-    : Math.max(14, totalSpanZ + BASKET_OUTER_DEPTH_Z + 4.8);
+    ? Math.max(21.5, primarySpanZ + E10_BAY_PITCH_Z + 5.2)
+    : Math.max(14, maxSpanZ + BASKET_OUTER_DEPTH_Z + 4.8);
+
+  const dualRoadLayout: DualRoadLayoutMeta | undefined = isDualRoad
+    ? {
+        roadCenterX: 0,
+        roadWidth,
+        apronWidth,
+        primaryGateId: buildingId,
+        oppositeGateId,
+        primarySlabCenterX,
+        primarySlabWidth: primarySlabWidthDual,
+        oppositeSlabCenterX,
+        oppositeSlabWidth: oppositeSlabWidthDual,
+      }
+    : undefined;
 
   return {
     buildingId,
@@ -719,6 +868,7 @@ export function buildBuildingBasketLayout3D(
     rowPositions,
     slabWidth,
     slabDepth,
+    dualRoadLayout,
     stats: {
       totalSlots: slots.length,
       occupiedSlots,

@@ -127,8 +127,13 @@ function createCoilWrapTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-function createBuildingSignTexture(buildingId: BlueBasketBuildingId): THREE.CanvasTexture {
+function createBuildingSignTexture(
+  buildingId: string,
+  customTitle?: string,
+  customSubtitle?: string
+): THREE.CanvasTexture {
   const isE10 = buildingId === "E10";
+  const isH4 = buildingId === "H4";
   const canvas = document.createElement("canvas");
   canvas.width = 768;
   canvas.height = 160;
@@ -137,14 +142,14 @@ function createBuildingSignTexture(buildingId: BlueBasketBuildingId): THREE.Canv
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = isE10 ? "#f59e0b" : "#38bdf8";
+  ctx.strokeStyle = isE10 ? "#f59e0b" : isH4 ? "#06b6d4" : "#38bdf8";
   ctx.lineWidth = 6;
   ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
 
-  // Building badge
-  ctx.fillStyle = isE10 ? "#d97706" : "#1d63b8";
+  // Building / Gate badge
+  ctx.fillStyle = isE10 ? "#d97706" : isH4 ? "#0891b2" : "#1d63b8";
   ctx.fillRect(20, 20, 152, 120);
-  ctx.strokeStyle = isE10 ? "#fde68a" : "#93c5fd";
+  ctx.strokeStyle = isE10 ? "#fde68a" : isH4 ? "#a5f3fc" : "#93c5fd";
   ctx.lineWidth = 3;
   ctx.strokeRect(20, 20, 152, 120);
 
@@ -158,19 +163,21 @@ function createBuildingSignTexture(buildingId: BlueBasketBuildingId): THREE.Canv
   ctx.fillStyle = "#f8fafc";
   ctx.font = "800 34px Inter, system-ui, sans-serif";
   ctx.fillText(
-    isE10
-      ? "BUILDING E10 · STEEL CRADLE RACK"
-      : `BUILDING ${buildingId} · BLUE BASKET ZONE`,
+    customTitle ||
+      (isE10
+        ? "BUILDING E10 · STEEL CRADLE RACK"
+        : `BUILDING ${buildingId} · BLUE BASKET ZONE`),
     196,
     62
   );
 
-  ctx.fillStyle = isE10 ? "#fcd34d" : "#7dd3fc";
+  ctx.fillStyle = isE10 ? "#fcd34d" : isH4 ? "#67e8f9" : "#7dd3fc";
   ctx.font = "700 22px Inter, system-ui, sans-serif";
   ctx.fillText(
-    isE10
-      ? "ROW A (2.0m A-FRAME RACK) · CENTRAL ROAD · SLITTING MACHINE"
-      : "MAX WIDTH 2,000 mm / BASKET · MAX STACK 2 LAYERS",
+    customSubtitle ||
+      (isE10
+        ? "ROW A (2.0m A-FRAME RACK) · CENTRAL ROAD · SLITTING MACHINE"
+        : "MAX WIDTH 2,000 mm / BASKET · MAX STACK 2 LAYERS"),
     196,
     110
   );
@@ -334,18 +341,25 @@ function createExteriorRoadTexture(): THREE.CanvasTexture {
   return tex;
 }
 
-function createRoadLabelTexture(buildingId: BlueBasketBuildingId): THREE.CanvasTexture {
+function createRoadLabelTexture(
+  buildingId: BlueBasketBuildingId,
+  customText?: string
+): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
   canvas.width = 768;
   canvas.height = 112;
   const ctx = canvas.getContext("2d")!;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(248, 250, 252, 0.78)";
-  ctx.font = "900 36px Inter, system-ui, sans-serif";
+  ctx.fillStyle = "rgba(248, 250, 252, 0.84)";
+  ctx.font = "900 34px Inter, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(`EXTERIOR ROAD · อาคาร ${buildingId} (แนวแถว A–D)`, 384, 58);
+  ctx.fillText(
+    customText || `EXTERIOR ROAD · อาคาร ${buildingId} (แนวแถว A–D)`,
+    384,
+    58
+  );
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -353,7 +367,12 @@ function createRoadLabelTexture(buildingId: BlueBasketBuildingId): THREE.CanvasT
   return tex;
 }
 
-function createFrontFacadeSignTexture(buildingId: BlueBasketBuildingId): THREE.CanvasTexture {
+function createFrontFacadeSignTexture(
+  gateId: string,
+  subtitle = "OUTDOOR ROAD ACCESS",
+  isGateStyle = false
+): THREE.CanvasTexture {
+  const isH4 = gateId === "H4";
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 112;
@@ -361,25 +380,29 @@ function createFrontFacadeSignTexture(buildingId: BlueBasketBuildingId): THREE.C
 
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = "#f59e0b";
+  ctx.strokeStyle = isH4 ? "#06b6d4" : "#f59e0b";
   ctx.lineWidth = 6;
   ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
 
-  ctx.fillStyle = "#f59e0b";
+  ctx.fillStyle = isH4 ? "#06b6d4" : "#f59e0b";
   ctx.fillRect(14, 14, 96, 84);
   ctx.fillStyle = "#0f172a";
   ctx.font = "900 46px Inter, system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(buildingId, 62, 58);
+  ctx.fillText(gateId, 62, 58);
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#f8fafc";
   ctx.font = "800 26px Inter, system-ui, sans-serif";
-  ctx.fillText(`BUILDING ${buildingId} · ROW A–D`, 128, 44);
-  ctx.fillStyle = "#94a3b8";
+  ctx.fillText(
+    isGateStyle ? `ประตู ${gateId} (GATE ${gateId})` : `BUILDING ${gateId} · ROW A–D`,
+    128,
+    44
+  );
+  ctx.fillStyle = isH4 ? "#67e8f9" : "#94a3b8";
   ctx.font = "700 19px Inter, system-ui, sans-serif";
-  ctx.fillText("OUTDOOR ROAD ACCESS", 128, 80);
+  ctx.fillText(subtitle, 128, 80);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -724,7 +747,7 @@ export class BlueBasketSceneEngine {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0f172a);
-    this.scene.fog = new THREE.Fog(0x0f172a, 78, 185);
+    this.scene.fog = new THREE.Fog(0x0f172a, 115, 290);
 
     // Metallic steel reflections via RoomEnvironment
     this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
@@ -735,7 +758,7 @@ export class BlueBasketSceneEngine {
     this.scene.environment = this.envRenderTarget.texture;
     this.scene.environmentIntensity = 0.72;
 
-    this.camera = new THREE.PerspectiveCamera(42, width / height, 0.2, 260);
+    this.camera = new THREE.PerspectiveCamera(42, width / height, 0.2, 360);
     this.camera.position.set(18, 16, 22);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -743,7 +766,7 @@ export class BlueBasketSceneEngine {
     this.controls.dampingFactor = 0.08;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.04;
     this.controls.minDistance = 3.2;
-    this.controls.maxDistance = 85;
+    this.controls.maxDistance = 125;
     this.controls.addEventListener("change", () => {
       this.requestRender();
     });
@@ -1205,9 +1228,12 @@ export class BlueBasketSceneEngine {
     const isE10 = this.currentLayout
       ? isCradleRackBuilding(this.currentLayout.buildingId)
       : false;
+    const isDualRoad = Boolean(this.currentLayout?.dualRoadLayout);
 
     const look = isE10
       ? new THREE.Vector3(0.1, 1.1, 0.2)
+      : isDualRoad
+      ? new THREE.Vector3(0, 1.1, 0)
       : new THREE.Vector3(-2.0, 1.1, 0);
     const pos = new THREE.Vector3();
 
@@ -1228,6 +1254,24 @@ export class BlueBasketSceneEngine {
         default:
           // Cutaway front-left diorama angle framing ROW A left, yellow-lined center road, and green Slitting Machine right
           pos.set(-slabW * 0.72, Math.max(15.5, span * 0.5), slabD * 0.78);
+          break;
+      }
+    } else if (isDualRoad) {
+      // Dual-side Building H2: Gate H4 (-X) and Gate H2 (+X) facing each other across central road at X = 0
+      switch (preset) {
+        case "top":
+          pos.set(0, Math.max(slabW * 0.92, slabD * 1.45), 0.01);
+          break;
+        case "front":
+          pos.set(0, 12.0, slabD * 0.85 + 32);
+          break;
+        case "side":
+          pos.set(0, 12.0, -(slabD * 0.85 + 30));
+          break;
+        case "isometric":
+        case "reset":
+        default:
+          pos.set(0, Math.max(30, slabW * 0.42), Math.max(46, slabW * 0.68));
           break;
       }
     } else {
@@ -1278,8 +1322,10 @@ export class BlueBasketSceneEngine {
     }
     const targetY = layer === 2 ? BASKET_STACK_STEP_Y + 0.75 : 0.75;
     this.targetOrbitLook.set(slot.worldX, targetY, slot.worldZ);
+    const roadSideOffsetX =
+      this.currentLayout?.dualRoadLayout && slot.side === "primary" ? -3.4 : 3.4;
     this.targetCamPos.set(
-      slot.worldX + 3.4,
+      slot.worldX + roadSideOffsetX,
       targetY + 3.1,
       slot.worldZ + 4.8
     );
@@ -1306,7 +1352,16 @@ export class BlueBasketSceneEngine {
 
   private matchesFilter(slot: BasketSlot3D): boolean {
     const f = this.currentFilter;
-    if (f.row !== "ALL" && slot.rowId !== f.row) return false;
+    if (f.row !== "ALL") {
+      if (f.row.startsWith("GATE:")) {
+        if (slot.gateId !== f.row.slice(5)) return false;
+      } else if (f.row.includes(":")) {
+        const [gateId, rowId] = f.row.split(":");
+        if (slot.gateId !== gateId || slot.rowId !== rowId) return false;
+      } else if (slot.rowId !== f.row) {
+        return false;
+      }
+    }
     if (f.status === "EMPTY" && slot.hasAnyCoil) return false;
     if (f.status === "OCCUPIED" && !slot.hasAnyCoil) return false;
     if (f.status === "NEAR_FULL_OR_FULL") {
@@ -1970,10 +2025,10 @@ export class BlueBasketSceneEngine {
       return;
     }
 
-    const { slabWidth, slabDepth, buildingId } = layout;
+    const { slabWidth, slabDepth, buildingId, dualRoadLayout } = layout;
 
-    // 0. Compact Exterior Industrial Site Ground Skirt (shifted slightly toward -X to cover road on Row A-D side)
-    const siteGroundGeo = new THREE.PlaneGeometry(slabWidth + 24, slabDepth + 16);
+    // 0. Industrial Site Ground Skirt
+    const siteGroundGeo = new THREE.PlaneGeometry(slabWidth + 24, slabDepth + 18);
     const siteGroundMat = new THREE.MeshStandardMaterial({
       color: 0x162030,
       roughness: 0.96,
@@ -1983,63 +2038,20 @@ export class BlueBasketSceneEngine {
     this.dynamicMaterials.push(siteGroundMat);
     const siteGround = new THREE.Mesh(siteGroundGeo, siteGroundMat);
     siteGround.rotation.x = -Math.PI / 2;
-    siteGround.position.set(-3.2, -0.05, 0);
+    siteGround.position.set(dualRoadLayout ? 0 : -3.2, -0.05, 0);
     this.dynamicRoot.add(siteGround);
 
-    // 1. Industrial Concrete Floor Slab (Building Interior)
-    const floorGeo = new THREE.PlaneGeometry(slabWidth, slabDepth);
     const floorMat = new THREE.MeshStandardMaterial({
       map: this.floorConcreteTex,
       roughness: 0.88,
       metalness: 0.08,
     });
-    this.dynamicGeometries.push(floorGeo);
-    this.dynamicMaterials.push(floorMat);
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = !this.isSoftwareGl;
-    this.dynamicRoot.add(floor);
-
-    // Building concrete foundation plinth edge so interior slab visibly stands apart from outdoor road
-    const plinthGeo = new THREE.BoxGeometry(slabWidth + 0.28, 0.08, slabDepth + 0.28);
     const plinthMat = new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.85,
       metalness: 0.15,
     });
-    this.dynamicGeometries.push(plinthGeo);
-    this.dynamicMaterials.push(plinthMat);
-    const plinth = new THREE.Mesh(plinthGeo, plinthMat);
-    plinth.position.set(0, -0.045, 0);
-    this.dynamicRoot.add(plinth);
-
-    // Safety yellow perimeter border inside the building floor
-    const borderPts = [
-      new THREE.Vector3(-slabWidth / 2 + 0.55, 0.02, -slabDepth / 2 + 0.55),
-      new THREE.Vector3(slabWidth / 2 - 0.55, 0.02, -slabDepth / 2 + 0.55),
-      new THREE.Vector3(slabWidth / 2 - 0.55, 0.02, slabDepth / 2 - 0.55),
-      new THREE.Vector3(-slabWidth / 2 + 0.55, 0.02, slabDepth / 2 - 0.55),
-      new THREE.Vector3(-slabWidth / 2 + 0.55, 0.02, -slabDepth / 2 + 0.55),
-    ];
-    const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPts);
-    const borderMat = new THREE.LineBasicMaterial({ color: 0xf59e0b });
-    this.dynamicGeometries.push(borderGeo);
-    this.dynamicMaterials.push(borderMat);
-    this.dynamicRoot.add(new THREE.Line(borderGeo, borderMat));
-
-    // 2. Overhead Building Signboard Gantry at Back Edge (-Z)
-    const signTex = createBuildingSignTexture(buildingId);
-    this.dynamicTextures.push(signTex);
-    const signGeo = new THREE.PlaneGeometry(8.8, 1.85);
-    const signMat = new THREE.MeshBasicMaterial({ map: signTex });
-    this.dynamicGeometries.push(signGeo);
-    this.dynamicMaterials.push(signMat);
-    const signMesh = new THREE.Mesh(signGeo, signMat);
-    signMesh.position.set(0, 4.4, -slabDepth / 2 + 0.7);
-    this.dynamicRoot.add(signMesh);
-
     const gantryPostGeo = new THREE.BoxGeometry(0.26, 5.4, 0.26);
-    const gantryBeamGeo = new THREE.BoxGeometry(slabWidth - 0.8, 0.28, 0.28);
     const sideHeaderBeamGeo = new THREE.BoxGeometry(0.28, 0.28, slabDepth - 0.8);
     const gantryMat = new THREE.MeshStandardMaterial({
       color: 0x334155,
@@ -2052,153 +2064,351 @@ export class BlueBasketSceneEngine {
       roughness: 0.45,
       metalness: 0.25,
     });
-    this.dynamicGeometries.push(
-      gantryPostGeo,
-      gantryBeamGeo,
-      sideHeaderBeamGeo,
-      safetyPostGeo
-    );
-    this.dynamicMaterials.push(gantryMat, safetyPostMat);
-
-    for (const gx of [-slabWidth / 2 + 0.5, slabWidth / 2 - 0.5]) {
-      const p = new THREE.Mesh(gantryPostGeo, gantryMat);
-      p.position.set(gx, 2.7, -slabDepth / 2 + 0.5);
-      this.dynamicRoot.add(p);
-    }
-    const topBeam = new THREE.Mesh(gantryBeamGeo, gantryMat);
-    topBeam.position.set(0, 5.4, -slabDepth / 2 + 0.5);
-    this.dynamicRoot.add(topBeam);
-
-    // 2B. Building Entrance Portal along Row A–D Side (-X edge, separating building interior from exterior road)
-    const roadEdgeX = -slabWidth / 2;
-    const portalColumnsZ = [-slabDepth / 2 + 0.5, slabDepth / 2 - 0.5];
-    for (const pz of portalColumnsZ) {
-      const col = new THREE.Mesh(gantryPostGeo, gantryMat);
-      col.position.set(roadEdgeX, 2.7, pz);
-      this.dynamicRoot.add(col);
-    }
-    const sideHeaderBeam = new THREE.Mesh(sideHeaderBeamGeo, gantryMat);
-    sideHeaderBeam.position.set(roadEdgeX, 5.4, 0);
-    this.dynamicRoot.add(sideHeaderBeam);
-
-    // Exterior fascia sign on the Row A–D entrance portal facing outward toward the road (-X)
-    const frontSignTex = createFrontFacadeSignTexture(buildingId);
-    this.dynamicTextures.push(frontSignTex);
-    const frontSignGeo = new THREE.PlaneGeometry(5.6, 1.2);
-    const frontSignMat = new THREE.MeshBasicMaterial({
-      map: frontSignTex,
-      side: THREE.DoubleSide,
-    });
-    this.dynamicGeometries.push(frontSignGeo);
-    this.dynamicMaterials.push(frontSignMat);
-    const frontSignMesh = new THREE.Mesh(frontSignGeo, frontSignMat);
-    frontSignMesh.rotation.y = -Math.PI / 2;
-    frontSignMesh.position.set(roadEdgeX - 0.18, 4.95, 0);
-    this.dynamicRoot.add(frontSignMesh);
-
-    // 2C. Compact Exterior Sidewalk / Apron & Slim Outdoor Asphalt Road OUTSIDE the Row A–D Edge (-X)
-    const apronWidth = 1.25;
-    const roadWidth = 4.6; // Compact slim exterior road
-    const roadLength = slabDepth + 8.5;
-    const apronCenterX = roadEdgeX - apronWidth / 2;
-    const roadCenterX = roadEdgeX - apronWidth - roadWidth / 2;
-
-    // Exterior concrete apron/threshold between building edge and outdoor road
-    const apronGeo = new THREE.PlaneGeometry(apronWidth, roadLength);
     const apronMat = new THREE.MeshStandardMaterial({
       color: 0x64748b,
       roughness: 0.9,
       metalness: 0.06,
     });
-    this.dynamicGeometries.push(apronGeo);
-    this.dynamicMaterials.push(apronMat);
-    const apronMesh = new THREE.Mesh(apronGeo, apronMat);
-    apronMesh.rotation.x = -Math.PI / 2;
-    apronMesh.position.set(apronCenterX, -0.012, 0);
-    this.dynamicRoot.add(apronMesh);
-
-    // Outer concrete road curb along the far side of the road + short curbs & yellow safety bollards at building ends
-    const farCurbGeo = new THREE.BoxGeometry(0.22, 0.12, roadLength);
-    const endCurbLen = 3.2;
-    const nearEndCurbGeo = new THREE.BoxGeometry(0.22, 0.12, endCurbLen);
     const curbMat = new THREE.MeshStandardMaterial({
       color: 0x94a3b8,
       roughness: 0.85,
       metalness: 0.08,
     });
-    this.dynamicGeometries.push(farCurbGeo, nearEndCurbGeo);
-    this.dynamicMaterials.push(curbMat);
-
-    const farCurb = new THREE.Mesh(farCurbGeo, curbMat);
-    farCurb.position.set(roadEdgeX - apronWidth - roadWidth - 0.11, 0.03, 0);
-    this.dynamicRoot.add(farCurb);
-
-    for (const side of [-1, 1]) {
-      const nearEndCurb = new THREE.Mesh(nearEndCurbGeo, curbMat);
-      nearEndCurb.position.set(
-        roadEdgeX - apronWidth + 0.11,
-        0.03,
-        side * (roadLength / 2 - endCurbLen / 2)
-      );
-      this.dynamicRoot.add(nearEndCurb);
-
-      const bollard = new THREE.Mesh(safetyPostGeo, safetyPostMat);
-      bollard.position.set(
-        roadEdgeX - apronWidth + 0.22,
-        0.4,
-        side * (slabDepth / 2 - 0.55)
-      );
-      this.dynamicRoot.add(bollard);
-    }
-
-    // Compact Outdoor Asphalt Road running parallel along the Row A–D badges (outside the building!)
-    const roadGeo = new THREE.PlaneGeometry(roadLength, roadWidth);
     const roadMat = new THREE.MeshStandardMaterial({
       map: this.exteriorRoadTex,
       roughness: 0.92,
       metalness: 0.05,
     });
-    this.dynamicGeometries.push(roadGeo);
-    this.dynamicMaterials.push(roadMat);
-    const roadMesh = new THREE.Mesh(roadGeo, roadMat);
-    roadMesh.rotation.x = -Math.PI / 2;
-    roadMesh.rotation.z = Math.PI / 2;
-    roadMesh.position.set(roadCenterX, -0.02, 0);
-    roadMesh.receiveShadow = !this.isSoftwareGl;
-    this.dynamicRoot.add(roadMesh);
-
-    // Compact road label painted parallel along the outer shoulder of the exterior road
-    const roadLabelTex = createRoadLabelTexture(buildingId);
-    this.dynamicTextures.push(roadLabelTex);
-    const roadLabelGeo = new THREE.PlaneGeometry(9.2, 1.35);
-    const roadLabelMat = new THREE.MeshBasicMaterial({
-      map: roadLabelTex,
-      transparent: true,
-    });
-    this.dynamicGeometries.push(roadLabelGeo);
-    this.dynamicMaterials.push(roadLabelMat);
-    const roadLabelMesh = new THREE.Mesh(roadLabelGeo, roadLabelMat);
-    roadLabelMesh.rotation.x = -Math.PI / 2;
-    roadLabelMesh.rotation.z = Math.PI / 2;
-    roadLabelMesh.position.set(
-      roadCenterX - roadWidth / 2 - 0.95,
-      -0.008,
-      0
+    this.dynamicGeometries.push(gantryPostGeo, sideHeaderBeamGeo, safetyPostGeo);
+    this.dynamicMaterials.push(
+      floorMat,
+      plinthMat,
+      gantryMat,
+      safetyPostMat,
+      apronMat,
+      curbMat,
+      roadMat
     );
-    this.dynamicRoot.add(roadLabelMesh);
 
-    // 3. Row Header Badges (ROW A, ROW B, ROW C, ROW D...) right along the -X road-facing edge
+    const addBuildingWingShell = (
+      centerX: number,
+      wingWidth: number,
+      gateLabel: string,
+      signTitle: string,
+      signSubtitle: string,
+      borderColorHex: number,
+      portalSide: "left" | "right",
+      isGateFacade: boolean
+    ) => {
+      // Concrete Floor Slab
+      const fGeo = new THREE.PlaneGeometry(wingWidth, slabDepth);
+      const pGeo = new THREE.BoxGeometry(wingWidth + 0.28, 0.08, slabDepth + 0.28);
+      const bGeo = new THREE.BoxGeometry(wingWidth - 0.8, 0.28, 0.28);
+      this.dynamicGeometries.push(fGeo, pGeo, bGeo);
+
+      const floor = new THREE.Mesh(fGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(centerX, 0, 0);
+      floor.receiveShadow = !this.isSoftwareGl;
+      this.dynamicRoot.add(floor);
+
+      const plinth = new THREE.Mesh(pGeo, plinthMat);
+      plinth.position.set(centerX, -0.045, 0);
+      this.dynamicRoot.add(plinth);
+
+      // Perimeter safety line
+      const halfW = wingWidth / 2;
+      const borderPts = [
+        new THREE.Vector3(centerX - halfW + 0.55, 0.02, -slabDepth / 2 + 0.55),
+        new THREE.Vector3(centerX + halfW - 0.55, 0.02, -slabDepth / 2 + 0.55),
+        new THREE.Vector3(centerX + halfW - 0.55, 0.02, slabDepth / 2 - 0.55),
+        new THREE.Vector3(centerX - halfW + 0.55, 0.02, slabDepth / 2 - 0.55),
+        new THREE.Vector3(centerX - halfW + 0.55, 0.02, -slabDepth / 2 + 0.55),
+      ];
+      const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPts);
+      const borderMat = new THREE.LineBasicMaterial({ color: borderColorHex });
+      this.dynamicGeometries.push(borderGeo);
+      this.dynamicMaterials.push(borderMat);
+      this.dynamicRoot.add(new THREE.Line(borderGeo, borderMat));
+
+      // Back Overhead Gantry & Signboard (-Z)
+      const signTex = createBuildingSignTexture(
+        gateLabel,
+        signTitle,
+        signSubtitle
+      );
+      this.dynamicTextures.push(signTex);
+      const signGeo = new THREE.PlaneGeometry(8.8, 1.85);
+      const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+      this.dynamicGeometries.push(signGeo);
+      this.dynamicMaterials.push(signMat);
+      const signMesh = new THREE.Mesh(signGeo, signMat);
+      signMesh.position.set(centerX, 4.4, -slabDepth / 2 + 0.7);
+      this.dynamicRoot.add(signMesh);
+
+      for (const gx of [centerX - halfW + 0.5, centerX + halfW - 0.5]) {
+        const p = new THREE.Mesh(gantryPostGeo, gantryMat);
+        p.position.set(gx, 2.7, -slabDepth / 2 + 0.5);
+        this.dynamicRoot.add(p);
+      }
+      const topBeam = new THREE.Mesh(bGeo, gantryMat);
+      topBeam.position.set(centerX, 5.4, -slabDepth / 2 + 0.5);
+      this.dynamicRoot.add(topBeam);
+
+      // Entrance Portal & Road-Facing Fascia Sign
+      const portalEdgeX =
+        portalSide === "left" ? centerX - halfW : centerX + halfW;
+      for (const pz of [-slabDepth / 2 + 0.5, slabDepth / 2 - 0.5]) {
+        const col = new THREE.Mesh(gantryPostGeo, gantryMat);
+        col.position.set(portalEdgeX, 2.7, pz);
+        this.dynamicRoot.add(col);
+      }
+      const sideHeaderBeam = new THREE.Mesh(sideHeaderBeamGeo, gantryMat);
+      sideHeaderBeam.position.set(portalEdgeX, 5.4, 0);
+      this.dynamicRoot.add(sideHeaderBeam);
+
+      const frontSignTex = createFrontFacadeSignTexture(
+        gateLabel,
+        isGateFacade ? "CENTRAL ROAD · ROW A–D" : "OUTDOOR ROAD ACCESS",
+        isGateFacade
+      );
+      this.dynamicTextures.push(frontSignTex);
+      const frontSignGeo = new THREE.PlaneGeometry(5.6, 1.2);
+      const frontSignMat = new THREE.MeshBasicMaterial({
+        map: frontSignTex,
+        side: THREE.DoubleSide,
+      });
+      this.dynamicGeometries.push(frontSignGeo);
+      this.dynamicMaterials.push(frontSignMat);
+      const frontSignMesh = new THREE.Mesh(frontSignGeo, frontSignMat);
+      frontSignMesh.rotation.y =
+        portalSide === "left" ? -Math.PI / 2 : Math.PI / 2;
+      frontSignMesh.position.set(
+        portalSide === "left" ? portalEdgeX - 0.18 : portalEdgeX + 0.18,
+        4.95,
+        0
+      );
+      this.dynamicRoot.add(frontSignMesh);
+    };
+
     const rowBadgeGeo = new THREE.PlaneGeometry(1.75, 0.88);
     this.dynamicGeometries.push(rowBadgeGeo);
-    for (const rp of layout.rowPositions) {
-      const rTex = createRowBadgeTexture(rp.rowId);
-      this.dynamicTextures.push(rTex);
-      const rMat = new THREE.MeshBasicMaterial({ map: rTex });
-      this.dynamicMaterials.push(rMat);
-      const badge = new THREE.Mesh(rowBadgeGeo, rMat);
-      badge.rotation.x = -Math.PI / 2;
-      badge.position.set(roadEdgeX + 1.55, 0.025, rp.worldZ);
-      this.dynamicRoot.add(badge);
+
+    if (dualRoadLayout) {
+      // DUAL-SIDE BUILDING H2: Gate H4 (-X) and Gate H2 (+X) facing each other across the central road!
+      const {
+        roadCenterX,
+        roadWidth,
+        apronWidth,
+        primaryGateId,
+        oppositeGateId,
+        primarySlabCenterX,
+        primarySlabWidth,
+        oppositeSlabCenterX,
+        oppositeSlabWidth,
+      } = dualRoadLayout;
+
+      // Right Wing (+X): ประตู H2
+      addBuildingWingShell(
+        primarySlabCenterX,
+        primarySlabWidth,
+        primaryGateId,
+        `ประตู ${primaryGateId} (GATE ${primaryGateId}) · BLUE BASKET`,
+        "MAX WIDTH 2,000 mm / BASKET · MAX STACK 2 LAYERS",
+        0xf59e0b,
+        "left",
+        true
+      );
+
+      // Left Wing (-X): ประตู H4 (opposite across central road)
+      addBuildingWingShell(
+        oppositeSlabCenterX,
+        oppositeSlabWidth,
+        oppositeGateId,
+        `ประตู ${oppositeGateId} (GATE ${oppositeGateId}) · BLUE BASKET`,
+        "OPPOSITE GATE H2 · MAX WIDTH 2,000 mm · MAX 2 LAYERS",
+        0x06b6d4,
+        "right",
+        true
+      );
+
+      const roadLength = slabDepth + 10.5;
+      const halfRoadW = roadWidth / 2;
+      const rightApronCenterX = roadCenterX + halfRoadW + apronWidth / 2;
+      const leftApronCenterX = roadCenterX - halfRoadW - apronWidth / 2;
+
+      // Aprons on BOTH sides of the central road
+      const apronGeo = new THREE.PlaneGeometry(apronWidth, roadLength);
+      const endCurbLen = 3.6;
+      const endCurbGeo = new THREE.BoxGeometry(0.22, 0.12, endCurbLen);
+      const roadGeo = new THREE.PlaneGeometry(roadLength, roadWidth);
+      this.dynamicGeometries.push(apronGeo, endCurbGeo, roadGeo);
+
+      for (const ax of [leftApronCenterX, rightApronCenterX]) {
+        const apronMesh = new THREE.Mesh(apronGeo, apronMat);
+        apronMesh.rotation.x = -Math.PI / 2;
+        apronMesh.position.set(ax, -0.012, 0);
+        this.dynamicRoot.add(apronMesh);
+      }
+
+      // Curbs & yellow safety bollards flanking BOTH Gate H4 & Gate H2 portals
+      for (const edgeSign of [-1, 1]) {
+        const curbX = roadCenterX + edgeSign * (halfRoadW + 0.11);
+        const bollardX = roadCenterX + edgeSign * (halfRoadW + 0.28);
+        for (const zSign of [-1, 1]) {
+          const endCurb = new THREE.Mesh(endCurbGeo, curbMat);
+          endCurb.position.set(
+            curbX,
+            0.03,
+            zSign * (roadLength / 2 - endCurbLen / 2)
+          );
+          this.dynamicRoot.add(endCurb);
+
+          const bollard = new THREE.Mesh(safetyPostGeo, safetyPostMat);
+          bollard.position.set(
+            bollardX,
+            0.4,
+            zSign * (slabDepth / 2 - 0.55)
+          );
+          this.dynamicRoot.add(bollard);
+        }
+      }
+
+      // Central Asphalt Road separating ประตู H4 (-X) and ประตู H2 (+X)
+      const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+      roadMesh.rotation.x = -Math.PI / 2;
+      roadMesh.rotation.z = Math.PI / 2;
+      roadMesh.position.set(roadCenterX, -0.02, 0);
+      roadMesh.receiveShadow = !this.isSoftwareGl;
+      this.dynamicRoot.add(roadMesh);
+
+      // Center Road Stencil Text
+      const roadLabelTex = createRoadLabelTexture(
+        buildingId,
+        `ROAD · ประตู ${oppositeGateId} ◄── ถนนคั่นกลาง ──► ประตู ${primaryGateId}`
+      );
+      this.dynamicTextures.push(roadLabelTex);
+      const roadLabelGeo = new THREE.PlaneGeometry(11.4, 1.45);
+      const roadLabelMat = new THREE.MeshBasicMaterial({
+        map: roadLabelTex,
+        transparent: true,
+      });
+      this.dynamicGeometries.push(roadLabelGeo);
+      this.dynamicMaterials.push(roadLabelMat);
+      const roadLabelMesh = new THREE.Mesh(roadLabelGeo, roadLabelMat);
+      roadLabelMesh.rotation.x = -Math.PI / 2;
+      roadLabelMesh.rotation.z = Math.PI / 2;
+      roadLabelMesh.position.set(roadCenterX, -0.004, 0);
+      this.dynamicRoot.add(roadLabelMesh);
+
+      // Row Header Badges on BOTH sides along the central road edges
+      const rightPortalEdgeX = roadCenterX + halfRoadW + apronWidth;
+      const leftPortalEdgeX = roadCenterX - halfRoadW - apronWidth;
+      for (const rp of layout.rowPositions) {
+        const rTex = createRowBadgeTexture(rp.rowId);
+        this.dynamicTextures.push(rTex);
+        const rMat = new THREE.MeshBasicMaterial({ map: rTex });
+        this.dynamicMaterials.push(rMat);
+        const badge = new THREE.Mesh(rowBadgeGeo, rMat);
+        badge.rotation.x = -Math.PI / 2;
+        const badgeX =
+          rp.side === "primary"
+            ? rightPortalEdgeX + 1.55
+            : leftPortalEdgeX - 1.55;
+        badge.position.set(badgeX, 0.025, rp.worldZ);
+        this.dynamicRoot.add(badge);
+      }
+    } else {
+      // SINGLE-SIDE BLUE BASKET BUILDINGS (E9, F — unchanged)
+      addBuildingWingShell(
+        0,
+        slabWidth,
+        buildingId,
+        `BUILDING ${buildingId} · BLUE BASKET ZONE`,
+        "MAX WIDTH 2,000 mm / BASKET · MAX STACK 2 LAYERS",
+        0xf59e0b,
+        "left",
+        false
+      );
+
+      const roadEdgeX = -slabWidth / 2;
+      const apronWidth = 1.25;
+      const roadWidth = 4.6;
+      const roadLength = slabDepth + 8.5;
+      const apronCenterX = roadEdgeX - apronWidth / 2;
+      const roadCenterX = roadEdgeX - apronWidth - roadWidth / 2;
+
+      const apronGeo = new THREE.PlaneGeometry(apronWidth, roadLength);
+      const farCurbGeo = new THREE.BoxGeometry(0.22, 0.12, roadLength);
+      const endCurbLen = 3.2;
+      const nearEndCurbGeo = new THREE.BoxGeometry(0.22, 0.12, endCurbLen);
+      const roadGeo = new THREE.PlaneGeometry(roadLength, roadWidth);
+      this.dynamicGeometries.push(apronGeo, farCurbGeo, nearEndCurbGeo, roadGeo);
+
+      const apronMesh = new THREE.Mesh(apronGeo, apronMat);
+      apronMesh.rotation.x = -Math.PI / 2;
+      apronMesh.position.set(apronCenterX, -0.012, 0);
+      this.dynamicRoot.add(apronMesh);
+
+      const farCurb = new THREE.Mesh(farCurbGeo, curbMat);
+      farCurb.position.set(roadEdgeX - apronWidth - roadWidth - 0.11, 0.03, 0);
+      this.dynamicRoot.add(farCurb);
+
+      for (const side of [-1, 1]) {
+        const nearEndCurb = new THREE.Mesh(nearEndCurbGeo, curbMat);
+        nearEndCurb.position.set(
+          roadEdgeX - apronWidth + 0.11,
+          0.03,
+          side * (roadLength / 2 - endCurbLen / 2)
+        );
+        this.dynamicRoot.add(nearEndCurb);
+
+        const bollard = new THREE.Mesh(safetyPostGeo, safetyPostMat);
+        bollard.position.set(
+          roadEdgeX - apronWidth + 0.22,
+          0.4,
+          side * (slabDepth / 2 - 0.55)
+        );
+        this.dynamicRoot.add(bollard);
+      }
+
+      const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+      roadMesh.rotation.x = -Math.PI / 2;
+      roadMesh.rotation.z = Math.PI / 2;
+      roadMesh.position.set(roadCenterX, -0.02, 0);
+      roadMesh.receiveShadow = !this.isSoftwareGl;
+      this.dynamicRoot.add(roadMesh);
+
+      const roadLabelTex = createRoadLabelTexture(buildingId);
+      this.dynamicTextures.push(roadLabelTex);
+      const roadLabelGeo = new THREE.PlaneGeometry(9.2, 1.35);
+      const roadLabelMat = new THREE.MeshBasicMaterial({
+        map: roadLabelTex,
+        transparent: true,
+      });
+      this.dynamicGeometries.push(roadLabelGeo);
+      this.dynamicMaterials.push(roadLabelMat);
+      const roadLabelMesh = new THREE.Mesh(roadLabelGeo, roadLabelMat);
+      roadLabelMesh.rotation.x = -Math.PI / 2;
+      roadLabelMesh.rotation.z = Math.PI / 2;
+      roadLabelMesh.position.set(
+        roadCenterX - roadWidth / 2 - 0.95,
+        -0.008,
+        0
+      );
+      this.dynamicRoot.add(roadLabelMesh);
+
+      // Row Header Badges (ROW A, ROW B, ROW C, ROW D...) right along the -X road-facing edge
+      for (const rp of layout.rowPositions) {
+        const rTex = createRowBadgeTexture(rp.rowId);
+        this.dynamicTextures.push(rTex);
+        const rMat = new THREE.MeshBasicMaterial({ map: rTex });
+        this.dynamicMaterials.push(rMat);
+        const badge = new THREE.Mesh(rowBadgeGeo, rMat);
+        badge.rotation.x = -Math.PI / 2;
+        badge.position.set(roadEdgeX + 1.55, 0.025, rp.worldZ);
+        this.dynamicRoot.add(badge);
+      }
     }
 
     // 4. Shared Floor Slot Pad & Hitbox Geometries (square 2.28m x 2.28m footprint)

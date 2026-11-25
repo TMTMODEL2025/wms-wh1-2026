@@ -48,7 +48,9 @@ import {
   formatBasketCode,
   formatBasketLayerLocation,
   getNextAvailableRowId,
+  H2_OPPOSITE_GATE_ID,
   isCradleRackBuilding,
+  isDualRoadBuilding,
   loadCachedBlueBasketConfig,
   parseBasketLocation,
   parseWidthMm,
@@ -264,6 +266,9 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
   >(null);
 
   // Row Manager Modal State
+  const [rowManagerSide, setRowManagerSide] = useState<"primary" | "opposite">(
+    "primary"
+  );
   const [newRowLabel, setNewRowLabel] = useState<string>("");
   const [newRowSlots, setNewRowSlots] = useState<number>(DEFAULT_SLOTS_PER_ROW);
   const [rowManagerError, setRowManagerError] = useState<string | null>(null);
@@ -558,16 +563,28 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
   // Reset row/layer filter when switching building
   useEffect(() => {
-    if (
-      rowFilter !== "ALL" &&
-      !currentLayout.config.rows.some((r) => r.rowId === rowFilter)
-    ) {
-      setRowFilter("ALL");
+    if (rowFilter !== "ALL") {
+      const validDual =
+        Boolean(currentLayout.dualRoadLayout) &&
+        (rowFilter === `GATE:${currentLayout.dualRoadLayout?.primaryGateId}` ||
+          rowFilter === `GATE:${currentLayout.dualRoadLayout?.oppositeGateId}` ||
+          currentLayout.rowPositions.some(
+            (rp) => `${rp.gateId}:${rp.rowId}` === rowFilter
+          ));
+      const validSingle =
+        !currentLayout.dualRoadLayout &&
+        currentLayout.config.rows.some((r) => r.rowId === rowFilter);
+      if (!validDual && !validSingle) {
+        setRowFilter("ALL");
+      }
     }
     if (isCradleRackBuilding(selectedBuilding) && layerFilter !== "ALL") {
       setLayerFilter("ALL");
     }
-  }, [currentLayout, rowFilter, selectedBuilding, layerFilter]);
+    if (!isDualRoadBuilding(selectedBuilding) && rowManagerSide !== "primary") {
+      setRowManagerSide("primary");
+    }
+  }, [currentLayout, rowFilter, selectedBuilding, layerFilter, rowManagerSide]);
 
   // Auto-focus inputs when stepping in Inbound Drawer
   useEffect(() => {
@@ -948,8 +965,15 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
   const handleAddRow = async () => {
     const bCfg = warehouseConfig.buildings[selectedBuilding];
+    const useOpposite =
+      isDualRoadBuilding(selectedBuilding) && rowManagerSide === "opposite";
+    const activeRows = useOpposite ? bCfg.oppositeRows || [] : bCfg.rows;
+    const gateDisplay = useOpposite
+      ? bCfg.oppositeGateId || H2_OPPOSITE_GATE_ID
+      : selectedBuilding;
+
     const cleanId = (
-      newRowLabel.trim() || getNextAvailableRowId(bCfg.rows)
+      newRowLabel.trim() || getNextAvailableRowId(activeRows)
     )
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, "")
@@ -961,11 +985,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       );
       return;
     }
-    if (bCfg.rows.some((r) => r.rowId === cleanId)) {
+    if (activeRows.some((r) => r.rowId === cleanId)) {
       setRowManagerError(
         isThai
-          ? `แถว ${cleanId} มีอยู่แล้วในอาคาร ${selectedBuilding}`
-          : `Row ${cleanId} already exists.`
+          ? `แถว ${cleanId} มีอยู่แล้วในฝั่งประตู ${gateDisplay}`
+          : `Row ${cleanId} already exists in ${gateDisplay}.`
       );
       return;
     }
@@ -974,14 +998,21 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       MIN_SLOTS_PER_ROW,
       Math.min(MAX_SLOTS_PER_ROW, Math.round(newRowSlots) || DEFAULT_SLOTS_PER_ROW)
     );
+    const updatedRows = [...activeRows, { rowId: cleanId, slotCount: clampedSlots }];
     const nextConfig: BlueBasketWarehouseConfig = {
       ...warehouseConfig,
       buildings: {
         ...warehouseConfig.buildings,
-        [selectedBuilding]: {
-          ...bCfg,
-          rows: [...bCfg.rows, { rowId: cleanId, slotCount: clampedSlots }],
-        },
+        [selectedBuilding]: useOpposite
+          ? {
+              ...bCfg,
+              oppositeGateId: bCfg.oppositeGateId || H2_OPPOSITE_GATE_ID,
+              oppositeRows: updatedRows,
+            }
+          : {
+              ...bCfg,
+              rows: updatedRows,
+            },
       },
       updatedAt: new Date().toISOString(),
     };
@@ -990,9 +1021,16 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     await persistConfigUpdate(nextConfig);
   };
 
-  const handleChangeRowSlotCount = async (rowId: string, delta: number) => {
+  const handleChangeRowSlotCount = async (
+    rowId: string,
+    delta: number,
+    side: "primary" | "opposite" = "primary"
+  ) => {
     const bCfg = warehouseConfig.buildings[selectedBuilding];
-    const targetRow = bCfg.rows.find((r) => r.rowId === rowId);
+    const useOpposite =
+      isDualRoadBuilding(selectedBuilding) && side === "opposite";
+    const activeRows = useOpposite ? bCfg.oppositeRows || [] : bCfg.rows;
+    const targetRow = activeRows.find((r) => r.rowId === rowId);
     if (!targetRow) return;
     const nextCount = Math.max(
       MIN_SLOTS_PER_ROW,
@@ -1003,7 +1041,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     // Prevent shrinking if active coils exist in the removed slots
     if (nextCount < targetRow.slotCount) {
       const blockedSlots = currentLayout.slots.filter(
-        (s) => s.rowId === rowId && s.slotNumber > nextCount && s.hasAnyCoil
+        (s) =>
+          s.side === side &&
+          s.rowId === rowId &&
+          s.slotNumber > nextCount &&
+          s.hasAnyCoil
       );
       if (blockedSlots.length > 0) {
         setRowManagerError(
@@ -1019,35 +1061,48 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       }
     }
 
+    const updatedRows = activeRows.map((r) =>
+      r.rowId === rowId ? { ...r, slotCount: nextCount } : r
+    );
     const nextConfig: BlueBasketWarehouseConfig = {
       ...warehouseConfig,
       buildings: {
         ...warehouseConfig.buildings,
-        [selectedBuilding]: {
-          ...bCfg,
-          rows: bCfg.rows.map((r) =>
-            r.rowId === rowId ? { ...r, slotCount: nextCount } : r
-          ),
-        },
+        [selectedBuilding]: useOpposite
+          ? {
+              ...bCfg,
+              oppositeGateId: bCfg.oppositeGateId || H2_OPPOSITE_GATE_ID,
+              oppositeRows: updatedRows,
+            }
+          : {
+              ...bCfg,
+              rows: updatedRows,
+            },
       },
       updatedAt: new Date().toISOString(),
     };
     await persistConfigUpdate(nextConfig);
   };
 
-  const handleDeleteRow = async (rowId: string) => {
+  const handleDeleteRow = async (
+    rowId: string,
+    side: "primary" | "opposite" = "primary"
+  ) => {
     const bCfg = warehouseConfig.buildings[selectedBuilding];
-    if (bCfg.rows.length <= 1) {
+    const useOpposite =
+      isDualRoadBuilding(selectedBuilding) && side === "opposite";
+    const activeRows = useOpposite ? bCfg.oppositeRows || [] : bCfg.rows;
+    if (activeRows.length <= 1) {
       setRowManagerError(
         isThai
-          ? "ต้องมีแถวอย่างน้อย 1 แถวในแต่ละอาคาร"
+          ? "ต้องมีแถวอย่างน้อย 1 แถวในแต่ละฝั่ง"
           : "At least 1 row must remain."
       );
       return;
     }
 
     const hasStockInRow = currentLayout.slots.some(
-      (s) => s.rowId === rowId && s.hasAnyCoil
+      (s) => s.side === side && s.rowId === rowId && s.hasAnyCoil
     );
     if (hasStockInRow) {
       setRowManagerError(
@@ -1058,18 +1113,25 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       return;
     }
 
+    const updatedRows = activeRows.filter((r) => r.rowId !== rowId);
     const nextConfig: BlueBasketWarehouseConfig = {
       ...warehouseConfig,
       buildings: {
         ...warehouseConfig.buildings,
-        [selectedBuilding]: {
-          ...bCfg,
-          rows: bCfg.rows.filter((r) => r.rowId !== rowId),
-        },
+        [selectedBuilding]: useOpposite
+          ? {
+              ...bCfg,
+              oppositeGateId: bCfg.oppositeGateId || H2_OPPOSITE_GATE_ID,
+              oppositeRows: updatedRows,
+            }
+          : {
+              ...bCfg,
+              rows: updatedRows,
+            },
       },
       updatedAt: new Date().toISOString(),
     };
-    if (selectedSlot?.rowId === rowId) {
+    if (selectedSlot?.rowId === rowId && selectedSlot?.side === side) {
       setSelectedBasketCode(null);
       setSelectedLayer(null);
     }
@@ -1079,12 +1141,18 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
   const handleResetBuildingToDefault = async () => {
     const def = createDefaultBlueBasketConfig();
     const defBuilding = def.buildings[selectedBuilding];
-    const defRowLimit = new Map(
+    const defPrimaryLimit = new Map(
       defBuilding.rows.map((r) => [r.rowId, r.slotCount])
+    );
+    const defOppositeLimit = new Map(
+      (defBuilding.oppositeRows || []).map((r) => [r.rowId, r.slotCount])
     );
     const hasStockOutsideDefault = currentLayout.slots.some((s) => {
       if (!s.hasAnyCoil) return false;
-      const limit = defRowLimit.get(s.rowId);
+      const limit =
+        s.side === "opposite"
+          ? defOppositeLimit.get(s.rowId)
+          : defPrimaryLimit.get(s.rowId);
       return limit === undefined || s.slotNumber > limit;
     });
     if (hasStockOutsideDefault) {
@@ -1110,10 +1178,17 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
   // Filtered basket picker list for Step 3 of Inbound Drawer
   const step3BasketOptions = useMemo(() => {
-    return inboundBuildingLayout.slots.filter(
-      (s) =>
-        inboundBasketRowFilter === "ALL" || s.rowId === inboundBasketRowFilter
-    );
+    return inboundBuildingLayout.slots.filter((s) => {
+      if (inboundBasketRowFilter === "ALL") return true;
+      if (inboundBasketRowFilter.startsWith("GATE:")) {
+        return s.gateId === inboundBasketRowFilter.slice(5);
+      }
+      if (inboundBasketRowFilter.includes(":")) {
+        const [gId, rId] = inboundBasketRowFilter.split(":");
+        return s.gateId === gId && s.rowId === rId;
+      }
+      return s.rowId === inboundBasketRowFilter;
+    });
   }, [inboundBuildingLayout, inboundBasketRowFilter]);
 
   return (
@@ -1138,9 +1213,13 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                     ? isThai
                       ? "E10 แคร่เหล็กสามเหลี่ยมขา 2 ม. | แถว A ชิดผนังซ้าย + ถนนกลาง + Slitting Machine"
                       : "E10 2m Steel Cradle Rack | ROW A + Central Road + Slitting Machine"
+                    : isDualRoadBuilding(selectedBuilding)
+                    ? isThai
+                      ? "อาคาร H2 · ประตู H2 ↔ ประตู H4 วางตรงข้ามกันมีถนนคั่นกลาง | ≤ 2,000 มม. | ซ้อนสูงสุด 2 ชั้น"
+                      : "Building H2 · Gate H2 ↔ Gate H4 across Central Road | ≤ 2,000 mm | Max 2 Layers"
                     : isThai
-                    ? "E9 · H2 · F ตะกร้าฟ้า (2 ชั้น) | E10 แคร่เหล็ก | ≤ 2,000 มม."
-                    : "E9 · H2 · F Blue Baskets (2 Layers) | E10 Steel Cradle | ≤ 2,000 mm"}
+                    ? "E9 · H2 (ประตู H2/H4) · F ตะกร้าฟ้า (2 ชั้น) | E10 แคร่เหล็ก | ≤ 2,000 มม."
+                    : "E9 · H2 (Gate H2/H4) · F Blue Baskets (2 Layers) | E10 Steel Cradle | ≤ 2,000 mm"}
                 </p>
               </div>
             </div>
@@ -1151,6 +1230,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 const bLayout = allBuildingLayouts[bId];
                 const active = selectedBuilding === bId;
                 const isCradle = isCradleRackBuilding(bId);
+                const isDual = isDualRoadBuilding(bId);
                 return (
                   <button
                     key={bId}
@@ -1172,6 +1252,17 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   >
                     <Building2 className="w-3 h-3" />
                     <span>{isThai ? `อาคาร ${bId}` : bId}</span>
+                    {isDual && (
+                      <span
+                        className={`px-1 py-0.2 rounded text-[9px] font-black ${
+                          active
+                            ? "bg-black/25 text-cyan-100"
+                            : "bg-cyan-500/20 text-cyan-300"
+                        }`}
+                      >
+                        H2/H4
+                      </span>
+                    )}
                     {isCradle && (
                       <span
                         className={`px-1 py-0.2 rounded text-[9px] font-black ${
@@ -1395,9 +1486,13 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 }`}
               />
               <span>
-                {BLUE_BASKET_BUILDING_META[selectedBuilding].nameTh} · แถว{" "}
-                {currentLayout.config.rows.map((r) => r.rowId).join(", ")}
-                {isCurrentCradle ? " · ถนนกลาง · Slitting Machine" : ""}
+                {currentLayout.dualRoadLayout
+                  ? `อาคาร ${selectedBuilding} · ประตู ${currentLayout.dualRoadLayout.primaryGateId} ↔ ประตู ${currentLayout.dualRoadLayout.oppositeGateId} (ถนนคั่นกลาง)`
+                  : `${BLUE_BASKET_BUILDING_META[selectedBuilding].nameTh} · แถว ${currentLayout.config.rows
+                      .map((r) => r.rowId)
+                      .join(", ")}${
+                      isCurrentCradle ? " · ถนนกลาง · Slitting Machine" : ""
+                    }`}
               </span>
             </div>
             {showInboundDrawer && (
@@ -1481,6 +1576,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   className={`font-black ${
                     isCradleRackBuilding(hoverInfo.slot.buildingId)
                       ? "text-amber-300"
+                      : hoverInfo.slot.side === "opposite"
+                      ? "text-cyan-300"
                       : "text-sky-300"
                   }`}
                 >
@@ -1491,6 +1588,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                     ? isThai
                       ? "แคร่เหล็ก 2 ม."
                       : "2m Cradle"
+                    : isDualRoadBuilding(hoverInfo.slot.buildingId)
+                    ? isThai
+                      ? `ประตู ${hoverInfo.slot.gateId} · ชั้น ${hoverInfo.layer}`
+                      : `Gate ${hoverInfo.slot.gateId} · L${hoverInfo.layer}`
                     : isThai
                     ? `ชั้น ${hoverInfo.layer}`
                     : `L${hoverInfo.layer}`}
@@ -1589,12 +1690,45 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                       onChange={(e) => setRowFilter(e.target.value)}
                       className="bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none"
                     >
-                      <option value="ALL">แถวทั้งหมด</option>
-                      {currentLayout.config.rows.map((r) => (
-                        <option key={r.rowId} value={r.rowId}>
-                          แถว {r.rowId} ({r.slotCount} ช่อง)
-                        </option>
-                      ))}
+                      {currentLayout.dualRoadLayout ? (
+                        <>
+                          <option value="ALL">
+                            ทั้งหมด (ประตู{" "}
+                            {currentLayout.dualRoadLayout.primaryGateId} +{" "}
+                            {currentLayout.dualRoadLayout.oppositeGateId})
+                          </option>
+                          <option
+                            value={`GATE:${currentLayout.dualRoadLayout.primaryGateId}`}
+                          >
+                            เฉพาะฝั่งประตู{" "}
+                            {currentLayout.dualRoadLayout.primaryGateId}
+                          </option>
+                          <option
+                            value={`GATE:${currentLayout.dualRoadLayout.oppositeGateId}`}
+                          >
+                            เฉพาะฝั่งประตู{" "}
+                            {currentLayout.dualRoadLayout.oppositeGateId}
+                          </option>
+                          {currentLayout.rowPositions.map((rp) => (
+                            <option
+                              key={`${rp.gateId}:${rp.rowId}`}
+                              value={`${rp.gateId}:${rp.rowId}`}
+                            >
+                              ประตู {rp.gateId} · แถว {rp.rowId} ({rp.slotCount}{" "}
+                              ช่อง)
+                            </option>
+                          ))}
+                        </>
+                      ) : (
+                        <>
+                          <option value="ALL">แถวทั้งหมด</option>
+                          {currentLayout.config.rows.map((r) => (
+                            <option key={r.rowId} value={r.rowId}>
+                              แถว {r.rowId} ({r.slotCount} ช่อง)
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
 
                     {!isCurrentCradle && (
@@ -1976,6 +2110,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                       const active = inboundBuilding === bId;
                       const stats = allBuildingLayouts[bId].stats;
                       const isCradle = isCradleRackBuilding(bId);
+                      const isDual = isDualRoadBuilding(bId);
                       return (
                         <button
                           key={bId}
@@ -1997,7 +2132,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                         >
                           <div className="text-xs font-black">อาคาร {bId}</div>
                           <div className="text-[9px] opacity-85">
-                            {isCradle ? "แคร่เหล็ก" : "ตะกร้าฟ้า"}
+                            {isCradle
+                              ? "แคร่เหล็ก"
+                              : isDual
+                              ? "ประตู H2 / H4"
+                              : "ตะกร้าฟ้า"}
                           </div>
                           <div className="text-[10px] opacity-80 mt-0.5">
                             {stats.occupiedSlots}/{stats.totalSlots} ช่อง
@@ -2022,7 +2161,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                       {isCradleRackBuilding(inboundBuilding)
                         ? "เบอร์แคร่เหล็ก"
                         : "เบอร์ตะกร้า"}{" "}
-                      ({inboundBuilding})
+                      (
+                      {isDualRoadBuilding(inboundBuilding)
+                        ? "ประตู H2 / H4"
+                        : inboundBuilding}
+                      )
                     </span>
                     <button
                       type="button"
@@ -2052,7 +2195,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                           handleApplyBasketCodeInput();
                         }
                       }}
-                      placeholder={`เช่น ${inboundBuilding}-A01`}
+                      placeholder={
+                        isDualRoadBuilding(inboundBuilding)
+                          ? "เช่น H2-A01 หรือ H4-A01"
+                          : `เช่น ${inboundBuilding}-A01`
+                      }
                       className="flex-1 rounded-xl bg-slate-900 border border-slate-700 focus:border-sky-400 px-3 py-2 text-sm font-mono font-bold text-white outline-none"
                     />
                     <button
@@ -2076,22 +2223,81 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                             : "bg-slate-800 text-slate-400 hover:text-white"
                         }`}
                       >
-                        ทุกแถว
+                        ทั้งหมด
                       </button>
-                      {inboundBuildingLayout.config.rows.map((r) => (
-                        <button
-                          key={r.rowId}
-                          type="button"
-                          onClick={() => setInboundBasketRowFilter(r.rowId)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                            inboundBasketRowFilter === r.rowId
-                              ? "bg-sky-600 text-white"
-                              : "bg-slate-800 text-slate-400 hover:text-white"
-                          }`}
-                        >
-                          แถว {r.rowId}
-                        </button>
-                      ))}
+                      {inboundBuildingLayout.dualRoadLayout ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setInboundBasketRowFilter(
+                                `GATE:${inboundBuildingLayout.dualRoadLayout!.primaryGateId}`
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                              inboundBasketRowFilter ===
+                              `GATE:${inboundBuildingLayout.dualRoadLayout.primaryGateId}`
+                                ? "bg-amber-600 text-white"
+                                : "bg-slate-800 text-amber-300 hover:text-white"
+                            }`}
+                          >
+                            ประตู{" "}
+                            {inboundBuildingLayout.dualRoadLayout.primaryGateId}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setInboundBasketRowFilter(
+                                `GATE:${inboundBuildingLayout.dualRoadLayout!.oppositeGateId}`
+                              )
+                            }
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                              inboundBasketRowFilter ===
+                              `GATE:${inboundBuildingLayout.dualRoadLayout.oppositeGateId}`
+                                ? "bg-cyan-600 text-white"
+                                : "bg-slate-800 text-cyan-300 hover:text-white"
+                            }`}
+                          >
+                            ประตู{" "}
+                            {
+                              inboundBuildingLayout.dualRoadLayout
+                                .oppositeGateId
+                            }
+                          </button>
+                          {inboundBuildingLayout.rowPositions.map((rp) => {
+                            const key = `${rp.gateId}:${rp.rowId}`;
+                            return (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setInboundBasketRowFilter(key)}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                                  inboundBasketRowFilter === key
+                                    ? "bg-sky-600 text-white"
+                                    : "bg-slate-800 text-slate-400 hover:text-white"
+                                }`}
+                              >
+                                {rp.gateId}-{rp.rowId}
+                              </button>
+                            );
+                          })}
+                        </>
+                      ) : (
+                        inboundBuildingLayout.config.rows.map((r) => (
+                          <button
+                            key={r.rowId}
+                            type="button"
+                            onClick={() => setInboundBasketRowFilter(r.rowId)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
+                              inboundBasketRowFilter === r.rowId
+                                ? "bg-sky-600 text-white"
+                                : "bg-slate-800 text-slate-400 hover:text-white"
+                            }`}
+                          >
+                            แถว {r.rowId}
+                          </button>
+                        ))
+                      )}
                     </div>
 
                     <div className="grid grid-cols-5 gap-1 max-h-28 overflow-y-auto pr-0.5">
@@ -2105,6 +2311,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                               effectiveInboundWidthMm &&
                             slot.layer2.remainingWidthMm <
                               effectiveInboundWidthMm;
+                        const isOpposite = slot.side === "opposite";
                         return (
                           <button
                             key={slot.basketCode}
@@ -2112,17 +2319,29 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                             onClick={() =>
                               handleApplyBasketCodeInput(slot.basketCode)
                             }
-                            className={`px-1.5 py-1.5 rounded-lg border text-center text-[10px] font-bold cursor-pointer transition-all ${
+                            className={`px-1 py-1.5 rounded-lg border text-center text-[10px] font-bold cursor-pointer transition-all ${
                               isPicked
-                                ? "bg-blue-600 border-blue-300 text-white"
+                                ? isOpposite
+                                  ? "bg-cyan-600 border-cyan-300 text-white"
+                                  : "bg-blue-600 border-blue-300 text-white"
                                 : bothFull
                                 ? "bg-rose-950/50 border-rose-800/60 text-rose-300"
                                 : slot.hasAnyCoil
                                 ? "bg-slate-900 border-sky-700/50 text-sky-200 hover:border-sky-400"
+                                : isOpposite
+                                ? "bg-slate-900 border-cyan-900/70 text-cyan-300 hover:border-cyan-400"
                                 : "bg-slate-900 border-slate-800 text-emerald-300 hover:border-emerald-400"
                             }`}
                           >
-                            <div>{slot.rowId}{String(slot.slotNumber).padStart(2, "0")}</div>
+                            <div>
+                              {inboundBuildingLayout.dualRoadLayout
+                                ? `${slot.gateId}-${slot.rowId}${String(
+                                    slot.slotNumber
+                                  ).padStart(2, "0")}`
+                                : `${slot.rowId}${String(
+                                    slot.slotNumber
+                                  ).padStart(2, "0")}`}
+                            </div>
                             <div className="text-[9px] opacity-80">
                               {slot.totalCoils > 0
                                 ? `${slot.totalCoils}ม้วน`
@@ -2367,7 +2586,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 <div className="rounded-xl bg-slate-950 border border-slate-800 p-3 flex items-center justify-between">
                   <div>
                     <div className="text-[11px] font-bold text-slate-400">
-                      อาคาร {selectedSlot.buildingId} · แถว {selectedSlot.rowId} ช่อง{" "}
+                      อาคาร {selectedSlot.buildingId}
+                      {isDualRoadBuilding(selectedSlot.buildingId)
+                        ? ` · ประตู ${selectedSlot.gateId}`
+                        : ""}{" "}
+                      · แถว {selectedSlot.rowId} ช่อง{" "}
                       {String(selectedSlot.slotNumber).padStart(2, "0")}
                     </div>
                     <div className="text-lg font-black text-white font-mono">
@@ -2577,13 +2800,14 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
             <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
               {/* Building Quick Switcher inside Modal */}
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {BLUE_BASKET_BUILDINGS.map((bId) => (
                   <button
                     key={bId}
                     type="button"
                     onClick={() => {
                       setSelectedBuilding(bId);
+                      setRowManagerSide("primary");
                       setRowManagerError(null);
                       setNewRowLabel(
                         getNextAvailableRowId(
@@ -2602,6 +2826,51 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 ))}
               </div>
 
+              {/* Dual-Road Gate Switcher inside Row Manager for Building H2 (ประตู H2 vs ประตู H4) */}
+              {currentLayout.dualRoadLayout && (
+                <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRowManagerSide("primary");
+                      setRowManagerError(null);
+                      setNewRowLabel(
+                        getNextAvailableRowId(
+                          warehouseConfig.buildings[selectedBuilding].rows
+                        )
+                      );
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-colors ${
+                      rowManagerSide === "primary"
+                        ? "bg-amber-600 text-white"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    ฝั่งประตู {currentLayout.dualRoadLayout.primaryGateId} (ขวา)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRowManagerSide("opposite");
+                      setRowManagerError(null);
+                      setNewRowLabel(
+                        getNextAvailableRowId(
+                          warehouseConfig.buildings[selectedBuilding]
+                            .oppositeRows || []
+                        )
+                      );
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-extrabold cursor-pointer transition-colors ${
+                      rowManagerSide === "opposite"
+                        ? "bg-cyan-600 text-white"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    ฝั่งประตู {currentLayout.dualRoadLayout.oppositeGateId} (ตรงข้าม)
+                  </button>
+                </div>
+              )}
+
               {rowManagerError && (
                 <div className="rounded-xl bg-rose-500/15 border border-rose-500/40 px-3 py-2 text-xs font-bold text-rose-200 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
@@ -2611,83 +2880,110 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
               {/* Existing Rows List */}
               <div className="space-y-2">
-                {currentLayout.rowPositions.map((rp) => (
-                  <div
-                    key={rp.rowId}
-                    className="rounded-xl bg-slate-950 border border-slate-800 px-3 py-2.5 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <div className="text-sm font-black text-white flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-xs">
-                          แถว {rp.rowId}
-                        </span>
-                        <span className="text-xs font-mono text-slate-400">
-                          {formatBasketCode(selectedBuilding, rp.rowId, 1)} –{" "}
-                          {formatBasketCode(
-                            selectedBuilding,
-                            rp.rowId,
-                            rp.slotCount
-                          )}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        ใช้งาน {rp.occupiedSlots}/{rp.slotCount} ช่อง ·{" "}
-                        {rp.totalCoils} ม้วนสลิต
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-1">
-                        <button
-                          type="button"
-                          disabled={
-                            isSavingLayout || rp.slotCount <= MIN_SLOTS_PER_ROW
-                          }
-                          onClick={() => handleChangeRowSlotCount(rp.rowId, -1)}
-                          className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                          title="ลด 1 ช่อง"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="w-12 text-center text-xs font-black tabular-nums">
-                          {rp.slotCount} ช่อง
-                        </span>
-                        <button
-                          type="button"
-                          disabled={
-                            isSavingLayout || rp.slotCount >= MAX_SLOTS_PER_ROW
-                          }
-                          onClick={() => handleChangeRowSlotCount(rp.rowId, 1)}
-                          className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
-                          title="เพิ่ม 1 ช่อง"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
+                {currentLayout.rowPositions
+                  .filter(
+                    (rp) =>
+                      !currentLayout.dualRoadLayout ||
+                      rp.side === rowManagerSide
+                  )
+                  .map((rp) => (
+                    <div
+                      key={`${rp.gateId}:${rp.rowId}`}
+                      className="rounded-xl bg-slate-950 border border-slate-800 px-3 py-2.5 flex items-center justify-between gap-3"
+                    >
+                      <div>
+                        <div className="text-sm font-black text-white flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-xs ${
+                              rp.side === "opposite"
+                                ? "bg-cyan-500/20 text-cyan-300"
+                                : "bg-amber-500/20 text-amber-300"
+                            }`}
+                          >
+                            {currentLayout.dualRoadLayout
+                              ? `ประตู ${rp.gateId} · แถว ${rp.rowId}`
+                              : `แถว ${rp.rowId}`}
+                          </span>
+                          <span className="text-xs font-mono text-slate-400">
+                            {formatBasketCode(rp.gateId, rp.rowId, 1)} –{" "}
+                            {formatBasketCode(
+                              rp.gateId,
+                              rp.rowId,
+                              rp.slotCount
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          ใช้งาน {rp.occupiedSlots}/{rp.slotCount} ช่อง ·{" "}
+                          {rp.totalCoils} ม้วนสลิต
+                        </div>
                       </div>
 
-                      <button
-                        type="button"
-                        disabled={isSavingLayout || rp.totalCoils > 0}
-                        onClick={() => handleDeleteRow(rp.rowId)}
-                        className="p-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 disabled:opacity-30 disabled:cursor-not-allowed text-rose-300 cursor-pointer"
-                        title={
-                          rp.totalCoils > 0
-                            ? "ลบไม่ได้เพราะมีม้วนเหล็กวางอยู่ในแถวนี้"
-                            : `ลบแถว ${rp.rowId}`
-                        }
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 rounded-lg p-1">
+                          <button
+                            type="button"
+                            disabled={
+                              isSavingLayout ||
+                              rp.slotCount <= MIN_SLOTS_PER_ROW
+                            }
+                            onClick={() =>
+                              handleChangeRowSlotCount(rp.rowId, -1, rp.side)
+                            }
+                            className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                            title="ลด 1 ช่อง"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-12 text-center text-xs font-black tabular-nums">
+                            {rp.slotCount} ช่อง
+                          </span>
+                          <button
+                            type="button"
+                            disabled={
+                              isSavingLayout ||
+                              rp.slotCount >= MAX_SLOTS_PER_ROW
+                            }
+                            onClick={() =>
+                              handleChangeRowSlotCount(rp.rowId, 1, rp.side)
+                            }
+                            className="p-1 rounded hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                            title="เพิ่ม 1 ช่อง"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={isSavingLayout || rp.totalCoils > 0}
+                          onClick={() => handleDeleteRow(rp.rowId, rp.side)}
+                          className="p-2 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 disabled:opacity-30 disabled:cursor-not-allowed text-rose-300 cursor-pointer"
+                          title={
+                            rp.totalCoils > 0
+                              ? "ลบไม่ได้เพราะมีม้วนเหล็กวางอยู่ในแถวนี้"
+                              : `ลบแถว ${rp.rowId}`
+                          }
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
 
               {/* Add New Row Form (Blue Basket buildings E9/H2/F only — E10 is fixed single ROW A against left wall) */}
               {!isCurrentCradle && (
                 <div className="rounded-xl bg-slate-950 border border-emerald-600/40 p-3 space-y-2">
                   <div className="text-xs font-extrabold text-emerald-400">
-                    + เพิ่มแถวตะกร้าใหม่ในอาคาร {selectedBuilding}
+                    + เพิ่มแถวตะกร้าใหม่ใน
+                    {currentLayout.dualRoadLayout
+                      ? `ฝั่งประตู ${
+                          rowManagerSide === "opposite"
+                            ? currentLayout.dualRoadLayout.oppositeGateId
+                            : currentLayout.dualRoadLayout.primaryGateId
+                        }`
+                      : `อาคาร ${selectedBuilding}`}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <input
@@ -2740,6 +3036,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 <span>
                   {isCurrentCradle
                     ? "รีเซ็ตเป็นแถว A (8 แคร่)"
+                    : currentLayout.dualRoadLayout
+                    ? "รีเซ็ตประตู H2 & H4 เป็น A–D (ฝั่งละ 40 ช่อง)"
                     : "รีเซ็ตเป็น A–D (แถวละ 10 ช่อง)"}
                 </span>
               </button>
