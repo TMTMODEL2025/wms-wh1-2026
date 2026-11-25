@@ -17,8 +17,11 @@ import {
   RefreshCw,
   ChevronDown,
   History,
+  Check,
+  Truck,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
+import { isTrailerVehicle } from "../utils/vehicleHelpers";
 import {
   MhTireStockRecord,
   subscribeToMhTireStock,
@@ -71,6 +74,8 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const [tireQty, setTireQty] = useState<string>("");
   const [tireUnitCost, setTireUnitCost] = useState<string>("");
   const [tireSupplierOrInvoice, setTireSupplierOrInvoice] = useState<string>("");
+  const [selectedCompatibleVehicles, setSelectedCompatibleVehicles] = useState<string[]>([]);
+  const [vehicleFilterQuery, setVehicleFilterQuery] = useState<string>("");
   const [tireVehicleId, setTireVehicleId] = useState<string>("");
   const [tireWheelPosition, setTireWheelPosition] = useState<string>("");
   const [tireOperatingHours, setTireOperatingHours] = useState<string>("");
@@ -132,6 +137,8 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
     setTireQty("");
     setTireUnitCost("");
     setTireSupplierOrInvoice("");
+    setSelectedCompatibleVehicles([]);
+    setVehicleFilterQuery("");
     setTireVehicleId("");
     setTireWheelPosition("");
     setTireOperatingHours("");
@@ -175,6 +182,95 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
     });
     return map;
   }, [tireRecords]);
+
+  // Fleet split cleanly into drivable vehicles (รถใช้งาน) vs trailers (หางลาก TTL)
+  const { drivableVehicles, trailerVehicles, vehicleById } = useMemo(() => {
+    const sorted = [...vehicles].sort((a, b) =>
+      a.vehicleId.localeCompare(b.vehicleId, undefined, { numeric: true, sensitivity: "base" })
+    );
+    const drivable: Vehicle[] = [];
+    const trailers: Vehicle[] = [];
+    const lookup = new Map<string, Vehicle>();
+    sorted.forEach((v) => {
+      lookup.set(v.vehicleId, v);
+      if (isTrailerVehicle(v)) {
+        trailers.push(v);
+      } else {
+        drivable.push(v);
+      }
+    });
+    return { drivableVehicles: drivable, trailerVehicles: trailers, vehicleById: lookup };
+  }, [vehicles]);
+
+  const isTrailerId = (id: string): boolean => {
+    const matched = vehicleById.get(id);
+    if (matched) return isTrailerVehicle(matched);
+    return id.trim().toUpperCase().startsWith("TTL");
+  };
+
+  // Aggregated compatible vehicles & trailers per tireSize from Cloud history
+  const compatibleVehiclesBySize = useMemo(() => {
+    const map = new Map<string, string[]>();
+    tireRecords.forEach((tr) => {
+      const key = (tr.tireSize || "").trim();
+      if (!key || key === "-" || !Array.isArray(tr.compatibleVehicles) || tr.compatibleVehicles.length === 0) {
+        return;
+      }
+      const existing = new Set<string>(map.get(key) || []);
+      tr.compatibleVehicles.forEach((vid) => {
+        const clean = vid.trim();
+        if (clean) existing.add(clean);
+      });
+      const sortedList = Array.from(existing).sort((a, b) => {
+        const aIsTrailer = isTrailerId(a);
+        const bIsTrailer = isTrailerId(b);
+        if (aIsTrailer !== bIsTrailer) return aIsTrailer ? 1 : -1;
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+      });
+      map.set(key, sortedList);
+    });
+    return map;
+  }, [tireRecords, vehicleById]);
+
+  const filteredDrivableVehicles = useMemo(() => {
+    const q = vehicleFilterQuery.trim().toLowerCase();
+    if (!q) return drivableVehicles;
+    return drivableVehicles.filter(
+      (v) =>
+        v.vehicleId.toLowerCase().includes(q) ||
+        (v.vehicleType || "").toLowerCase().includes(q) ||
+        (v.description || "").toLowerCase().includes(q)
+    );
+  }, [drivableVehicles, vehicleFilterQuery]);
+
+  const filteredTrailerVehicles = useMemo(() => {
+    const q = vehicleFilterQuery.trim().toLowerCase();
+    if (!q) return trailerVehicles;
+    return trailerVehicles.filter(
+      (v) =>
+        v.vehicleId.toLowerCase().includes(q) ||
+        (v.vehicleType || "").toLowerCase().includes(q) ||
+        (v.description || "").toLowerCase().includes(q)
+    );
+  }, [trailerVehicles, vehicleFilterQuery]);
+
+  const toggleCompatibleVehicle = (vehicleId: string) => {
+    setSelectedCompatibleVehicles((prev) =>
+      prev.includes(vehicleId) ? prev.filter((id) => id !== vehicleId) : [...prev, vehicleId]
+    );
+  };
+
+  const toggleGroupSelection = (groupIds: string[]) => {
+    if (groupIds.length === 0) return;
+    setSelectedCompatibleVehicles((prev) => {
+      const allSelected = groupIds.every((id) => prev.includes(id));
+      if (allSelected) {
+        return prev.filter((id) => !groupIds.includes(id));
+      }
+      const merged = new Set([...prev, ...groupIds]);
+      return Array.from(merged);
+    });
+  };
 
   // Distinct Tire Sizes & Brands fetched from Cloud records for next-time selection
   const cloudTireSizeOptions = useMemo(() => {
@@ -288,6 +384,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
         tr.tireSize.toLowerCase().includes(q) ||
         tr.brand.toLowerCase().includes(q) ||
         (tr.vehicleId || "").toLowerCase().includes(q) ||
+        (tr.compatibleVehicles || []).join(" ").toLowerCase().includes(q) ||
         (tr.supplierOrInvoice || "").toLowerCase().includes(q) ||
         tr.technicianOrReceiver.toLowerCase().includes(q)
     );
@@ -327,6 +424,15 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
       totalCost: safeQty * safeUnit,
       supplierOrInvoice:
         tireTxType === "Inbound" ? tireSupplierOrInvoice.trim() : undefined,
+      compatibleVehicles:
+        tireTxType === "Inbound" && selectedCompatibleVehicles.length > 0
+          ? [...selectedCompatibleVehicles].sort((a, b) => {
+              const aIsTrailer = isTrailerId(a);
+              const bIsTrailer = isTrailerId(b);
+              if (aIsTrailer !== bIsTrailer) return aIsTrailer ? 1 : -1;
+              return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+            })
+          : undefined,
       vehicleId: tireTxType === "Outbound" ? tireVehicleId : undefined,
       vehicleNumber: tireTxType === "Outbound" ? tireVehicleId : undefined,
       wheelPosition: tireTxType === "Outbound" ? tireWheelPosition : undefined,
@@ -344,13 +450,18 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
     resetModalFields();
     await saveMhTireTransactionToCloud(newTireRecord);
 
+    const compatSuffix =
+      newTireRecord.compatibleVehicles && newTireRecord.compatibleVehicles.length > 0
+        ? ` · ใช้กับ: ${newTireRecord.compatibleVehicles.join(", ")}`
+        : "";
+
     void appendWmsActivityLog({
       module: "สต๊อกยางโฟล์คลิฟท์",
       sectionId: "fleet_ops",
       reference: txId,
       activity:
         tireTxType === "Inbound"
-          ? `รับเข้ายาง ${cleanSize} (${cleanBrand}) จำนวน ${safeQty} เส้น (${newTireRecord.supplierOrInvoice || "-"})`
+          ? `รับเข้ายาง ${cleanSize} (${cleanBrand}) จำนวน ${safeQty} เส้น (${newTireRecord.supplierOrInvoice || "-"}${compatSuffix})`
           : `เบิกเปลี่ยนยาง ${cleanSize} (${cleanBrand}) จำนวน ${safeQty} เส้น รถ ${newTireRecord.vehicleId || "-"}`,
       status: "Completed",
     });
@@ -433,30 +544,58 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
               ยังไม่มีรายการขนาดยางในสต๊อก กด "+ รับเข้ายางใหม่ (Inbound)" เพื่อบันทึกขนาดยางและยี่ห้อลงคลาวด์
             </div>
           ) : (
-            Array.from(tireStockBySize.entries()).map(([sizeLabel, stats]) => (
-              <div
-                key={sizeLabel}
-                className="p-3 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]"
-              >
-                <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                  {sizeLabel}
+            Array.from(tireStockBySize.entries()).map(([sizeLabel, stats]) => {
+              const compatList = compatibleVehiclesBySize.get(sizeLabel) || [];
+              return (
+                <div
+                  key={sizeLabel}
+                  className="p-3 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33] flex flex-col justify-between gap-2"
+                >
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                      {sizeLabel}
+                    </div>
+                    <div className="flex justify-between items-baseline mt-1.5 tabular-nums">
+                      <span
+                        className={`text-lg font-extrabold ${
+                          stats.balance > 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-slate-500 dark:text-slate-400"
+                        }`}
+                      >
+                        {stats.balance} <span className="text-[11px] font-semibold">เส้น</span>
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        รับ +{stats.inbound} · เบิก -{stats.outbound}
+                      </span>
+                    </div>
+                  </div>
+
+                  {compatList.length > 0 && (
+                    <div className="pt-2 border-t border-slate-200/80 dark:border-[#1e3a5f] flex flex-wrap items-center gap-1">
+                      <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mr-0.5">
+                        ใช้กับ:
+                      </span>
+                      {compatList.map((vid) => {
+                        const trailer = isTrailerId(vid);
+                        return (
+                          <span
+                            key={vid}
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border tabular-nums ${
+                              trailer
+                                ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                : "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                            }`}
+                          >
+                            {vid}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-                <div className="flex justify-between items-baseline mt-1.5 tabular-nums">
-                  <span
-                    className={`text-lg font-extrabold ${
-                      stats.balance > 0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-slate-500 dark:text-slate-400"
-                    }`}
-                  >
-                    {stats.balance} <span className="text-[11px] font-semibold">เส้น</span>
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    รับ +{stats.inbound} · เบิก -{stats.outbound}
-                  </span>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -468,7 +607,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
             />
             <input
               type="text"
-              placeholder="ค้นหาเลขที่รายการ, ขนาดยาง, ยี่ห้อ, เบอร์รถ, ช่างผู้เบิก..."
+              placeholder="ค้นหาเลขที่รายการ, ขนาดยาง, ยี่ห้อ, เบอร์รถ/หางลาก, ช่างผู้เบิก..."
               value={tireSearchQuery}
               onChange={(e) => setTireSearchQuery(e.target.value)}
               className="field w-full font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
@@ -478,23 +617,24 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
+          <table className="ts-stats-table w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 text-left">
-                <th className="py-3 px-4 font-bold">เลขที่รายการ & วัน-เวลา</th>
-                <th className="py-3 px-4 font-bold">ประเภท</th>
-                <th className="py-3 px-4 font-bold">ขนาดยาง & ยี่ห้อ</th>
-                <th className="py-3 px-4 font-bold text-right">จำนวน (เส้น)</th>
-                <th className="py-3 px-4 font-bold text-right">ราคา/หน่วย & รวม</th>
-                <th className="py-3 px-4 font-bold">รถโฟล์คลิฟท์ / แหล่งที่มา</th>
-                <th className="py-3 px-4 font-bold">ผู้รับผิดชอบ / หมายเหตุ</th>
-                <th className="py-3 px-4 font-bold text-right">จัดการ</th>
+              <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                <th className="ts-left font-bold whitespace-nowrap">เลขที่รายการ & วัน-เวลา</th>
+                <th className="ts-center font-bold whitespace-nowrap">ประเภท</th>
+                <th className="ts-left font-bold whitespace-nowrap">ขนาดยาง & ยี่ห้อ</th>
+                <th className="ts-right font-bold whitespace-nowrap">จำนวน (เส้น)</th>
+                <th className="ts-right font-bold whitespace-nowrap">ราคา/หน่วย & รวม</th>
+                <th className="ts-left font-bold whitespace-nowrap">รถ / หางลาก</th>
+                <th className="ts-left font-bold whitespace-nowrap">แหล่งที่มา</th>
+                <th className="ts-left font-bold whitespace-nowrap">ผู้รับผิดชอบ / หมายเหตุ</th>
+                <th className="ts-center font-bold whitespace-nowrap">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
               {filteredTireRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-10 text-center text-slate-500 dark:text-slate-400">
+                  <td colSpan={9} className="ts-center py-10 text-slate-500 dark:text-slate-400">
                     ยังไม่มีประวัติรายการสต๊อกยางในฐานข้อมูล (mh_tire_stock)
                   </td>
                 </tr>
@@ -504,7 +644,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                     key={tr.id}
                     className="hover:bg-slate-50 dark:hover:bg-[#162744]/60 transition-colors"
                   >
-                    <td className="py-3 px-4">
+                    <td className="ts-left whitespace-nowrap">
                       <div className="font-bold text-[#087eaf] dark:text-sky-400 tabular-nums">
                         {tr.transactionNo}
                       </div>
@@ -512,7 +652,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         {tr.date} · {tr.time}
                       </div>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="ts-center whitespace-nowrap">
                       <span
                         className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${
                           tr.transactionType === "Inbound"
@@ -523,7 +663,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         {tr.transactionType === "Inbound" ? "+ รับเข้าสต๊อก" : "- เบิกเปลี่ยนยาง"}
                       </span>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="ts-left ts-wrap min-w-[160px]">
                       <div className="font-semibold text-slate-900 dark:text-slate-100">
                         {tr.tireSize}
                       </div>
@@ -531,7 +671,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         ยี่ห้อ: {tr.brand}
                       </div>
                     </td>
-                    <td className="py-3 px-4 text-right font-bold tabular-nums">
+                    <td className="ts-right font-bold tabular-nums whitespace-nowrap">
                       <span
                         className={
                           tr.transactionType === "Inbound"
@@ -543,7 +683,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         {tr.qty} เส้น
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right tabular-nums">
+                    <td className="ts-right tabular-nums whitespace-nowrap">
                       <div className="font-bold text-slate-900 dark:text-slate-100">
                         {tr.totalCost.toLocaleString()} บาท
                       </div>
@@ -551,7 +691,42 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         @{tr.unitCost.toLocaleString()} บาท
                       </div>
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="ts-left ts-wrap min-w-[170px]">
+                      {tr.transactionType === "Inbound" ? (
+                        tr.compatibleVehicles && tr.compatibleVehicles.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-1">
+                            {tr.compatibleVehicles.map((vid) => {
+                              const trailer = isTrailerId(vid);
+                              return (
+                                <span
+                                  key={vid}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border tabular-nums ${
+                                    trailer
+                                      ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                      : "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                                  }`}
+                                >
+                                  {vid}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 dark:text-slate-500">-</span>
+                        )
+                      ) : (
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                            {tr.vehicleId || "-"}
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {tr.wheelPosition || "-"}
+                            {tr.operatingHours ? ` · ${tr.operatingHours} ชม.` : ""}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                    <td className="ts-left ts-wrap min-w-[160px]">
                       {tr.transactionType === "Inbound" ? (
                         <div>
                           <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
@@ -562,18 +737,10 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                           </div>
                         </div>
                       ) : (
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-slate-100">
-                            {tr.vehicleId || "-"}
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {tr.wheelPosition || "-"}
-                            {tr.operatingHours ? ` · ${tr.operatingHours} ชม.` : ""}
-                          </div>
-                        </div>
+                        <span className="text-slate-400 dark:text-slate-500">-</span>
                       )}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className="ts-left ts-wrap min-w-[160px]">
                       <div className="font-semibold text-slate-800 dark:text-slate-200">
                         {tr.technicianOrReceiver}
                       </div>
@@ -583,9 +750,9 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-4 text-right">
+                    <td className="ts-center whitespace-nowrap">
                       {confirmDeleteId === tr.id ? (
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => handleDeleteTireRecord(tr.id)}
@@ -622,9 +789,9 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
 
       {/* Tire Stock Inbound / Outbound Modal */}
       {isTireModalOpen && (
-        <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex justify-between items-center">
+        <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-2xl max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)] flex flex-col min-h-0 overflow-hidden shadow-xl">
+            <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex justify-between items-center">
               <div>
                 <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
                   {tireTxType === "Inbound"
@@ -646,8 +813,9 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
 
             <form
               onSubmit={handleCreateTireTransaction}
-              className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs"
+              className="flex-1 min-h-0 flex flex-col overflow-hidden text-xs"
             >
+              <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 grid grid-cols-1 sm:grid-cols-2 gap-3.5 content-start">
               <div className="sm:col-span-2 flex gap-2">
                 <button
                   type="button"
@@ -722,6 +890,12 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                             e.preventDefault();
                             setTireSize(sz);
                             setShowSizeDropdown(false);
+                            if (tireTxType === "Inbound" && selectedCompatibleVehicles.length === 0) {
+                              const knownCompat = compatibleVehiclesBySize.get(sz);
+                              if (knownCompat && knownCompat.length > 0) {
+                                setSelectedCompatibleVehicles(knownCompat);
+                              }
+                            }
                           }}
                           className="w-full px-3 py-2 text-left text-xs hover:bg-sky-50 dark:hover:bg-[#162744] flex items-center justify-between gap-2 border-b last:border-b-0 border-slate-100 dark:border-[#1e3a5f]/60"
                         >
@@ -828,24 +1002,190 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
               </div>
 
               {tireTxType === "Inbound" ? (
-                <div className="sm:col-span-2">
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    ผู้จัดจำหน่าย / เลขที่ใบส่งของ (Supplier / Invoice No.) *
-                  </label>
-                  <input
-                    type="text"
-                    value={tireSupplierOrInvoice}
-                    onChange={(e) => setTireSupplierOrInvoice(e.target.value)}
-                    placeholder="เช่น บจก. สยามไทร์ / INV-2026-089"
-                    required
-                    className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                  />
-                </div>
+                <>
+                  <div className="sm:col-span-2">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      ผู้จัดจำหน่าย / เลขที่ใบส่งของ (Supplier / Invoice No.) *
+                    </label>
+                    <input
+                      type="text"
+                      value={tireSupplierOrInvoice}
+                      onChange={(e) => setTireSupplierOrInvoice(e.target.value)}
+                      placeholder="เช่น บจก. สยามไทร์ / INV-2026-089"
+                      required
+                      className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  {/* Compatible Vehicles & Trailers Selector */}
+                  <div className="sm:col-span-2 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]/70 p-3 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <Truck size={14} className="text-[#087eaf] dark:text-sky-400 shrink-0" />
+                        <span className="font-bold text-slate-800 dark:text-slate-100">
+                          รถและหางลากที่ใช้ยางขนาดนี้ (เลือกได้หลายคัน)
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold tabular-nums">
+                          เลือกแล้ว {selectedCompatibleVehicles.length} รายการ
+                        </span>
+                      </div>
+                      {selectedCompatibleVehicles.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCompatibleVehicles([])}
+                          className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+                        >
+                          ล้างที่เลือกทั้งหมด
+                        </button>
+                      )}
+                    </div>
+
+                    {vehicles.length > 10 && (
+                      <div className="relative">
+                        <Search
+                          size={12}
+                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+                        />
+                        <input
+                          type="text"
+                          value={vehicleFilterQuery}
+                          onChange={(e) => setVehicleFilterQuery(e.target.value)}
+                          placeholder="กรองรหัสรถหรือหางลาก เช่น FL-01, TT-01, TTL-01..."
+                          className="w-full pl-7 pr-3 py-1.5 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-[11px] text-slate-900 dark:text-slate-100"
+                        />
+                      </div>
+                    )}
+
+                    {/* Group 1: รถใช้งาน (Forklift / Tractor / etc.) */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-sky-800 dark:text-sky-300">
+                          รถใช้งาน / โฟล์คลิฟท์ / หัวลาก ({filteredDrivableVehicles.length} คัน)
+                        </span>
+                        {filteredDrivableVehicles.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleGroupSelection(filteredDrivableVehicles.map((v) => v.vehicleId))
+                            }
+                            className="text-[10px] font-semibold text-[#087eaf] dark:text-sky-400 hover:underline"
+                          >
+                            {filteredDrivableVehicles.every((v) =>
+                              selectedCompatibleVehicles.includes(v.vehicleId)
+                            )
+                              ? "ยกเลิกกลุ่มนี้"
+                              : "เลือกทั้งหมดในกลุ่ม"}
+                          </button>
+                        )}
+                      </div>
+                      {filteredDrivableVehicles.length === 0 ? (
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500 py-1">
+                          ไม่พบรายการรถที่ตรงกับคำค้นหา
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto pr-0.5">
+                          {filteredDrivableVehicles.map((v) => {
+                            const selected = selectedCompatibleVehicles.includes(v.vehicleId);
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => toggleCompatibleVehicle(v.vehicleId)}
+                                title={`${v.vehicleId} - ${v.vehicleType}${v.description ? ` (${v.description})` : ""}`}
+                                className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded border text-left transition-colors ${
+                                  selected
+                                    ? "bg-sky-600 text-white border-sky-600 shadow-xs"
+                                    : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:border-sky-400 dark:hover:border-sky-500"
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-bold truncate tabular-nums">
+                                    {v.vehicleId}
+                                  </div>
+                                  <div
+                                    className={`text-[9px] truncate ${
+                                      selected ? "text-sky-100" : "text-slate-400 dark:text-slate-400"
+                                    }`}
+                                  >
+                                    {v.vehicleType}
+                                  </div>
+                                </div>
+                                {selected && <Check size={12} className="shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Group 2: หางลาก / เทรลเลอร์ (TTL) */}
+                    <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-[#1e3a5f]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                          หางลาก / เทรลเลอร์ (TTL) ({filteredTrailerVehicles.length} หาง)
+                        </span>
+                        {filteredTrailerVehicles.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleGroupSelection(filteredTrailerVehicles.map((v) => v.vehicleId))
+                            }
+                            className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+                          >
+                            {filteredTrailerVehicles.every((v) =>
+                              selectedCompatibleVehicles.includes(v.vehicleId)
+                            )
+                              ? "ยกเลิกกลุ่มนี้"
+                              : "เลือกทั้งหมดในกลุ่ม"}
+                          </button>
+                        )}
+                      </div>
+                      {filteredTrailerVehicles.length === 0 ? (
+                        <div className="text-[11px] text-slate-400 dark:text-slate-500 py-1">
+                          ไม่พบรายการหางลากที่ตรงกับคำค้นหา
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-28 overflow-y-auto pr-0.5">
+                          {filteredTrailerVehicles.map((v) => {
+                            const selected = selectedCompatibleVehicles.includes(v.vehicleId);
+                            return (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() => toggleCompatibleVehicle(v.vehicleId)}
+                                title={`${v.vehicleId} - ${v.vehicleType}${v.description ? ` (${v.description})` : ""}`}
+                                className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded border text-left transition-colors ${
+                                  selected
+                                    ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                                    : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:border-amber-400 dark:hover:border-amber-500"
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="text-[11px] font-bold truncate tabular-nums">
+                                    {v.vehicleId}
+                                  </div>
+                                  <div
+                                    className={`text-[9px] truncate ${
+                                      selected ? "text-amber-100" : "text-slate-400 dark:text-slate-400"
+                                    }`}
+                                  >
+                                    {v.description || "หางลาก / เทรลเลอร์"}
+                                  </div>
+                                </div>
+                                {selected && <Check size={12} className="shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      รถโฟล์คลิฟท์ที่เปลี่ยนยาง *
+                      รถโฟล์คลิฟท์ / หางลากที่เปลี่ยนยาง *
                     </label>
                     <select
                       value={tireVehicleId}
@@ -853,12 +1193,43 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                       required
                       className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
                     >
-                      <option value="">— เลือกรถโฟล์คลิฟท์ —</option>
-                      {vehicles.map((v) => (
-                        <option key={v.id} value={v.vehicleId}>
-                          {v.vehicleId} - {v.vehicleType} ({v.description})
-                        </option>
-                      ))}
+                      <option value="">— เลือกรถ / หางลาก —</option>
+                      {drivableVehicles.length > 0 && (
+                        <optgroup label="รถใช้งาน / โฟล์คลิฟท์ / หัวลาก">
+                          {drivableVehicles.map((v) => {
+                            const isCompat =
+                              tireSize.trim() &&
+                              (compatibleVehiclesBySize.get(tireSize.trim()) || []).includes(
+                                v.vehicleId
+                              );
+                            return (
+                              <option key={v.id} value={v.vehicleId}>
+                                {v.vehicleId} - {v.vehicleType}
+                                {v.description ? ` (${v.description})` : ""}
+                                {isCompat ? " ★ ใช้ยางขนาดนี้" : ""}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+                      )}
+                      {trailerVehicles.length > 0 && (
+                        <optgroup label="หางลาก / เทรลเลอร์ (TTL)">
+                          {trailerVehicles.map((v) => {
+                            const isCompat =
+                              tireSize.trim() &&
+                              (compatibleVehiclesBySize.get(tireSize.trim()) || []).includes(
+                                v.vehicleId
+                              );
+                            return (
+                              <option key={v.id} value={v.vehicleId}>
+                                {v.vehicleId} - {v.vehicleType}
+                                {v.description ? ` (${v.description})` : ""}
+                                {isCompat ? " ★ ใช้ยางขนาดนี้" : ""}
+                              </option>
+                            );
+                          })}
+                        </optgroup>
+                      )}
                     </select>
                   </div>
                   <div>
@@ -1037,11 +1408,13 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                 </div>
               )}
 
-              <div className="sm:col-span-2 flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#1e3a5f]">
+              </div>
+
+              <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50/90 dark:bg-[#0d1b33] flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsTireModalOpen(false)}
-                  className="px-4 py-2 rounded-md border border-slate-300 dark:border-[#1e3a5f] font-semibold"
+                  className="px-4 py-2 rounded-md border border-slate-300 dark:border-[#1e3a5f] font-semibold bg-white dark:bg-[#111e38]"
                 >
                   ยกเลิก
                 </button>

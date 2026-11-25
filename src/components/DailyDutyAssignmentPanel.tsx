@@ -217,7 +217,19 @@ export function DailyDutyAssignmentPanel({
   };
 
   const activeVehicles = useMemo(
-    () => vehicles.filter((v) => v.activeStatus === "Active"),
+    () =>
+      vehicles.filter((v) => {
+        if (v.activeStatus !== "Active") return false;
+        const code = String(v.vehicleId || v.number || "").trim().toUpperCase();
+        if (!code || code.startsWith("TTL") || v.vehicleType === "Trailer") {
+          return false;
+        }
+        return (
+          code.startsWith("TT-") ||
+          code.startsWith("FL-") ||
+          code.startsWith("SC")
+        );
+      }),
     [vehicles]
   );
 

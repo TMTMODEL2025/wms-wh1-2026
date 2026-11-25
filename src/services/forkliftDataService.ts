@@ -381,6 +381,7 @@ export interface MhTireStockRecord {
   unitCost: number;
   totalCost: number;
   supplierOrInvoice?: string;
+  compatibleVehicles?: string[]; // รายการรถและหางลากที่ใช้ยางขนาดนี้ (เช่น FL-01, TT-01, TTL-01)
   vehicleId?: string;
   vehicleNumber?: string;
   wheelPosition?: string; // e.g. "ล้อหน้าซ้าย (FL)", "ล้อหน้าขวา (FR)", "ล้อหลังซ้าย (RL)", "ล้อหลังขวา (RR)", "ครบชุด 4 ล้อ"
@@ -1635,6 +1636,16 @@ function sanitizeMhTireStockPayload(r: MhTireStockRecord): MhTireStockRecord {
       ? r.totalCost
       : safeQty * safeUnitCost;
 
+  const safeCompatibleVehicles = Array.isArray(r.compatibleVehicles)
+    ? Array.from(
+        new Set(
+          r.compatibleVehicles
+            .map((v) => String(v || "").trim().slice(0, 64))
+            .filter(Boolean)
+        )
+      ).slice(0, 100)
+    : [];
+
   return stripUndefinedDeep({
     id: docId,
     transactionNo: String(r.transactionNo || docId).trim().slice(0, 64),
@@ -1649,6 +1660,8 @@ function sanitizeMhTireStockPayload(r: MhTireStockRecord): MhTireStockRecord {
     supplierOrInvoice: r.supplierOrInvoice
       ? String(r.supplierOrInvoice).trim().slice(0, 128)
       : undefined,
+    compatibleVehicles:
+      safeCompatibleVehicles.length > 0 ? safeCompatibleVehicles : undefined,
     vehicleId: r.vehicleId ? String(r.vehicleId).trim().slice(0, 64) : undefined,
     vehicleNumber: r.vehicleNumber ? String(r.vehicleNumber).trim().slice(0, 64) : undefined,
     wheelPosition: r.wheelPosition ? String(r.wheelPosition).trim().slice(0, 64) : undefined,
