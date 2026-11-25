@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   BASKET_HEIGHT_Y,
   BASKET_INNER_WIDTH_X,
@@ -256,9 +257,122 @@ function createFloorConcreteTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+function createExteriorRoadTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  canvas.height = 384;
+  const ctx = canvas.getContext("2d")!;
+
+  // Dark outdoor weathered asphalt
+  ctx.fillStyle = "#1f2530";
+  ctx.fillRect(0, 0, 1024, 384);
+
+  // Subtle asphalt aggregate texture
+  for (let i = 0; i < 1800; i++) {
+    const x = (i * 4999) % 1024;
+    const y = (i * 3187) % 384;
+    ctx.fillStyle =
+      i % 3 === 0 ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.09)";
+    ctx.fillRect(x, y, 3, 3);
+  }
+
+  // Solid white road edge shoulder lines (left & right shoulders)
+  ctx.fillStyle = "#e2e8f0";
+  ctx.fillRect(0, 20, 1024, 10);
+  ctx.fillRect(0, 354, 1024, 10);
+
+  // Dashed yellow two-way center divider
+  ctx.fillStyle = "#facc15";
+  for (let x = 24; x < 1024; x += 128) {
+    ctx.fillRect(x, 186, 68, 12);
+  }
+
+  // Subtle white directional arrows
+  const drawArrow = (cx: number, cy: number, dir: 1 | -1) => {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(dir, 1);
+    ctx.fillStyle = "rgba(241, 245, 249, 0.55)";
+    ctx.fillRect(-38, -7, 46, 14);
+    ctx.beginPath();
+    ctx.moveTo(8, -19);
+    ctx.lineTo(42, 0);
+    ctx.lineTo(8, 19);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+
+  drawArrow(260, 104, -1);
+  drawArrow(760, 104, -1);
+  drawArrow(260, 280, 1);
+  drawArrow(760, 280, 1);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.repeat.set(2, 1);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createRoadLabelTexture(buildingId: BlueBasketBuildingId): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 112;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(248, 250, 252, 0.78)";
+  ctx.font = "900 36px Inter, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`EXTERIOR ROAD · อาคาร ${buildingId} (แนวแถว A–D)`, 384, 58);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createFrontFacadeSignTexture(buildingId: BlueBasketBuildingId): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 112;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "#f59e0b";
+  ctx.lineWidth = 6;
+  ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+
+  ctx.fillStyle = "#f59e0b";
+  ctx.fillRect(14, 14, 96, 84);
+  ctx.fillStyle = "#0f172a";
+  ctx.font = "900 46px Inter, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(buildingId, 62, 58);
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "800 26px Inter, system-ui, sans-serif";
+  ctx.fillText(`BUILDING ${buildingId} · ROW A–D`, 128, 44);
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "700 19px Inter, system-ui, sans-serif";
+  ctx.fillText("OUTDOOR ROAD ACCESS", 128, 80);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 function createHollowCoilUnitGeometry(): THREE.BufferGeometry {
-  const outerR = 0.54;
-  const innerR = 0.2;
+  const outerR = 0.66;
+  const innerR = 0.25;
   const shape = new THREE.Shape();
   shape.absarc(0, 0, outerR, 0, Math.PI * 2, false);
   const hole = new THREE.Path();
@@ -303,29 +417,25 @@ export class BlueBasketSceneEngine {
   private dynamicMaterials: THREE.Material[] = [];
 
   private basketBlueMat: THREE.MeshStandardMaterial;
+  private basketBlueEmptyMat: THREE.MeshStandardMaterial;
   private basketBlueDimMat: THREE.MeshStandardMaterial;
   private basketPerforatedMat: THREE.MeshStandardMaterial;
   private basketVPlateMat: THREE.MeshStandardMaterial;
   private ghostLayer2Mat: THREE.MeshBasicMaterial;
+  private statusStripMats: Record<BasketLayerStatus, THREE.MeshBasicMaterial>;
+  private statusStripSelectedMat: THREE.MeshBasicMaterial;
+  private statusStripFocusedMat: THREE.MeshBasicMaterial;
   private coilUnitGeo: THREE.BufferGeometry;
   private coilMaterials: THREE.MeshStandardMaterial[];
   private coilPendingSapMat: THREE.MeshStandardMaterial;
   private floorConcreteTex: THREE.CanvasTexture;
+  private exteriorRoadTex: THREE.CanvasTexture;
 
-  // Shared basket frame part geometries
-  private postGeo: THREE.BoxGeometry;
-  private pinGeo: THREE.CylinderGeometry;
-  private collarGeo: THREE.CylinderGeometry;
-  private lugGeo: THREE.CylinderGeometry;
-  private baseRailXGeo: THREE.BoxGeometry;
-  private baseRailZGeo: THREE.BoxGeometry;
-  private subRibZGeo: THREE.BoxGeometry;
-  private perfBarXGeo: THREE.BoxGeometry;
-  private sideBarZGeo: THREE.BoxGeometry;
-  private diagStrutGeo: THREE.BoxGeometry;
-  private vPlateGeo: THREE.BoxGeometry;
-  private footPadGeo: THREE.BoxGeometry;
-  private statusStripGeo: THREE.BoxGeometry;
+  // Shared pre-merged blue basket geometries (4 draw calls per basket instead of 44)
+  private mergedFrameGeo: THREE.BufferGeometry;
+  private mergedPerfGeo: THREE.BufferGeometry;
+  private mergedVPlateGeo: THREE.BufferGeometry;
+  private mergedStatusStripGeo: THREE.BufferGeometry;
 
   private currentLayout: BuildingBasketLayout3D | null = null;
   private currentFilter: BasketSceneFilterState = {
@@ -375,7 +485,7 @@ export class BlueBasketSceneEngine {
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0f172a);
-    this.scene.fog = new THREE.Fog(0x0f172a, 52, 130);
+    this.scene.fog = new THREE.Fog(0x0f172a, 78, 185);
 
     // Metallic steel reflections via RoomEnvironment
     this.pmremGenerator = new THREE.PMREMGenerator(this.renderer);
@@ -429,12 +539,23 @@ export class BlueBasketSceneEngine {
     const perfTex = createPerforatedBarTexture();
     const wrapTex = createCoilWrapTexture();
     this.floorConcreteTex = createFloorConcreteTexture();
-    this.sharedTextures.push(perfTex, wrapTex, this.floorConcreteTex);
+    this.exteriorRoadTex = createExteriorRoadTexture();
+    this.sharedTextures.push(
+      perfTex,
+      wrapTex,
+      this.floorConcreteTex,
+      this.exteriorRoadTex
+    );
 
     this.basketBlueMat = new THREE.MeshStandardMaterial({
       color: 0x1d63b8,
       roughness: 0.42,
       metalness: 0.36,
+    });
+    this.basketBlueEmptyMat = new THREE.MeshStandardMaterial({
+      color: 0x1e5ca8,
+      roughness: 0.48,
+      metalness: 0.32,
     });
     this.basketBlueDimMat = new THREE.MeshStandardMaterial({
       color: 0x264366,
@@ -459,6 +580,15 @@ export class BlueBasketSceneEngine {
       transparent: true,
       opacity: 0.55,
     });
+    this.statusStripMats = {
+      EMPTY: new THREE.MeshBasicMaterial({ color: STATUS_COLORS.EMPTY }),
+      PARTIAL: new THREE.MeshBasicMaterial({ color: STATUS_COLORS.PARTIAL }),
+      NEAR_FULL: new THREE.MeshBasicMaterial({ color: STATUS_COLORS.NEAR_FULL }),
+      FULL: new THREE.MeshBasicMaterial({ color: STATUS_COLORS.FULL }),
+      OVERFLOW: new THREE.MeshBasicMaterial({ color: STATUS_COLORS.OVERFLOW }),
+    };
+    this.statusStripSelectedMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    this.statusStripFocusedMat = new THREE.MeshBasicMaterial({ color: 0xa855f7 });
 
     this.coilUnitGeo = createHollowCoilUnitGeometry();
     this.coilMaterials = STEEL_COIL_SHADES.map(
@@ -477,21 +607,119 @@ export class BlueBasketSceneEngine {
       metalness: 0.72,
     });
 
-    // Shared procedural blue basket geometries (100% matching the 3 reference images)
-    this.postGeo = new THREE.BoxGeometry(0.11, 1.24, 0.11);
-    this.pinGeo = new THREE.CylinderGeometry(0.022, 0.048, 0.16, 12);
-    this.collarGeo = new THREE.CylinderGeometry(0.064, 0.064, 0.06, 12);
-    this.lugGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.16, 10);
-    this.lugGeo.rotateZ(Math.PI / 2);
-    this.baseRailXGeo = new THREE.BoxGeometry(BASKET_OUTER_WIDTH_X, 0.09, 0.09);
-    this.baseRailZGeo = new THREE.BoxGeometry(0.09, 0.09, BASKET_OUTER_DEPTH_Z);
-    this.subRibZGeo = new THREE.BoxGeometry(0.07, 0.075, BASKET_OUTER_DEPTH_Z - 0.16);
-    this.perfBarXGeo = new THREE.BoxGeometry(BASKET_OUTER_WIDTH_X - 0.14, 0.085, 0.055);
-    this.sideBarZGeo = new THREE.BoxGeometry(0.065, 0.065, BASKET_OUTER_DEPTH_Z - 0.12);
-    this.diagStrutGeo = new THREE.BoxGeometry(0.065, 0.86, 0.065);
-    this.vPlateGeo = new THREE.BoxGeometry(BASKET_INNER_WIDTH_X + 0.02, 0.04, 0.52);
-    this.footPadGeo = new THREE.BoxGeometry(0.14, 0.06, 0.14);
-    this.statusStripGeo = new THREE.BoxGeometry(BASKET_OUTER_WIDTH_X - 0.22, 0.045, 0.04);
+    // Build pre-merged procedural square blue basket geometries (2.28m x 2.28m matching reference images)
+    const stampPart = (
+      src: THREE.BufferGeometry,
+      x: number,
+      y: number,
+      z: number,
+      rx = 0
+    ): THREE.BufferGeometry => {
+      const g = src.index ? src.toNonIndexed() : src.clone();
+      if (rx !== 0) g.rotateX(rx);
+      g.translate(x, y, z);
+      return g;
+    };
+
+    const postGeo = new THREE.BoxGeometry(0.11, 1.56, 0.11);
+    const pinGeo = new THREE.CylinderGeometry(0.024, 0.05, 0.18, 12);
+    const collarGeo = new THREE.CylinderGeometry(0.066, 0.066, 0.065, 12);
+    const lugGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.17, 10);
+    lugGeo.rotateZ(Math.PI / 2);
+    const baseRailXGeo = new THREE.BoxGeometry(BASKET_OUTER_WIDTH_X, 0.095, 0.095);
+    const baseRailZGeo = new THREE.BoxGeometry(0.095, 0.095, BASKET_OUTER_DEPTH_Z);
+    const subRibZGeo = new THREE.BoxGeometry(0.075, 0.08, BASKET_OUTER_DEPTH_Z - 0.18);
+    const perfBarXGeo = new THREE.BoxGeometry(BASKET_OUTER_WIDTH_X - 0.14, 0.095, 0.06);
+    const sideBarZGeo = new THREE.BoxGeometry(0.07, 0.07, BASKET_OUTER_DEPTH_Z - 0.14);
+    const diagStrutGeo = new THREE.BoxGeometry(0.07, 1.16, 0.07);
+    const vPlateGeo = new THREE.BoxGeometry(BASKET_INNER_WIDTH_X + 0.02, 0.045, 0.72);
+    const footPadGeo = new THREE.BoxGeometry(0.15, 0.06, 0.15);
+    const statusStripGeo = new THREE.BoxGeometry(BASKET_OUTER_WIDTH_X - 0.22, 0.05, 0.045);
+
+    const halfX = BASKET_OUTER_WIDTH_X / 2 - 0.055;
+    const halfZ = BASKET_OUTER_DEPTH_Z / 2 - 0.055;
+    const frameParts: THREE.BufferGeometry[] = [];
+
+    // 1. 4 Corner vertical square posts + conical stacking pins + lifting lugs
+    const corners: [number, number][] = [
+      [-halfX, -halfZ],
+      [halfX, -halfZ],
+      [-halfX, halfZ],
+      [halfX, halfZ],
+    ];
+    for (const [cx, cz] of corners) {
+      frameParts.push(stampPart(footPadGeo, cx, 0.03, cz));
+      frameParts.push(stampPart(postGeo, cx, 0.84, cz));
+      frameParts.push(stampPart(collarGeo, cx, 1.64, cz));
+      frameParts.push(stampPart(pinGeo, cx, 1.75, cz));
+      frameParts.push(stampPart(lugGeo, cx, 1.56, cz));
+    }
+
+    // 2. Bottom forklift perimeter frame (lower + upper base rails)
+    for (const yLevel of [0.09, 0.28]) {
+      frameParts.push(stampPart(baseRailXGeo, 0, yLevel, halfZ));
+      frameParts.push(stampPart(baseRailXGeo, 0, yLevel, -halfZ));
+      frameParts.push(stampPart(baseRailZGeo, -halfX, yLevel, 0));
+      frameParts.push(stampPart(baseRailZGeo, halfX, yLevel, 0));
+    }
+
+    // 4 Base cross-ribs under the coil cradle
+    for (const rx of [-0.72, -0.24, 0.24, 0.72]) {
+      frameParts.push(stampPart(subRibZGeo, rx, 0.11, 0));
+    }
+
+    // Mid-height end rails (left & right) + diagonal V-bracing struts
+    for (const sx of [-halfX, halfX]) {
+      frameParts.push(stampPart(sideBarZGeo, sx, 0.62, 0));
+      frameParts.push(stampPart(diagStrutGeo, sx, 0.82, 0.58, 0.5));
+      frameParts.push(stampPart(diagStrutGeo, sx, 0.82, -0.58, -0.5));
+    }
+
+    // 3. Perforated horizontal side cross-bars
+    const perfParts: THREE.BufferGeometry[] = [
+      stampPart(perfBarXGeo, 0, 1.26, halfZ),
+      stampPart(perfBarXGeo, 0, 1.26, -halfZ),
+    ];
+
+    // 4. Dark steel V-cradle inclined plates
+    const vPlateParts: THREE.BufferGeometry[] = [
+      stampPart(vPlateGeo, 0, 0.42, 0.48, -0.52),
+      stampPart(vPlateGeo, 0, 0.42, -0.48, 0.52),
+    ];
+
+    // 5. Capacity LED status strips on both perforated sides
+    const statusStripParts: THREE.BufferGeometry[] = [
+      stampPart(statusStripGeo, 0, 0.28, halfZ + 0.055),
+      stampPart(statusStripGeo, 0, 0.28, -halfZ - 0.055),
+    ];
+
+    this.mergedFrameGeo = mergeGeometries(frameParts, false)!;
+    this.mergedPerfGeo = mergeGeometries(perfParts, false)!;
+    this.mergedVPlateGeo = mergeGeometries(vPlateParts, false)!;
+    this.mergedStatusStripGeo = mergeGeometries(statusStripParts, false)!;
+
+    // Dispose temporary source & stamped geometries
+    for (const g of [
+      ...frameParts,
+      ...perfParts,
+      ...vPlateParts,
+      ...statusStripParts,
+      postGeo,
+      pinGeo,
+      collarGeo,
+      lugGeo,
+      baseRailXGeo,
+      baseRailZGeo,
+      subRibZGeo,
+      perfBarXGeo,
+      sideBarZGeo,
+      diagStrutGeo,
+      vPlateGeo,
+      footPadGeo,
+      statusStripGeo,
+    ]) {
+      g.dispose();
+    }
 
     this.scene.add(this.dynamicRoot);
 
@@ -611,27 +839,28 @@ export class BlueBasketSceneEngine {
   }
 
   public setCameraPreset(preset: BasketCameraPreset, instant = false): void {
-    const slabW = this.currentLayout?.slabWidth || 30;
-    const slabD = this.currentLayout?.slabDepth || 18;
-    const span = Math.max(slabW, slabD);
+    const slabW = this.currentLayout?.slabWidth || 34;
+    const slabD = this.currentLayout?.slabDepth || 22;
+    const span = Math.max(slabW + 6, slabD + 6);
 
-    const look = new THREE.Vector3(0, 1.1, 0);
+    // Shift look slightly toward -X so Row A-D labels + compact exterior road on the left edge are framed cleanly
+    const look = new THREE.Vector3(-2.0, 1.1, 0);
     const pos = new THREE.Vector3();
 
     switch (preset) {
       case "top":
-        pos.set(0, span * 1.15, 0.01);
+        pos.set(-2.0, span * 1.08, 0.01);
         break;
       case "front":
-        pos.set(0, 6.5, slabD * 0.95 + 10);
+        pos.set(-2.0, 7.2, slabD * 0.88 + 13);
         break;
       case "side":
-        pos.set(slabW * 0.78 + 10, 8.5, 0);
+        pos.set(-slabW * 0.72 - 14, 9.5, 0);
         break;
       case "isometric":
       case "reset":
       default:
-        pos.set(slabW * 0.48, Math.max(13, span * 0.44), slabD * 0.78 + 9);
+        pos.set(-slabW * 0.44 - 6, Math.max(14.5, span * 0.42), slabD * 0.85 + 11);
         break;
     }
 
@@ -705,124 +934,42 @@ export class BlueBasketSceneEngine {
     isFocused: boolean
   ): THREE.Group {
     const group = new THREE.Group();
-    const frameMat = dimmed ? this.basketBlueDimMat : this.basketBlueMat;
+    const isEmpty = layerState.coils.length === 0;
+    const frameMat = dimmed
+      ? this.basketBlueDimMat
+      : isEmpty
+      ? this.basketBlueEmptyMat
+      : this.basketBlueMat;
     const perfMat = dimmed ? this.basketBlueDimMat : this.basketPerforatedMat;
 
-    const halfX = BASKET_OUTER_WIDTH_X / 2 - 0.055;
-    const halfZ = BASKET_OUTER_DEPTH_Z / 2 - 0.055;
-
-    // 1. 4 Corner vertical square posts + conical stacking pins + lifting lugs
-    const corners: [number, number][] = [
-      [-halfX, -halfZ],
-      [halfX, -halfZ],
-      [-halfX, halfZ],
-      [halfX, halfZ],
-    ];
-    for (const [cx, cz] of corners) {
-      const foot = new THREE.Mesh(this.footPadGeo, frameMat);
-      foot.position.set(cx, 0.03, cz);
-      group.add(foot);
-
-      const post = new THREE.Mesh(this.postGeo, frameMat);
-      post.position.set(cx, 0.68, cz);
-      if (!this.isSoftwareGl && !dimmed) {
-        post.castShadow = true;
-        post.receiveShadow = true;
-      }
-      group.add(post);
-
-      const collar = new THREE.Mesh(this.collarGeo, frameMat);
-      collar.position.set(cx, 1.31, cz);
-      group.add(collar);
-
-      const pin = new THREE.Mesh(this.pinGeo, frameMat);
-      pin.position.set(cx, 1.4, cz);
-      group.add(pin);
-
-      const lug = new THREE.Mesh(this.lugGeo, frameMat);
-      lug.position.set(cx, 1.24, cz);
-      group.add(lug);
+    // 1. Merged blue steel frame (posts, stacking pins, lugs, base rails, ribs, side rails, V-bracing)
+    const frameMesh = new THREE.Mesh(this.mergedFrameGeo, frameMat);
+    if (!this.isSoftwareGl && !dimmed) {
+      frameMesh.castShadow = true;
+      frameMesh.receiveShadow = true;
     }
+    group.add(frameMesh);
 
-    // 2. Bottom forklift perimeter frame (lower + upper base rails like photo 1 & 2)
-    for (const yLevel of [0.09, 0.25]) {
-      const frontRail = new THREE.Mesh(this.baseRailXGeo, frameMat);
-      frontRail.position.set(0, yLevel, halfZ);
-      group.add(frontRail);
+    // 2. Merged perforated horizontal cross-bars
+    const perfMesh = new THREE.Mesh(this.mergedPerfGeo, perfMat);
+    group.add(perfMesh);
 
-      const backRail = new THREE.Mesh(this.baseRailXGeo, frameMat);
-      backRail.position.set(0, yLevel, -halfZ);
-      group.add(backRail);
-
-      const leftRail = new THREE.Mesh(this.baseRailZGeo, frameMat);
-      leftRail.position.set(-halfX, yLevel, 0);
-      group.add(leftRail);
-
-      const rightRail = new THREE.Mesh(this.baseRailZGeo, frameMat);
-      rightRail.position.set(halfX, yLevel, 0);
-      group.add(rightRail);
-    }
-
-    // 4 Base cross-ribs under the coil cradle
-    for (const rx of [-0.72, -0.24, 0.24, 0.72]) {
-      const rib = new THREE.Mesh(this.subRibZGeo, frameMat);
-      rib.position.set(rx, 0.11, 0);
-      group.add(rib);
-    }
-
-    // 3. Perforated horizontal side cross-bars (front & back, matching photo 1 & 2)
-    const frontPerf = new THREE.Mesh(this.perfBarXGeo, perfMat);
-    frontPerf.position.set(0, 1.04, halfZ);
-    group.add(frontPerf);
-
-    const backPerf = new THREE.Mesh(this.perfBarXGeo, perfMat);
-    backPerf.position.set(0, 1.04, -halfZ);
-    group.add(backPerf);
-
-    // Mid-height end rails (left & right)
-    for (const sx of [-halfX, halfX]) {
-      const midRail = new THREE.Mesh(this.sideBarZGeo, frameMat);
-      midRail.position.set(sx, 0.52, 0);
-      group.add(midRail);
-
-      // Diagonal V-bracing struts on both ends
-      const strutFront = new THREE.Mesh(this.diagStrutGeo, frameMat);
-      strutFront.position.set(sx, 0.66, 0.42);
-      strutFront.rotation.x = 0.42;
-      group.add(strutFront);
-
-      const strutBack = new THREE.Mesh(this.diagStrutGeo, frameMat);
-      strutBack.position.set(sx, 0.66, -0.42);
-      strutBack.rotation.x = -0.42;
-      group.add(strutBack);
-    }
-
-    // 4. Dark steel V-cradle inclined plates supporting the slit coils
+    // 3. Merged dark steel V-cradle inclined plates supporting the slit coils
     if (!dimmed) {
-      const frontVPlate = new THREE.Mesh(this.vPlateGeo, this.basketVPlateMat);
-      frontVPlate.position.set(0, 0.34, 0.34);
-      frontVPlate.rotation.x = -0.46;
-      group.add(frontVPlate);
-
-      const backVPlate = new THREE.Mesh(this.vPlateGeo, this.basketVPlateMat);
-      backVPlate.position.set(0, 0.34, -0.34);
-      backVPlate.rotation.x = 0.46;
-      group.add(backVPlate);
+      const vPlateMesh = new THREE.Mesh(this.mergedVPlateGeo, this.basketVPlateMat);
+      group.add(vPlateMesh);
     }
 
-    // 5. Capacity LED status strip on the front base rail
-    const stripColor = isFocused
-      ? 0xa855f7
+    // 4. Merged capacity LED status strips on both perforated sides
+    const stripMat = isFocused
+      ? this.statusStripFocusedMat
       : isSelected
-      ? 0x38bdf8
-      : STATUS_COLORS[layerState.status];
-    const stripMat = new THREE.MeshBasicMaterial({ color: stripColor });
-    this.dynamicMaterials.push(stripMat);
-    const strip = new THREE.Mesh(this.statusStripGeo, stripMat);
-    strip.position.set(0, 0.25, halfZ + 0.055);
-    group.add(strip);
+      ? this.statusStripSelectedMat
+      : this.statusStripMats[layerState.status];
+    const stripMesh = new THREE.Mesh(this.mergedStatusStripGeo, stripMat);
+    group.add(stripMesh);
 
-    // 6. Slit steel coils seated horizontally inside V-cradle proportional to width (mm / 1000)
+    // 5. Slit steel coils seated horizontally inside V-cradle proportional to width (mm / 1000)
     if (layerState.coils.length > 0) {
       let cursorX = -BASKET_INNER_WIDTH_X / 2;
       const maxSpan = BASKET_INNER_WIDTH_X;
@@ -841,7 +988,7 @@ export class BlueBasketSceneEngine {
 
         const coilMesh = new THREE.Mesh(this.coilUnitGeo, coilMat);
         coilMesh.scale.set(visualW, 1, 1);
-        coilMesh.position.set(cursorX + rawW / 2, 0.83, 0);
+        coilMesh.position.set(cursorX + rawW / 2, 0.99, 0);
         if (!this.isSoftwareGl && !dimmed) {
           coilMesh.castShadow = true;
           coilMesh.receiveShadow = true;
@@ -862,7 +1009,21 @@ export class BlueBasketSceneEngine {
 
     const { slabWidth, slabDepth, buildingId } = layout;
 
-    // 1. Industrial Concrete Floor Slab
+    // 0. Compact Exterior Industrial Site Ground Skirt (shifted slightly toward -X to cover road on Row A-D side)
+    const siteGroundGeo = new THREE.PlaneGeometry(slabWidth + 24, slabDepth + 16);
+    const siteGroundMat = new THREE.MeshStandardMaterial({
+      color: 0x162030,
+      roughness: 0.96,
+      metalness: 0.04,
+    });
+    this.dynamicGeometries.push(siteGroundGeo);
+    this.dynamicMaterials.push(siteGroundMat);
+    const siteGround = new THREE.Mesh(siteGroundGeo, siteGroundMat);
+    siteGround.rotation.x = -Math.PI / 2;
+    siteGround.position.set(-3.2, -0.05, 0);
+    this.dynamicRoot.add(siteGround);
+
+    // 1. Industrial Concrete Floor Slab (Building Interior)
     const floorGeo = new THREE.PlaneGeometry(slabWidth, slabDepth);
     const floorMat = new THREE.MeshStandardMaterial({
       map: this.floorConcreteTex,
@@ -876,13 +1037,26 @@ export class BlueBasketSceneEngine {
     floor.receiveShadow = !this.isSoftwareGl;
     this.dynamicRoot.add(floor);
 
-    // Safety yellow perimeter border on floor
+    // Building concrete foundation plinth edge so interior slab visibly stands apart from outdoor road
+    const plinthGeo = new THREE.BoxGeometry(slabWidth + 0.28, 0.08, slabDepth + 0.28);
+    const plinthMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.85,
+      metalness: 0.15,
+    });
+    this.dynamicGeometries.push(plinthGeo);
+    this.dynamicMaterials.push(plinthMat);
+    const plinth = new THREE.Mesh(plinthGeo, plinthMat);
+    plinth.position.set(0, -0.045, 0);
+    this.dynamicRoot.add(plinth);
+
+    // Safety yellow perimeter border inside the building floor
     const borderPts = [
-      new THREE.Vector3(-slabWidth / 2 + 0.6, 0.02, -slabDepth / 2 + 0.6),
-      new THREE.Vector3(slabWidth / 2 - 0.6, 0.02, -slabDepth / 2 + 0.6),
-      new THREE.Vector3(slabWidth / 2 - 0.6, 0.02, slabDepth / 2 - 0.6),
-      new THREE.Vector3(-slabWidth / 2 + 0.6, 0.02, slabDepth / 2 - 0.6),
-      new THREE.Vector3(-slabWidth / 2 + 0.6, 0.02, -slabDepth / 2 + 0.6),
+      new THREE.Vector3(-slabWidth / 2 + 0.55, 0.02, -slabDepth / 2 + 0.55),
+      new THREE.Vector3(slabWidth / 2 - 0.55, 0.02, -slabDepth / 2 + 0.55),
+      new THREE.Vector3(slabWidth / 2 - 0.55, 0.02, slabDepth / 2 - 0.55),
+      new THREE.Vector3(-slabWidth / 2 + 0.55, 0.02, slabDepth / 2 - 0.55),
+      new THREE.Vector3(-slabWidth / 2 + 0.55, 0.02, -slabDepth / 2 + 0.55),
     ];
     const borderGeo = new THREE.BufferGeometry().setFromPoints(borderPts);
     const borderMat = new THREE.LineBasicMaterial({ color: 0xf59e0b });
@@ -901,26 +1075,156 @@ export class BlueBasketSceneEngine {
     signMesh.position.set(0, 4.4, -slabDepth / 2 + 0.7);
     this.dynamicRoot.add(signMesh);
 
-    const gantryPostGeo = new THREE.BoxGeometry(0.24, 5.4, 0.24);
-    const gantryBeamGeo = new THREE.BoxGeometry(slabWidth - 1.4, 0.28, 0.28);
+    const gantryPostGeo = new THREE.BoxGeometry(0.26, 5.4, 0.26);
+    const gantryBeamGeo = new THREE.BoxGeometry(slabWidth - 0.8, 0.28, 0.28);
+    const sideHeaderBeamGeo = new THREE.BoxGeometry(0.28, 0.28, slabDepth - 0.8);
     const gantryMat = new THREE.MeshStandardMaterial({
       color: 0x334155,
       roughness: 0.6,
       metalness: 0.5,
     });
-    this.dynamicGeometries.push(gantryPostGeo, gantryBeamGeo);
-    this.dynamicMaterials.push(gantryMat);
+    const safetyPostGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.8, 10);
+    const safetyPostMat = new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      roughness: 0.45,
+      metalness: 0.25,
+    });
+    this.dynamicGeometries.push(
+      gantryPostGeo,
+      gantryBeamGeo,
+      sideHeaderBeamGeo,
+      safetyPostGeo
+    );
+    this.dynamicMaterials.push(gantryMat, safetyPostMat);
 
-    for (const gx of [-slabWidth / 2 + 0.8, slabWidth / 2 - 0.8]) {
+    for (const gx of [-slabWidth / 2 + 0.5, slabWidth / 2 - 0.5]) {
       const p = new THREE.Mesh(gantryPostGeo, gantryMat);
-      p.position.set(gx, 2.7, -slabDepth / 2 + 0.6);
+      p.position.set(gx, 2.7, -slabDepth / 2 + 0.5);
       this.dynamicRoot.add(p);
     }
     const topBeam = new THREE.Mesh(gantryBeamGeo, gantryMat);
-    topBeam.position.set(0, 5.4, -slabDepth / 2 + 0.6);
+    topBeam.position.set(0, 5.4, -slabDepth / 2 + 0.5);
     this.dynamicRoot.add(topBeam);
 
-    // 3. Row Header Badges (ROW A, ROW B, ROW C, ROW D...) on left aisle edge
+    // 2B. Building Entrance Portal along Row A–D Side (-X edge, separating building interior from exterior road)
+    const roadEdgeX = -slabWidth / 2;
+    const portalColumnsZ = [-slabDepth / 2 + 0.5, slabDepth / 2 - 0.5];
+    for (const pz of portalColumnsZ) {
+      const col = new THREE.Mesh(gantryPostGeo, gantryMat);
+      col.position.set(roadEdgeX, 2.7, pz);
+      this.dynamicRoot.add(col);
+    }
+    const sideHeaderBeam = new THREE.Mesh(sideHeaderBeamGeo, gantryMat);
+    sideHeaderBeam.position.set(roadEdgeX, 5.4, 0);
+    this.dynamicRoot.add(sideHeaderBeam);
+
+    // Exterior fascia sign on the Row A–D entrance portal facing outward toward the road (-X)
+    const frontSignTex = createFrontFacadeSignTexture(buildingId);
+    this.dynamicTextures.push(frontSignTex);
+    const frontSignGeo = new THREE.PlaneGeometry(5.6, 1.2);
+    const frontSignMat = new THREE.MeshBasicMaterial({
+      map: frontSignTex,
+      side: THREE.DoubleSide,
+    });
+    this.dynamicGeometries.push(frontSignGeo);
+    this.dynamicMaterials.push(frontSignMat);
+    const frontSignMesh = new THREE.Mesh(frontSignGeo, frontSignMat);
+    frontSignMesh.rotation.y = -Math.PI / 2;
+    frontSignMesh.position.set(roadEdgeX - 0.18, 4.95, 0);
+    this.dynamicRoot.add(frontSignMesh);
+
+    // 2C. Compact Exterior Sidewalk / Apron & Slim Outdoor Asphalt Road OUTSIDE the Row A–D Edge (-X)
+    const apronWidth = 1.25;
+    const roadWidth = 4.6; // Compact slim exterior road
+    const roadLength = slabDepth + 8.5;
+    const apronCenterX = roadEdgeX - apronWidth / 2;
+    const roadCenterX = roadEdgeX - apronWidth - roadWidth / 2;
+
+    // Exterior concrete apron/threshold between building edge and outdoor road
+    const apronGeo = new THREE.PlaneGeometry(apronWidth, roadLength);
+    const apronMat = new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      roughness: 0.9,
+      metalness: 0.06,
+    });
+    this.dynamicGeometries.push(apronGeo);
+    this.dynamicMaterials.push(apronMat);
+    const apronMesh = new THREE.Mesh(apronGeo, apronMat);
+    apronMesh.rotation.x = -Math.PI / 2;
+    apronMesh.position.set(apronCenterX, -0.012, 0);
+    this.dynamicRoot.add(apronMesh);
+
+    // Outer concrete road curb along the far side of the road + short curbs & yellow safety bollards at building ends
+    const farCurbGeo = new THREE.BoxGeometry(0.22, 0.12, roadLength);
+    const endCurbLen = 3.2;
+    const nearEndCurbGeo = new THREE.BoxGeometry(0.22, 0.12, endCurbLen);
+    const curbMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      roughness: 0.85,
+      metalness: 0.08,
+    });
+    this.dynamicGeometries.push(farCurbGeo, nearEndCurbGeo);
+    this.dynamicMaterials.push(curbMat);
+
+    const farCurb = new THREE.Mesh(farCurbGeo, curbMat);
+    farCurb.position.set(roadEdgeX - apronWidth - roadWidth - 0.11, 0.03, 0);
+    this.dynamicRoot.add(farCurb);
+
+    for (const side of [-1, 1]) {
+      const nearEndCurb = new THREE.Mesh(nearEndCurbGeo, curbMat);
+      nearEndCurb.position.set(
+        roadEdgeX - apronWidth + 0.11,
+        0.03,
+        side * (roadLength / 2 - endCurbLen / 2)
+      );
+      this.dynamicRoot.add(nearEndCurb);
+
+      const bollard = new THREE.Mesh(safetyPostGeo, safetyPostMat);
+      bollard.position.set(
+        roadEdgeX - apronWidth + 0.22,
+        0.4,
+        side * (slabDepth / 2 - 0.55)
+      );
+      this.dynamicRoot.add(bollard);
+    }
+
+    // Compact Outdoor Asphalt Road running parallel along the Row A–D badges (outside the building!)
+    const roadGeo = new THREE.PlaneGeometry(roadLength, roadWidth);
+    const roadMat = new THREE.MeshStandardMaterial({
+      map: this.exteriorRoadTex,
+      roughness: 0.92,
+      metalness: 0.05,
+    });
+    this.dynamicGeometries.push(roadGeo);
+    this.dynamicMaterials.push(roadMat);
+    const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+    roadMesh.rotation.x = -Math.PI / 2;
+    roadMesh.rotation.z = Math.PI / 2;
+    roadMesh.position.set(roadCenterX, -0.02, 0);
+    roadMesh.receiveShadow = !this.isSoftwareGl;
+    this.dynamicRoot.add(roadMesh);
+
+    // Compact road label painted parallel along the outer shoulder of the exterior road
+    const roadLabelTex = createRoadLabelTexture(buildingId);
+    this.dynamicTextures.push(roadLabelTex);
+    const roadLabelGeo = new THREE.PlaneGeometry(9.2, 1.35);
+    const roadLabelMat = new THREE.MeshBasicMaterial({
+      map: roadLabelTex,
+      transparent: true,
+    });
+    this.dynamicGeometries.push(roadLabelGeo);
+    this.dynamicMaterials.push(roadLabelMat);
+    const roadLabelMesh = new THREE.Mesh(roadLabelGeo, roadLabelMat);
+    roadLabelMesh.rotation.x = -Math.PI / 2;
+    roadLabelMesh.rotation.z = Math.PI / 2;
+    roadLabelMesh.position.set(
+      roadCenterX - roadWidth / 2 - 0.95,
+      -0.008,
+      0
+    );
+    this.dynamicRoot.add(roadLabelMesh);
+
+    // 3. Row Header Badges (ROW A, ROW B, ROW C, ROW D...) right along the -X road-facing edge
     const rowBadgeGeo = new THREE.PlaneGeometry(1.75, 0.88);
     this.dynamicGeometries.push(rowBadgeGeo);
     for (const rp of layout.rowPositions) {
@@ -930,22 +1234,22 @@ export class BlueBasketSceneEngine {
       this.dynamicMaterials.push(rMat);
       const badge = new THREE.Mesh(rowBadgeGeo, rMat);
       badge.rotation.x = -Math.PI / 2;
-      badge.position.set(-slabWidth / 2 + 2.05, 0.025, rp.worldZ);
+      badge.position.set(roadEdgeX + 1.55, 0.025, rp.worldZ);
       this.dynamicRoot.add(badge);
     }
 
-    // 4. Shared Floor Slot Pad & Hitbox Geometries
+    // 4. Shared Floor Slot Pad & Hitbox Geometries (square 2.28m x 2.28m footprint)
     const padGeo = new THREE.PlaneGeometry(
       BASKET_OUTER_WIDTH_X + 0.14,
       BASKET_OUTER_DEPTH_Z + 0.14
     );
-    const labelGeo = new THREE.PlaneGeometry(1.7, 0.62);
+    const labelGeo = new THREE.PlaneGeometry(1.75, 0.62);
     const hitGeo = new THREE.BoxGeometry(
       BASKET_OUTER_WIDTH_X + 0.08,
       BASKET_HEIGHT_Y,
       BASKET_OUTER_DEPTH_Z + 0.08
     );
-    const focusRingGeo = new THREE.RingGeometry(1.32, 1.54, 32);
+    const focusRingGeo = new THREE.RingGeometry(1.58, 1.78, 36);
     focusRingGeo.rotateX(-Math.PI / 2);
     this.dynamicGeometries.push(padGeo, labelGeo, hitGeo, focusRingGeo);
 
@@ -1036,11 +1340,9 @@ export class BlueBasketSceneEngine {
         this.dynamicRoot.add(ring);
       }
 
-      // Layer 1 basket: render solid blue steel basket whenever Layer 1 OR Layer 2 has coils,
-      // OR render subtle empty blue frame outline if selected
-      const showLayer1 =
-        f.layer !== "2" &&
-        (slot.layer1.coils.length > 0 || slot.layer2.coils.length > 0);
+      // Layer 1 base basket: always display the ground-level (Layer 1) blue basket by default
+      // (empty blue basket when no coils yet, loaded with slit coils once stocked)
+      const showLayer1 = f.layer !== "2";
       if (showLayer1) {
         const basketL1 = this.buildBlueBasketMeshGroup(
           slot.layer1,
@@ -1049,18 +1351,12 @@ export class BlueBasketSceneEngine {
           isFocused
         );
         basketL1.position.set(slot.worldX, 0, slot.worldZ);
+        // Rotate basket 90 deg so its front/perforated face faces across the building (แนวขวางของอาคาร)
+        basketL1.rotation.y = Math.PI / 2;
         this.dynamicRoot.add(basketL1);
-      } else if (
-        f.layer !== "2" &&
-        (isSelected || isFocused || f.previewLayer2BasketCode === slot.basketCode)
-      ) {
-        // Show translucent wireframe basket guide on Layer 1 when inspecting/targeting an empty bay
-        const ghostBox = new THREE.Mesh(hitGeo, this.ghostLayer2Mat);
-        ghostBox.position.set(slot.worldX, BASKET_HEIGHT_Y / 2, slot.worldZ);
-        this.dynamicRoot.add(ghostBox);
       }
 
-      // Layer 2 stacked basket (interlocked onto Layer 1 corner pins!)
+      // Layer 2 stacked basket (interlocked onto Layer 1 corner pins, also rotated 90 deg across building)
       const showLayer2 = f.layer !== "1" && slot.layer2.coils.length > 0;
       if (showLayer2) {
         const basketL2 = this.buildBlueBasketMeshGroup(
@@ -1070,6 +1366,7 @@ export class BlueBasketSceneEngine {
           isFocused
         );
         basketL2.position.set(slot.worldX, BASKET_STACK_STEP_Y, slot.worldZ);
+        basketL2.rotation.y = Math.PI / 2;
         this.dynamicRoot.add(basketL2);
       } else if (
         f.layer !== "1" &&
@@ -1203,27 +1500,22 @@ export class BlueBasketSceneEngine {
 
     for (const tex of this.sharedTextures) tex.dispose();
     this.basketBlueMat.dispose();
+    this.basketBlueEmptyMat.dispose();
     this.basketBlueDimMat.dispose();
     this.basketPerforatedMat.dispose();
     this.basketVPlateMat.dispose();
     this.ghostLayer2Mat.dispose();
+    Object.values(this.statusStripMats).forEach((m) => m.dispose());
+    this.statusStripSelectedMat.dispose();
+    this.statusStripFocusedMat.dispose();
     this.coilUnitGeo.dispose();
     this.coilMaterials.forEach((m) => m.dispose());
     this.coilPendingSapMat.dispose();
 
-    this.postGeo.dispose();
-    this.pinGeo.dispose();
-    this.collarGeo.dispose();
-    this.lugGeo.dispose();
-    this.baseRailXGeo.dispose();
-    this.baseRailZGeo.dispose();
-    this.subRibZGeo.dispose();
-    this.perfBarXGeo.dispose();
-    this.sideBarZGeo.dispose();
-    this.diagStrutGeo.dispose();
-    this.vPlateGeo.dispose();
-    this.footPadGeo.dispose();
-    this.statusStripGeo.dispose();
+    this.mergedFrameGeo.dispose();
+    this.mergedPerfGeo.dispose();
+    this.mergedVPlateGeo.dispose();
+    this.mergedStatusStripGeo.dispose();
 
     this.renderer.dispose();
     if (dom.parentElement === this.container) {

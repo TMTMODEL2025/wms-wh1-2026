@@ -174,13 +174,14 @@ export interface PlacementValidationResult {
 }
 
 // 3D World spacing constants (1 world unit = 1 meter)
-export const BASKET_OUTER_WIDTH_X = 2.28; // Holds 2.00m (2,000 mm) internal slit coils
+// Square blue basket: outer width === outer length (2.28m x 2.28m), inner span 2.00m (2,000 mm)
+export const BASKET_OUTER_WIDTH_X = 2.28;
 export const BASKET_INNER_WIDTH_X = 2.0; // Exact 2,000 mm usable coil span
-export const BASKET_OUTER_DEPTH_Z = 1.46;
-export const BASKET_HEIGHT_Y = 1.38;
-export const BASKET_STACK_STEP_Y = 1.34; // Layer 2 interlocks onto Layer 1 corner pins
-export const SLOT_PITCH_X = 2.74; // Basket width + clear side gap for visibility & forklift
-export const ROW_PITCH_Z = 3.45; // Basket depth + wide forklift inspection aisle
+export const BASKET_OUTER_DEPTH_Z = 2.28; // Equal to width (square basket footprint)
+export const BASKET_HEIGHT_Y = 1.76;
+export const BASKET_STACK_STEP_Y = 1.68; // Layer 2 interlocks onto Layer 1 corner pins
+export const SLOT_PITCH_X = 2.88; // Square basket + clear side gap for visibility & forklift
+export const ROW_PITCH_Z = 4.15; // Square basket + wide forklift inspection aisle & label strip
 
 export function createDefaultBlueBasketConfig(): BlueBasketWarehouseConfig {
   const defaultRows = (): BlueBasketRowConfig[] => [
@@ -558,7 +559,7 @@ export function buildBuildingBasketLayout3D(
     for (let slotIndex = 0; slotIndex < rowCfg.slotCount; slotIndex++) {
       const slotNumber = slotIndex + 1;
       const basketCode = formatBasketCode(buildingId, rowCfg.rowId, slotNumber);
-      const worldX = -totalSpanX / 2 + slotIndex * SLOT_PITCH_X;
+      const worldX = -totalSpanX / 2 + 0.95 + slotIndex * SLOT_PITCH_X;
 
       const l1Coils = coilsByKey.get(`${basketCode}#L1`) || [];
       const l2Coils = coilsByKey.get(`${basketCode}#L2`) || [];
@@ -633,8 +634,8 @@ export function buildBuildingBasketLayout3D(
     });
   });
 
-  const slabWidth = Math.max(18, totalSpanX + BASKET_OUTER_WIDTH_X + 7.5);
-  const slabDepth = Math.max(14, totalSpanZ + BASKET_OUTER_DEPTH_Z + 6.5);
+  const slabWidth = Math.max(18, totalSpanX + BASKET_OUTER_WIDTH_X + 6.4);
+  const slabDepth = Math.max(14, totalSpanZ + BASKET_OUTER_DEPTH_Z + 4.8);
 
   return {
     buildingId,

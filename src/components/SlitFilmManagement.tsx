@@ -66,6 +66,10 @@ import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { cleanBarcode } from "../utils/barcodeUtils";
 import { SpaceManagementView } from "./SpaceManagementView";
 import { SlitBlueBasket3DView } from "./slit3d/SlitBlueBasket3DView";
+import {
+  formatBasketLayerLocation,
+  parseBasketLocation,
+} from "./slit3d/blueBasketLayout";
 import { TmtRecheckView } from "./TmtRecheckView";
 import {
   ensureBasketInMasterLayout,
@@ -1147,6 +1151,8 @@ export function SlitFilmManagement({
   const [isLocationModalOpen, setIsLocationModalOpen] = useState<boolean>(false);
   const [isLocationCameraActive, setIsLocationCameraActive] = useState<boolean>(false);
   const [locationBarcode, setLocationBarcode] = useState<string>("");
+  const [selectedLocationLayer, setSelectedLocationLayer] = useState<1 | 2 | null>(null);
+  const [locationLayerPrompt, setLocationLayerPrompt] = useState<string | null>(null);
   const [locationScanError, setLocationScanError] = useState<string | null>(null);
   const locationInputRef = useRef<HTMLInputElement>(null);
 
@@ -3420,6 +3426,8 @@ export function SlitFilmManagement({
   useEffect(() => {
     if (isLocationModalOpen) {
       setLocationScanError(null);
+      setLocationLayerPrompt(null);
+      setSelectedLocationLayer(null);
       setIsLocationCameraActive(false);
       const timer = setTimeout(() => {
         if (locationInputRef.current) {
@@ -3473,6 +3481,92 @@ export function SlitFilmManagement({
   const currentSessionWidthMeters = (currentSessionWidthMm / 1000).toFixed(2);
 
   const currentSessionWeightTon = (currentSessionWeightKg / 1000).toFixed(3);
+
+  // Strip optional layer suffix (-L1 / -L2 / /L1 / ชั้น1 etc.) to get base Location code
+  const stripLocationLayerSuffix = useCallback((rawLoc: string): string => {
+    return String(rawLoc || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[-/_]?(?:L|LAYER|ชั้น)[12]$/i, "")
+      .trim();
+  }, []);
+
+  // Build final Location string including chosen stack layer (unified with Location 3D format)
+  const buildFinalLocationWithLayer = useCallback(
+    (rawLoc: string, layer: 1 | 2): string => {
+      const trimmed = String(rawLoc || "").trim().toUpperCase();
+      if (!trimmed) return "";
+      const parsed = parseBasketLocation(trimmed);
+      if (parsed) {
+        return formatBasketLayerLocation(parsed.basketCode, layer);
+      }
+      const base = stripLocationLayerSuffix(trimmed);
+      return `${base}-L${layer}`;
+    },
+    [stripLocationLayerSuffix]
+  );
+
+  // Live Layer 1 / Layer 2 occupancy stats for the currently scanned inbound Location
+  const scannedLocationLayerStats = useMemo(() => {
+    const raw = locationBarcode.trim().toUpperCase();
+    if (!isLocationModalOpen || activeMode !== "inbound" || !raw) {
+      return null;
+    }
+
+    const parsedTarget = parseBasketLocation(raw);
+    const baseLocation = parsedTarget ? parsedTarget.basketCode : stripLocationLayerSuffix(raw);
+    if (!baseLocation) return null;
+
+    const outboundSet = new Set<string>();
+    for (const outRec of outboundList) {
+      if (outRec.batch) outboundSet.add(outRec.batch.trim().toUpperCase());
+    }
+
+    const layer1 = { count: 0, usedWidthMm: 0, totalWeightKg: 0 };
+    const layer2 = { count: 0, usedWidthMm: 0, totalWeightKg: 0 };
+
+    for (const rec of inboundList) {
+      const bKey = (rec.batch || "").trim().toUpperCase();
+      if (!bKey || outboundSet.has(bKey)) continue;
+      const recLoc = (rec.location || "").trim().toUpperCase();
+      if (!recLoc || recLoc === "-") continue;
+
+      let matchedLayer: 1 | 2 | null = null;
+      if (parsedTarget) {
+        const recParsed = parseBasketLocation(recLoc);
+        if (recParsed && recParsed.basketCode === parsedTarget.basketCode) {
+          matchedLayer = recParsed.layer;
+        }
+      } else if (stripLocationLayerSuffix(recLoc) === baseLocation) {
+        matchedLayer = /[-/_]?(?:L|LAYER|ชั้น)2$/i.test(recLoc) ? 2 : 1;
+      }
+
+      if (matchedLayer === 1) {
+        layer1.count += 1;
+        layer1.usedWidthMm += getBatchWidthMm(rec.batch, rec.width);
+        layer1.totalWeightKg += rec.weightKg || 0;
+      } else if (matchedLayer === 2) {
+        layer2.count += 1;
+        layer2.usedWidthMm += getBatchWidthMm(rec.batch, rec.width);
+        layer2.totalWeightKg += rec.weightKg || 0;
+      }
+    }
+
+    return {
+      baseLocation,
+      layer1,
+      layer2,
+    };
+  }, [
+    isLocationModalOpen,
+    activeMode,
+    locationBarcode,
+    inboundList,
+    outboundList,
+    sapMasterMap,
+    inboundByBatchMap,
+    stripLocationLayerSuffix,
+  ]);
 
   // AGENT.MD Compliance: Collapsible Section (Default: Collapsed)
   const [isTableCollapsed, setIsTableCollapsed] = useState<boolean>(true);
@@ -6078,6 +6172,8 @@ export function SlitFilmManagement({
     // Chained Modal Workflow: Close Batch Scanner Modal and immediately launch Location Scanner Modal
     setIsScannerModalOpen(false);
     setLocationBarcode("");
+    setSelectedLocationLayer(null);
+    setLocationLayerPrompt(null);
     setLocationScanError(null);
     setIsLocationModalOpen(true);
     setTimeout(() => {
@@ -6085,10 +6181,10 @@ export function SlitFilmManagement({
     }, 100);
   };
 
-  // Confirm Location Submission: Binds location to all batches in this round and commits to storage
+  // Confirm Location Submission: Binds location (and chosen stack layer for inbound) to all batches in this round and commits to storage
   const handleConfirmLocationSubmission = async (overrideLoc?: string) => {
-    const finalLocation = (overrideLoc || locationBarcode).trim().toUpperCase();
-    if (!finalLocation) {
+    const rawLocation = (overrideLoc || locationBarcode).trim().toUpperCase();
+    if (!rawLocation) {
       const errText = isThai
         ? "กรุณาสแกนหรือระบุตำแหน่งจัดเก็บ (Location ห้ามเว้นว่าง)"
         : "Please scan or specify a storage location (Cannot be empty)";
@@ -6098,6 +6194,20 @@ export function SlitFilmManagement({
       }
       return;
     }
+
+    if (activeMode === "inbound" && !selectedLocationLayer) {
+      const errText = isThai
+        ? "กรุณาเลือกชั้นที่วาง (ชั้นที่ 1 หรือ ชั้นที่ 2) ก่อนยืนยันรับเข้า"
+        : "Please select a stack layer (Layer 1 or Layer 2) before confirming inbound.";
+      setLocationScanError(errText);
+      if (soundEnabled) playScanSound(false);
+      return;
+    }
+
+    const finalLocation =
+      activeMode === "inbound" && selectedLocationLayer
+        ? buildFinalLocationWithLayer(rawLocation, selectedLocationLayer)
+        : rawLocation;
 
     if (currentSessionBatches.length === 0) {
       const errText = isThai ? "ยังไม่มีรายการสแกนในรอบนี้" : "No items scanned in this round.";
@@ -6193,10 +6303,14 @@ export function SlitFilmManagement({
       await batchSaveOutboundToCloud(committedBatches);
     }
 
+    const committedLayer = activeMode === "inbound" ? selectedLocationLayer : null;
+
     setSelectedLocation(finalLocation);
     setIsLocationModalOpen(false);
     setIsLocationCameraActive(false);
     setLocationScanError(null);
+    setLocationLayerPrompt(null);
+    setSelectedLocationLayer(null);
 
     // Auto-expand summary table so employee can inspect the committed batches
     setIsTableCollapsed(false);
@@ -6207,8 +6321,8 @@ export function SlitFilmManagement({
     // Log transaction
     onLogTransaction?.(
       `Confirmed Inbound: Machine ${finalizedMachine}, ${committedBatches.length} Batches (${totalKg.toLocaleString()} kg) stored to Location ${finalLocation}${
-        cleanTransferDocNo ? ` [Transfer Doc: ${cleanTransferDocNo}]` : ""
-      }`,
+        committedLayer ? ` (Layer ${committedLayer})` : ""
+      }${cleanTransferDocNo ? ` [Transfer Doc: ${cleanTransferDocNo}]` : ""}`,
       `INBOUND-${Date.now()}`,
       "Completed"
     );
@@ -6218,11 +6332,11 @@ export function SlitFilmManagement({
       isThai ? "บันทึกจัดเก็บสำเร็จ!" : "Stored Successfully!",
       isThai
         ? `บันทึกจัดเก็บเหล็กสลิตจำนวน ${committedBatches.length} รายการ (${totalKg.toLocaleString()} kg / ${totalTon} ตัน) เข้า Location [${finalLocation}]${
-            cleanTransferDocNo ? ` · เลขที่ใบโอนย้าย: ${cleanTransferDocNo}` : ""
-          } เรียบร้อยแล้ว`
+            committedLayer ? ` (ชั้นที่ ${committedLayer})` : ""
+          }${cleanTransferDocNo ? ` · เลขที่ใบโอนย้าย: ${cleanTransferDocNo}` : ""} เรียบร้อยแล้ว`
         : `Successfully stored ${committedBatches.length} items (${totalKg.toLocaleString()} kg / ${totalTon} tons) to [${finalLocation}]${
-            cleanTransferDocNo ? ` · Transfer Doc: ${cleanTransferDocNo}` : ""
-          }.`
+            committedLayer ? ` (Layer ${committedLayer})` : ""
+          }${cleanTransferDocNo ? ` · Transfer Doc: ${cleanTransferDocNo}` : ""}.`
     );
 
     // Clear session
@@ -6235,7 +6349,9 @@ export function SlitFilmManagement({
   // Confirm Inbound & Trigger Location Modal
   const handleConfirmInbound = () => {
     if (inboundList.length === 0) return;
-    setLocationBarcode(selectedLocation || "");
+    setLocationBarcode(selectedLocation ? stripLocationLayerSuffix(selectedLocation) : "");
+    setSelectedLocationLayer(null);
+    setLocationLayerPrompt(null);
     setLocationScanError(null);
     setIsLocationModalOpen(true);
   };
@@ -6320,7 +6436,13 @@ export function SlitFilmManagement({
   };
 
   return (
-    <div className="slit-film-management space-y-2 sm:space-y-2.5 pb-16 sm:pb-0 relative">
+    <div
+      className={
+        activeMode === "location_3d"
+          ? "slit-film-management flex-1 min-h-0 flex flex-col overflow-hidden relative"
+          : "slit-film-management space-y-2 sm:space-y-2.5 pb-16 sm:pb-0 relative"
+      }
+    >
       {notificationToast && (
         <div className="fixed top-5 right-5 z-[100] max-w-md animate-fade-in shadow-2xl rounded-xl p-3 sm:p-4 bg-emerald-600 text-white flex items-center justify-between gap-3 border border-emerald-400">
           <div className="flex items-center gap-2">
@@ -8897,13 +9019,17 @@ export function SlitFilmManagement({
                             .toUpperCase();
                           if (rawVal) {
                             setLocationBarcode(rawVal);
+                            setSelectedLocationLayer(null);
                             if (locationScanError) setLocationScanError(null);
+                            if (activeMode === "inbound") {
+                              setLocationLayerPrompt(
+                                isThai
+                                  ? `สแกน Location [${stripLocationLayerSuffix(rawVal)}] แล้ว — กรุณาเลือกชั้นที่วางก่อนยืนยันรับเข้า`
+                                  : `Location [${stripLocationLayerSuffix(rawVal)}] scanned — please select a stack layer before confirming.`
+                              );
+                            }
+                            if (soundEnabled) playScanSound(true);
                             setIsLocationCameraActive(false);
-                            setTimeout(() => {
-                              if (locationInputRef.current) {
-                                locationInputRef.current.focus();
-                              }
-                            }, 100);
                           }
                         }}
                         onClose={() => {
@@ -8933,22 +9059,222 @@ export function SlitFilmManagement({
                           .replace(/[\r\n\t\0\x02\x03\x04]+/g, "")
                           .replace(/^\*+|\*+$/g, "")
                           .toUpperCase();
+                        if (
+                          stripLocationLayerSuffix(rawVal) !==
+                          stripLocationLayerSuffix(locationBarcode)
+                        ) {
+                          setSelectedLocationLayer(null);
+                          setLocationLayerPrompt(null);
+                        }
                         setLocationBarcode(rawVal);
                         if (locationScanError) setLocationScanError(null);
                       }}
+                      onKeyDown={(e) => {
+                        if (
+                          e.key === "Enter" &&
+                          activeMode === "inbound" &&
+                          locationBarcode.trim() &&
+                          !selectedLocationLayer
+                        ) {
+                          e.preventDefault();
+                          locationInputRef.current?.blur();
+                          setLocationScanError(null);
+                          setLocationLayerPrompt(
+                            isThai
+                              ? `สแกน Location [${stripLocationLayerSuffix(locationBarcode)}] แล้ว — กรุณาเลือกชั้นที่วางก่อนยืนยันรับเข้า`
+                              : `Location [${stripLocationLayerSuffix(locationBarcode)}] scanned — please select a stack layer before confirming.`
+                          );
+                          if (soundEnabled) playScanSound(true);
+                        }
+                      }}
                       placeholder={isThai ? "ยิงบาร์โค้ด Location จัดเก็บ..." : "Scan Location barcode..."}
-                      className="w-full pl-4 pr-11 py-2.5 text-base sm:text-lg font-mono font-black tracking-wider rounded-xl bg-white dark:bg-[#0c1930] border-2 border-cyan-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/20 shadow-inner"
+                      className="w-full pl-4 pr-20 py-2.5 text-base sm:text-lg font-mono font-black tracking-wider rounded-xl bg-white dark:bg-[#0c1930] border-2 border-cyan-500 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-4 focus:ring-cyan-500/20 shadow-inner"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setIsLocationCameraActive((prev) => !prev)}
-                      className="absolute right-2.5 top-2.5 p-1 rounded-lg text-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors cursor-pointer"
-                      title={isThai ? "เปิด/ปิดกล้องสแกนบาร์โค้ด Location" : "Toggle camera scanner"}
-                    >
-                      <Camera size={20} />
-                    </button>
+                    <div className="absolute right-2 top-2 flex items-center gap-0.5">
+                      {locationBarcode.trim().length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLocationBarcode("");
+                            setSelectedLocationLayer(null);
+                            setLocationLayerPrompt(null);
+                            setLocationScanError(null);
+                            setTimeout(() => locationInputRef.current?.focus(), 40);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                          title={isThai ? "ล้างเพื่อสแกน Location ใหม่" : "Clear Location"}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsLocationCameraActive((prev) => !prev)}
+                        className="p-1.5 rounded-lg text-cyan-500 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors cursor-pointer"
+                        title={isThai ? "เปิด/ปิดกล้องสแกนบาร์โค้ด Location" : "Toggle camera scanner"}
+                      >
+                        <Camera size={20} />
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {/* 2. Stack Layer Selection (Shown after scanning Location in Inbound mode before confirming) */}
+                {activeMode === "inbound" && locationBarcode.trim().length > 0 && (
+                  <div className="p-3 rounded-xl bg-slate-50/90 dark:bg-[#0c1930] border-2 border-cyan-400/70 dark:border-cyan-500/40 space-y-2.5 animate-fade-in">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                        <Layers size={14} className="text-cyan-500" />
+                        <span>{isThai ? "เลือกชั้นที่วาง:" : "Select Stack Layer:"}</span>
+                        <span className="text-[10px] text-rose-500 font-extrabold">
+                          {isThai ? "* เลือกก่อนยืนยัน" : "* Required"}
+                        </span>
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-black border ${
+                          selectedLocationLayer
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40"
+                            : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/40"
+                        }`}
+                      >
+                        {selectedLocationLayer
+                          ? buildFinalLocationWithLayer(locationBarcode, selectedLocationLayer)
+                          : isThai
+                          ? "รอเลือกชั้น"
+                          : "Choose Layer"}
+                      </span>
+                    </div>
+
+                    {locationLayerPrompt && !selectedLocationLayer && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-300/80 dark:border-cyan-700/60 text-cyan-800 dark:text-cyan-200 text-[11px] font-semibold flex items-center gap-1.5">
+                        <Info size={13} className="shrink-0 text-cyan-600 dark:text-cyan-400" />
+                        <span>{locationLayerPrompt}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {([1, 2] as const).map((layerNum) => {
+                        const isSelected = selectedLocationLayer === layerNum;
+                        const stats =
+                          layerNum === 1
+                            ? scannedLocationLayerStats?.layer1
+                            : scannedLocationLayerStats?.layer2;
+                        const existingCount = stats?.count || 0;
+                        const existingWidthMm = Math.round(stats?.usedWidthMm || 0);
+                        const projectedWidthMm = Math.round(existingWidthMm + currentSessionWidthMm);
+                        const isWidthOverflow = projectedWidthMm > 2000;
+
+                        return (
+                          <button
+                            key={layerNum}
+                            type="button"
+                            onClick={() => {
+                              setSelectedLocationLayer(layerNum);
+                              setLocationScanError(null);
+                              setLocationLayerPrompt(null);
+                            }}
+                            className={`relative p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer active:scale-[0.98] ${
+                              isSelected
+                                ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 ring-2 ring-emerald-500/25 shadow-sm"
+                                : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-cyan-400 dark:hover:border-cyan-500/70"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`inline-flex flex-col gap-0.5 p-1 rounded border ${
+                                    isSelected
+                                      ? "border-emerald-500/50 bg-emerald-500/15"
+                                      : "border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800"
+                                  }`}
+                                >
+                                  <span
+                                    className={`block w-3.5 h-1.5 rounded-[2px] ${
+                                      layerNum === 2
+                                        ? isSelected
+                                          ? "bg-emerald-500"
+                                          : "bg-cyan-500"
+                                        : "bg-slate-300 dark:bg-slate-600"
+                                    }`}
+                                  />
+                                  <span
+                                    className={`block w-3.5 h-1.5 rounded-[2px] ${
+                                      layerNum === 1
+                                        ? isSelected
+                                          ? "bg-emerald-500"
+                                          : "bg-cyan-500"
+                                        : "bg-slate-300 dark:bg-slate-600"
+                                    }`}
+                                  />
+                                </span>
+                                <div>
+                                  <div
+                                    className={`text-xs font-black leading-tight ${
+                                      isSelected
+                                        ? "text-emerald-700 dark:text-emerald-300"
+                                        : "text-slate-800 dark:text-slate-100"
+                                    }`}
+                                  >
+                                    {isThai ? `ชั้นที่ ${layerNum}` : `Layer ${layerNum}`}
+                                  </div>
+                                  <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                                    {layerNum === 1
+                                      ? isThai
+                                        ? "ชั้นล่าง (L1)"
+                                        : "Bottom (L1)"
+                                      : isThai
+                                      ? "ชั้นบน (L2)"
+                                      : "Top (L2)"}
+                                  </div>
+                                </div>
+                              </div>
+                              {isSelected && (
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white shrink-0">
+                                  <Check size={12} className="stroke-[3]" />
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-2 pt-1.5 border-t border-slate-200/80 dark:border-[#1e3a5f] space-y-0.5">
+                              <div className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">
+                                {existingCount === 0
+                                  ? isThai
+                                    ? "สถานะ: ว่าง (0 ม้วน)"
+                                    : "Status: Empty (0)"
+                                  : isThai
+                                  ? `มีอยู่ ${existingCount} ม้วน · ${existingWidthMm.toLocaleString()}/2,000 มม.`
+                                  : `${existingCount} coils · ${existingWidthMm.toLocaleString()}/2,000 mm`}
+                              </div>
+                              {isWidthOverflow && (
+                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                  <AlertTriangle size={11} className="shrink-0" />
+                                  <span>
+                                    {isThai
+                                      ? `รวมรอบนี้ ${projectedWidthMm.toLocaleString()} มม. (>2,000)`
+                                      : `Total ${projectedWidthMm.toLocaleString()} mm (>2,000)`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {selectedLocationLayer === 2 &&
+                      scannedLocationLayerStats &&
+                      scannedLocationLayerStats.layer1.count === 0 && (
+                        <div className="px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 text-amber-800 dark:text-amber-200 text-[10.5px] font-semibold flex items-center gap-1.5">
+                          <AlertTriangle size={13} className="shrink-0 text-amber-500" />
+                          <span>
+                            {isThai
+                              ? "หมายเหตุ: ชั้นที่ 1 ของตำแหน่งนี้ยังว่างอยู่ (สามารถยืนยันวางชั้นที่ 2 ได้)"
+                              : "Note: Layer 1 is currently empty (you can still confirm Layer 2)."}
+                          </span>
+                        </div>
+                      )}
+                  </div>
+                )}
 
                 {/* Summary Cards: Source Machine & Scanned Count & Weight */}
                 <div className="grid grid-cols-3 gap-2 text-center pt-1">
@@ -8987,6 +9313,8 @@ export function SlitFilmManagement({
                     onClick={() => {
                       setIsLocationModalOpen(false);
                       setIsLocationCameraActive(false);
+                      setSelectedLocationLayer(null);
+                      setLocationLayerPrompt(null);
                       setIsScannerModalOpen(true);
                     }}
                     className="px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#172b4d] border border-slate-300 dark:border-[#1e3a5f] cursor-pointer"
@@ -8996,10 +9324,26 @@ export function SlitFilmManagement({
 
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                    className={`px-4 py-2 rounded-lg text-xs font-bold text-white flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 ${
+                      activeMode === "inbound" && !selectedLocationLayer
+                        ? "bg-emerald-600/60 hover:bg-emerald-600/80 shadow-none"
+                        : "bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-600/30"
+                    }`}
                   >
                     <Check size={14} />
-                    <span>บันทึกจัดเก็บ</span>
+                    <span>
+                      {activeMode === "inbound"
+                        ? selectedLocationLayer
+                          ? isThai
+                            ? `ยืนยันรับเข้า (ชั้นที่ ${selectedLocationLayer})`
+                            : `Confirm Receive (Layer ${selectedLocationLayer})`
+                          : isThai
+                          ? "ยืนยันรับเข้า"
+                          : "Confirm Receive"
+                        : isThai
+                        ? "บันทึกจัดเก็บ"
+                        : "Save Storage"}
+                    </span>
                   </button>
                 </div>
               </form>

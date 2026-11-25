@@ -6708,7 +6708,7 @@ function WmsApp({
             className={`main ${
               active === "slit" && (slitMode === "tmt_recheck" || slitMode === "tmt_recheck_report")
                 ? "main-flush"
-                : active === "coil" && coilMode === "warehouse_3d"
+                : (active === "coil" && coilMode === "warehouse_3d") || (active === "slit" && slitMode === "location_3d")
                 ? "main-3d-viewport"
                 : ""
             }`}

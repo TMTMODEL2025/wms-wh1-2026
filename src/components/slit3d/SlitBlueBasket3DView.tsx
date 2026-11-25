@@ -1063,32 +1063,32 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
   }, [inboundBuildingLayout, inboundBasketRowFilter]);
 
   return (
-    <div className="space-y-3 select-none">
-      {/* Top Industrial Control Header (Solid crisp dark slate, zero backdrop-filter) */}
-      <div className="rounded-2xl border border-slate-700/80 bg-slate-900 text-slate-100 p-3 sm:p-4 shadow-lg">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
-          {/* Title + Building Switcher */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-2.5 mr-1">
-              <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
-                <Box className="w-5 h-5" />
+    <div className="flex-1 min-h-0 h-full flex flex-col gap-2 select-none overflow-hidden">
+      {/* Compact Single-Screen Top Control Header (Solid crisp dark slate, zero backdrop-filter) */}
+      <div className="shrink-0 rounded-2xl border border-slate-700/80 bg-slate-900 text-slate-100 px-3 py-2 shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          {/* Compact Title + Building Switcher */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                <Box className="w-4 h-4" />
               </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-white leading-tight">
+              <div className="leading-tight">
+                <h2 className="text-sm font-extrabold tracking-tight text-white">
                   {isThai
-                    ? "Location 3D ตะกร้าฟ้า — เหล็กสลิต / ฟิล์ม"
-                    : "3D Blue Basket Location — Slit / Film"}
+                    ? "Location 3D ตะกร้าฟ้า"
+                    : "3D Blue Basket Location"}
                 </h2>
-                <p className="text-[11px] sm:text-xs text-slate-400">
+                <p className="text-[10px] text-slate-400 hidden sm:block">
                   {isThai
-                    ? "อาคาร E9 · H2 · F | แถว A–D (เพิ่ม/ลบได้) | หน้ากว้างรวม ≤ 2,000 มม. | ซ้อนสูงสุด 2 ชั้น"
-                    : "Buildings E9 · H2 · F | Rows A–D | Max Width 2,000 mm | Max 2 Layers"}
+                    ? "E9 · H2 · F | แถว A–D | ≤ 2,000 มม. | ซ้อนสูงสุด 2 ชั้น"
+                    : "E9 · H2 · F | Rows A–D | ≤ 2,000 mm | Max 2 Layers"}
                 </p>
               </div>
             </div>
 
             {/* Building Tabs: E9, H2, F */}
-            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
               {BLUE_BASKET_BUILDINGS.map((bId) => {
                 const bLayout = allBuildingLayouts[bId];
                 const active = selectedBuilding === bId;
@@ -1103,16 +1103,16 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                       setFocusedBasketCode(null);
                       setSearchFeedback(null);
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                       active
-                        ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
+                        ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
                         : "text-slate-300 hover:bg-slate-800 hover:text-white"
                     }`}
                   >
-                    <Building2 className="w-3.5 h-3.5" />
+                    <Building2 className="w-3 h-3" />
                     <span>{isThai ? `อาคาร ${bId}` : bId}</span>
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
                         active
                           ? "bg-white/20 text-white"
                           : "bg-slate-800 text-sky-300"
@@ -1127,10 +1127,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
           </div>
 
           {/* Right Actions: Search + 4-Step Inbound + Manage Rows + Reference */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <form
               onSubmit={handleSearchSubmit}
-              className="flex items-center gap-1.5 bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 min-w-[215px] flex-1 sm:flex-initial"
+              className="flex items-center gap-1 bg-slate-950 border border-slate-700 rounded-xl px-2 py-1 w-[195px] sm:w-[215px]"
             >
               <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <input
@@ -1139,10 +1139,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={
                   isThai
-                    ? "ค้นหา Batch / ตะกร้า (E9-A01)"
+                    ? "ค้นหา Batch / E9-A01"
                     : "Search Batch / E9-A01"
                 }
-                className="bg-transparent text-xs text-white placeholder-slate-500 outline-none w-full"
+                className="bg-transparent text-[11px] text-white placeholder-slate-500 outline-none w-full"
               />
               {searchQuery && (
                 <button
@@ -1154,14 +1154,14 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   }}
                   className="text-slate-400 hover:text-white cursor-pointer"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
               <button
                 type="submit"
-                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-sky-300 cursor-pointer shrink-0"
+                className="p-1 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 cursor-pointer shrink-0"
               >
-                <Crosshair className="w-3.5 h-3.5" />
+                <Crosshair className="w-3 h-3" />
               </button>
             </form>
 
@@ -1172,13 +1172,13 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   ? setShowInboundDrawer(false)
                   : openInboundDrawer()
               }
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-md ${
+              className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
                 showInboundDrawer
-                  ? "bg-emerald-500 text-slate-950 shadow-emerald-500/30"
-                  : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/25"
+                  ? "bg-emerald-500 text-slate-950"
+                  : "bg-emerald-600 hover:bg-emerald-500 text-white"
               }`}
             >
-              <ScanBarcode className="w-4 h-4" />
+              <ScanBarcode className="w-3.5 h-3.5" />
               <span>
                 {isThai ? "รับเข้าลงตะกร้าฟ้า" : "Inbound to Basket"}
               </span>
@@ -1193,7 +1193,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 );
                 setShowRowManager(true);
               }}
-              className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1 cursor-pointer"
             >
               <Settings2 className="w-3.5 h-3.5 text-amber-400" />
               <span>{isThai ? "จัดการแถว A–D" : "Manage Rows"}</span>
@@ -1202,141 +1202,87 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
             <button
               type="button"
               onClick={() => setShowReferenceModal(true)}
-              className="px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1.5 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center gap-1 cursor-pointer"
               title={isThai ? "ดูภาพแบบตะกร้าฟ้าอ้างอิง" : "View Basket Reference"}
             >
               <ImageIcon className="w-3.5 h-3.5 text-sky-400" />
-              <span className="hidden sm:inline">
-                {isThai ? "แบบตะกร้าอ้างอิง" : "Reference"}
+              <span className="hidden md:inline">
+                {isThai ? "แบบตะกร้า" : "Reference"}
               </span>
             </button>
           </div>
         </div>
 
-        {/* Live KPI Strip for Active Building */}
-        <div className="mt-3 pt-3 border-t border-slate-800 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isThai ? "ช่องตะกร้าใช้งาน" : "Occupied Bays"}
-            </div>
-            <div className="text-base font-black text-white mt-0.5 tabular-nums">
-              {currentLayout.stats.occupiedSlots}{" "}
-              <span className="text-xs font-semibold text-slate-400">
-                / {currentLayout.stats.totalSlots} ช่อง
+        {/* Slim Single-Line Inline KPI Strip (Zero vertical bloat) */}
+        <div className="mt-1.5 pt-1.5 border-t border-slate-800/90 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-semibold">
+              {isThai ? "ช่องใช้งาน:" : "Occupied:"}
+            </span>
+            <span className="font-black text-white tabular-nums">
+              {currentLayout.stats.occupiedSlots}/{currentLayout.stats.totalSlots}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 text-sky-300">
+            <Layers className="w-3 h-3" />
+            <span className="text-slate-400 font-semibold">
+              {isThai ? "ซ้อน 2 ชั้น:" : "2-Layer:"}
+            </span>
+            <span className="font-black tabular-nums">
+              {currentLayout.stats.stacked2LayerCount} จุด
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 text-emerald-400">
+            <Package className="w-3 h-3" />
+            <span className="text-slate-400 font-semibold">
+              {isThai ? "ม้วนสลิต:" : "Coils:"}
+            </span>
+            <span className="font-black tabular-nums">
+              {currentLayout.stats.totalCoils.toLocaleString()} ม้วน
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 text-white">
+            <Scale className="w-3 h-3 text-blue-400" />
+            <span className="text-slate-400 font-semibold">
+              {isThai ? "น้ำหนัก:" : "Weight:"}
+            </span>
+            <span className="font-black tabular-nums">
+              {currentLayout.stats.totalWeightTons.toFixed(2)} ตัน
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 text-amber-400">
+            <Ruler className="w-3 h-3" />
+            <span className="text-slate-400 font-semibold">
+              {isThai ? "เต็มเฉลี่ย:" : "Avg Fill:"}
+            </span>
+            <span className="font-black tabular-nums">
+              {currentLayout.stats.avgUtilizationPercent}%
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1 text-rose-400">
+            <span className="text-slate-400 font-semibold">
+              {isThai ? "เต็ม/ใกล้เต็ม:" : "Full/Near:"}
+            </span>
+            <span className="font-black tabular-nums">
+              {currentLayout.stats.fullLayers}
+              <span className="text-amber-400">
+                /{currentLayout.stats.nearFullLayers}
               </span>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isThai ? "ตะกร้าซ้อน 2 ชั้น" : "2-Layer Stacked"}
-            </div>
-            <div className="text-base font-black text-sky-400 mt-0.5 tabular-nums flex items-center gap-1.5">
-              <Layers className="w-4 h-4" />
-              <span>{currentLayout.stats.stacked2LayerCount} จุด</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isThai ? "ม้วนสลิตทั้งหมด" : "Total Slit Coils"}
-            </div>
-            <div className="text-base font-black text-emerald-400 mt-0.5 tabular-nums flex items-center gap-1.5">
-              <Package className="w-4 h-4" />
-              <span>{currentLayout.stats.totalCoils.toLocaleString()} ม้วน</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isThai ? "น้ำหนักรวม" : "Total Weight"}
-            </div>
-            <div className="text-base font-black text-white mt-0.5 tabular-nums flex items-center gap-1.5">
-              <Scale className="w-4 h-4 text-blue-400" />
-              <span>{currentLayout.stats.totalWeightTons.toFixed(2)} ตัน</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isThai ? "อัตราเต็มเฉลี่ย (2 ม.)" : "Avg Fill (2m)"}
-            </div>
-            <div className="text-base font-black text-amber-400 mt-0.5 tabular-nums flex items-center gap-1.5">
-              <Ruler className="w-4 h-4" />
-              <span>{currentLayout.stats.avgUtilizationPercent}%</span>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-slate-950/90 border border-slate-800 px-3 py-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isThai ? "เต็ม / ใกล้เต็ม (≥80%)" : "Full / Near Full"}
-            </div>
-            <div className="text-base font-black text-rose-400 mt-0.5 tabular-nums">
-              {currentLayout.stats.fullLayers}{" "}
-              <span className="text-xs font-semibold text-amber-400">
-                / {currentLayout.stats.nearFullLayers} ใกล้เต็ม
-              </span>
-            </div>
+            </span>
           </div>
         </div>
-
-        {/* Search Feedback or Toast Banner */}
-        {(searchFeedback || toastMessage) && (
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {searchFeedback && (
-              <div
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 border ${
-                  searchFeedback.type === "found"
-                    ? "bg-purple-500/15 text-purple-200 border-purple-500/40"
-                    : "bg-rose-500/15 text-rose-200 border-rose-500/40"
-                }`}
-              >
-                <Crosshair className="w-3.5 h-3.5 shrink-0" />
-                <span>{searchFeedback.message}</span>
-                <button
-                  type="button"
-                  onClick={() => setSearchFeedback(null)}
-                  className="ml-1 opacity-75 hover:opacity-100 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {toastMessage && (
-              <div
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 border ${
-                  toastMessage.type === "success"
-                    ? "bg-emerald-500/15 text-emerald-200 border-emerald-500/40"
-                    : toastMessage.type === "error"
-                    ? "bg-rose-500/15 text-rose-200 border-rose-500/40"
-                    : "bg-sky-500/15 text-sky-200 border-sky-500/40"
-                }`}
-              >
-                {toastMessage.type === "success" ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                ) : (
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                )}
-                <span>{toastMessage.text}</span>
-                <button
-                  type="button"
-                  onClick={() => setToastMessage(null)}
-                  className="ml-1 opacity-75 hover:opacity-100 cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* Main Split Workspace: 3D Viewport + Side Guided Inbound / Basket Inspector */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch">
+      {/* Main Split Workspace: Fills 100% Remaining Viewport Height (Zero Page Scrollbar) */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-12 gap-2 items-stretch overflow-hidden">
         {/* 3D Interactive Canvas Container */}
         <div
-          className={`relative rounded-2xl border border-slate-700/80 bg-slate-950 overflow-hidden shadow-xl min-h-[540px] h-[68vh] max-h-[780px] ${
+          className={`relative h-full min-h-0 rounded-2xl border border-slate-700/80 bg-slate-950 overflow-hidden shadow-xl ${
             showInboundDrawer || selectedSlot
               ? "xl:col-span-8"
               : "xl:col-span-12"
@@ -1357,22 +1303,73 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
           )}
 
           {/* Top-Left Compact Building Tag */}
-          <div className="absolute top-3 left-3 z-10 pointer-events-none flex items-center gap-2">
-            <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-extrabold text-white flex items-center gap-2 shadow-md">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none flex flex-wrap items-center gap-1.5">
+            <div className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-[11px] font-extrabold text-white flex items-center gap-1.5 shadow-md">
+              <span className="w-2 h-2 rounded-full bg-blue-500" />
               <span>
                 {BLUE_BASKET_BUILDING_META[selectedBuilding].nameTh} · แถว{" "}
                 {currentLayout.config.rows.map((r) => r.rowId).join(", ")}
               </span>
             </div>
             {showInboundDrawer && (
-              <div className="px-2.5 py-1.5 rounded-xl bg-emerald-950 border border-emerald-600/60 text-[11px] font-bold text-emerald-300 shadow-md">
+              <div className="px-2.5 py-1 rounded-xl bg-emerald-950 border border-emerald-600/60 text-[11px] font-bold text-emerald-300 shadow-md">
                 {isThai
                   ? "คลิกตะกร้าในฉาก 3D เพื่อเลือกช่องรับเข้าได้ทันที"
                   : "Click any 3D basket to pick inbound slot"}
               </div>
             )}
           </div>
+
+          {/* Top-Right Floating Search Feedback & Toast Banners (Never shifts viewport height) */}
+          {(searchFeedback || toastMessage) && (
+            <div className="absolute top-2.5 right-2.5 z-20 flex flex-col items-end gap-1.5 max-w-md">
+              {searchFeedback && (
+                <div
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 border shadow-lg ${
+                    searchFeedback.type === "found"
+                      ? "bg-slate-900 text-purple-200 border-purple-500/60"
+                      : "bg-slate-900 text-rose-200 border-rose-500/60"
+                  }`}
+                >
+                  <Crosshair className="w-3.5 h-3.5 shrink-0" />
+                  <span>{searchFeedback.message}</span>
+                  <button
+                    type="button"
+                    onClick={() => setSearchFeedback(null)}
+                    className="ml-1 opacity-75 hover:opacity-100 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {toastMessage && (
+                <div
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-2 border shadow-lg ${
+                    toastMessage.type === "success"
+                      ? "bg-slate-900 text-emerald-200 border-emerald-500/60"
+                      : toastMessage.type === "error"
+                      ? "bg-slate-900 text-rose-200 border-rose-500/60"
+                      : "bg-slate-900 text-sky-200 border-sky-500/60"
+                  }`}
+                >
+                  {toastMessage.type === "success" ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                  ) : (
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  )}
+                  <span>{toastMessage.text}</span>
+                  <button
+                    type="button"
+                    onClick={() => setToastMessage(null)}
+                    className="ml-1 opacity-75 hover:opacity-100 cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Hover Tooltip (Solid surface, no backdrop-filter) */}
           {hoverInfo && (
@@ -1526,7 +1523,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      ว่าง (0 มม.)
+                      ตะกร้าเปล่าชั้น 1 (0 มม.)
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
@@ -1556,7 +1553,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
         {/* Right Side Panel: 4-Step Guided Inbound Drawer OR Basket Layer 1/2 Inspector */}
         {(showInboundDrawer || selectedSlot) && (
-          <div className="xl:col-span-4 rounded-2xl border border-slate-700/80 bg-slate-900 text-slate-100 shadow-xl flex flex-col max-h-[780px] overflow-hidden">
+          <div className="xl:col-span-4 h-full min-h-0 rounded-2xl border border-slate-700/80 bg-slate-900 text-slate-100 shadow-xl flex flex-col overflow-hidden">
             {/* Mode Toggle Header when both are relevant */}
             <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2 bg-slate-950/70">
               <div className="flex items-center gap-1.5">
