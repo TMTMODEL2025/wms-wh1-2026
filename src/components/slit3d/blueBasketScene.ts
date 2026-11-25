@@ -13,7 +13,11 @@ import {
   BasketSlot3D,
   BlueBasketBuildingId,
   BuildingBasketLayout3D,
-  MAX_BASKET_WIDTH_MM,
+  E10_CRADLE_HEIGHT_Y,
+  E10_CRADLE_LEG_SPAN_X,
+  E10_CRADLE_TOTAL_LENGTH_X,
+  E10_CRADLE_WIDTH_Z,
+  isCradleRackBuilding,
 } from "./blueBasketLayout";
 
 export type BasketCameraPreset = "isometric" | "top" | "front" | "side" | "reset";
@@ -124,6 +128,7 @@ function createCoilWrapTexture(): THREE.CanvasTexture {
 }
 
 function createBuildingSignTexture(buildingId: BlueBasketBuildingId): THREE.CanvasTexture {
+  const isE10 = buildingId === "E10";
   const canvas = document.createElement("canvas");
   canvas.width = 768;
   canvas.height = 160;
@@ -132,14 +137,14 @@ function createBuildingSignTexture(buildingId: BlueBasketBuildingId): THREE.Canv
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.strokeStyle = "#38bdf8";
+  ctx.strokeStyle = isE10 ? "#f59e0b" : "#38bdf8";
   ctx.lineWidth = 6;
   ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
 
-  // Blue building badge
-  ctx.fillStyle = "#1d63b8";
+  // Building badge
+  ctx.fillStyle = isE10 ? "#d97706" : "#1d63b8";
   ctx.fillRect(20, 20, 152, 120);
-  ctx.strokeStyle = "#93c5fd";
+  ctx.strokeStyle = isE10 ? "#fde68a" : "#93c5fd";
   ctx.lineWidth = 3;
   ctx.strokeRect(20, 20, 152, 120);
 
@@ -151,12 +156,24 @@ function createBuildingSignTexture(buildingId: BlueBasketBuildingId): THREE.Canv
 
   ctx.textAlign = "left";
   ctx.fillStyle = "#f8fafc";
-  ctx.font = "800 36px Inter, system-ui, sans-serif";
-  ctx.fillText(`BUILDING ${buildingId} · BLUE BASKET ZONE`, 196, 62);
+  ctx.font = "800 34px Inter, system-ui, sans-serif";
+  ctx.fillText(
+    isE10
+      ? "BUILDING E10 · STEEL CRADLE RACK"
+      : `BUILDING ${buildingId} · BLUE BASKET ZONE`,
+    196,
+    62
+  );
 
-  ctx.fillStyle = "#7dd3fc";
-  ctx.font = "700 24px Inter, system-ui, sans-serif";
-  ctx.fillText("MAX WIDTH 2,000 mm / BASKET · MAX STACK 2 LAYERS", 196, 110);
+  ctx.fillStyle = isE10 ? "#fcd34d" : "#7dd3fc";
+  ctx.font = "700 22px Inter, system-ui, sans-serif";
+  ctx.fillText(
+    isE10
+      ? "ROW A (2.0m A-FRAME RACK) · CENTRAL ROAD · SLITTING MACHINE"
+      : "MAX WIDTH 2,000 mm / BASKET · MAX STACK 2 LAYERS",
+    196,
+    110
+  );
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -394,6 +411,216 @@ function createHollowCoilUnitGeometry(): THREE.BufferGeometry {
   return geo;
 }
 
+function createTimberWoodTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#7a5b3e";
+  ctx.fillRect(0, 0, 256, 128);
+
+  // Horizontal weathered hardwood grain streaks
+  for (let y = 0; y < 128; y += 3) {
+    const tone = (y * 37) % 3;
+    ctx.fillStyle =
+      tone === 0
+        ? "rgba(42, 26, 14, 0.24)"
+        : tone === 1
+        ? "rgba(180, 145, 108, 0.16)"
+        : "rgba(58, 38, 22, 0.14)";
+    ctx.fillRect(0, y, 256, 2);
+  }
+  for (let i = 0; i < 45; i++) {
+    const x = (i * 59) % 256;
+    const y = (i * 29) % 128;
+    ctx.fillStyle = "rgba(30, 18, 9, 0.22)";
+    ctx.fillRect(x, y, 24 + (i % 28), 1.5);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createCorrugatedWallTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#9aa6b5";
+  ctx.fillRect(0, 0, 256, 256);
+
+  // Vertical corrugated metal sheet flutes
+  for (let x = 0; x < 256; x += 16) {
+    const grad = ctx.createLinearGradient(x, 0, x + 16, 0);
+    grad.addColorStop(0, "#7c8899");
+    grad.addColorStop(0.35, "#cbd5e1");
+    grad.addColorStop(0.65, "#94a3b8");
+    grad.addColorStop(1, "#64748b");
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, 0, 16, 256);
+  }
+
+  // Subtle horizontal purlin seam lines
+  ctx.fillStyle = "rgba(30, 41, 59, 0.22)";
+  ctx.fillRect(0, 84, 256, 3);
+  ctx.fillRect(0, 172, 256, 3);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(8, 1);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createE10CenterRoadTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 1024;
+  const ctx = canvas.getContext("2d")!;
+
+  // Clean light-gray concrete drive-through floor matching E10 floorplan
+  ctx.fillStyle = "#8a94a2";
+  ctx.fillRect(0, 0, 512, 1024);
+
+  // Concrete expansion joints & subtle aggregate
+  ctx.strokeStyle = "rgba(30, 41, 59, 0.14)";
+  ctx.lineWidth = 2;
+  for (let y = 0; y <= 1024; y += 128) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(512, y);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 1200; i++) {
+    const x = (i * 4219) % 512;
+    const y = (i * 6131) % 1024;
+    ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
+    ctx.fillRect(x, y, 3, 3);
+  }
+
+  // Bright yellow safety boundary lines on BOTH edges of the center road
+  ctx.fillStyle = "#facc15";
+  ctx.fillRect(10, 0, 22, 1024);
+  ctx.fillRect(480, 0, 22, 1024);
+
+  // Dashed white center divider line
+  ctx.fillStyle = "#f1f5f9";
+  for (let y = 24; y < 1024; y += 112) {
+    ctx.fillRect(250, y, 12, 58);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1, 2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createHazardStripeTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.fillStyle = "#facc15";
+  ctx.fillRect(0, 0, 256, 64);
+
+  ctx.fillStyle = "#1e293b";
+  for (let x = -64; x < 320; x += 36) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + 18, 0);
+    ctx.lineTo(x + 42, 64);
+    ctx.lineTo(x + 24, 64);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createFloorStencilTexture(
+  text: string,
+  color: string,
+  fontSize = 86
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 160;
+  const ctx = canvas.getContext("2d")!;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = color;
+  ctx.font = `900 ${fontSize}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function makeBeamBetween(
+  p1: THREE.Vector3,
+  p2: THREE.Vector3,
+  thicknessX: number,
+  thicknessZ: number
+): THREE.BufferGeometry {
+  const dir = new THREE.Vector3().subVectors(p2, p1);
+  const len = dir.length();
+  const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+  const box = new THREE.BoxGeometry(thicknessX, len, thicknessZ);
+  const geo = box.index ? box.toNonIndexed() : box.clone();
+  box.dispose();
+  const quat = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    dir.normalize()
+  );
+  const mat4 = new THREE.Matrix4().compose(mid, quat, new THREE.Vector3(1, 1, 1));
+  geo.applyMatrix4(mat4);
+  return geo;
+}
+
+function makeTriangleGusset(
+  baseX: number,
+  apexX: number,
+  height: number,
+  zPos: number,
+  thickness = 0.03
+): THREE.BufferGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(baseX, 0.06);
+  shape.lineTo(apexX, 0.06);
+  shape.lineTo(baseX, 0.06 + height);
+  shape.closePath();
+
+  const raw = new THREE.ExtrudeGeometry(shape, {
+    depth: thickness,
+    bevelEnabled: false,
+  });
+  const geo = raw.index ? raw.toNonIndexed() : raw.clone();
+  raw.dispose();
+  geo.translate(0, 0, zPos - thickness / 2);
+  return geo;
+}
+
 export class BlueBasketSceneEngine {
   private container: HTMLElement;
   private callbacks: BasketSceneCallbacks;
@@ -436,6 +663,18 @@ export class BlueBasketSceneEngine {
   private mergedPerfGeo: THREE.BufferGeometry;
   private mergedVPlateGeo: THREE.BufferGeometry;
   private mergedStatusStripGeo: THREE.BufferGeometry;
+
+  // Shared Building E10 steel cradle rack materials, textures & pre-merged geometries
+  private cradleSteelMat: THREE.MeshStandardMaterial;
+  private cradleSteelDimMat: THREE.MeshStandardMaterial;
+  private cradleWoodMat: THREE.MeshStandardMaterial;
+  private cradleWoodDimMat: THREE.MeshStandardMaterial;
+  private corrugatedWallTex: THREE.CanvasTexture;
+  private e10CenterRoadTex: THREE.CanvasTexture;
+  private hazardStripeTex: THREE.CanvasTexture;
+  private mergedCradleSteelGeo: THREE.BufferGeometry;
+  private mergedCradleWoodGeo: THREE.BufferGeometry;
+  private mergedCradleStatusGeo: THREE.BufferGeometry;
 
   private currentLayout: BuildingBasketLayout3D | null = null;
   private currentFilter: BasketSceneFilterState = {
@@ -721,6 +960,127 @@ export class BlueBasketSceneEngine {
       g.dispose();
     }
 
+    // Building E10 Triangular A-Frame 2m Steel Cradle Rack Materials & Pre-Merged Geometries
+    const woodTex = createTimberWoodTexture();
+    this.corrugatedWallTex = createCorrugatedWallTexture();
+    this.e10CenterRoadTex = createE10CenterRoadTexture();
+    this.hazardStripeTex = createHazardStripeTexture();
+    this.sharedTextures.push(
+      woodTex,
+      this.corrugatedWallTex,
+      this.e10CenterRoadTex,
+      this.hazardStripeTex
+    );
+
+    this.cradleSteelMat = new THREE.MeshStandardMaterial({
+      color: 0x3b424c,
+      roughness: 0.46,
+      metalness: 0.72,
+    });
+    this.cradleSteelDimMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.7,
+      metalness: 0.25,
+      transparent: true,
+      opacity: 0.34,
+    });
+    this.cradleWoodMat = new THREE.MeshStandardMaterial({
+      map: woodTex,
+      color: 0xb9936c,
+      roughness: 0.84,
+      metalness: 0.04,
+    });
+    this.cradleWoodDimMat = new THREE.MeshStandardMaterial({
+      color: 0x6b5642,
+      roughness: 0.88,
+      metalness: 0.04,
+      transparent: true,
+      opacity: 0.34,
+    });
+
+    // Build pre-merged triangular A-frame steel cradle rack (2.00m timber sleeper legs + inclined A-frame headboard)
+    const cradleSteelParts: THREE.BufferGeometry[] = [];
+    const cradleWoodParts: THREE.BufferGeometry[] = [];
+    const railHalfZ = 0.43;
+
+    for (const sz of [-railHalfZ, railHalfZ]) {
+      // Lower parallel steel channel base rail running full length (-1.44 to +1.42)
+      cradleSteelParts.push(
+        makeBeamBetween(
+          new THREE.Vector3(-1.44, 0.045, sz),
+          new THREE.Vector3(1.42, 0.045, sz),
+          0.085,
+          0.095
+        )
+      );
+      // 2.00m hardwood timber sleeper resting atop steel leg (-0.56 to +1.38)
+      cradleWoodParts.push(
+        makeBeamBetween(
+          new THREE.Vector3(-0.56, 0.135, sz),
+          new THREE.Vector3(1.38, 0.135, sz),
+          0.095,
+          0.105
+        )
+      );
+      // Front inclined A-frame steel channel upright extending past apex (twin channel ears)
+      cradleSteelParts.push(
+        makeBeamBetween(
+          new THREE.Vector3(-0.58, 0.06, sz),
+          new THREE.Vector3(-1.26, E10_CRADLE_HEIGHT_Y, sz),
+          0.09,
+          0.095
+        )
+      );
+      // Inclined wooden rubbing liner bolted to front face of A-frame upright
+      cradleWoodParts.push(
+        makeBeamBetween(
+          new THREE.Vector3(-0.51, 0.14, sz),
+          new THREE.Vector3(-1.11, 1.74, sz),
+          0.07,
+          0.092
+        )
+      );
+      // Rear angled steel support leg completing the triangle
+      cradleSteelParts.push(
+        makeBeamBetween(
+          new THREE.Vector3(-1.42, 0.06, sz),
+          new THREE.Vector3(-1.17, 1.76, sz),
+          0.085,
+          0.09
+        )
+      );
+      // Welded triangular corner gusset plates at front & rear of A-frame base
+      cradleSteelParts.push(makeTriangleGusset(-0.58, -0.84, 0.34, sz, 0.04));
+      cradleSteelParts.push(makeTriangleGusset(-1.42, -1.16, 0.34, sz, 0.04));
+    }
+
+    // Cross steel tie-plate at front tip of 2m legs
+    const frontTiePlate = new THREE.BoxGeometry(0.22, 0.028, railHalfZ * 2 + 0.11);
+    cradleSteelParts.push(stampPart(frontTiePlate, 1.36, 0.016, 0));
+    frontTiePlate.dispose();
+
+    // Base cross-beams under A-frame (front & rear) + upper horizontal A-frame cross-brace
+    const baseCrossGeo = new THREE.BoxGeometry(0.085, 0.085, railHalfZ * 2 + 0.09);
+    cradleSteelParts.push(stampPart(baseCrossGeo, -0.58, 0.045, 0));
+    cradleSteelParts.push(stampPart(baseCrossGeo, -1.42, 0.045, 0));
+    baseCrossGeo.dispose();
+
+    const upperCrossGeo = new THREE.BoxGeometry(0.075, 0.075, railHalfZ * 2);
+    cradleSteelParts.push(stampPart(upperCrossGeo, -1.14, 1.56, 0));
+    upperCrossGeo.dispose();
+
+    const cradleStripRaw = new THREE.BoxGeometry(0.06, 0.042, railHalfZ * 2 + 0.02);
+    const cradleStripStamped = stampPart(cradleStripRaw, 1.47, 0.04, 0);
+    cradleStripRaw.dispose();
+
+    this.mergedCradleSteelGeo = mergeGeometries(cradleSteelParts, false)!;
+    this.mergedCradleWoodGeo = mergeGeometries(cradleWoodParts, false)!;
+    this.mergedCradleStatusGeo = cradleStripStamped;
+
+    for (const g of [...cradleSteelParts, ...cradleWoodParts]) {
+      g.dispose();
+    }
+
     this.scene.add(this.dynamicRoot);
 
     this.bindEvents();
@@ -842,26 +1202,51 @@ export class BlueBasketSceneEngine {
     const slabW = this.currentLayout?.slabWidth || 34;
     const slabD = this.currentLayout?.slabDepth || 22;
     const span = Math.max(slabW + 6, slabD + 6);
+    const isE10 = this.currentLayout
+      ? isCradleRackBuilding(this.currentLayout.buildingId)
+      : false;
 
-    // Shift look slightly toward -X so Row A-D labels + compact exterior road on the left edge are framed cleanly
-    const look = new THREE.Vector3(-2.0, 1.1, 0);
+    const look = isE10
+      ? new THREE.Vector3(0.1, 1.1, 0.2)
+      : new THREE.Vector3(-2.0, 1.1, 0);
     const pos = new THREE.Vector3();
 
-    switch (preset) {
-      case "top":
-        pos.set(-2.0, span * 1.08, 0.01);
-        break;
-      case "front":
-        pos.set(-2.0, 7.2, slabD * 0.88 + 13);
-        break;
-      case "side":
-        pos.set(-slabW * 0.72 - 14, 9.5, 0);
-        break;
-      case "isometric":
-      case "reset":
-      default:
-        pos.set(-slabW * 0.44 - 6, Math.max(14.5, span * 0.42), slabD * 0.85 + 11);
-        break;
+    if (isE10) {
+      switch (preset) {
+        case "top":
+          pos.set(0.1, Math.max(slabW, slabD) * 1.16, 0.01);
+          break;
+        case "front":
+          pos.set(0.0, 8.8, slabD * 0.88 + 10.5);
+          break;
+        case "side":
+          pos.set(10.5, 6.8, 0.2);
+          look.set(-6.5, 1.1, 0.2);
+          break;
+        case "isometric":
+        case "reset":
+        default:
+          // Cutaway front-left diorama angle framing ROW A left, yellow-lined center road, and green Slitting Machine right
+          pos.set(-slabW * 0.72, Math.max(15.5, span * 0.5), slabD * 0.78);
+          break;
+      }
+    } else {
+      switch (preset) {
+        case "top":
+          pos.set(-2.0, span * 1.08, 0.01);
+          break;
+        case "front":
+          pos.set(-2.0, 7.2, slabD * 0.88 + 13);
+          break;
+        case "side":
+          pos.set(-slabW * 0.72 - 14, 9.5, 0);
+          break;
+        case "isometric":
+        case "reset":
+        default:
+          pos.set(-slabW * 0.44 - 6, Math.max(14.5, span * 0.42), slabD * 0.85 + 11);
+          break;
+      }
     }
 
     if (instant) {
@@ -880,6 +1265,17 @@ export class BlueBasketSceneEngine {
   public focusBasket(basketCode: string, layer: 1 | 2 = 1): void {
     const slot = this.currentLayout?.slotByCode.get(basketCode.toUpperCase());
     if (!slot) return;
+    if (isCradleRackBuilding(slot.buildingId)) {
+      this.targetOrbitLook.set(slot.worldX, 0.9, slot.worldZ);
+      this.targetCamPos.set(
+        slot.worldX + 6.2,
+        3.4,
+        slot.worldZ + 3.8
+      );
+      this.isAnimatingCamera = true;
+      this.requestRender();
+      return;
+    }
     const targetY = layer === 2 ? BASKET_STACK_STEP_Y + 0.75 : 0.75;
     this.targetOrbitLook.set(slot.worldX, targetY, slot.worldZ);
     this.targetCamPos.set(
@@ -1002,10 +1398,577 @@ export class BlueBasketSceneEngine {
     return group;
   }
 
+  private buildSteelCradleMeshGroup(
+    layerState: BasketLayerState,
+    dimmed: boolean,
+    isSelected: boolean,
+    isFocused: boolean
+  ): THREE.Group {
+    const group = new THREE.Group();
+
+    const steelMat = dimmed ? this.cradleSteelDimMat : this.cradleSteelMat;
+    const woodMat = dimmed ? this.cradleWoodDimMat : this.cradleWoodMat;
+
+    // 1. Merged gunmetal structural steel triangular A-frame & 2m floor rails
+    const steelMesh = new THREE.Mesh(this.mergedCradleSteelGeo, steelMat);
+    if (!this.isSoftwareGl && !dimmed) {
+      steelMesh.castShadow = true;
+      steelMesh.receiveShadow = true;
+    }
+    group.add(steelMesh);
+
+    // 2. Merged hardwood timber sleeper beams & A-frame rubbing liners
+    const woodMesh = new THREE.Mesh(this.mergedCradleWoodGeo, woodMat);
+    if (!this.isSoftwareGl && !dimmed) {
+      woodMesh.castShadow = true;
+      woodMesh.receiveShadow = true;
+    }
+    group.add(woodMesh);
+
+    // 3. Capacity status LED strip along the front toe plate
+    const stripMat = isFocused
+      ? this.statusStripFocusedMat
+      : isSelected
+      ? this.statusStripSelectedMat
+      : this.statusStripMats[layerState.status];
+    const stripMesh = new THREE.Mesh(this.mergedCradleStatusGeo, stripMat);
+    group.add(stripMesh);
+
+    // 4. Slit steel coils resting upright along the 2m timber legs, leaning snug against the wooden A-frame headboard
+    if (layerState.coils.length > 0) {
+      let cursorX = -0.54; // Snug against the inclined timber headboard liner
+      const maxSpan = E10_CRADLE_LEG_SPAN_X;
+      const totalRawWidthM = layerState.usedWidthMm / 1000;
+      const overflowScale =
+        totalRawWidthM > maxSpan ? maxSpan / totalRawWidthM : 1;
+
+      layerState.coils.forEach((coil, idx) => {
+        const rawW = Math.max(0.055, (coil.widthMm / 1000) * overflowScale);
+        const visualW = Math.max(0.04, rawW - 0.012);
+        const coilMat = dimmed
+          ? this.cradleSteelDimMat
+          : !coil.hasSapData
+          ? this.coilPendingSapMat
+          : this.coilMaterials[idx % this.coilMaterials.length];
+
+        const coilMesh = new THREE.Mesh(this.coilUnitGeo, coilMat);
+        coilMesh.scale.set(visualW, 1, 1);
+        // Cradled directly onto the twin timber sleeper rails (y = 0.74 -> rim clears floor & nests between rails)
+        coilMesh.position.set(cursorX + rawW / 2, 0.74, 0);
+        if (!this.isSoftwareGl && !dimmed) {
+          coilMesh.castShadow = true;
+          coilMesh.receiveShadow = true;
+        }
+        group.add(coilMesh);
+
+        cursorX += rawW;
+      });
+    }
+
+    return group;
+  }
+
+  private buildSlittingMachineGroup(): THREE.Group {
+    const machine = new THREE.Group();
+
+    const bluePaintMat = new THREE.MeshStandardMaterial({
+      color: 0x2b5c86,
+      roughness: 0.38,
+      metalness: 0.52,
+    });
+    const darkMachineryMat = new THREE.MeshStandardMaterial({
+      color: 0x263140,
+      roughness: 0.48,
+      metalness: 0.7,
+    });
+    const steelStripMat = new THREE.MeshStandardMaterial({
+      color: 0x64748b,
+      roughness: 0.3,
+      metalness: 0.85,
+    });
+    const yellowSafetyMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      roughness: 0.42,
+      metalness: 0.25,
+    });
+    const hazardMat = new THREE.MeshStandardMaterial({
+      map: this.hazardStripeTex,
+      roughness: 0.48,
+      metalness: 0.15,
+    });
+    this.dynamicMaterials.push(
+      bluePaintMat,
+      darkMachineryMat,
+      steelStripMat,
+      yellowSafetyMat,
+      hazardMat
+    );
+
+    const addBox = (
+      w: number,
+      h: number,
+      d: number,
+      x: number,
+      y: number,
+      z: number,
+      mat: THREE.Material,
+      rx = 0,
+      ry = 0,
+      rz = 0
+    ) => {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      this.dynamicGeometries.push(geo);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      if (rx || ry || rz) mesh.rotation.set(rx, ry, rz);
+      if (!this.isSoftwareGl) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+      machine.add(mesh);
+      return mesh;
+    };
+
+    const addCyl = (
+      rt: number,
+      rb: number,
+      h: number,
+      x: number,
+      y: number,
+      z: number,
+      mat: THREE.Material,
+      rz = 0,
+      rx = 0
+    ) => {
+      const geo = new THREE.CylinderGeometry(rt, rb, h, 20);
+      this.dynamicGeometries.push(geo);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      if (rx || rz) mesh.rotation.set(rx, 0, rz);
+      if (!this.isSoftwareGl) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+      machine.add(mesh);
+      return mesh;
+    };
+
+    // Dark recessed machine foundation pit pad
+    addBox(3.4, 0.06, 9.6, 0, 0.03, -0.3, darkMachineryMat);
+
+    // 1. Rear Uncoiler / Decoiler with Mother Steel Coil (at z = -4.6)
+    addBox(1.5, 1.35, 1.65, -0.95, 0.7, -4.6, darkMachineryMat);
+    addCyl(0.24, 0.24, 1.9, 0.15, 1.15, -4.6, darkMachineryMat, Math.PI / 2);
+    const motherCoil = new THREE.Mesh(this.coilUnitGeo, this.coilMaterials[0]);
+    motherCoil.scale.set(1.35, 1.18, 1.18);
+    motherCoil.position.set(0.35, 1.15, -4.6);
+    if (!this.isSoftwareGl) {
+      motherCoil.castShadow = true;
+      motherCoil.receiveShadow = true;
+    }
+    machine.add(motherCoil);
+
+    // 2. Entry Pinch Roll & Leveler Housing (at z = -2.6)
+    addBox(0.65, 1.85, 1.65, -1.25, 0.95, -2.6, bluePaintMat);
+    addBox(0.65, 1.85, 1.65, 1.25, 0.95, -2.6, bluePaintMat);
+    addBox(2.9, 0.34, 1.5, 0, 1.85, -2.6, bluePaintMat);
+    addCyl(0.22, 0.22, 2.2, 0, 1.28, -2.6, steelStripMat, Math.PI / 2);
+    addCyl(0.22, 0.22, 2.2, 0, 0.82, -2.6, steelStripMat, Math.PI / 2);
+
+    // 3. Main Slitter Head Unit (at z = 0.0)
+    addBox(0.75, 2.1, 2.0, -1.3, 1.08, 0.0, bluePaintMat);
+    addBox(0.75, 2.1, 2.0, 1.3, 1.08, 0.0, bluePaintMat);
+    addBox(3.1, 0.38, 1.9, 0, 2.08, 0.0, bluePaintMat);
+    // Upper & lower slitter knife arbors + cutting blades
+    addCyl(0.16, 0.16, 2.1, 0, 1.32, 0.0, darkMachineryMat, Math.PI / 2);
+    addCyl(0.16, 0.16, 2.1, 0, 0.88, 0.0, darkMachineryMat, Math.PI / 2);
+    for (let kx = -0.75; kx <= 0.75; kx += 0.3) {
+      addCyl(0.25, 0.25, 0.04, kx, 1.32, 0.0, steelStripMat, Math.PI / 2);
+      addCyl(0.25, 0.25, 0.04, kx, 0.88, 0.0, steelStripMat, Math.PI / 2);
+    }
+    // Yellow electrical control cabinet on right housing
+    addBox(0.32, 0.65, 0.52, 1.78, 1.15, 0.35, yellowSafetyMat);
+
+    // Continuous dark steel strip feeding from uncoiler -> leveler -> slitter -> recoiler
+    addBox(1.75, 0.04, 7.6, 0, 1.08, -0.7, steelStripMat);
+    // Slit strip guide deflection roll in front
+    addCyl(0.16, 0.16, 1.9, 0, 0.92, 1.85, steelStripMat, Math.PI / 2);
+
+    // 4. Front Recoiler & Iconic 2-Arm Hazard-Striped Turnstile (at z = +3.35)
+    addCyl(1.15, 1.28, 0.55, 0, 0.3, 3.35, bluePaintMat);
+    addCyl(0.55, 0.65, 1.05, 0, 0.95, 3.35, bluePaintMat);
+    // Left & right extending turnstile coil arms with black/yellow hazard stripes
+    addBox(1.95, 0.34, 0.34, -1.65, 1.02, 3.35, hazardMat);
+    addBox(1.95, 0.34, 0.34, 1.65, 1.02, 3.35, hazardMat);
+
+    // 5. Right-Side Steel Operator Walkway Platform, Stairs & Safety-Yellow Handrails
+    addBox(1.1, 0.12, 5.4, 2.35, 0.82, -1.6, darkMachineryMat);
+    // Platform legs
+    for (const lz of [-4.1, -1.6, 0.95]) {
+      addBox(0.08, 0.82, 0.08, 2.84, 0.41, lz, darkMachineryMat);
+      addBox(0.08, 0.82, 0.08, 1.86, 0.41, lz, darkMachineryMat);
+    }
+    // Front access staircase descending from platform (z = 1.1 to 2.2)
+    for (let s = 0; s < 4; s++) {
+      addBox(0.95, 0.06, 0.26, 2.35, 0.7 - s * 0.18, 1.2 + s * 0.28, darkMachineryMat);
+    }
+    // Yellow safety railing along outer edge, rear edge & stair handrails
+    addBox(0.05, 0.05, 5.4, 2.86, 1.65, -1.6, yellowSafetyMat);
+    addBox(0.05, 0.05, 5.4, 2.86, 1.25, -1.6, yellowSafetyMat);
+    addBox(1.1, 0.05, 0.05, 2.35, 1.65, -4.26, yellowSafetyMat);
+    addBox(1.1, 0.05, 0.05, 2.35, 1.25, -4.26, yellowSafetyMat);
+    for (const rz of [-4.26, -2.9, -1.55, -0.2, 1.06]) {
+      addBox(0.05, 0.86, 0.05, 2.86, 1.25, rz, yellowSafetyMat);
+    }
+    // Left-side rear walkway railing guard
+    addBox(0.05, 0.05, 2.2, -1.78, 1.45, -3.5, yellowSafetyMat);
+    addBox(0.05, 0.86, 0.05, -1.78, 1.05, -4.55, yellowSafetyMat);
+    addBox(0.05, 0.86, 0.05, -1.78, 1.05, -2.45, yellowSafetyMat);
+
+    return machine;
+  }
+
+  private rebuildE10Scene(layout: BuildingBasketLayout3D): void {
+    const { slabWidth, slabDepth } = layout;
+
+    // 0. Exterior Ground Skirt
+    const siteGeo = new THREE.PlaneGeometry(slabWidth + 18, slabDepth + 16);
+    const siteMat = new THREE.MeshStandardMaterial({
+      color: 0x162030,
+      roughness: 0.96,
+      metalness: 0.04,
+    });
+    this.dynamicGeometries.push(siteGeo);
+    this.dynamicMaterials.push(siteMat);
+    const siteGround = new THREE.Mesh(siteGeo, siteMat);
+    siteGround.rotation.x = -Math.PI / 2;
+    siteGround.position.set(0, -0.06, 0);
+    this.dynamicRoot.add(siteGround);
+
+    // 1. Main Building Concrete Floor Slab & Foundation Plinth
+    const floorGeo = new THREE.PlaneGeometry(slabWidth, slabDepth);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x9aa4b2,
+      roughness: 0.86,
+      metalness: 0.06,
+    });
+    const plinthGeo = new THREE.BoxGeometry(slabWidth + 0.36, 0.1, slabDepth + 0.36);
+    const plinthMat = new THREE.MeshStandardMaterial({
+      color: 0x334155,
+      roughness: 0.84,
+      metalness: 0.16,
+    });
+    this.dynamicGeometries.push(floorGeo, plinthGeo);
+    this.dynamicMaterials.push(floorMat, plinthMat);
+
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = !this.isSoftwareGl;
+    this.dynamicRoot.add(floor);
+
+    const plinth = new THREE.Mesh(plinthGeo, plinthMat);
+    plinth.position.set(0, -0.055, 0);
+    this.dynamicRoot.add(plinth);
+
+    // 2. Central Drive-Through Road with Bright Yellow Safety Boundaries (x = -3.8 to +2.6, width = 6.4m)
+    const roadLeftX = -3.8;
+    const roadRightX = 2.6;
+    const roadWidth = roadRightX - roadLeftX;
+    const roadCenterX = (roadLeftX + roadRightX) / 2;
+
+    const roadGeo = new THREE.PlaneGeometry(roadWidth, slabDepth - 0.12);
+    const roadMat = new THREE.MeshStandardMaterial({
+      map: this.e10CenterRoadTex,
+      roughness: 0.86,
+      metalness: 0.06,
+    });
+    this.dynamicGeometries.push(roadGeo);
+    this.dynamicMaterials.push(roadMat);
+    const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+    roadMesh.rotation.x = -Math.PI / 2;
+    roadMesh.position.set(roadCenterX, 0.014, 0);
+    roadMesh.receiveShadow = !this.isSoftwareGl;
+    this.dynamicRoot.add(roadMesh);
+
+    // Bold black "ROW A" floor stencil along the left edge of the central road
+    const rowATex = createFloorStencilTexture("ROW A", "#0f172a", 92);
+    this.dynamicTextures.push(rowATex);
+    const rowAGeo = new THREE.PlaneGeometry(4.4, 0.95);
+    const rowAMat = new THREE.MeshBasicMaterial({
+      map: rowATex,
+      transparent: true,
+    });
+    this.dynamicGeometries.push(rowAGeo);
+    this.dynamicMaterials.push(rowAMat);
+    const rowALabel = new THREE.Mesh(rowAGeo, rowAMat);
+    rowALabel.rotation.x = -Math.PI / 2;
+    rowALabel.rotation.z = Math.PI / 2;
+    rowALabel.position.set(roadLeftX + 1.05, 0.024, 0.2);
+    this.dynamicRoot.add(rowALabel);
+
+    // 3. Right Side: Green Epoxy Floor Zone ("SLITTING MACHINE")
+    const greenLeftX = roadRightX + 0.14;
+    const greenRightX = slabWidth / 2 - 0.22;
+    const greenWidth = greenRightX - greenLeftX;
+    const greenCenterX = (greenLeftX + greenRightX) / 2;
+
+    const greenGeo = new THREE.PlaneGeometry(greenWidth, slabDepth - 0.5);
+    const greenMat = new THREE.MeshStandardMaterial({
+      color: 0x2f7d57,
+      roughness: 0.44,
+      metalness: 0.08,
+    });
+    this.dynamicGeometries.push(greenGeo);
+    this.dynamicMaterials.push(greenMat);
+    const greenFloor = new THREE.Mesh(greenGeo, greenMat);
+    greenFloor.rotation.x = -Math.PI / 2;
+    greenFloor.position.set(greenCenterX, 0.014, 0);
+    greenFloor.receiveShadow = !this.isSoftwareGl;
+    this.dynamicRoot.add(greenFloor);
+
+    // Bold white "SLITTING MACHINE" stencil painted on front green epoxy floor
+    const slitLblTex = createFloorStencilTexture("SLITTING MACHINE", "#f8fafc", 68);
+    this.dynamicTextures.push(slitLblTex);
+    const slitLblGeo = new THREE.PlaneGeometry(6.6, 1.35);
+    const slitLblMat = new THREE.MeshBasicMaterial({
+      map: slitLblTex,
+      transparent: true,
+    });
+    this.dynamicGeometries.push(slitLblGeo);
+    this.dynamicMaterials.push(slitLblMat);
+    const slitLblMesh = new THREE.Mesh(slitLblGeo, slitLblMat);
+    slitLblMesh.rotation.x = -Math.PI / 2;
+    slitLblMesh.position.set(greenCenterX - 0.1, 0.024, slabDepth / 2 - 2.45);
+    this.dynamicRoot.add(slitLblMesh);
+
+    // Composite 3D Slitting Machine staggered slightly along Z relative to ROW A (matching reference floorplan)
+    const slittingMachine = this.buildSlittingMachineGroup();
+    slittingMachine.position.set(greenCenterX - 0.35, 0.014, 1.35);
+    this.dynamicRoot.add(slittingMachine);
+
+    // 4. Cutaway Corrugated Warehouse Shell & Steel I-Beam Columns (matching Image 3)
+    const wallCorrugatedMat = new THREE.MeshStandardMaterial({
+      map: this.corrugatedWallTex,
+      roughness: 0.54,
+      metalness: 0.44,
+    });
+    const dadoConcreteMat = new THREE.MeshStandardMaterial({
+      color: 0xcbd5e1,
+      roughness: 0.84,
+      metalness: 0.06,
+    });
+    const steelColMat = new THREE.MeshStandardMaterial({
+      color: 0x3f4754,
+      roughness: 0.5,
+      metalness: 0.62,
+    });
+    this.dynamicMaterials.push(wallCorrugatedMat, dadoConcreteMat, steelColMat);
+
+    const addWallBox = (
+      w: number,
+      h: number,
+      d: number,
+      x: number,
+      y: number,
+      z: number,
+      mat: THREE.Material
+    ) => {
+      const geo = new THREE.BoxGeometry(w, h, d);
+      this.dynamicGeometries.push(geo);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, y, z);
+      this.dynamicRoot.add(mesh);
+    };
+
+    const wallXLeft = -slabWidth / 2 + 0.14;
+    const wallXRight = slabWidth / 2 - 0.14;
+    const wallZBack = -slabDepth / 2 + 0.14;
+    const wallZFront = slabDepth / 2 - 0.14;
+
+    // Left full warehouse wall behind ROW A (concrete dado + corrugated metal upper siding)
+    addWallBox(0.24, 1.5, slabDepth, wallXLeft, 0.75, 0, dadoConcreteMat);
+    addWallBox(0.18, 3.6, slabDepth, wallXLeft, 3.3, 0, wallCorrugatedMat);
+    addWallBox(0.28, 0.24, slabDepth, wallXLeft, 5.18, 0, steelColMat);
+
+    // Steel structural columns evenly spaced along left wall
+    const colCount = Math.max(4, Math.round(slabDepth / 5.2));
+    for (let i = 0; i <= colCount; i++) {
+      const cz = -slabDepth / 2 + 0.25 + (i * (slabDepth - 0.5)) / colCount;
+      addWallBox(0.32, 5.25, 0.26, wallXLeft + 0.08, 2.62, cz, steelColMat);
+    }
+
+    // Back split walls (left wing behind ROW A + right wing behind Slitting Machine; open drive-through center portal!)
+    const backLeftW = roadLeftX - (-slabWidth / 2);
+    const backLeftCenterX = -slabWidth / 2 + backLeftW / 2;
+    addWallBox(backLeftW, 1.5, 0.24, backLeftCenterX, 0.75, wallZBack, dadoConcreteMat);
+    addWallBox(backLeftW, 3.6, 0.18, backLeftCenterX, 3.3, wallZBack, wallCorrugatedMat);
+    addWallBox(backLeftW, 0.24, 0.28, backLeftCenterX, 5.18, wallZBack, steelColMat);
+    addWallBox(0.3, 5.25, 0.3, roadLeftX, 2.62, wallZBack, steelColMat);
+
+    const backRightW = slabWidth / 2 - roadRightX;
+    const backRightCenterX = roadRightX + backRightW / 2;
+    addWallBox(backRightW, 1.5, 0.24, backRightCenterX, 0.75, wallZBack, dadoConcreteMat);
+    addWallBox(backRightW, 3.6, 0.18, backRightCenterX, 3.3, wallZBack, wallCorrugatedMat);
+    addWallBox(backRightW, 0.24, 0.28, backRightCenterX, 5.18, wallZBack, steelColMat);
+    addWallBox(0.3, 5.25, 0.3, roadRightX, 2.62, wallZBack, steelColMat);
+
+    // Right cutaway wall (dado full length + upper corrugated back section; kept open in front-right so Slitting Machine is unobstructed)
+    addWallBox(0.24, 1.5, slabDepth, wallXRight, 0.75, 0, dadoConcreteMat);
+    const rightUpperD = slabDepth * 0.34;
+    addWallBox(
+      0.18,
+      3.6,
+      rightUpperD,
+      wallXRight,
+      3.3,
+      -slabDepth / 2 + rightUpperD / 2,
+      wallCorrugatedMat
+    );
+    for (let i = 0; i <= 3; i++) {
+      const cz = -slabDepth / 2 + 0.25 + (i * (slabDepth - 0.5)) / 3;
+      const ch = i === 0 ? 5.25 : 4.2;
+      addWallBox(0.32, ch, 0.26, wallXRight - 0.08, ch / 2, cz, steelColMat);
+    }
+
+    // Front low cutaway dado walls on left & right wings (center road drive-through open!)
+    addWallBox(backLeftW, 1.25, 0.24, backLeftCenterX, 0.625, wallZFront, dadoConcreteMat);
+    addWallBox(backRightW, 1.25, 0.24, backRightCenterX, 0.625, wallZFront, dadoConcreteMat);
+
+    // Building E10 Signboard mounted on left back wall header
+    const signTex = createBuildingSignTexture("E10");
+    this.dynamicTextures.push(signTex);
+    const signGeo = new THREE.PlaneGeometry(6.4, 1.35);
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+    this.dynamicGeometries.push(signGeo);
+    this.dynamicMaterials.push(signMat);
+    const signMesh = new THREE.Mesh(signGeo, signMat);
+    signMesh.position.set(backLeftCenterX, 4.15, wallZBack + 0.22);
+    this.dynamicRoot.add(signMesh);
+
+    // 5. Left Side (ROW A): Yellow Safety Floor Bays + Triangular A-Frame 2m Steel Cradle Racks
+    const bayPadGeo = new THREE.PlaneGeometry(5.65, 2.38);
+    const bayInnerGeo = new THREE.PlaneGeometry(3.45, 1.38);
+    const labelGeo = new THREE.PlaneGeometry(1.55, 0.56);
+    const hitGeo = new THREE.BoxGeometry(
+      E10_CRADLE_TOTAL_LENGTH_X + 0.35,
+      E10_CRADLE_HEIGHT_Y,
+      E10_CRADLE_WIDTH_Z + 0.72
+    );
+    const focusRingGeo = new THREE.PlaneGeometry(5.85, 2.54);
+    focusRingGeo.rotateX(-Math.PI / 2);
+    this.dynamicGeometries.push(bayPadGeo, bayInnerGeo, labelGeo, hitGeo, focusRingGeo);
+
+    const bayInnerMat = new THREE.MeshStandardMaterial({
+      color: 0x7e8896,
+      roughness: 0.88,
+      metalness: 0.06,
+    });
+    const invisibleHitMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    this.dynamicMaterials.push(bayInnerMat, invisibleHitMat);
+
+    const f = this.currentFilter;
+    for (const slot of layout.slots) {
+      const matched = this.matchesFilter(slot);
+      const isSelected = f.selectedBasketCode === slot.basketCode;
+      const isFocused = f.focusedBasketCode === slot.basketCode;
+      const dimmed = !matched && !isSelected && !isFocused;
+
+      const bayColor = isFocused
+        ? 0xa855f7
+        : isSelected
+        ? 0x38bdf8
+        : dimmed
+        ? 0x475569
+        : 0xfacc15; // Iconic yellow painted safety bay around every ROW A cradle rack
+      const bayMat = new THREE.MeshStandardMaterial({
+        color: bayColor,
+        roughness: 0.65,
+        metalness: 0.05,
+        transparent: dimmed,
+        opacity: dimmed ? 0.38 : 1,
+      });
+      this.dynamicMaterials.push(bayMat);
+
+      const bayPad = new THREE.Mesh(bayPadGeo, bayMat);
+      bayPad.rotation.x = -Math.PI / 2;
+      bayPad.position.set(-7.1, 0.012, slot.worldZ);
+      bayPad.receiveShadow = !this.isSoftwareGl;
+      this.dynamicRoot.add(bayPad);
+
+      // Inner concrete cutout beneath rack rails so the yellow safety border pops cleanly like Image 3
+      if (!isSelected && !isFocused) {
+        const innerPad = new THREE.Mesh(bayInnerGeo, bayInnerMat);
+        innerPad.rotation.x = -Math.PI / 2;
+        innerPad.position.set(slot.worldX + 0.12, 0.014, slot.worldZ);
+        this.dynamicRoot.add(innerPad);
+      }
+
+      // Slot floor code badge near the road-facing tip of each bay (E10-A01..E10-A08)
+      const statusCss =
+        slot.layer1.status === "EMPTY"
+          ? "#22c55e"
+          : slot.layer1.status === "PARTIAL"
+          ? "#38bdf8"
+          : slot.layer1.status === "NEAR_FULL"
+          ? "#f59e0b"
+          : "#f43f5e";
+      const summaryTxt = slot.hasAnyCoil
+        ? `${Math.round(slot.layer1.usedWidthMm)} / 2000mm`
+        : "EMPTY · 2.0m";
+      const lblTex = createSlotFloorLabelTexture(
+        slot.basketCode,
+        statusCss,
+        summaryTxt
+      );
+      this.dynamicTextures.push(lblTex);
+      const lblMat = new THREE.MeshBasicMaterial({
+        map: lblTex,
+        transparent: true,
+        opacity: dimmed ? 0.35 : 0.96,
+      });
+      this.dynamicMaterials.push(lblMat);
+      const lblMesh = new THREE.Mesh(labelGeo, lblMat);
+      lblMesh.rotation.x = -Math.PI / 2;
+      lblMesh.position.set(-5.32, 0.022, slot.worldZ);
+      this.dynamicRoot.add(lblMesh);
+
+      // Render Triangular A-Frame 2m Steel Cradle Rack (always visible on ground level, empty or loaded with coils!)
+      if (f.layer !== "2") {
+        const cradleGroup = this.buildSteelCradleMeshGroup(
+          slot.layer1,
+          dimmed,
+          isSelected,
+          isFocused
+        );
+        cradleGroup.position.set(slot.worldX, 0.015, slot.worldZ);
+        this.dynamicRoot.add(cradleGroup);
+      }
+
+      // Clickable raycast hitbox covering full rack footprint
+      const hitMesh = new THREE.Mesh(hitGeo, invisibleHitMat);
+      hitMesh.position.set(slot.worldX, E10_CRADLE_HEIGHT_Y / 2, slot.worldZ);
+      hitMesh.userData = { slot, layer: 1 as const };
+      this.dynamicRoot.add(hitMesh);
+      this.hitMeshes.push(hitMesh);
+    }
+
+    const maxSpan = Math.max(slabWidth, slabDepth);
+    this.controls.maxDistance = Math.max(55, maxSpan * 2.1);
+  }
+
   private rebuildScene(): void {
     this.clearDynamicObjects();
     const layout = this.currentLayout;
     if (!layout) return;
+
+    if (isCradleRackBuilding(layout.buildingId)) {
+      this.rebuildE10Scene(layout);
+      return;
+    }
 
     const { slabWidth, slabDepth, buildingId } = layout;
 
@@ -1516,6 +2479,14 @@ export class BlueBasketSceneEngine {
     this.mergedPerfGeo.dispose();
     this.mergedVPlateGeo.dispose();
     this.mergedStatusStripGeo.dispose();
+
+    this.cradleSteelMat.dispose();
+    this.cradleSteelDimMat.dispose();
+    this.cradleWoodMat.dispose();
+    this.cradleWoodDimMat.dispose();
+    this.mergedCradleSteelGeo.dispose();
+    this.mergedCradleWoodGeo.dispose();
+    this.mergedCradleStatusGeo.dispose();
 
     this.renderer.dispose();
     if (dom.parentElement === this.container) {

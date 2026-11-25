@@ -6,17 +6,27 @@ import {
 } from "../../services/slitDataService";
 import type { SapMasterItem, SlitBarcodeRecord } from "../SlitFilmManagement";
 
-export type BlueBasketBuildingId = "E9" | "H2" | "F";
+export type BlueBasketBuildingId = "E9" | "H2" | "F" | "E10";
+
+export type BuildingStorageStyle = "blue_basket" | "steel_cradle";
 
 export const BLUE_BASKET_BUILDINGS: readonly BlueBasketBuildingId[] = [
   "E9",
   "H2",
   "F",
+  "E10",
 ] as const;
+
+export function isCradleRackBuilding(
+  buildingId: BlueBasketBuildingId
+): boolean {
+  return buildingId === "E10";
+}
 
 export const MAX_BASKET_WIDTH_MM = 2000;
 export const MAX_STACK_LAYERS = 2;
 export const DEFAULT_SLOTS_PER_ROW = 10;
+export const DEFAULT_E10_SLOTS_PER_ROW = 8;
 export const MIN_SLOTS_PER_ROW = 1;
 export const MAX_SLOTS_PER_ROW = 30;
 export const DEFAULT_FALLBACK_WIDTH_MM = 250;
@@ -32,6 +42,8 @@ export const BLUE_BASKET_BUILDING_META: Record<
     nameEn: string;
     accentHex: string;
     subtitleTh: string;
+    storageStyle: BuildingStorageStyle;
+    maxLayers: 1 | 2;
   }
 > = {
   E9: {
@@ -40,6 +52,8 @@ export const BLUE_BASKET_BUILDING_META: Record<
     nameEn: "Building E9",
     accentHex: "#2563eb",
     subtitleTh: "โซนตะกร้าฟ้า E9 · แถว A–D",
+    storageStyle: "blue_basket",
+    maxLayers: 2,
   },
   H2: {
     id: "H2",
@@ -47,6 +61,8 @@ export const BLUE_BASKET_BUILDING_META: Record<
     nameEn: "Building H2",
     accentHex: "#0284c7",
     subtitleTh: "โซนตะกร้าฟ้า H2 · แถว A–D",
+    storageStyle: "blue_basket",
+    maxLayers: 2,
   },
   F: {
     id: "F",
@@ -54,6 +70,17 @@ export const BLUE_BASKET_BUILDING_META: Record<
     nameEn: "Building F",
     accentHex: "#0ea5e9",
     subtitleTh: "โซนตะกร้าฟ้า F · แถว A–D",
+    storageStyle: "blue_basket",
+    maxLayers: 2,
+  },
+  E10: {
+    id: "E10",
+    nameTh: "อาคาร E10",
+    nameEn: "Building E10",
+    accentHex: "#f59e0b",
+    subtitleTh: "โซนแคร่เหล็กสามเหลี่ยม E10 · แถว A + เครื่องสลิต",
+    storageStyle: "steel_cradle",
+    maxLayers: 1,
   },
 };
 
@@ -183,6 +210,15 @@ export const BASKET_STACK_STEP_Y = 1.68; // Layer 2 interlocks onto Layer 1 corn
 export const SLOT_PITCH_X = 2.88; // Square basket + clear side gap for visibility & forklift
 export const ROW_PITCH_Z = 4.15; // Square basket + wide forklift inspection aisle & label strip
 
+// Building E10 triangular A-frame steel cradle rack constants (2.0m leg span, single row along left wall)
+export const E10_CRADLE_LEG_SPAN_X = 2.0; // Exact 2.00m timber sleeper coil loading span
+export const E10_CRADLE_TOTAL_LENGTH_X = 2.9; // A-frame headboard (0.85m) + 2.0m legs + front plate
+export const E10_CRADLE_WIDTH_Z = 1.06; // Width across parallel timber sleepers
+export const E10_CRADLE_HEIGHT_Y = 2.02; // Tall triangular A-frame headboard height
+export const E10_BAY_PITCH_Z = 2.65; // Spacing between adjacent cradle racks along left wall
+export const E10_SLAB_WIDTH = 22.0; // Left ROW A (7.0m) + Center Road (6.4m) + Right Slitting Zone (8.6m)
+export const E10_RACK_CENTER_X = -8.05; // A-frame back snug against left wall, 2m legs pointing +X toward center road
+
 export function createDefaultBlueBasketConfig(): BlueBasketWarehouseConfig {
   const defaultRows = (): BlueBasketRowConfig[] => [
     { rowId: "A", slotCount: DEFAULT_SLOTS_PER_ROW },
@@ -197,6 +233,10 @@ export function createDefaultBlueBasketConfig(): BlueBasketWarehouseConfig {
       E9: { buildingId: "E9", rows: defaultRows() },
       H2: { buildingId: "H2", rows: defaultRows() },
       F: { buildingId: "F", rows: defaultRows() },
+      E10: {
+        buildingId: "E10",
+        rows: [{ rowId: "A", slotCount: DEFAULT_E10_SLOTS_PER_ROW }],
+      },
     },
     updatedAt: new Date().toISOString(),
   };
@@ -287,9 +327,9 @@ export function parseWidthMm(raw?: string | number | null): number | null {
 }
 
 /**
- * Parses blue-basket barcode / location codes into structured coordinates.
+ * Parses blue-basket & E10 steel-cradle barcode / location codes into structured coordinates.
  * Accepts:
- *   "E9-A01", "E9-A01-L1", "E9-A01-L2", "E9-A01/L2", "E9/A01", "H2-B10-L1", "F-C03", "E9-A1-2"
+ *   "E9-A01", "E9-A01-L1", "E9-A01-L2", "H2-B10-L1", "F-C03", "E10-A01", "E10-A01-L1"
  */
 export function parseBasketLocation(
   rawLocation?: string | null
@@ -301,9 +341,9 @@ export function parseBasketLocation(
     .replace(/\s+/g, "");
   if (!cleaned) return null;
 
-  // Match building prefix (E9, H2, F), separator, row letters, slot digits, optional layer
+  // Match building prefix (E10 before E9, plus H2, F), separator, row letters, slot digits, optional layer
   const m = cleaned.match(
-    /^(E9|H2|F)[-/_ ]?([A-Z]{1,2})[-/_]?(\d{1,2})(?:[-/_]?(?:L|LAYER|ชั้น)?([12]))?$/
+    /^(E10|E9|H2|F)[-/_ ]?([A-Z]{1,2})[-/_]?(\d{1,2})(?:[-/_]?(?:L|LAYER|ชั้น)?([12]))?$/
   );
   if (!m) return null;
 
@@ -313,7 +353,9 @@ export function parseBasketLocation(
   if (!Number.isFinite(slotNumber) || slotNumber < 1 || slotNumber > 99) {
     return null;
   }
-  const layer: 1 | 2 = m[4] === "2" ? 2 : 1;
+  // Building E10 steel cradle racks are strictly ground-level single-tier (Layer 1 only)
+  const layer: 1 | 2 =
+    buildingId === "E10" ? 1 : m[4] === "2" ? 2 : 1;
   const basketCode = formatBasketCode(buildingId, rowId, slotNumber);
 
   return {
@@ -322,7 +364,10 @@ export function parseBasketLocation(
     slotNumber,
     basketCode,
     layer,
-    canonicalLocation: formatBasketLayerLocation(basketCode, layer),
+    canonicalLocation:
+      buildingId === "E10"
+        ? basketCode
+        : formatBasketLayerLocation(basketCode, layer),
   };
 }
 
@@ -407,6 +452,20 @@ export function validateBasketPlacement(
       currentUsedWidthMm: 0,
       nextUsedWidthMm: 0,
       nextRemainingWidthMm: MAX_BASKET_WIDTH_MM,
+      overflowMm: 0,
+    };
+  }
+
+  if (isCradleRackBuilding(slot.buildingId) && targetLayer !== 1) {
+    return {
+      ok: false,
+      reasonTh:
+        "อาคาร E10 ใช้แคร่เหล็กฐานสามเหลี่ยม วางได้เฉพาะระดับพื้น (ชั้น 1) เท่านั้น ไม่รองรับการซ้อนชั้น 2",
+      reasonEn:
+        "Building E10 steel cradle racks are single-tier only (Layer 1).",
+      currentUsedWidthMm: 0,
+      nextUsedWidthMm: incomingWidthMm,
+      nextRemainingWidthMm: 0,
       overflowMm: 0,
     };
   }
@@ -528,6 +587,7 @@ export function buildBuildingBasketLayout3D(
     list.sort((a, b) => a.scanTimestamp.localeCompare(b.scanTimestamp));
   });
 
+  const isE10 = isCradleRackBuilding(buildingId);
   const maxSlotsInAnyRow = Math.max(
     1,
     ...rows.map((r) => Math.max(1, r.slotCount))
@@ -535,7 +595,9 @@ export function buildBuildingBasketLayout3D(
   const rowCount = Math.max(1, rows.length);
 
   const totalSpanX = (maxSlotsInAnyRow - 1) * SLOT_PITCH_X;
-  const totalSpanZ = (rowCount - 1) * ROW_PITCH_Z;
+  const totalSpanZ = isE10
+    ? (maxSlotsInAnyRow - 1) * E10_BAY_PITCH_Z
+    : (rowCount - 1) * ROW_PITCH_Z;
 
   const slots: BasketSlot3D[] = [];
   const slotByCode = new Map<string, BasketSlot3D>();
@@ -552,17 +614,25 @@ export function buildBuildingBasketLayout3D(
   let pendingSapCoils = 0;
 
   rows.forEach((rowCfg, rowIndex) => {
-    const worldZ = -totalSpanZ / 2 + rowIndex * ROW_PITCH_Z;
+    const rowWorldZ = isE10 ? 0 : -totalSpanZ / 2 + rowIndex * ROW_PITCH_Z;
     let rowOccupied = 0;
     let rowCoils = 0;
 
     for (let slotIndex = 0; slotIndex < rowCfg.slotCount; slotIndex++) {
       const slotNumber = slotIndex + 1;
       const basketCode = formatBasketCode(buildingId, rowCfg.rowId, slotNumber);
-      const worldX = -totalSpanX / 2 + 0.95 + slotIndex * SLOT_PITCH_X;
+
+      // In E10, ROW A cradle racks line up in a single column along Z snug against the left wall (-X).
+      // If additional rows are ever added in E10, shift them along Z after the previous row cleanly.
+      const worldX = isE10
+        ? E10_RACK_CENTER_X
+        : -totalSpanX / 2 + 0.95 + slotIndex * SLOT_PITCH_X;
+      const worldZ = isE10
+        ? -totalSpanZ / 2 + slotIndex * E10_BAY_PITCH_Z
+        : rowWorldZ;
 
       const l1Coils = coilsByKey.get(`${basketCode}#L1`) || [];
-      const l2Coils = coilsByKey.get(`${basketCode}#L2`) || [];
+      const l2Coils = isE10 ? [] : coilsByKey.get(`${basketCode}#L2`) || [];
 
       const layer1 = buildLayerState(basketCode, 1, l1Coils);
       const layer2 = buildLayerState(basketCode, 2, l2Coils);
@@ -627,15 +697,19 @@ export function buildBuildingBasketLayout3D(
     rowPositions.push({
       rowId: rowCfg.rowId,
       rowIndex,
-      worldZ,
+      worldZ: rowWorldZ,
       slotCount: rowCfg.slotCount,
       occupiedSlots: rowOccupied,
       totalCoils: rowCoils,
     });
   });
 
-  const slabWidth = Math.max(18, totalSpanX + BASKET_OUTER_WIDTH_X + 6.4);
-  const slabDepth = Math.max(14, totalSpanZ + BASKET_OUTER_DEPTH_Z + 4.8);
+  const slabWidth = isE10
+    ? E10_SLAB_WIDTH
+    : Math.max(18, totalSpanX + BASKET_OUTER_WIDTH_X + 6.4);
+  const slabDepth = isE10
+    ? Math.max(21.5, totalSpanZ + E10_BAY_PITCH_Z + 5.2)
+    : Math.max(14, totalSpanZ + BASKET_OUTER_DEPTH_Z + 4.8);
 
   return {
     buildingId,

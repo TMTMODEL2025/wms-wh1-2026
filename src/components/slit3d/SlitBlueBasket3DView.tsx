@@ -48,6 +48,7 @@ import {
   formatBasketCode,
   formatBasketLayerLocation,
   getNextAvailableRowId,
+  isCradleRackBuilding,
   loadCachedBlueBasketConfig,
   parseBasketLocation,
   parseWidthMm,
@@ -93,6 +94,27 @@ const REFERENCE_IMAGES = [
     titleEn: "2-Layer Stack (Max 2 Tiers)",
     captionTh:
       "ตะกร้าชั้น 2 สวมลงบนสลักมุมทั้ง 4 เสาของตะกร้าชั้น 1 พอดี เพื่อความปลอดภัยห้ามซ้อนเกิน 2 ชั้น",
+  },
+  {
+    src: "/assets/aistudio/Gemini_Generated_Image_kn9y1mkn9y1mkn9y__1__c4398bf4.jpg",
+    titleTh: "อาคาร E10 · แคร่เหล็กฐานสามเหลี่ยมขา 2 เมตร (แคร่เปล่า)",
+    titleEn: "Building E10 · Empty 2m Triangular Steel Cradle Rack",
+    captionTh:
+      "โครงสร้างแคร่เหล็กหัวสามเหลี่ยม A-Frame พร้อมหมอนไม้รองรับ 2 ขายาว 2 เมตร และแผ่นไม้บุพนักพิงป้องกันรอย",
+  },
+  {
+    src: "/assets/aistudio/Gemini_Generated_Image_kn9y1mkn9y1mkn9y_a42d0d5b.jpg",
+    titleTh: "อาคาร E10 · การวางม้วนเหล็กสลิตพิงหัวแคร่ (ชั้นเดียว)",
+    titleEn: "Building E10 · Slit Coils Loaded on Steel Cradle",
+    captionTh:
+      "วางม้วนเหล็กสลิตตั้งตรงบนหมอนไม้ยาว 2 เมตร พิงชิดหัวแคร่สามเหลี่ยม รวมหน้ากว้างไม่เกิน 2,000 มม. (ไม่ซ้อนชั้น)",
+  },
+  {
+    src: "/assets/aistudio/Gemini_Generated_Image_xggvi3xggvi3xggv_f7bf0223.jpg",
+    titleTh: "ผังคลัง 3 มิติ อาคาร E10 (ROW A + ถนนกลาง + SLITTING MACHINE)",
+    titleEn: "Building E10 3D Warehouse Floorplan",
+    captionTh:
+      "ฝั่งซ้ายวางแคร่เหล็ก ROW A แถวเดียวชิดผนัง กลางอาคารเป็นถนนเส้นขอบเขตสีเหลือง ฝั่งขวาโซนพื้นเขียวติดตั้งเครื่องสลิตเหล็กวางเยื้องแนว ROW A",
   },
 ];
 
@@ -319,7 +341,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     return Array.from(latestByBatch.values());
   }, [inboundList, outboundList]);
 
-  // Build layouts for all 3 buildings (E9, H2, F) so building badges & cross-building search are instant
+  // Build layouts for all buildings (E9, H2, F, E10) so building badges & cross-building search are instant
   const allBuildingLayouts = useMemo(() => {
     return {
       E9: buildBuildingBasketLayout3D(
@@ -340,10 +362,17 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
         activeStockRecords,
         sapMasterMap
       ),
+      E10: buildBuildingBasketLayout3D(
+        "E10",
+        warehouseConfig,
+        activeStockRecords,
+        sapMasterMap
+      ),
     };
   }, [warehouseConfig, activeStockRecords, sapMasterMap]);
 
   const currentLayout = allBuildingLayouts[selectedBuilding];
+  const isCurrentCradle = isCradleRackBuilding(selectedBuilding);
 
   // Selected slot object for Inspector
   const selectedSlot: BasketSlot3D | null = useMemo(() => {
@@ -433,12 +462,14 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       setFocusedBasketCode(slot.basketCode);
       setConfirmDeleteRecordId(null);
 
-      // If 4-step inbound drawer is open, clicking a 3D basket fills Step 3 automatically!
+      // If 4-step inbound drawer is open, clicking a 3D basket/cradle fills Step 3 automatically!
       if (showInboundDrawerRef.current) {
         setInboundBuilding(slot.buildingId);
         setInboundBasketInput(slot.basketCode);
         setConfirmEmptyLayer1(false);
-        if (layer) {
+        if (isCradleRackBuilding(slot.buildingId)) {
+          setInboundLayer(1);
+        } else if (layer) {
           setInboundLayer(layer);
         } else if (
           slot.layer1.status === "FULL" ||
@@ -449,7 +480,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
           setInboundLayer(1);
         }
         setInboundStep((prev) => (prev >= 2 ? 4 : prev));
-        engineRef.current?.focusBasket(slot.basketCode, layer || 1);
+        engineRef.current?.focusBasket(
+          slot.basketCode,
+          isCradleRackBuilding(slot.buildingId) ? 1 : layer || 1
+        );
       }
     },
     []
@@ -498,6 +532,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       focusedBasketCode,
       previewLayer2BasketCode:
         showInboundDrawer &&
+        !isCradleRackBuilding(selectedBuilding) &&
         inboundBuilding === selectedBuilding &&
         inboundLayer === 2 &&
         resolvedInboundBasketCode
@@ -521,7 +556,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     resolvedInboundBasketCode,
   ]);
 
-  // Reset row filter when switching building if row doesn't exist
+  // Reset row/layer filter when switching building
   useEffect(() => {
     if (
       rowFilter !== "ALL" &&
@@ -529,7 +564,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     ) {
       setRowFilter("ALL");
     }
-  }, [currentLayout, rowFilter]);
+    if (isCradleRackBuilding(selectedBuilding) && layerFilter !== "ALL") {
+      setLayerFilter("ALL");
+    }
+  }, [currentLayout, rowFilter, selectedBuilding, layerFilter]);
 
   // Auto-focus inputs when stepping in Inbound Drawer
   useEffect(() => {
@@ -575,8 +613,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
         setSearchFeedback({
           type: "found",
           message: isThai
-            ? `พบตะกร้า ${slot.basketCode} (อาคาร ${parsedBasket.buildingId} · ${slot.totalCoils} ม้วน)`
-            : `Found basket ${slot.basketCode} (${slot.totalCoils} coils)`,
+            ? `พบ${isCradleRackBuilding(parsedBasket.buildingId) ? "แคร่เหล็ก" : "ตะกร้า"} ${slot.basketCode} (อาคาร ${parsedBasket.buildingId} · ${slot.totalCoils} ม้วน)`
+            : `Found ${slot.basketCode} (${slot.totalCoils} coils)`,
         });
         window.setTimeout(() => {
           engineRef.current?.focusBasket(slot.basketCode, parsedBasket.layer);
@@ -604,8 +642,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
           setSearchFeedback({
             type: "found",
             message: isThai
-              ? `พบ Batch ${matchedCoil.batch} ที่ ${slot.basketCode} ชั้น ${matchedLayer} (${matchedCoil.widthMm} มม.)`
-              : `Found ${matchedCoil.batch} at ${slot.basketCode} Layer ${matchedLayer}`,
+              ? isCradleRackBuilding(bId)
+                ? `พบ Batch ${matchedCoil.batch} ที่แคร่ ${slot.basketCode} (${matchedCoil.widthMm} มม.)`
+                : `พบ Batch ${matchedCoil.batch} ที่ ${slot.basketCode} ชั้น ${matchedLayer} (${matchedCoil.widthMm} มม.)`
+              : `Found ${matchedCoil.batch} at ${slot.basketCode}${isCradleRackBuilding(bId) ? "" : ` Layer ${matchedLayer}`}`,
           });
           window.setTimeout(() => {
             engineRef.current?.focusBasket(slot.basketCode, matchedLayer);
@@ -618,8 +658,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     setSearchFeedback({
       type: "not_found",
       message: isThai
-        ? `ไม่พบ Batch หรือเบอร์ตะกร้า "${q}" ในอาคาร E9, H2, F`
-        : `No Batch or Basket "${q}" found in E9, H2, F`,
+        ? `ไม่พบ Batch หรือรหัสตำแหน่ง "${q}" ในอาคาร E9, H2, F, E10`
+        : `No Batch or Location "${q}" found in E9, H2, F, E10`,
     });
   };
 
@@ -633,17 +673,23 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     setConfirmEmptyLayer1(false);
     setCameraScanTarget(null);
     if (preset) {
+      const targetLayer: 1 | 2 = isCradleRackBuilding(preset.buildingId)
+        ? 1
+        : preset.layer;
       setSelectedBuilding(preset.buildingId);
       setInboundBuilding(preset.buildingId);
       setInboundBasketInput(preset.basketCode);
-      setInboundLayer(preset.layer);
+      setInboundLayer(targetLayer);
       setInboundStep(1);
       setFocusedBasketCode(preset.basketCode);
       window.setTimeout(() => {
-        engineRef.current?.focusBasket(preset.basketCode, preset.layer);
+        engineRef.current?.focusBasket(preset.basketCode, targetLayer);
       }, 60);
     } else {
       setInboundBuilding(selectedBuilding);
+      if (isCradleRackBuilding(selectedBuilding)) {
+        setInboundLayer(1);
+      }
       setInboundStep(1);
     }
   };
@@ -695,21 +741,19 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       setConfirmEmptyLayer1(false);
 
       const slot = targetLayout.slotByCode.get(parsed.basketCode)!;
-      // Pick layer from scanned suffix if specified, else smart default
+      // Pick layer from scanned suffix if specified, else smart default (E10 is always layer 1)
       const hasExplicitLayer = /[-/_]?(?:L|LAYER|ชั้น)[12]$/.test(code);
-      if (hasExplicitLayer) {
-        setInboundLayer(parsed.layer);
-      } else if (
-        slot.layer1.status === "FULL" ||
-        slot.layer1.status === "OVERFLOW"
-      ) {
-        setInboundLayer(2);
-      } else {
-        setInboundLayer(1);
-      }
+      const nextLayer: 1 | 2 = isCradleRackBuilding(parsed.buildingId)
+        ? 1
+        : hasExplicitLayer
+        ? parsed.layer
+        : slot.layer1.status === "FULL" || slot.layer1.status === "OVERFLOW"
+        ? 2
+        : 1;
+      setInboundLayer(nextLayer);
       setInboundStep(4);
       window.setTimeout(() => {
-        engineRef.current?.focusBasket(parsed.basketCode, parsed.layer);
+        engineRef.current?.focusBasket(parsed.basketCode, nextLayer);
       }, 80);
       return;
     }
@@ -717,8 +761,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     setToastMessage({
       type: "error",
       text: isThai
-        ? `รูปแบบเบอร์ตะกร้าไม่ถูกต้อง กรุณาสแกนเช่น E9-A01, H2-B05 หรือ F-C10`
-        : `Invalid basket code. Expected format like E9-A01, H2-B05, F-C10.`,
+        ? `รูปแบบรหัสตำแหน่งไม่ถูกต้อง กรุณาสแกนเช่น E9-A01, H2-B05, F-C10 หรือ E10-A01`
+        : `Invalid location code. Expected format like E9-A01, H2-B05, F-C10, E10-A01.`,
     });
   };
 
@@ -739,10 +783,14 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
     setIsSavingInbound(true);
     try {
-      const canonicalLocation = formatBasketLayerLocation(
-        inboundTargetSlot.basketCode,
-        inboundLayer
-      );
+      const targetIsCradle = isCradleRackBuilding(inboundTargetSlot.buildingId);
+      const effectiveLayer: 1 | 2 = targetIsCradle ? 1 : inboundLayer;
+      const canonicalLocation = targetIsCradle
+        ? inboundTargetSlot.basketCode
+        : formatBasketLayerLocation(
+            inboundTargetSlot.basketCode,
+            effectiveLayer
+          );
       const nowTs = formatCurrentTimestamp();
       const sap = inboundSapItem;
       const weightKg =
@@ -796,18 +844,19 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
         description:
           sap?.description || existingActiveRecordForBatch?.description || "",
         coilNo: sap?.coilNo || existingActiveRecordForBatch?.coilNo || "",
-        conditionText:
-          inboundLayer === 2 &&
-          inboundTargetSlot.layer1.coils.length === 0 &&
-          confirmEmptyLayer1
-            ? "ตะกร้าฟ้า 3D (วางชั้น 2 บนตะกร้าเปล่ารองรับ)"
-            : "ตะกร้าฟ้า 3D",
+        conditionText: targetIsCradle
+          ? "แคร่เหล็กสามเหลี่ยม E10 3D"
+          : effectiveLayer === 2 &&
+            inboundTargetSlot.layer1.coils.length === 0 &&
+            confirmEmptyLayer1
+          ? "ตะกร้าฟ้า 3D (วางชั้น 2 บนตะกร้าเปล่ารองรับ)"
+          : "ตะกร้าฟ้า 3D",
       };
 
       await saveInboundRecordToCloud(newRecord);
       onInboundRecordSaved?.(newRecord);
       onLogTransaction?.(
-        "Blue Basket 3D Inbound",
+        targetIsCradle ? "E10 Steel Cradle 3D Inbound" : "Blue Basket 3D Inbound",
         `Batch ${newRecord.batch} (${effectiveInboundWidthMm} mm) -> ${canonicalLocation}`
       );
 
@@ -1028,26 +1077,31 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
   };
 
   const handleResetBuildingToDefault = async () => {
-    const hasStockOutsideDefault = currentLayout.slots.some(
-      (s) =>
-        s.hasAnyCoil &&
-        (!["A", "B", "C", "D"].includes(s.rowId) ||
-          s.slotNumber > DEFAULT_SLOTS_PER_ROW)
+    const def = createDefaultBlueBasketConfig();
+    const defBuilding = def.buildings[selectedBuilding];
+    const defRowLimit = new Map(
+      defBuilding.rows.map((r) => [r.rowId, r.slotCount])
     );
+    const hasStockOutsideDefault = currentLayout.slots.some((s) => {
+      if (!s.hasAnyCoil) return false;
+      const limit = defRowLimit.get(s.rowId);
+      return limit === undefined || s.slotNumber > limit;
+    });
     if (hasStockOutsideDefault) {
       setRowManagerError(
         isThai
-          ? "ไม่สามารถรีเซ็ตเป็น A–D (แถวละ 10 ช่อง) ได้ เนื่องจากมีเหล็กวางอยู่ในแถวหรือช่องที่เกินค่าเริ่มต้น"
-          : "Cannot reset while coils exist outside A–D (10 slots)."
+          ? isCurrentCradle
+            ? "ไม่สามารถรีเซ็ตเป็นแถว A (8 แคร่) ได้ เนื่องจากมีเหล็กวางอยู่ในช่องที่เกินค่าเริ่มต้น"
+            : "ไม่สามารถรีเซ็ตเป็น A–D (แถวละ 10 ช่อง) ได้ เนื่องจากมีเหล็กวางอยู่ในแถวหรือช่องที่เกินค่าเริ่มต้น"
+          : "Cannot reset while coils exist outside default slots."
       );
       return;
     }
-    const def = createDefaultBlueBasketConfig();
     const nextConfig: BlueBasketWarehouseConfig = {
       ...warehouseConfig,
       buildings: {
         ...warehouseConfig.buildings,
-        [selectedBuilding]: def.buildings[selectedBuilding],
+        [selectedBuilding]: defBuilding,
       },
       updatedAt: new Date().toISOString(),
     };
@@ -1080,18 +1134,23 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                     : "3D Blue Basket Location"}
                 </h2>
                 <p className="text-[10px] text-slate-400 hidden sm:block">
-                  {isThai
-                    ? "E9 · H2 · F | แถว A–D | ≤ 2,000 มม. | ซ้อนสูงสุด 2 ชั้น"
-                    : "E9 · H2 · F | Rows A–D | ≤ 2,000 mm | Max 2 Layers"}
+                  {isCurrentCradle
+                    ? isThai
+                      ? "E10 แคร่เหล็กสามเหลี่ยมขา 2 ม. | แถว A ชิดผนังซ้าย + ถนนกลาง + Slitting Machine"
+                      : "E10 2m Steel Cradle Rack | ROW A + Central Road + Slitting Machine"
+                    : isThai
+                    ? "E9 · H2 · F ตะกร้าฟ้า (2 ชั้น) | E10 แคร่เหล็ก | ≤ 2,000 มม."
+                    : "E9 · H2 · F Blue Baskets (2 Layers) | E10 Steel Cradle | ≤ 2,000 mm"}
                 </p>
               </div>
             </div>
 
-            {/* Building Tabs: E9, H2, F */}
+            {/* Building Tabs: E9, H2, F, E10 */}
             <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-xl border border-slate-800">
               {BLUE_BASKET_BUILDINGS.map((bId) => {
                 const bLayout = allBuildingLayouts[bId];
                 const active = selectedBuilding === bId;
+                const isCradle = isCradleRackBuilding(bId);
                 return (
                   <button
                     key={bId}
@@ -1105,12 +1164,25 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                     }}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition-all flex items-center gap-1.5 cursor-pointer ${
                       active
-                        ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                        ? isCradle
+                          ? "bg-amber-600 text-white shadow-sm shadow-amber-600/30"
+                          : "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
                         : "text-slate-300 hover:bg-slate-800 hover:text-white"
                     }`}
                   >
                     <Building2 className="w-3 h-3" />
                     <span>{isThai ? `อาคาร ${bId}` : bId}</span>
+                    {isCradle && (
+                      <span
+                        className={`px-1 py-0.2 rounded text-[9px] font-black ${
+                          active
+                            ? "bg-black/25 text-amber-100"
+                            : "bg-amber-500/20 text-amber-300"
+                        }`}
+                      >
+                        {isThai ? "แคร่เหล็ก" : "Cradle"}
+                      </span>
+                    )}
                     <span
                       className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
                         active
@@ -1139,8 +1211,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={
                   isThai
-                    ? "ค้นหา Batch / E9-A01"
-                    : "Search Batch / E9-A01"
+                    ? "ค้นหา Batch / E9-A01 / E10-A01"
+                    : "Search Batch / E9-A01 / E10-A01"
                 }
                 className="bg-transparent text-[11px] text-white placeholder-slate-500 outline-none w-full"
               />
@@ -1224,15 +1296,27 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-1 text-sky-300">
-            <Layers className="w-3 h-3" />
-            <span className="text-slate-400 font-semibold">
-              {isThai ? "ซ้อน 2 ชั้น:" : "2-Layer:"}
-            </span>
-            <span className="font-black tabular-nums">
-              {currentLayout.stats.stacked2LayerCount} จุด
-            </span>
-          </div>
+          {isCurrentCradle ? (
+            <div className="flex items-center gap-1 text-amber-300">
+              <Layers className="w-3 h-3" />
+              <span className="text-slate-400 font-semibold">
+                {isThai ? "รูปแบบวาง:" : "Rack:"}
+              </span>
+              <span className="font-black">
+                {isThai ? "แคร่เหล็กสามเหลี่ยม ขา 2 ม. (ชั้นเดียว)" : "2m Steel Cradle (1-Tier)"}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 text-sky-300">
+              <Layers className="w-3 h-3" />
+              <span className="text-slate-400 font-semibold">
+                {isThai ? "ซ้อน 2 ชั้น:" : "2-Layer:"}
+              </span>
+              <span className="font-black tabular-nums">
+                {currentLayout.stats.stacked2LayerCount} จุด
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-1 text-emerald-400">
             <Package className="w-3 h-3" />
@@ -1305,15 +1389,24 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
           {/* Top-Left Compact Building Tag */}
           <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none flex flex-wrap items-center gap-1.5">
             <div className="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-[11px] font-extrabold text-white flex items-center gap-1.5 shadow-md">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  isCurrentCradle ? "bg-amber-400" : "bg-blue-500"
+                }`}
+              />
               <span>
                 {BLUE_BASKET_BUILDING_META[selectedBuilding].nameTh} · แถว{" "}
                 {currentLayout.config.rows.map((r) => r.rowId).join(", ")}
+                {isCurrentCradle ? " · ถนนกลาง · Slitting Machine" : ""}
               </span>
             </div>
             {showInboundDrawer && (
               <div className="px-2.5 py-1 rounded-xl bg-emerald-950 border border-emerald-600/60 text-[11px] font-bold text-emerald-300 shadow-md">
-                {isThai
+                {isCurrentCradle
+                  ? isThai
+                    ? "คลิกแคร่เหล็กในฉาก 3D เพื่อเลือกช่องรับเข้าได้ทันที"
+                    : "Click any 3D steel cradle to pick inbound slot"
+                  : isThai
                   ? "คลิกตะกร้าในฉาก 3D เพื่อเลือกช่องรับเข้าได้ทันที"
                   : "Click any 3D basket to pick inbound slot"}
               </div>
@@ -1374,70 +1467,91 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
           {/* Hover Tooltip (Solid surface, no backdrop-filter) */}
           {hoverInfo && (
             <div
-              className="fixed z-40 pointer-events-none rounded-xl bg-slate-900 border border-slate-600 px-3 py-2 text-xs text-slate-100 shadow-2xl min-w-[195px]"
+              className="fixed z-40 pointer-events-none rounded-xl bg-slate-900 border border-slate-600 px-3 py-2 text-xs text-slate-100 shadow-2xl min-w-[205px]"
               style={{
                 left: Math.min(
                   hoverInfo.clientX + 16,
-                  typeof window !== "undefined" ? window.innerWidth - 230 : 800
+                  typeof window !== "undefined" ? window.innerWidth - 240 : 800
                 ),
                 top: Math.max(hoverInfo.clientY - 12, 12),
               }}
             >
               <div className="flex items-center justify-between gap-2 pb-1 mb-1 border-b border-slate-700">
-                <span className="font-black text-sky-300">
+                <span
+                  className={`font-black ${
+                    isCradleRackBuilding(hoverInfo.slot.buildingId)
+                      ? "text-amber-300"
+                      : "text-sky-300"
+                  }`}
+                >
                   {hoverInfo.slot.basketCode}
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                  {isThai ? `ชั้น ${hoverInfo.layer}` : `L${hoverInfo.layer}`}
+                  {isCradleRackBuilding(hoverInfo.slot.buildingId)
+                    ? isThai
+                      ? "แคร่เหล็ก 2 ม."
+                      : "2m Cradle"
+                    : isThai
+                    ? `ชั้น ${hoverInfo.layer}`
+                    : `L${hoverInfo.layer}`}
                 </span>
               </div>
-              <div className="space-y-1 text-[11px]">
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-400">ชั้น 1 (ฐาน):</span>
-                  <span className="font-bold text-white tabular-nums">
-                    {hoverInfo.slot.layer1.usedWidthMm.toLocaleString()} /{" "}
-                    {MAX_BASKET_WIDTH_MM} มม. ({hoverInfo.slot.layer1.coils.length} ม้วน)
-                  </span>
+              {isCradleRackBuilding(hoverInfo.slot.buildingId) ? (
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-400">แคร่ขา 2 ม.:</span>
+                    <span className="font-bold text-white tabular-nums">
+                      {hoverInfo.slot.layer1.usedWidthMm.toLocaleString()} /{" "}
+                      {MAX_BASKET_WIDTH_MM} มม. (
+                      {hoverInfo.slot.layer1.coils.length} ม้วน)
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between gap-3">
-                  <span className="text-slate-400">ชั้น 2 (ซ้อน):</span>
-                  <span className="font-bold text-sky-300 tabular-nums">
-                    {hoverInfo.slot.layer2.usedWidthMm.toLocaleString()} /{" "}
-                    {MAX_BASKET_WIDTH_MM} มม. ({hoverInfo.slot.layer2.coils.length} ม้วน)
-                  </span>
+              ) : (
+                <div className="space-y-1 text-[11px]">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-400">ชั้น 1 (ฐาน):</span>
+                    <span className="font-bold text-white tabular-nums">
+                      {hoverInfo.slot.layer1.usedWidthMm.toLocaleString()} /{" "}
+                      {MAX_BASKET_WIDTH_MM} มม. (
+                      {hoverInfo.slot.layer1.coils.length} ม้วน)
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-slate-400">ชั้น 2 (ซ้อน):</span>
+                    <span className="font-bold text-sky-300 tabular-nums">
+                      {hoverInfo.slot.layer2.usedWidthMm.toLocaleString()} /{" "}
+                      {MAX_BASKET_WIDTH_MM} มม. (
+                      {hoverInfo.slot.layer2.coils.length} ม้วน)
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
-          {/* Collapsible Bottom 3D Control Dock */}
-          <div className="absolute bottom-3 left-3 right-3 z-20 flex flex-col items-center pointer-events-none">
+          {/* Collapsible Bottom 3D Control Dock (Anchored flush to bottom-left corner) */}
+          <div className="absolute bottom-2 left-2 right-2 z-20 flex flex-col items-start pointer-events-none">
             <div className="pointer-events-auto">
               <button
                 type="button"
                 onClick={() => setDockVisible((v) => !v)}
-                className="px-3.5 py-1.5 rounded-t-xl bg-slate-900 border border-b-0 border-slate-700 text-[11px] font-bold text-slate-200 hover:text-white flex items-center gap-1.5 cursor-pointer shadow-md"
+                className={`px-2.5 py-1.5 bg-slate-900 border border-slate-700 text-[11px] font-bold text-slate-200 hover:text-white hover:border-slate-500 flex items-center gap-1.5 cursor-pointer shadow-md transition-colors ${
+                  dockVisible ? "rounded-t-xl border-b-0" : "rounded-xl"
+                }`}
               >
-                <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" />
-                <span>
-                  {dockVisible
-                    ? isThai
-                      ? "ซ่อนแถบควบคุม 3D"
-                      : "Hide 3D Controls"
-                    : isThai
-                    ? "แสดงแถบควบคุม 3D · มุมกล้อง / ตัวกรอง / สีสถานะ"
-                    : "Show 3D Controls"}
-                </span>
+                <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>{isThai ? "แถบควบคุม 3D" : "3D Controls"}</span>
                 {dockVisible ? (
-                  <ChevronDown className="w-3.5 h-3.5" />
+                  <ChevronDown className="w-3.5 h-3.5 shrink-0" />
                 ) : (
-                  <ChevronUp className="w-3.5 h-3.5" />
+                  <ChevronUp className="w-3.5 h-3.5 shrink-0" />
                 )}
               </button>
             </div>
 
             {dockVisible && (
-              <div className="pointer-events-auto w-full max-w-5xl rounded-2xl bg-slate-900 border border-slate-700 p-3 shadow-2xl space-y-2.5">
+              <div className="pointer-events-auto w-full max-w-5xl rounded-b-2xl rounded-tr-2xl rounded-tl-none bg-slate-900 border border-slate-700 p-3 shadow-2xl space-y-2.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   {/* Camera Presets */}
                   <div className="flex flex-wrap items-center gap-1">
@@ -1483,17 +1597,19 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                       ))}
                     </select>
 
-                    <select
-                      value={layerFilter}
-                      onChange={(e) =>
-                        setLayerFilter(e.target.value as "ALL" | "1" | "2")
-                      }
-                      className="bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none"
-                    >
-                      <option value="ALL">ทุกชั้น (ชั้น 1–2)</option>
-                      <option value="1">เฉพาะชั้น 1 (ฐานล่าง)</option>
-                      <option value="2">เฉพาะชั้น 2 (ซ้อนบน)</option>
-                    </select>
+                    {!isCurrentCradle && (
+                      <select
+                        value={layerFilter}
+                        onChange={(e) =>
+                          setLayerFilter(e.target.value as "ALL" | "1" | "2")
+                        }
+                        className="bg-slate-950 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none"
+                      >
+                        <option value="ALL">ทุกชั้น (ชั้น 1–2)</option>
+                        <option value="1">เฉพาะชั้น 1 (ฐานล่าง)</option>
+                        <option value="2">เฉพาะชั้น 2 (ซ้อนบน)</option>
+                      </select>
+                    )}
 
                     <select
                       value={statusFilter}
@@ -1523,7 +1639,9 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                      ตะกร้าเปล่าชั้น 1 (0 มม.)
+                      {isCurrentCradle
+                        ? "แคร่เหล็กเปล่า (0 มม.)"
+                        : "ตะกร้าเปล่าชั้น 1 (0 มม.)"}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
@@ -1543,7 +1661,9 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-400">
-                    ลากเพื่อหมุน · เลื่อนล้อเมาส์เพื่อซูม · คลิกตะกร้าเพื่อดูชั้น 1–2
+                    {isCurrentCradle
+                      ? "ลากเพื่อหมุน · เลื่อนล้อเมาส์เพื่อซูม · คลิกแคร่เหล็ก ROW A เพื่อดูรายละเอียด"
+                      : "ลากเพื่อหมุน · เลื่อนล้อเมาส์เพื่อซูม · คลิกตะกร้าเพื่อดูชั้น 1–2"}
                   </span>
                 </div>
               </div>
@@ -1840,7 +1960,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   )}
                 </div>
 
-                {/* STEP 2: เลือกอาคาร (E9 / H2 / F) */}
+                {/* STEP 2: เลือกอาคาร (E9 / H2 / F / E10) */}
                 <div
                   className={`rounded-xl border p-3 space-y-2 ${
                     inboundStep === 2
@@ -1849,12 +1969,13 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   }`}
                 >
                   <div className="text-xs font-extrabold text-sky-400">
-                    ขั้นที่ 2 · เลือกอาคารตะกร้าฟ้า
+                    ขั้นที่ 2 · เลือกอาคารจัดเก็บ (ตะกร้าฟ้า / แคร่เหล็ก E10)
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     {BLUE_BASKET_BUILDINGS.map((bId) => {
                       const active = inboundBuilding === bId;
                       const stats = allBuildingLayouts[bId].stats;
+                      const isCradle = isCradleRackBuilding(bId);
                       return (
                         <button
                           key={bId}
@@ -1863,15 +1984,21 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                             setInboundBuilding(bId);
                             setSelectedBuilding(bId);
                             setInboundBasketRowFilter("ALL");
+                            if (isCradle) setInboundLayer(1);
                             setInboundStep(3);
                           }}
-                          className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
+                          className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
                             active
-                              ? "bg-blue-600 border-blue-400 text-white shadow-md"
+                              ? isCradle
+                                ? "bg-amber-600 border-amber-400 text-white shadow-md"
+                                : "bg-blue-600 border-blue-400 text-white shadow-md"
                               : "bg-slate-900 border-slate-700 text-slate-200 hover:border-blue-500"
                           }`}
                         >
-                          <div className="text-sm font-black">อาคาร {bId}</div>
+                          <div className="text-xs font-black">อาคาร {bId}</div>
+                          <div className="text-[9px] opacity-85">
+                            {isCradle ? "แคร่เหล็ก" : "ตะกร้าฟ้า"}
+                          </div>
                           <div className="text-[10px] opacity-80 mt-0.5">
                             {stats.occupiedSlots}/{stats.totalSlots} ช่อง
                           </div>
@@ -1881,7 +2008,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   </div>
                 </div>
 
-                {/* STEP 3: สแกนเบอร์ตะกร้า */}
+                {/* STEP 3: สแกนเบอร์ตะกร้า / แคร่เหล็ก */}
                 <div
                   className={`rounded-xl border p-3 space-y-2.5 ${
                     inboundStep === 3
@@ -1891,7 +2018,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-extrabold text-sky-400">
-                      ขั้นที่ 3 · สแกนเบอร์ตะกร้า ({inboundBuilding})
+                      ขั้นที่ 3 · สแกน
+                      {isCradleRackBuilding(inboundBuilding)
+                        ? "เบอร์แคร่เหล็ก"
+                        : "เบอร์ตะกร้า"}{" "}
+                      ({inboundBuilding})
                     </span>
                     <button
                       type="button"
@@ -1967,11 +2098,13 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                       {step3BasketOptions.map((slot) => {
                         const isPicked =
                           resolvedInboundBasketCode === slot.basketCode;
-                        const bothFull =
-                          slot.layer1.remainingWidthMm <
-                            effectiveInboundWidthMm &&
-                          slot.layer2.remainingWidthMm <
-                            effectiveInboundWidthMm;
+                        const bothFull = isCradleRackBuilding(slot.buildingId)
+                          ? slot.layer1.remainingWidthMm <
+                            effectiveInboundWidthMm
+                          : slot.layer1.remainingWidthMm <
+                              effectiveInboundWidthMm &&
+                            slot.layer2.remainingWidthMm <
+                              effectiveInboundWidthMm;
                         return (
                           <button
                             key={slot.basketCode}
@@ -2002,7 +2135,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   </div>
                 </div>
 
-                {/* STEP 4: เลือกชั้น (ชั้น 1 / ชั้น 2) + ตรวจสอบไม่เกิน 2,000 มม. */}
+                {/* STEP 4: เลือกชั้น / ยืนยันแคร่เหล็ก + ตรวจสอบไม่เกิน 2,000 มม. */}
                 <div
                   className={`rounded-xl border p-3 space-y-2.5 ${
                     inboundStep === 4
@@ -2012,7 +2145,10 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-extrabold text-amber-400">
-                      ขั้นที่ 4 · เลือกชั้น (สูงสุด 2 ชั้น · ≤ 2,000 มม.)
+                      {inboundTargetSlot &&
+                      isCradleRackBuilding(inboundTargetSlot.buildingId)
+                        ? "ขั้นที่ 4 · แคร่เหล็กขา 2 ม. (วางชั้นเดียว · ≤ 2,000 มม.)"
+                        : "ขั้นที่ 4 · เลือกชั้น (สูงสุด 2 ชั้น · ≤ 2,000 มม.)"}
                     </span>
                     {inboundTargetSlot && (
                       <span className="text-xs font-black text-sky-300">
@@ -2023,172 +2159,204 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
                   {!inboundTargetSlot ? (
                     <div className="text-xs text-slate-400 py-2 text-center">
-                      กรุณาสแกนหรือคลิกเลือกเบอร์ตะกร้าในขั้นที่ 3 ก่อน
+                      กรุณาสแกนหรือคลิกเลือกช่องตำแหน่งในขั้นที่ 3 ก่อน
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-2 gap-2">
-                        {(
-                          [
-                            {
-                              layer: 1 as const,
-                              title: "ชั้น 1 (ฐานล่าง)",
-                              state: inboundTargetSlot.layer1,
-                              validation: validationL1,
-                            },
-                            {
-                              layer: 2 as const,
-                              title: "ชั้น 2 (ซ้อนบน)",
-                              state: inboundTargetSlot.layer2,
-                              validation: validationL2,
-                            },
-                          ] as const
-                        ).map((card) => {
-                          const picked = inboundLayer === card.layer;
-                          const overLimit = card.validation.overflowMm > 0;
-                          const projectedPct = Math.min(
-                            100,
-                            Math.round(
-                              (card.validation.nextUsedWidthMm /
-                                MAX_BASKET_WIDTH_MM) *
-                                100
-                            )
-                          );
-                          return (
-                            <button
-                              key={card.layer}
-                              type="button"
-                              onClick={() => {
-                                setInboundLayer(card.layer);
-                                setConfirmEmptyLayer1(false);
-                                engineRef.current?.focusBasket(
-                                  inboundTargetSlot.basketCode,
-                                  card.layer
-                                );
-                              }}
-                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer space-y-1.5 ${
-                                picked
-                                  ? overLimit
-                                    ? "bg-rose-950/60 border-rose-400"
-                                    : "bg-blue-600/20 border-sky-400"
-                                  : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                      {(() => {
+                        const targetIsCradle = isCradleRackBuilding(
+                          inboundTargetSlot.buildingId
+                        );
+                        const targetLocationLabel = targetIsCradle
+                          ? inboundTargetSlot.basketCode
+                          : formatBasketLayerLocation(
+                              inboundTargetSlot.basketCode,
+                              inboundLayer
+                            );
+                        const layerCards = targetIsCradle
+                          ? [
+                              {
+                                layer: 1 as const,
+                                title: "แคร่เหล็กสามเหลี่ยม · ขา 2 เมตร (วางพื้นชั้นเดียว)",
+                                state: inboundTargetSlot.layer1,
+                                validation: validationL1,
+                              },
+                            ]
+                          : [
+                              {
+                                layer: 1 as const,
+                                title: "ชั้น 1 (ฐานล่าง)",
+                                state: inboundTargetSlot.layer1,
+                                validation: validationL1,
+                              },
+                              {
+                                layer: 2 as const,
+                                title: "ชั้น 2 (ซ้อนบน)",
+                                state: inboundTargetSlot.layer2,
+                                validation: validationL2,
+                              },
+                            ];
+
+                        return (
+                          <>
+                            <div
+                              className={`grid gap-2 ${
+                                targetIsCradle ? "grid-cols-1" : "grid-cols-2"
                               }`}
                             >
-                              <div className="flex items-center justify-between gap-1">
-                                <span className="text-xs font-black text-white">
-                                  {card.title}
-                                </span>
-                                {picked && (
-                                  <Check className="w-3.5 h-3.5 text-sky-300" />
-                                )}
-                              </div>
-                              <div className="text-[10px] text-slate-300 tabular-nums">
-                                เดิม {card.state.usedWidthMm.toLocaleString()} +{" "}
-                                <span className="text-emerald-300 font-bold">
-                                  {effectiveInboundWidthMm}
-                                </span>{" "}
-                                มม.
-                              </div>
-                              <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-                                <div
-                                  className={`h-full transition-all ${
-                                    overLimit
-                                      ? "bg-rose-500"
-                                      : projectedPct >= 80
-                                      ? "bg-amber-500"
-                                      : "bg-emerald-500"
-                                  }`}
-                                  style={{ width: `${projectedPct}%` }}
-                                />
-                              </div>
-                              <div
-                                className={`text-[10px] font-bold ${
-                                  overLimit
-                                    ? "text-rose-400"
-                                    : "text-emerald-300"
-                                }`}
-                              >
-                                {overLimit
-                                  ? `เกิน ${card.validation.overflowMm.toLocaleString()} มม.`
-                                  : `เหลือ ${card.validation.nextRemainingWidthMm.toLocaleString()} มม.`}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                              {layerCards.map((card) => {
+                                const picked =
+                                  targetIsCradle || inboundLayer === card.layer;
+                                const overLimit =
+                                  card.validation.overflowMm > 0;
+                                const projectedPct = Math.min(
+                                  100,
+                                  Math.round(
+                                    (card.validation.nextUsedWidthMm /
+                                      MAX_BASKET_WIDTH_MM) *
+                                      100
+                                  )
+                                );
+                                return (
+                                  <button
+                                    key={card.layer}
+                                    type="button"
+                                    onClick={() => {
+                                      setInboundLayer(card.layer);
+                                      setConfirmEmptyLayer1(false);
+                                      engineRef.current?.focusBasket(
+                                        inboundTargetSlot.basketCode,
+                                        card.layer
+                                      );
+                                    }}
+                                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer space-y-1.5 ${
+                                      picked
+                                        ? overLimit
+                                          ? "bg-rose-950/60 border-rose-400"
+                                          : targetIsCradle
+                                          ? "bg-amber-600/20 border-amber-400"
+                                          : "bg-blue-600/20 border-sky-400"
+                                        : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-xs font-black text-white">
+                                        {card.title}
+                                      </span>
+                                      {picked && (
+                                        <Check className="w-3.5 h-3.5 text-sky-300" />
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-slate-300 tabular-nums">
+                                      เดิม {card.state.usedWidthMm.toLocaleString()}{" "}
+                                      +{" "}
+                                      <span className="text-emerald-300 font-bold">
+                                        {effectiveInboundWidthMm}
+                                      </span>{" "}
+                                      มม.
+                                    </div>
+                                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                                      <div
+                                        className={`h-full transition-all ${
+                                          overLimit
+                                            ? "bg-rose-500"
+                                            : projectedPct >= 80
+                                            ? "bg-amber-500"
+                                            : "bg-emerald-500"
+                                        }`}
+                                        style={{ width: `${projectedPct}%` }}
+                                      />
+                                    </div>
+                                    <div
+                                      className={`text-[10px] font-bold ${
+                                        overLimit
+                                          ? "text-rose-400"
+                                          : "text-emerald-300"
+                                      }`}
+                                    >
+                                      {overLimit
+                                        ? `เกิน ${card.validation.overflowMm.toLocaleString()} มม.`
+                                        : `เหลือ ${card.validation.nextRemainingWidthMm.toLocaleString()} มม.`}
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
 
-                      {/* Layer 2 empty Layer 1 advisory confirmation */}
-                      {inboundLayer === 2 &&
-                        inboundTargetSlot.layer1.coils.length === 0 && (
-                          <label className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/40 p-2.5 text-[11px] text-amber-200 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={confirmEmptyLayer1}
-                              onChange={(e) =>
-                                setConfirmEmptyLayer1(e.target.checked)
+                            {/* Layer 2 empty Layer 1 advisory confirmation (Blue Basket only) */}
+                            {!targetIsCradle &&
+                              inboundLayer === 2 &&
+                              inboundTargetSlot.layer1.coils.length === 0 && (
+                                <label className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/40 p-2.5 text-[11px] text-amber-200 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={confirmEmptyLayer1}
+                                    onChange={(e) =>
+                                      setConfirmEmptyLayer1(e.target.checked)
+                                    }
+                                    className="mt-0.5 accent-amber-500"
+                                  />
+                                  <span>
+                                    ชั้น 1 ยังไม่มีม้วนเหล็กในระบบ — ติ๊กยืนยันหากมีตะกร้าเปล่ารองรับที่ชั้น 1 หน้างานแล้ว
+                                  </span>
+                                </label>
+                              )}
+
+                            {/* Hard Block Error Message (> 2,000 mm) */}
+                            {!activeLayerValidation.ok &&
+                              activeLayerValidation.reasonTh && (
+                                <div className="rounded-xl bg-rose-500/15 border border-rose-500/50 p-2.5 text-[11px] font-bold text-rose-200 flex items-start gap-2">
+                                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                                  <span>{activeLayerValidation.reasonTh}</span>
+                                </div>
+                              )}
+
+                            {/* Final Target Summary & Submit */}
+                            <div className="rounded-xl bg-slate-900 border border-slate-800 p-2.5 flex items-center justify-between text-xs">
+                              <span className="text-slate-400">
+                                Location ปลายทาง:
+                              </span>
+                              <span className="font-mono font-black text-emerald-300 text-sm">
+                                {targetLocationLabel}
+                              </span>
+                            </div>
+
+                            <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={keepTargetAfterSave}
+                                onChange={(e) =>
+                                  setKeepTargetAfterSave(e.target.checked)
+                                }
+                                className="accent-emerald-500"
+                              />
+                              <span>
+                                {targetIsCradle
+                                  ? "รับเข้าต่อเนื่องในแคร่เหล็กเดิม (สแกน Batch ถัดไปได้ทันที)"
+                                  : "รับเข้าต่อเนื่องในตะกร้าเดิม (สแกน Batch ถัดไปได้ทันที)"}
+                              </span>
+                            </label>
+
+                            <button
+                              type="button"
+                              disabled={
+                                isSavingInbound ||
+                                !normalizedInboundBatch ||
+                                !activeLayerValidation.ok
                               }
-                              className="mt-0.5 accent-amber-500"
-                            />
-                            <span>
-                              ชั้น 1 ยังไม่มีม้วนเหล็กในระบบ — ติ๊กยืนยันหากมีตะกร้าเปล่ารองรับที่ชั้น 1 หน้างานแล้ว
-                            </span>
-                          </label>
-                        )}
-
-                      {/* Hard Block Error Message (> 2,000 mm) */}
-                      {!activeLayerValidation.ok &&
-                        activeLayerValidation.reasonTh && (
-                          <div className="rounded-xl bg-rose-500/15 border border-rose-500/50 p-2.5 text-[11px] font-bold text-rose-200 flex items-start gap-2">
-                            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                            <span>{activeLayerValidation.reasonTh}</span>
-                          </div>
-                        )}
-
-                      {/* Final Target Summary & Submit */}
-                      <div className="rounded-xl bg-slate-900 border border-slate-800 p-2.5 flex items-center justify-between text-xs">
-                        <span className="text-slate-400">Location ปลายทาง:</span>
-                        <span className="font-mono font-black text-emerald-300 text-sm">
-                          {formatBasketLayerLocation(
-                            inboundTargetSlot.basketCode,
-                            inboundLayer
-                          )}
-                        </span>
-                      </div>
-
-                      <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={keepTargetAfterSave}
-                          onChange={(e) =>
-                            setKeepTargetAfterSave(e.target.checked)
-                          }
-                          className="accent-emerald-500"
-                        />
-                        <span>
-                          รับเข้าต่อเนื่องในตะกร้าเดิม (สแกน Batch ถัดไปได้ทันที)
-                        </span>
-                      </label>
-
-                      <button
-                        type="button"
-                        disabled={
-                          isSavingInbound ||
-                          !normalizedInboundBatch ||
-                          !activeLayerValidation.ok
-                        }
-                        onClick={handleSaveInboundPlacement}
-                        className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-black text-white shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>
-                          {isSavingInbound
-                            ? "กำลังบันทึก..."
-                            : `ยืนยันรับเข้า ${formatBasketLayerLocation(
-                                inboundTargetSlot.basketCode,
-                                inboundLayer
-                              )}`}
-                        </span>
-                      </button>
+                              onClick={handleSaveInboundPlacement}
+                              className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-black text-white shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>
+                                {isSavingInbound
+                                  ? "กำลังบันทึก..."
+                                  : `ยืนยันรับเข้า ${targetLocationLabel}`}
+                              </span>
+                            </button>
+                          </>
+                        );
+                      })()}
                     </>
                   )}
                 </div>
@@ -2216,22 +2384,39 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   </div>
                 </div>
 
-                {/* Display Layer 2 on top, Layer 1 on bottom (matches physical stacking) */}
-                {[selectedSlot.layer2, selectedSlot.layer1].map((layerObj) => {
-                  const isLayerHighlighted = selectedLayer === layerObj.layer;
+                {/* Display single steel cradle for E10, or Layer 2 on top & Layer 1 on bottom for Blue Basket buildings */}
+                {(isCradleRackBuilding(selectedSlot.buildingId)
+                  ? [selectedSlot.layer1]
+                  : [selectedSlot.layer2, selectedSlot.layer1]
+                ).map((layerObj) => {
+                  const slotIsCradle = isCradleRackBuilding(
+                    selectedSlot.buildingId
+                  );
+                  const isLayerHighlighted =
+                    slotIsCradle || selectedLayer === layerObj.layer;
                   return (
                     <div
                       key={layerObj.layer}
                       className={`rounded-xl border p-3 space-y-2.5 ${
                         isLayerHighlighted
-                          ? "bg-slate-950 border-sky-500/60"
+                          ? slotIsCradle
+                            ? "bg-slate-950 border-amber-500/60"
+                            : "bg-slate-950 border-sky-500/60"
                           : "bg-slate-950/70 border-slate-800"
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-lg bg-blue-600/20 border border-blue-500/40 text-xs font-black text-sky-300">
-                            {layerObj.layer === 2
+                          <span
+                            className={`px-2 py-0.5 rounded-lg border text-xs font-black ${
+                              slotIsCradle
+                                ? "bg-amber-600/20 border-amber-500/40 text-amber-300"
+                                : "bg-blue-600/20 border-blue-500/40 text-sky-300"
+                            }`}
+                          >
+                            {slotIsCradle
+                              ? "แคร่เหล็กฐานสามเหลี่ยม (ขา 2 ม.)"
+                              : layerObj.layer === 2
                               ? "ชั้น 2 (ซ้อนบน)"
                               : "ชั้น 1 (ฐานล่าง)"}
                           </span>
@@ -2249,14 +2434,16 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                             openInboundDrawer({
                               buildingId: selectedSlot.buildingId,
                               basketCode: selectedSlot.basketCode,
-                              layer: layerObj.layer,
+                              layer: slotIsCradle ? 1 : layerObj.layer,
                             })
                           }
                           disabled={layerObj.remainingWidthMm <= 0}
                           className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-[11px] font-extrabold text-white flex items-center gap-1 cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
-                          <span>รับเข้าชั้นนี้</span>
+                          <span>
+                            {slotIsCradle ? "รับเข้าแคร่นี้" : "รับเข้าชั้นนี้"}
+                          </span>
                         </button>
                       </div>
 
@@ -2369,10 +2556,14 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
             <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div>
                 <h3 className="text-sm font-black text-white">
-                  จัดการแถวตะกร้าฟ้า — อาคาร {selectedBuilding}
+                  {isCurrentCradle
+                    ? `จัดการแคร่เหล็ก ROW A — อาคาร ${selectedBuilding}`
+                    : `จัดการแถวตะกร้าฟ้า — อาคาร ${selectedBuilding}`}
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  เพิ่ม/ลบแถว (A, B, C, D, ...) และปรับจำนวนช่องตะกร้าต่อแถว (1–30 ช่อง) · ซิงก์คลาวด์ทันที
+                  {isCurrentCradle
+                    ? "อาคาร E10 วางแคร่เหล็กแถวเดียว (ROW A) ชิดผนังซ้าย · ปรับเพิ่ม/ลดจำนวนแคร่ได้ (1–30 แคร่) · ซิงก์คลาวด์ทันที"
+                    : "เพิ่ม/ลบแถว (A, B, C, D, ...) และปรับจำนวนช่องตะกร้าต่อแถว (1–30 ช่อง) · ซิงก์คลาวด์ทันที"}
                 </p>
               </div>
               <button
@@ -2492,48 +2683,50 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 ))}
               </div>
 
-              {/* Add New Row Form */}
-              <div className="rounded-xl bg-slate-950 border border-emerald-600/40 p-3 space-y-2">
-                <div className="text-xs font-extrabold text-emerald-400">
-                  + เพิ่มแถวตะกร้าใหม่ในอาคาร {selectedBuilding}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    maxLength={4}
-                    value={newRowLabel}
-                    onChange={(e) =>
-                      setNewRowLabel(e.target.value.toUpperCase())
-                    }
-                    placeholder="ชื่อแถว เช่น E"
-                    className="w-28 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs font-black text-white outline-none"
-                  />
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-slate-400">จำนวนช่อง:</span>
-                    <input
-                      type="number"
-                      min={MIN_SLOTS_PER_ROW}
-                      max={MAX_SLOTS_PER_ROW}
-                      value={newRowSlots}
-                      onChange={(e) =>
-                        setNewRowSlots(
-                          parseInt(e.target.value, 10) || DEFAULT_SLOTS_PER_ROW
-                        )
-                      }
-                      className="w-16 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs font-black text-center text-white outline-none"
-                    />
+              {/* Add New Row Form (Blue Basket buildings E9/H2/F only — E10 is fixed single ROW A against left wall) */}
+              {!isCurrentCradle && (
+                <div className="rounded-xl bg-slate-950 border border-emerald-600/40 p-3 space-y-2">
+                  <div className="text-xs font-extrabold text-emerald-400">
+                    + เพิ่มแถวตะกร้าใหม่ในอาคาร {selectedBuilding}
                   </div>
-                  <button
-                    type="button"
-                    disabled={isSavingLayout}
-                    onClick={handleAddRow}
-                    className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-extrabold text-white flex items-center gap-1 cursor-pointer ml-auto"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>เพิ่มแถว</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      maxLength={4}
+                      value={newRowLabel}
+                      onChange={(e) =>
+                        setNewRowLabel(e.target.value.toUpperCase())
+                      }
+                      placeholder="ชื่อแถว เช่น E"
+                      className="w-28 rounded-lg bg-slate-900 border border-slate-700 px-2.5 py-1.5 text-xs font-black text-white outline-none"
+                    />
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <span className="text-slate-400">จำนวนช่อง:</span>
+                      <input
+                        type="number"
+                        min={MIN_SLOTS_PER_ROW}
+                        max={MAX_SLOTS_PER_ROW}
+                        value={newRowSlots}
+                        onChange={(e) =>
+                          setNewRowSlots(
+                            parseInt(e.target.value, 10) || DEFAULT_SLOTS_PER_ROW
+                          )
+                        }
+                        className="w-16 rounded-lg bg-slate-900 border border-slate-700 px-2 py-1.5 text-xs font-black text-center text-white outline-none"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      disabled={isSavingLayout}
+                      onClick={handleAddRow}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-extrabold text-white flex items-center gap-1 cursor-pointer ml-auto"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>เพิ่มแถว</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="px-4 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
@@ -2544,7 +2737,11 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                 className="text-xs font-bold text-slate-400 hover:text-amber-300 flex items-center gap-1 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>รีเซ็ตเป็น A–D (แถวละ 10 ช่อง)</span>
+                <span>
+                  {isCurrentCradle
+                    ? "รีเซ็ตเป็นแถว A (8 แคร่)"
+                    : "รีเซ็ตเป็น A–D (แถวละ 10 ช่อง)"}
+                </span>
               </button>
               <button
                 type="button"
@@ -2558,17 +2755,17 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
         </div>
       )}
 
-      {/* Modal 2: Reference Blue Basket Blueprint & Stacking Rules (User's 3 Attached Images) */}
+      {/* Modal 2: Reference Blueprint & Stacking Rules (Blue Baskets E9/H2/F + Steel Cradle E10) */}
       {showReferenceModal && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <div className="w-full max-w-4xl rounded-2xl bg-slate-900 border border-slate-700 text-slate-100 shadow-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-950">
               <div>
                 <h3 className="text-sm font-black text-white">
-                  แบบมาตรฐานตะกร้าเหล็กสีฟ้า & เงื่อนไขการจัดเก็บ (อาคาร E9, H2, F)
+                  แบบมาตรฐานตะกร้าฟ้า (E9, H2, F) & แคร่เหล็กสามเหลี่ยม (อาคาร E10)
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  ผลรวมหน้ากว้างม้วนสลิตไม่เกิน 2,000 มม. (2 เมตร) ต่อตะกร้า · ซ้อนได้สูงสุดไม่เกิน 2 ชั้น
+                  ตะกร้าฟ้า E9/H2/F: รวมหน้ากว้าง ≤ 2,000 มม. ซ้อนสูงสุด 2 ชั้น · แคร่เหล็ก E10: ฐานสามเหลี่ยมขา 2 ม. วางพิงหัวแคร่แถวเดียว (ROW A)
                 </p>
               </div>
               <button
