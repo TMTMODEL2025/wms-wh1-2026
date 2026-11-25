@@ -298,7 +298,7 @@ const MACHINE_FAC_MAP: Record<string, string> = {
   TM04: "FAC G",
   TM05: "FAC P",
   TM06: "FAC G",
-  TM07: "FAC D",
+  TM07: "FAC G",
   TM08: "FAC D",
   TM09: "FAC D",
   TM10: "FAC D",
