@@ -2442,8 +2442,9 @@ export class BlueBasketSceneEngine {
       const dimmed = !matched && !isSelected && !isFocused;
 
       // Determine slot floor pad highlight color
+      const hasLayer1Work = slot.layer1.coils.length > 0;
       const primaryStatus: BasketLayerStatus =
-        slot.layer2.status !== "EMPTY"
+        hasLayer1Work && slot.layer2.status !== "EMPTY"
           ? slot.layer2.status
           : slot.layer1.status;
       const padColor = isFocused
@@ -2530,7 +2531,9 @@ export class BlueBasketSceneEngine {
       }
 
       // Layer 2 stacked basket (interlocked onto Layer 1 corner pins, also rotated 90 deg across building)
-      const showLayer2 = f.layer !== "1" && slot.layer2.coils.length > 0;
+      // Blue basket rule: never stack a loaded Layer 2 basket on top of an empty Layer 1 basket
+      const showLayer2 =
+        f.layer !== "1" && hasLayer1Work && slot.layer2.coils.length > 0;
       if (showLayer2) {
         const basketL2 = this.buildBlueBasketMeshGroup(
           slot.layer2,
@@ -2543,9 +2546,10 @@ export class BlueBasketSceneEngine {
         this.dynamicRoot.add(basketL2);
       } else if (
         f.layer !== "1" &&
+        hasLayer1Work &&
         f.previewLayer2BasketCode === slot.basketCode
       ) {
-        // Preview wireframe when operator picks Layer 2 in Inbound stepper
+        // Preview wireframe when operator picks Layer 2 in Inbound stepper (only allowed when L1 has work)
         const ghostL2 = new THREE.Mesh(hitGeo, this.ghostLayer2Mat);
         ghostL2.position.set(
           slot.worldX,

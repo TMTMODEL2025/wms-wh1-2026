@@ -23,6 +23,12 @@ export function isCradleRackBuilding(
   return buildingId === "E10";
 }
 
+export function isBlueBasketBuilding(
+  buildingId: BlueBasketBuildingId
+): boolean {
+  return !isCradleRackBuilding(buildingId);
+}
+
 export const H2_OPPOSITE_GATE_ID = "H4";
 
 export function isDualRoadBuilding(
@@ -219,7 +225,7 @@ export interface PlacementValidationResult {
   ok: boolean;
   reasonTh?: string;
   reasonEn?: string;
-  requiresEmptyLayer1Confirm?: boolean;
+  blockedEmptyLayer1?: boolean;
   warningTh?: string;
   warningEn?: string;
   currentUsedWidthMm: number;
@@ -494,8 +500,7 @@ function buildLayerState(
 export function validateBasketPlacement(
   slot: BasketSlot3D | null | undefined,
   targetLayer: 1 | 2,
-  incomingWidthMm: number,
-  confirmEmptyLayer1 = false
+  incomingWidthMm: number
 ): PlacementValidationResult {
   if (!slot) {
     return {
@@ -556,6 +561,23 @@ export function validateBasketPlacement(
   const nextRemainingWidthMm =
     Math.round(Math.max(0, MAX_BASKET_WIDTH_MM - nextUsedWidthMm) * 10) / 10;
 
+  // Blue Basket stacking rule: never place a loaded basket on Layer 2 (L2) while Layer 1 (L1) is still empty
+  const isLayer1Empty = slot.layer1.coils.length === 0;
+  if (isBlueBasketBuilding(slot.buildingId) && targetLayer === 2 && isLayer1Empty) {
+    return {
+      ok: false,
+      blockedEmptyLayer1: true,
+      reasonTh:
+        "ห้ามวางตะกร้าที่มีงานบนชั้น 2 (L2) เนื่องจากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า กรุณาวางงานบนชั้น 1 (L1) ก่อน",
+      reasonEn:
+        "Cannot place a loaded basket on Layer 2 (L2) while Layer 1 (L1) is empty. Please place on Layer 1 (L1) first.",
+      currentUsedWidthMm,
+      nextUsedWidthMm,
+      nextRemainingWidthMm,
+      overflowMm,
+    };
+  }
+
   if (nextUsedWidthMm > MAX_BASKET_WIDTH_MM) {
     return {
       ok: false,
@@ -568,32 +590,8 @@ export function validateBasketPlacement(
     };
   }
 
-  const isLayer1Empty = slot.layer1.coils.length === 0;
-  if (targetLayer === 2 && isLayer1Empty && !confirmEmptyLayer1) {
-    return {
-      ok: false,
-      requiresEmptyLayer1Confirm: true,
-      warningTh:
-        "ชั้น 1 ของช่องนี้ยังไม่มีข้อมูลม้วนเหล็ก กรุณาเลือกวางชั้น 1 หรือติ๊กยืนยันว่ามีตะกร้าเปล่ารองรับด้านล่างแล้ว",
-      warningEn:
-        "Layer 1 has no recorded coils. Place on Layer 1 first or confirm an empty base basket is underneath.",
-      currentUsedWidthMm,
-      nextUsedWidthMm,
-      nextRemainingWidthMm,
-      overflowMm: 0,
-    };
-  }
-
   return {
     ok: true,
-    warningTh:
-      targetLayer === 2 && isLayer1Empty
-        ? "วางชั้น 2 บนตะกร้าเปล่ารองรับชั้น 1 (ยืนยันแล้ว)"
-        : undefined,
-    warningEn:
-      targetLayer === 2 && isLayer1Empty
-        ? "Placing on Layer 2 above confirmed empty base basket."
-        : undefined,
     currentUsedWidthMm,
     nextUsedWidthMm,
     nextRemainingWidthMm,

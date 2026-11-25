@@ -68,6 +68,7 @@ import { SpaceManagementView } from "./SpaceManagementView";
 import { SlitBlueBasket3DView } from "./slit3d/SlitBlueBasket3DView";
 import {
   formatBasketLayerLocation,
+  isBlueBasketBuilding,
   parseBasketLocation,
 } from "./slit3d/blueBasketLayout";
 import { TmtRecheckView } from "./TmtRecheckView";
@@ -3554,6 +3555,9 @@ export function SlitFilmManagement({
 
     return {
       baseLocation,
+      isBlueBasket: Boolean(
+        parsedTarget && isBlueBasketBuilding(parsedTarget.buildingId)
+      ),
       layer1,
       layer2,
     };
@@ -6199,6 +6203,26 @@ export function SlitFilmManagement({
       const errText = isThai
         ? "กรุณาเลือกชั้นที่วาง (ชั้นที่ 1 หรือ ชั้นที่ 2) ก่อนยืนยันรับเข้า"
         : "Please select a stack layer (Layer 1 or Layer 2) before confirming inbound.";
+      setLocationScanError(errText);
+      if (soundEnabled) playScanSound(false);
+      return;
+    }
+
+    const parsedInboundBlueBasket = parseBasketLocation(rawLocation);
+    const isBlueBasketInbound = Boolean(
+      parsedInboundBlueBasket &&
+        isBlueBasketBuilding(parsedInboundBlueBasket.buildingId)
+    );
+    if (
+      activeMode === "inbound" &&
+      isBlueBasketInbound &&
+      selectedLocationLayer === 2 &&
+      scannedLocationLayerStats &&
+      scannedLocationLayerStats.layer1.count === 0
+    ) {
+      const errText = isThai
+        ? "ห้ามวางตะกร้าที่มีงานบนชั้น 2 (L2) เนื่องจากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า กรุณาเลือกวางชั้นที่ 1 (L1) ก่อน"
+        : "Cannot place a loaded basket on Layer 2 (L2) while Layer 1 (L1) is empty. Please select Layer 1 (L1) first.";
       setLocationScanError(errText);
       if (soundEnabled) playScanSound(false);
       return;
@@ -9154,7 +9178,15 @@ export function SlitFilmManagement({
 
                     <div className="grid grid-cols-2 gap-2">
                       {([1, 2] as const).map((layerNum) => {
-                        const isSelected = selectedLocationLayer === layerNum;
+                        const isL2BlockedByEmptyL1 =
+                          layerNum === 2 &&
+                          Boolean(
+                            scannedLocationLayerStats?.isBlueBasket &&
+                              scannedLocationLayerStats.layer1.count === 0
+                          );
+                        const isSelected =
+                          !isL2BlockedByEmptyL1 &&
+                          selectedLocationLayer === layerNum;
                         const stats =
                           layerNum === 1
                             ? scannedLocationLayerStats?.layer1
@@ -9168,15 +9200,19 @@ export function SlitFilmManagement({
                           <button
                             key={layerNum}
                             type="button"
+                            disabled={isL2BlockedByEmptyL1}
                             onClick={() => {
+                              if (isL2BlockedByEmptyL1) return;
                               setSelectedLocationLayer(layerNum);
                               setLocationScanError(null);
                               setLocationLayerPrompt(null);
                             }}
-                            className={`relative p-2.5 rounded-xl border-2 text-left transition-all cursor-pointer active:scale-[0.98] ${
-                              isSelected
-                                ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 ring-2 ring-emerald-500/25 shadow-sm"
-                                : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-cyan-400 dark:hover:border-cyan-500/70"
+                            className={`relative p-2.5 rounded-xl border-2 text-left transition-all ${
+                              isL2BlockedByEmptyL1
+                                ? "bg-slate-100/80 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 opacity-55 cursor-not-allowed"
+                                : isSelected
+                                ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 ring-2 ring-emerald-500/25 shadow-sm cursor-pointer active:scale-[0.98]"
+                                : "bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] hover:border-cyan-400 dark:hover:border-cyan-500/70 cursor-pointer active:scale-[0.98]"
                             }`}
                           >
                             <div className="flex items-center justify-between gap-1.5">
@@ -9191,7 +9227,9 @@ export function SlitFilmManagement({
                                   <span
                                     className={`block w-3.5 h-1.5 rounded-[2px] ${
                                       layerNum === 2
-                                        ? isSelected
+                                        ? isL2BlockedByEmptyL1
+                                          ? "bg-rose-400/60"
+                                          : isSelected
                                           ? "bg-emerald-500"
                                           : "bg-cyan-500"
                                         : "bg-slate-300 dark:bg-slate-600"
@@ -9228,32 +9266,48 @@ export function SlitFilmManagement({
                                   </div>
                                 </div>
                               </div>
-                              {isSelected && (
-                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white shrink-0">
-                                  <Check size={12} className="stroke-[3]" />
+                              {isL2BlockedByEmptyL1 ? (
+                                <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/40 text-[9.5px] font-extrabold shrink-0">
+                                  {isThai ? "ห้ามวาง" : "Locked"}
                                 </span>
+                              ) : (
+                                isSelected && (
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white shrink-0">
+                                    <Check size={12} className="stroke-[3]" />
+                                  </span>
+                                )
                               )}
                             </div>
 
                             <div className="mt-2 pt-1.5 border-t border-slate-200/80 dark:border-[#1e3a5f] space-y-0.5">
-                              <div className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">
-                                {existingCount === 0
-                                  ? isThai
-                                    ? "สถานะ: ว่าง (0 ม้วน)"
-                                    : "Status: Empty (0)"
-                                  : isThai
-                                  ? `มีอยู่ ${existingCount} ม้วน · ${existingWidthMm.toLocaleString()}/2,000 มม.`
-                                  : `${existingCount} coils · ${existingWidthMm.toLocaleString()}/2,000 mm`}
-                              </div>
-                              {isWidthOverflow && (
-                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                                  <AlertTriangle size={11} className="shrink-0" />
-                                  <span>
-                                    {isThai
-                                      ? `รวมรอบนี้ ${projectedWidthMm.toLocaleString()} มม. (>2,000)`
-                                      : `Total ${projectedWidthMm.toLocaleString()} mm (>2,000)`}
-                                  </span>
+                              {isL2BlockedByEmptyL1 ? (
+                                <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                                  {isThai
+                                    ? "ชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า — วาง L1 ก่อน"
+                                    : "Layer 1 is empty — place on L1 first"}
                                 </div>
+                              ) : (
+                                <>
+                                  <div className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">
+                                    {existingCount === 0
+                                      ? isThai
+                                        ? "สถานะ: ว่าง (0 ม้วน)"
+                                        : "Status: Empty (0)"
+                                      : isThai
+                                      ? `มีอยู่ ${existingCount} ม้วน · ${existingWidthMm.toLocaleString()}/2,000 มม.`
+                                      : `${existingCount} coils · ${existingWidthMm.toLocaleString()}/2,000 mm`}
+                                  </div>
+                                  {isWidthOverflow && (
+                                    <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                      <AlertTriangle size={11} className="shrink-0" />
+                                      <span>
+                                        {isThai
+                                          ? `รวมรอบนี้ ${projectedWidthMm.toLocaleString()} มม. (>2,000)`
+                                          : `Total ${projectedWidthMm.toLocaleString()} mm (>2,000)`}
+                                      </span>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </button>
@@ -9261,7 +9315,20 @@ export function SlitFilmManagement({
                       })}
                     </div>
 
-                    {selectedLocationLayer === 2 &&
+                    {scannedLocationLayerStats?.isBlueBasket &&
+                      scannedLocationLayerStats.layer1.count === 0 && (
+                        <div className="px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-300/80 dark:border-rose-700/60 text-rose-700 dark:text-rose-200 text-[10.5px] font-semibold flex items-center gap-1.5">
+                          <AlertTriangle size={13} className="shrink-0 text-rose-500" />
+                          <span>
+                            {isThai
+                              ? "ตะกร้าฟ้า: ห้ามวางตะกร้าที่มีงานบนชั้น 2 (L2) หากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า กรุณาเลือกชั้นที่ 1 (L1) ก่อน"
+                              : "Blue basket: Cannot place a loaded basket on Layer 2 (L2) while Layer 1 (L1) is empty."}
+                          </span>
+                        </div>
+                      )}
+
+                    {!scannedLocationLayerStats?.isBlueBasket &&
+                      selectedLocationLayer === 2 &&
                       scannedLocationLayerStats &&
                       scannedLocationLayerStats.layer1.count === 0 && (
                         <div className="px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-300/80 dark:border-amber-700/60 text-amber-800 dark:text-amber-200 text-[10.5px] font-semibold flex items-center gap-1.5">

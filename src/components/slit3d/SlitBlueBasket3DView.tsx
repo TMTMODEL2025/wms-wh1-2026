@@ -249,7 +249,6 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
   const [inboundBasketRowFilter, setInboundBasketRowFilter] =
     useState<string>("ALL");
   const [inboundLayer, setInboundLayer] = useState<1 | 2>(1);
-  const [confirmEmptyLayer1, setConfirmEmptyLayer1] = useState<boolean>(false);
   const [keepTargetAfterSave, setKeepTargetAfterSave] = useState<boolean>(true);
   const [cameraScanTarget, setCameraScanTarget] = useState<
     "batch" | "basket" | null
@@ -434,8 +433,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       validateBasketPlacement(
         inboundTargetSlot,
         1,
-        effectiveInboundWidthMm,
-        true
+        effectiveInboundWidthMm
       ),
     [inboundTargetSlot, effectiveInboundWidthMm]
   );
@@ -445,11 +443,22 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       validateBasketPlacement(
         inboundTargetSlot,
         2,
-        effectiveInboundWidthMm,
-        confirmEmptyLayer1
+        effectiveInboundWidthMm
       ),
-    [inboundTargetSlot, effectiveInboundWidthMm, confirmEmptyLayer1]
+    [inboundTargetSlot, effectiveInboundWidthMm]
   );
+
+  // Auto-reset inboundLayer back to Layer 1 whenever target blue basket has an empty Layer 1
+  useEffect(() => {
+    if (
+      inboundTargetSlot &&
+      !isCradleRackBuilding(inboundTargetSlot.buildingId) &&
+      inboundTargetSlot.layer1.coils.length === 0 &&
+      inboundLayer === 2
+    ) {
+      setInboundLayer(1);
+    }
+  }, [inboundTargetSlot, inboundLayer]);
 
   const activeLayerValidation =
     inboundLayer === 1 ? validationL1 : validationL2;
@@ -471,24 +480,21 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       if (showInboundDrawerRef.current) {
         setInboundBuilding(slot.buildingId);
         setInboundBasketInput(slot.basketCode);
-        setConfirmEmptyLayer1(false);
-        if (isCradleRackBuilding(slot.buildingId)) {
-          setInboundLayer(1);
+        const isL1Empty = slot.layer1.coils.length === 0;
+        let nextLayer: 1 | 2 = 1;
+        if (isCradleRackBuilding(slot.buildingId) || isL1Empty) {
+          nextLayer = 1;
         } else if (layer) {
-          setInboundLayer(layer);
+          nextLayer = layer;
         } else if (
           slot.layer1.status === "FULL" ||
           slot.layer1.status === "OVERFLOW"
         ) {
-          setInboundLayer(2);
-        } else {
-          setInboundLayer(1);
+          nextLayer = 2;
         }
+        setInboundLayer(nextLayer);
         setInboundStep((prev) => (prev >= 2 ? 4 : prev));
-        engineRef.current?.focusBasket(
-          slot.basketCode,
-          isCradleRackBuilding(slot.buildingId) ? 1 : layer || 1
-        );
+        engineRef.current?.focusBasket(slot.basketCode, nextLayer);
       }
     },
     []
@@ -540,6 +546,8 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
         !isCradleRackBuilding(selectedBuilding) &&
         inboundBuilding === selectedBuilding &&
         inboundLayer === 2 &&
+        inboundTargetSlot &&
+        inboundTargetSlot.layer1.coils.length > 0 &&
         resolvedInboundBasketCode
           ? resolvedInboundBasketCode
           : null,
@@ -558,6 +566,7 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     showInboundDrawer,
     inboundBuilding,
     inboundLayer,
+    inboundTargetSlot,
     resolvedInboundBasketCode,
   ]);
 
@@ -687,12 +696,17 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     layer: 1 | 2;
   }) => {
     setShowInboundDrawer(true);
-    setConfirmEmptyLayer1(false);
     setCameraScanTarget(null);
     if (preset) {
-      const targetLayer: 1 | 2 = isCradleRackBuilding(preset.buildingId)
-        ? 1
-        : preset.layer;
+      const presetSlot = allBuildingLayouts[preset.buildingId]?.slotByCode.get(
+        preset.basketCode
+      );
+      const isL1Empty = !presetSlot || presetSlot.layer1.coils.length === 0;
+      const targetLayer: 1 | 2 =
+        isCradleRackBuilding(preset.buildingId) ||
+        (preset.layer === 2 && isL1Empty)
+          ? 1
+          : preset.layer;
       setSelectedBuilding(preset.buildingId);
       setInboundBuilding(preset.buildingId);
       setInboundBasketInput(preset.basketCode);
@@ -755,18 +769,36 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       setInboundBasketInput(parsed.basketCode);
       setSelectedBasketCode(parsed.basketCode);
       setFocusedBasketCode(parsed.basketCode);
-      setConfirmEmptyLayer1(false);
 
       const slot = targetLayout.slotByCode.get(parsed.basketCode)!;
-      // Pick layer from scanned suffix if specified, else smart default (E10 is always layer 1)
+      const isL1Empty = slot.layer1.coils.length === 0;
+      // Pick layer from scanned suffix if specified, else smart default (E10 is always layer 1;
+      // blue baskets forbid L2 while L1 is empty)
       const hasExplicitLayer = /[-/_]?(?:L|LAYER|ชั้น)[12]$/.test(code);
-      const nextLayer: 1 | 2 = isCradleRackBuilding(parsed.buildingId)
-        ? 1
-        : hasExplicitLayer
-        ? parsed.layer
-        : slot.layer1.status === "FULL" || slot.layer1.status === "OVERFLOW"
-        ? 2
-        : 1;
+      const requestedLayer2OnEmptyL1 =
+        !isCradleRackBuilding(parsed.buildingId) &&
+        hasExplicitLayer &&
+        parsed.layer === 2 &&
+        isL1Empty;
+
+      const nextLayer: 1 | 2 =
+        isCradleRackBuilding(parsed.buildingId) || isL1Empty
+          ? 1
+          : hasExplicitLayer
+          ? parsed.layer
+          : slot.layer1.status === "FULL" || slot.layer1.status === "OVERFLOW"
+          ? 2
+          : 1;
+
+      if (requestedLayer2OnEmptyL1) {
+        setToastMessage({
+          type: "error",
+          text: isThai
+            ? `ห้ามวางตะกร้าที่มีงานบนชั้น 2 (${parsed.basketCode}-L2) เนื่องจากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า — ระบบเปลี่ยนเป็นชั้น 1 (L1) ให้อัตโนมัติ`
+            : `Cannot place on ${parsed.basketCode}-L2 while Layer 1 is empty. Switched to Layer 1.`,
+        });
+      }
+
       setInboundLayer(nextLayer);
       setInboundStep(4);
       window.setTimeout(() => {
@@ -802,6 +834,21 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
     try {
       const targetIsCradle = isCradleRackBuilding(inboundTargetSlot.buildingId);
       const effectiveLayer: 1 | 2 = targetIsCradle ? 1 : inboundLayer;
+      if (
+        !targetIsCradle &&
+        effectiveLayer === 2 &&
+        inboundTargetSlot.layer1.coils.length === 0
+      ) {
+        setToastMessage({
+          type: "error",
+          text: isThai
+            ? "ห้ามวางตะกร้าที่มีงานบนชั้น 2 (L2) เนื่องจากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า กรุณาวางงานบนชั้น 1 (L1) ก่อน"
+            : "Cannot place a loaded basket on Layer 2 (L2) while Layer 1 (L1) is empty.",
+        });
+        setInboundLayer(1);
+        setIsSavingInbound(false);
+        return;
+      }
       const canonicalLocation = targetIsCradle
         ? inboundTargetSlot.basketCode
         : formatBasketLayerLocation(
@@ -863,10 +910,6 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
         coilNo: sap?.coilNo || existingActiveRecordForBatch?.coilNo || "",
         conditionText: targetIsCradle
           ? "แคร่เหล็กสามเหลี่ยม E10 3D"
-          : effectiveLayer === 2 &&
-            inboundTargetSlot.layer1.coils.length === 0 &&
-            confirmEmptyLayer1
-          ? "ตะกร้าฟ้า 3D (วางชั้น 2 บนตะกร้าเปล่ารองรับ)"
           : "ตะกร้าฟ้า 3D",
       };
 
@@ -879,12 +922,12 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
       setSelectedBuilding(inboundTargetSlot.buildingId);
       setSelectedBasketCode(inboundTargetSlot.basketCode);
-      setSelectedLayer(inboundLayer);
+      setSelectedLayer(effectiveLayer);
       setFocusedBasketCode(inboundTargetSlot.basketCode);
       window.setTimeout(() => {
         engineRef.current?.focusBasket(
           inboundTargetSlot.basketCode,
-          inboundLayer
+          effectiveLayer
         );
       }, 90);
 
@@ -898,7 +941,6 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
       // Reset for next scan
       setInboundBatchInput("");
       setInboundManualWidth("");
-      setConfirmEmptyLayer1(false);
       if (keepTargetAfterSave) {
         setInboundStep(1);
       } else {
@@ -2424,8 +2466,14 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                               }`}
                             >
                               {layerCards.map((card) => {
+                                const isL2BlockedByEmptyL1 =
+                                  !targetIsCradle &&
+                                  card.layer === 2 &&
+                                  inboundTargetSlot.layer1.coils.length === 0;
                                 const picked =
-                                  targetIsCradle || inboundLayer === card.layer;
+                                  targetIsCradle ||
+                                  (!isL2BlockedByEmptyL1 &&
+                                    inboundLayer === card.layer);
                                 const overLimit =
                                   card.validation.overflowMm > 0;
                                 const projectedPct = Math.min(
@@ -2440,60 +2488,88 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                                   <button
                                     key={card.layer}
                                     type="button"
+                                    disabled={isL2BlockedByEmptyL1}
                                     onClick={() => {
+                                      if (isL2BlockedByEmptyL1) return;
                                       setInboundLayer(card.layer);
-                                      setConfirmEmptyLayer1(false);
                                       engineRef.current?.focusBasket(
                                         inboundTargetSlot.basketCode,
                                         card.layer
                                       );
                                     }}
-                                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer space-y-1.5 ${
-                                      picked
+                                    className={`p-2.5 rounded-xl border text-left transition-all space-y-1.5 ${
+                                      isL2BlockedByEmptyL1
+                                        ? "bg-slate-900/50 border-slate-800/80 opacity-50 cursor-not-allowed"
+                                        : picked
                                         ? overLimit
-                                          ? "bg-rose-950/60 border-rose-400"
+                                          ? "bg-rose-950/60 border-rose-400 cursor-pointer"
                                           : targetIsCradle
-                                          ? "bg-amber-600/20 border-amber-400"
-                                          : "bg-blue-600/20 border-sky-400"
-                                        : "bg-slate-900 border-slate-800 hover:border-slate-600"
+                                          ? "bg-amber-600/20 border-amber-400 cursor-pointer"
+                                          : "bg-blue-600/20 border-sky-400 cursor-pointer"
+                                        : "bg-slate-900 border-slate-800 hover:border-slate-600 cursor-pointer"
                                     }`}
                                   >
                                     <div className="flex items-center justify-between gap-1">
                                       <span className="text-xs font-black text-white">
                                         {card.title}
                                       </span>
-                                      {picked && (
-                                        <Check className="w-3.5 h-3.5 text-sky-300" />
+                                      {isL2BlockedByEmptyL1 ? (
+                                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                          ห้ามวาง
+                                        </span>
+                                      ) : (
+                                        picked && (
+                                          <Check className="w-3.5 h-3.5 text-sky-300" />
+                                        )
                                       )}
                                     </div>
                                     <div className="text-[10px] text-slate-300 tabular-nums">
-                                      เดิม {card.state.usedWidthMm.toLocaleString()}{" "}
-                                      +{" "}
-                                      <span className="text-emerald-300 font-bold">
-                                        {effectiveInboundWidthMm}
-                                      </span>{" "}
-                                      มม.
+                                      {isL2BlockedByEmptyL1 ? (
+                                        <span className="text-rose-300 font-semibold">
+                                          ชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า
+                                        </span>
+                                      ) : (
+                                        <>
+                                          เดิม{" "}
+                                          {card.state.usedWidthMm.toLocaleString()}{" "}
+                                          +{" "}
+                                          <span className="text-emerald-300 font-bold">
+                                            {effectiveInboundWidthMm}
+                                          </span>{" "}
+                                          มม.
+                                        </>
+                                      )}
                                     </div>
                                     <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
                                       <div
                                         className={`h-full transition-all ${
-                                          overLimit
+                                          isL2BlockedByEmptyL1
+                                            ? "bg-slate-700"
+                                            : overLimit
                                             ? "bg-rose-500"
                                             : projectedPct >= 80
                                             ? "bg-amber-500"
                                             : "bg-emerald-500"
                                         }`}
-                                        style={{ width: `${projectedPct}%` }}
+                                        style={{
+                                          width: `${
+                                            isL2BlockedByEmptyL1
+                                              ? 0
+                                              : projectedPct
+                                          }%`,
+                                        }}
                                       />
                                     </div>
                                     <div
                                       className={`text-[10px] font-bold ${
-                                        overLimit
+                                        isL2BlockedByEmptyL1 || overLimit
                                           ? "text-rose-400"
                                           : "text-emerald-300"
                                       }`}
                                     >
-                                      {overLimit
+                                      {isL2BlockedByEmptyL1
+                                        ? "กรุณาวางงานชั้น 1 (L1) ก่อน"
+                                        : overLimit
                                         ? `เกิน ${card.validation.overflowMm.toLocaleString()} มม.`
                                         : `เหลือ ${card.validation.nextRemainingWidthMm.toLocaleString()} มม.`}
                                     </div>
@@ -2502,26 +2578,18 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                               })}
                             </div>
 
-                            {/* Layer 2 empty Layer 1 advisory confirmation (Blue Basket only) */}
+                            {/* Blue Basket Layer 2 stacking rule notice when Layer 1 is empty */}
                             {!targetIsCradle &&
-                              inboundLayer === 2 &&
                               inboundTargetSlot.layer1.coils.length === 0 && (
-                                <label className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/40 p-2.5 text-[11px] text-amber-200 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={confirmEmptyLayer1}
-                                    onChange={(e) =>
-                                      setConfirmEmptyLayer1(e.target.checked)
-                                    }
-                                    className="mt-0.5 accent-amber-500"
-                                  />
+                                <div className="rounded-xl bg-rose-500/10 border border-rose-500/40 p-2.5 text-[11px] font-semibold text-rose-200 flex items-start gap-2">
+                                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                                   <span>
-                                    ชั้น 1 ยังไม่มีม้วนเหล็กในระบบ — ติ๊กยืนยันหากมีตะกร้าเปล่ารองรับที่ชั้น 1 หน้างานแล้ว
+                                    ห้ามวางตะกร้าที่มีงานบนชั้น 2 (L2) หากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า — กรุณาวางงานบนชั้น 1 (L1) ก่อน
                                   </span>
-                                </label>
+                                </div>
                               )}
 
-                            {/* Hard Block Error Message (> 2,000 mm) */}
+                            {/* Hard Block Error Message (> 2,000 mm or L2 empty L1) */}
                             {!activeLayerValidation.ok &&
                               activeLayerValidation.reasonTh && (
                                 <div className="rounded-xl bg-rose-500/15 border border-rose-500/50 p-2.5 text-[11px] font-bold text-rose-200 flex items-start gap-2">
@@ -2615,13 +2683,19 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                   const slotIsCradle = isCradleRackBuilding(
                     selectedSlot.buildingId
                   );
+                  const isL2BlockedByEmptyL1 =
+                    !slotIsCradle &&
+                    layerObj.layer === 2 &&
+                    selectedSlot.layer1.coils.length === 0;
                   const isLayerHighlighted =
                     slotIsCradle || selectedLayer === layerObj.layer;
                   return (
                     <div
                       key={layerObj.layer}
                       className={`rounded-xl border p-3 space-y-2.5 ${
-                        isLayerHighlighted
+                        isL2BlockedByEmptyL1
+                          ? "bg-slate-950/50 border-slate-800/80 opacity-75"
+                          : isLayerHighlighted
                           ? slotIsCradle
                             ? "bg-slate-950 border-amber-500/60"
                             : "bg-slate-950 border-sky-500/60"
@@ -2653,19 +2727,32 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
                         </div>
                         <button
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            if (isL2BlockedByEmptyL1) return;
                             openInboundDrawer({
                               buildingId: selectedSlot.buildingId,
                               basketCode: selectedSlot.basketCode,
                               layer: slotIsCradle ? 1 : layerObj.layer,
-                            })
+                            });
+                          }}
+                          disabled={
+                            layerObj.remainingWidthMm <= 0 ||
+                            isL2BlockedByEmptyL1
                           }
-                          disabled={layerObj.remainingWidthMm <= 0}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-[11px] font-extrabold text-white flex items-center gap-1 cursor-pointer"
+                          title={
+                            isL2BlockedByEmptyL1
+                              ? "ห้ามวางงานบนชั้น 2 (L2) ขณะที่ชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า"
+                              : undefined
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-[11px] font-extrabold text-white flex items-center gap-1 cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
                           <span>
-                            {slotIsCradle ? "รับเข้าแคร่นี้" : "รับเข้าชั้นนี้"}
+                            {slotIsCradle
+                              ? "รับเข้าแคร่นี้"
+                              : isL2BlockedByEmptyL1
+                              ? "วางชั้น 1 ก่อน"
+                              : "รับเข้าชั้นนี้"}
                           </span>
                         </button>
                       </div>
@@ -2694,8 +2781,16 @@ export const SlitBlueBasket3DView: React.FC<SlitBlueBasket3DViewProps> = ({
 
                       {/* Coils List inside this layer */}
                       {layerObj.coils.length === 0 ? (
-                        <div className="text-[11px] text-slate-500 py-2 text-center border border-dashed border-slate-800 rounded-lg">
-                          ว่าง — รองรับได้สูงสุด 2,000 มม.
+                        <div
+                          className={`text-[11px] py-2 px-2 text-center border border-dashed rounded-lg ${
+                            isL2BlockedByEmptyL1
+                              ? "text-rose-300 border-rose-500/40 bg-rose-500/10 font-semibold"
+                              : "text-slate-500 border-slate-800"
+                          }`}
+                        >
+                          {isL2BlockedByEmptyL1
+                            ? "ห้ามวางงานบนชั้น 2 (L2) เนื่องจากชั้นล่าง (L1) ยังเป็นตะกร้าเปล่า"
+                            : "ว่าง — รองรับได้สูงสุด 2,000 มม."}
                         </div>
                       ) : (
                         <div className="space-y-1.5">
