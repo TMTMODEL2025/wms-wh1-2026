@@ -39,8 +39,11 @@ import {
   MH_WORK_AREAS,
   MhDailyDutyRecord,
   MhDeliveryPointRecord,
+  MhRmProductType,
   MhTransferRecord,
+  MhTransferScope,
   MhTransferStatus,
+  isRmTransferRecord,
   loadCachedMhDailyDuties,
   loadCachedMhDeliveryPoints,
   extractUniqueDeliveryPointNames,
@@ -57,6 +60,8 @@ import {
   setForkliftCloudRealtimeEnabled,
   subscribeForkliftCloudRealtimeMode,
 } from "../services/forkliftDataService";
+import { markSlitPickListBatchesDelivered } from "../services/slitDataService";
+import { markCoilStagingBatchesDelivered } from "../services/coilDataService";
 import {
   appendWmsActivityLog,
   getActiveRecorderDisplay,
@@ -108,7 +113,7 @@ interface QueuedTripDraft {
 const SLA_LIMIT_SECONDS = 20 * 60; // 1200 seconds (20 minutes)
 const LAST_VEHICLE_STORAGE_KEY = "tmt_mh_last_vehicle_v1";
 
-const QUICK_PRODUCTS = ["เหล็กฟิล์ม", "เหล็กม้วน", "เหล็กสลิต", "เหล็กแผ่น RM"];
+const QUICK_PRODUCTS = ["ท่อดำ", "แป็บแบน", "เหล็กแผ่น", "เหล็กตัวซี", "อื่นๆ"];
 const QUICK_TRANSFER_TYPES = ["งาน Stock", "ทั่วไป", "งานฝาก", "อื่นๆ"];
 const QUICK_BUILDINGS = ["อาคาร A", "อาคาร B", "อาคาร C", "ลานพักสินค้า"];
 const QUICK_TRIP_COUNTS = [1, 2, 3, 4, 5];
@@ -296,10 +301,14 @@ export function TransportOperations({
   // Real-time ticking clock for 20-minute SLA timer
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
+  // Main Scope Tab: FG (Finished Goods) vs RM (Raw Material auto-synced from Pick List)
+  const [activeScopeTab, setActiveScopeTab] = useState<MhTransferScope>("FG");
+  const [rmProductFilter, setRmProductFilter] = useState<"All" | MhRmProductType>("All");
+
   // Quick Entry Form toggle (hidden by default)
   const [isQuickFormExpanded, setIsQuickFormExpanded] = useState<boolean>(false);
 
-  // History Table Status Group collapse state (both collapsed by default)
+  // History Table Status Group collapse state
   const [expandedStatusGroups, setExpandedStatusGroups] = useState<{
     inProgress: boolean;
     completed: boolean;
@@ -309,6 +318,16 @@ export function TransportOperations({
     completed: false,
     cancelled: false,
   });
+
+  // RM Driver/Vehicle auto-filled & editable confirmation state
+  const [rmDriverName, setRmDriverName] = useState<string>("");
+  const [rmVehicleNumber, setRmVehicleNumber] = useState<string>("");
+  const [rmShift, setRmShift] = useState<string>(MH_SHIFTS[0]);
+  const [rmTeam, setRmTeam] = useState<string>(MH_TEAMS[0]);
+  const [rmConfirmTarget, setRmConfirmTarget] = useState<TransportTransferRecord | null>(null);
+  const [rmConfirmNotes, setRmConfirmNotes] = useState<string>("");
+  const [isConfirmingRm, setIsConfirmingRm] = useState<boolean>(false);
+  const rmDriverTouchedRef = useRef<boolean>(false);
 
   // Quick Transfer Entry State
   const [workingDate, setWorkingDate] = useState<string>(() => getLocalDateStr());
@@ -353,7 +372,7 @@ export function TransportOperations({
   const [team, setTeam] = useState<string>(MH_TEAMS[0]);
   const [manualDutyOverride, setManualDutyOverride] = useState<boolean>(false);
 
-  const [itemName, setItemName] = useState<string>("เหล็กม้วน");
+  const [itemName, setItemName] = useState<string>("ท่อดำ");
   const [transferType, setTransferType] = useState<string>("งาน Stock");
   const [originFacility, setOriginFacility] = useState<string>("อาคาร A");
   const [destinationFacility, setDestinationFacility] = useState<string>("อาคาร B");
@@ -506,20 +525,125 @@ export function TransportOperations({
     setManualDutyOverride(false);
   }, [matchedDailyDuty]);
 
-  // Live 1-second timer tick while there are active transfers
-  const activeTransfers = useMemo(
-    () => transfers.filter((t) => t.status === "In Transit" || t.status === "Pending"),
+  // Distinct driver list for RM delivery confirmation (today's duty + Fleet employees + logged-in user)
+  const rmDriverOptions = useMemo(() => {
+    const todayYmd = getLocalDateStr();
+    const names = new Set<string>();
+    if (loggedInDriverName.trim()) names.add(loggedInDriverName.trim());
+    dailyDuties.forEach((d) => {
+      if (d.workingDate === todayYmd && d.employeeName?.trim()) {
+        names.add(d.employeeName.trim());
+      }
+    });
+    employees.forEach((emp) => {
+      if (emp.employmentStatus !== "Inactive" && emp.employeeName?.trim()) {
+        names.add(emp.employeeName.trim());
+      }
+    });
+    return Array.from(names);
+  }, [loggedInDriverName, dailyDuties, employees]);
+
+  const findDutyForDriverName = (targetName: string): MhDailyDutyRecord | null => {
+    const clean = targetName.trim().toLowerCase();
+    const todayStr = getLocalDateStr();
+    const isLoggedIn =
+      clean.length > 0 && clean === loggedInDriverName.trim().toLowerCase();
+    const cleanEmpId = isLoggedIn
+      ? (currentUser?.employeeId || "").trim().toLowerCase()
+      : "";
+    if (!clean && !cleanEmpId) return null;
+
+    const matchesDriver = (d: MhDailyDutyRecord) =>
+      (cleanEmpId && (d.employeeId || "").trim().toLowerCase() === cleanEmpId) ||
+      (clean && d.employeeName.trim().toLowerCase() === clean);
+
+    return (
+      dailyDuties.find((d) => d.workingDate === todayStr && matchesDriver(d)) ||
+      dailyDuties.find((d) => matchesDriver(d)) ||
+      null
+    );
+  };
+
+  // Auto-sync RM driver/vehicle defaults from logged-in user & today's duty until user overrides
+  useEffect(() => {
+    if (rmDriverTouchedRef.current) return;
+    const defaultDriver = loggedInDriverName || rmDriverOptions[0] || "";
+    if (defaultDriver) {
+      setRmDriverName(defaultDriver);
+    }
+    const duty = matchedDailyDuty || (defaultDriver ? findDutyForDriverName(defaultDriver) : null);
+    if (duty) {
+      setRmVehicleNumber(
+        duty.vehicleNumber && duty.vehicleNumber !== "-" ? duty.vehicleNumber : vehicleNumber || ""
+      );
+      setRmShift(duty.shift || MH_SHIFTS[0]);
+      setRmTeam(duty.team || MH_TEAMS[0]);
+    } else if (vehicleNumber) {
+      setRmVehicleNumber(vehicleNumber);
+    }
+  }, [loggedInDriverName, matchedDailyDuty, vehicleNumber, rmDriverOptions]);
+
+  const handleSelectRmDriver = (nextDriver: string) => {
+    rmDriverTouchedRef.current = true;
+    setRmDriverName(nextDriver);
+    const duty = findDutyForDriverName(nextDriver);
+    if (duty) {
+      if (duty.vehicleNumber && duty.vehicleNumber !== "-") {
+        setRmVehicleNumber(duty.vehicleNumber);
+      }
+      if (duty.shift) setRmShift(duty.shift);
+      if (duty.team) setRmTeam(duty.team);
+    }
+  };
+
+  const handleSwitchScopeTab = (nextTab: MhTransferScope) => {
+    setActiveScopeTab(nextTab);
+    if (nextTab === "RM") {
+      setExpandedStatusGroups((prev) => ({
+        ...prev,
+        inProgress: true,
+      }));
+    }
+  };
+
+  // Split transfers cleanly into FG vs RM
+  const fgTransfers = useMemo(
+    () => transfers.filter((t) => !isRmTransferRecord(t)),
     [transfers]
+  );
+  const rmTransfers = useMemo(
+    () => transfers.filter((t) => isRmTransferRecord(t)),
+    [transfers]
+  );
+  const scopedTransfers = useMemo(
+    () => (activeScopeTab === "RM" ? rmTransfers : fgTransfers),
+    [activeScopeTab, rmTransfers, fgTransfers]
+  );
+
+  const fgActiveCount = useMemo(
+    () => fgTransfers.filter((t) => t.status === "In Transit" || t.status === "Pending").length,
+    [fgTransfers]
+  );
+  const rmActiveCount = useMemo(
+    () => rmTransfers.filter((t) => t.status === "In Transit" || t.status === "Pending").length,
+    [rmTransfers]
+  );
+
+  // Live 1-second timer tick while there are active transfers in either FG or RM
+  const allActiveTransfersCount = fgActiveCount + rmActiveCount;
+  const activeTransfers = useMemo(
+    () => scopedTransfers.filter((t) => t.status === "In Transit" || t.status === "Pending"),
+    [scopedTransfers]
   );
 
   useEffect(() => {
-    if (activeTransfers.length === 0) return;
+    if (allActiveTransfersCount === 0) return;
     setNowMs(Date.now());
     const interval = window.setInterval(() => {
       setNowMs(Date.now());
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [activeTransfers.length]);
+  }, [allActiveTransfersCount]);
 
   // Auto-dismiss feedback banner
   useEffect(() => {
@@ -599,6 +723,7 @@ export function TransportOperations({
       records.push({
         id: recordId,
         transferCode: recordId,
+        transferScope: "FG",
         originFacility: draft.originFacility.trim(),
         destinationFacility: draft.destinationFacility.trim(),
         sku: "-",
@@ -793,7 +918,122 @@ export function TransportOperations({
     }
   };
 
+  const openRmConfirmModal = (record: TransportTransferRecord) => {
+    const defaultDriver = rmDriverName.trim() || loggedInDriverName || rmDriverOptions[0] || "";
+    const duty = defaultDriver ? findDutyForDriverName(defaultDriver) : matchedDailyDuty;
+    if (!rmDriverName.trim() && defaultDriver) {
+      setRmDriverName(defaultDriver);
+    }
+    if (!rmVehicleNumber.trim() && duty?.vehicleNumber && duty.vehicleNumber !== "-") {
+      setRmVehicleNumber(duty.vehicleNumber);
+    }
+    setRmConfirmNotes(record.notes || "");
+    setRmConfirmTarget(record);
+  };
+
+  const handleConfirmRmDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rmConfirmTarget || isConfirmingRm) return;
+    const finalDriver = rmDriverName.trim();
+    if (!finalDriver) {
+      await showWarningAlert({
+        title: "กรุณาระบุชื่อพนักงานขับรถ",
+        text: "เลือกหรือระบุชื่อพนักงานขับรถก่อนกดยืนยันการส่ง",
+        confirmButtonText: "ตกลง",
+      });
+      return;
+    }
+
+    setIsConfirmingRm(true);
+    try {
+      const record = rmConfirmTarget;
+      const endDate = new Date();
+      const endMs = endDate.getTime();
+      const endTimeStr = getLocalTimeHmsStr(endDate);
+      const deliveredAtStr = `${getLocalDateStr(endDate)} ${endTimeStr.slice(0, 5)}`;
+      const startMs = parseRecordStartMs(record) || endMs;
+      const durationSec = Math.max(0, Math.round((endMs - startMs) / 1000));
+      const durationMin = Number((durationSec / 60).toFixed(2));
+      const overdue = durationSec > SLA_LIMIT_SECONDS;
+      const finalVehicle = rmVehicleNumber.trim() || "-";
+      const matchedDuty = findDutyForDriverName(finalDriver);
+      const finalShift = rmShift.trim() || matchedDuty?.shift || MH_SHIFTS[0];
+      const finalTeam = rmTeam.trim() || matchedDuty?.team || MH_TEAMS[0];
+      const finalWorkArea =
+        matchedDuty?.workArea || record.destinationFacility || record.workArea || "-";
+
+      const updated: TransportTransferRecord = {
+        ...record,
+        status: "Completed",
+        driverName: finalDriver,
+        vehicleNumber: finalVehicle,
+        shift: finalShift,
+        team: finalTeam,
+        workArea: finalWorkArea,
+        recorderName: getActiveRecorderDisplay(finalDriver).label,
+        notes: rmConfirmNotes.trim() || record.notes,
+        endTime: endTimeStr,
+        endTimeMs: endMs,
+        durationSeconds: durationSec,
+        durationMinutes: durationMin,
+        isSlaOverdue: overdue,
+        updatedAt: `${getLocalDateStr(endDate)} ${endTimeStr}`,
+      };
+
+      setTransfers((prev) => prev.map((item) => (item.id === record.id ? updated : item)));
+      if (selectedRecord?.id === record.id) {
+        setSelectedRecord(updated);
+      }
+      await saveMhTransferToCloud(updated);
+
+      // Two-way sync back to source Pick List / Staging order -> status becomes "ส่งสำเร็จ"
+      const syncParams = {
+        orderDocId: record.sourceOrderDocId,
+        orderNo: record.sourceOrderNo || record.transferCode,
+        batches: record.sourceBatches || [],
+        mhTransferId: record.id,
+        deliveredBy: finalDriver,
+        deliveredVehicle: finalVehicle,
+        deliveredAt: deliveredAtStr,
+      };
+      if (record.sourceCollection === "slit_picklists") {
+        await markSlitPickListBatchesDelivered(syncParams);
+      } else if (record.sourceCollection === "coil_staging") {
+        await markCoilStagingBatchesDelivered(syncParams);
+      }
+
+      const orderLabel = record.sourceOrderNo || record.transferCode;
+      void appendWmsActivityLog({
+        module: "Transport Operations",
+        sectionId: "fleet_ops",
+        reference: orderLabel,
+        activity: `ยืนยันส่งงาน RM (${record.itemName}) ใบสั่ง ${orderLabel} โดย ${finalDriver}${finalVehicle !== "-" ? ` (${finalVehicle})` : ""} · ${formatDurationThai(durationSec)}`,
+        status: overdue ? "Attention" : "Completed",
+      });
+
+      setRmConfirmTarget(null);
+      setRmConfirmNotes("");
+      setFeedbackBanner({
+        type: overdue ? "error" : "success",
+        text: overdue
+          ? `ยืนยันส่งงาน RM ใบสั่ง ${orderLabel} แล้ว — ใช้เวลา ${formatDurationThai(durationSec)} (เกิน SLA 20 นาที) และอัปเดตสถานะ "ส่งสำเร็จ" ไปยังหน้าเตรียมเบิกแล้ว`
+          : `ยืนยันส่งงาน RM ใบสั่ง ${orderLabel} สำเร็จ (${formatDurationThai(durationSec)}) — อัปเดตสถานะ "ส่งสำเร็จ" ไปยังหน้าเตรียมเบิกแล้ว`,
+      });
+    } catch {
+      setFeedbackBanner({
+        type: "error",
+        text: "ไม่สามารถยืนยันการส่งงาน RM ได้ กรุณาลองใหม่อีกครั้ง",
+      });
+    } finally {
+      setIsConfirmingRm(false);
+    }
+  };
+
   const handleCompleteTrip = async (record: TransportTransferRecord) => {
+    if (isRmTransferRecord(record)) {
+      openRmConfirmModal(record);
+      return;
+    }
     const endDate = new Date();
     const endMs = endDate.getTime();
     const endTimeStr = getLocalTimeHmsStr(endDate);
@@ -890,21 +1130,26 @@ export function TransportOperations({
     return Array.from(groups.entries());
   }, [activeTransfers]);
 
-  // Daily KPI metrics
+  // Daily KPI metrics (scoped to active FG or RM tab)
   const todayDateStr = getLocalDateStr();
   const todayAssignedCount = dailyDuties.filter((d) => d.workingDate === todayDateStr).length;
   const activeOverdueCount = activeTransfers.filter((t) => isRecordOverdue(t, nowMs)).length;
-  const completedToday = transfers.filter(
+  const completedToday = scopedTransfers.filter(
     (t) => t.status === "Completed" && t.workingDate === todayDateStr
   );
-  const totalWeightTodayKg = transfers
+  const totalWeightTodayKg = scopedTransfers
     .filter((t) => t.workingDate === todayDateStr && t.status !== "Cancelled")
     .reduce((sum, t) => sum + getRecordWeightKg(t), 0);
 
-  // Filtered History Table (Search + Status + Team + Shift)
+  // Filtered History Table (Tab Scope + RM Product + Search + Status + Team + Shift)
   const filteredTransfers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return transfers.filter((t) => {
+    return scopedTransfers.filter((t) => {
+      if (activeScopeTab === "RM" && rmProductFilter !== "All") {
+        const inferredType: MhRmProductType =
+          t.rmProductType || (t.sourceCollection === "coil_staging" ? "coil" : "slit");
+        if (inferredType !== rmProductFilter) return false;
+      }
       if (teamFilter !== "All" && (t.team || "") !== teamFilter) return false;
       if (shiftFilter !== "All" && (t.shift || "") !== shiftFilter) return false;
 
@@ -912,6 +1157,8 @@ export function TransportOperations({
         !q ||
         t.id.toLowerCase().includes(q) ||
         t.transferCode.toLowerCase().includes(q) ||
+        (t.sourceOrderNo || "").toLowerCase().includes(q) ||
+        (t.sourceMachineId || "").toLowerCase().includes(q) ||
         t.driverName.toLowerCase().includes(q) ||
         t.vehicleNumber.toLowerCase().includes(q) ||
         (t.trailerNumber || "").toLowerCase().includes(q) ||
@@ -932,7 +1179,16 @@ export function TransportOperations({
       }
       return t.status === statusFilter;
     });
-  }, [transfers, searchQuery, statusFilter, teamFilter, shiftFilter, nowMs]);
+  }, [
+    scopedTransfers,
+    activeScopeTab,
+    rmProductFilter,
+    searchQuery,
+    statusFilter,
+    teamFilter,
+    shiftFilter,
+    nowMs,
+  ]);
 
   const inProgressTransfers = useMemo(
     () => filteredTransfers.filter((t) => t.status === "In Transit" || t.status === "Pending"),
@@ -1014,7 +1270,8 @@ export function TransportOperations({
     Boolean(searchQuery.trim()) ||
     statusFilter !== "All" ||
     teamFilter !== "All" ||
-    shiftFilter !== "All";
+    shiftFilter !== "All" ||
+    (activeScopeTab === "RM" && rmProductFilter !== "All");
 
   return (
     <div className="space-y-2.5 overflow-x-hidden sm:space-y-5">
@@ -1054,6 +1311,99 @@ export function TransportOperations({
           </button>
         </div>
       )}
+
+      {/* 2-TAB SCOPE SWITCHER: ย้ายงาน FG vs ย้ายงาน RM */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={() => handleSwitchScopeTab("FG")}
+          className={`group flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition sm:px-4 sm:py-3 ${
+            activeScopeTab === "FG"
+              ? "border-cyan-500 bg-cyan-50/70 shadow-xs ring-1 ring-cyan-500/30 dark:border-cyan-500 dark:bg-cyan-950/40"
+              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:hover:bg-[#162544]"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9 ${
+                activeScopeTab === "FG"
+                  ? "bg-cyan-600 text-white"
+                  : "bg-slate-100 text-slate-600 dark:bg-[#1a2c4e] dark:text-slate-300"
+              }`}
+            >
+              <Package size={16} />
+            </div>
+            <div className="min-w-0">
+              <div
+                className={`truncate text-xs font-extrabold sm:text-sm ${
+                  activeScopeTab === "FG"
+                    ? "text-cyan-900 dark:text-cyan-200"
+                    : "text-slate-800 dark:text-slate-100"
+                }`}
+              >
+                ย้ายงาน FG
+              </div>
+              <div className="hidden truncate text-[11px] text-slate-500 sm:block dark:text-slate-400">
+                สินค้าผลิตแล้ว (ท่อดำ, แป็บแบน, เหล็กแผ่น ฯลฯ)
+              </div>
+            </div>
+          </div>
+          <span
+            className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-extrabold tabular-nums ${
+              fgActiveCount > 0
+                ? "bg-cyan-600 text-white"
+                : "bg-slate-100 text-slate-600 dark:bg-[#1a2c4e] dark:text-slate-300"
+            }`}
+          >
+            {fgActiveCount} กำลังส่ง
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleSwitchScopeTab("RM")}
+          className={`group flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition sm:px-4 sm:py-3 ${
+            activeScopeTab === "RM"
+              ? "border-amber-500 bg-amber-50/80 shadow-xs ring-1 ring-amber-500/30 dark:border-amber-500 dark:bg-amber-950/35"
+              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-[#1e3a5f] dark:bg-[#111e38] dark:hover:bg-[#162544]"
+          }`}
+        >
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg sm:h-9 sm:w-9 ${
+                activeScopeTab === "RM"
+                  ? "bg-amber-600 text-white"
+                  : "bg-slate-100 text-slate-600 dark:bg-[#1a2c4e] dark:text-slate-300"
+              }`}
+            >
+              <Layers size={16} />
+            </div>
+            <div className="min-w-0">
+              <div
+                className={`truncate text-xs font-extrabold sm:text-sm ${
+                  activeScopeTab === "RM"
+                    ? "text-amber-900 dark:text-amber-200"
+                    : "text-slate-800 dark:text-slate-100"
+                }`}
+              >
+                ย้ายงาน RM
+              </div>
+              <div className="hidden truncate text-[11px] text-slate-500 sm:block dark:text-slate-400">
+                เหล็กม้วนสลิต &amp; เหล็กม้วนคอล์ย (เชื่อมอัตโนมัติจากหน้าเตรียมเบิก)
+              </div>
+            </div>
+          </div>
+          <span
+            className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-xs font-extrabold tabular-nums ${
+              rmActiveCount > 0
+                ? "bg-amber-600 text-white"
+                : "bg-slate-100 text-slate-600 dark:bg-[#1a2c4e] dark:text-slate-300"
+            }`}
+          >
+            {rmActiveCount} รอยืนยัน
+          </span>
+        </button>
+      </div>
 
       {/* KPI Summary Strip (Compact Single-Line 2x2 Mobile / 4-Column Desktop) */}
       <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-slate-200 bg-white lg:grid-cols-4 dark:border-[#1e3a5f] dark:bg-[#111e38] [&>*:nth-child(odd)]:border-r [&>*:nth-child(-n+2)]:border-b lg:[&>*:not(:last-child)]:border-r lg:[&>*]:border-b-0 [&>*]:border-slate-200 dark:[&>*]:border-[#1e3a5f]">
@@ -1118,8 +1468,130 @@ export function TransportOperations({
       </div>
 
       {/* ===================================================================== */}
-      {/* 1. QUICK TRANSFER ENTRY WORKBENCH                                     */}
+      {/* 1. FG QUICK TRANSFER ENTRY WORKBENCH  OR  RM AUTO-FILLED DRIVER BAR   */}
       {/* ===================================================================== */}
+      {activeScopeTab === "RM" ? (
+        <section className="overflow-hidden rounded-xl border border-amber-200 bg-white dark:border-amber-900/60 dark:bg-[#111e38]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/80 bg-amber-50/50 px-3 py-2.5 sm:px-5 dark:border-amber-900/50 dark:bg-amber-950/20">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-600 text-white sm:h-8 sm:w-8">
+                <Truck size={14} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="truncate text-xs font-extrabold text-slate-900 sm:text-sm dark:text-white">
+                  งานย้ายวัตถุดิบ RM อัตโนมัติ (เหล็กม้วนสลิต &amp; เหล็กม้วนคอล์ย)
+                </h2>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                  รายการจะขึ้นในตาราง &quot;อยู่ระหว่างการส่ง&quot; ทันทีเมื่อหน้าเตรียมเบิกสแกน Batch — คนขับไม่ต้องกรอกฟอร์ม กดยืนยันการส่งได้ทันที
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsDailyDutyModalOpen(true)}
+              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 transition hover:bg-amber-50 dark:border-amber-800 dark:bg-[#162544] dark:text-amber-200 dark:hover:bg-[#1d3158]"
+            >
+              <ClipboardList size={13} />
+              <span>มอบหมายงานวันนี้ ({todayAssignedCount})</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2.5 p-3 sm:grid-cols-12 sm:p-4">
+            <div className="sm:col-span-4">
+              <label className="mb-1 flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                <User size={12} className="text-amber-600 dark:text-amber-400" />
+                <span>พนักงานขับรถ (ดึงจากกะวันนี้ · เปลี่ยนได้)</span>
+              </label>
+              <select
+                value={rmDriverName}
+                onChange={(e) => handleSelectRmDriver(e.target.value)}
+                aria-label="พนักงานขับรถสำหรับยืนยันงาน RM"
+                className="field transport-select w-full rounded-md border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:border-amber-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                style={{ height: 35, minHeight: 35, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
+              >
+                <option value="">-- เลือกพนักงานขับรถ --</option>
+                {rmDriverOptions.map((name) => (
+                  <option key={`rm-drv-${name}`} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="mb-1 flex items-center gap-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                <Truck size={12} className="text-amber-600 dark:text-amber-400" />
+                <span>หมายเลขรถโฟล์คลิฟท์</span>
+              </label>
+              <select
+                value={rmVehicleNumber}
+                onChange={(e) => {
+                  rmDriverTouchedRef.current = true;
+                  setRmVehicleNumber(e.target.value);
+                }}
+                aria-label="หมายเลขรถสำหรับยืนยันงาน RM"
+                className="field transport-select w-full rounded-md border border-slate-300 bg-white font-mono text-xs font-semibold text-slate-900 focus:border-amber-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                style={{ height: 35, minHeight: 35, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
+              >
+                <option value="">-- เลือกหมายเลขรถ --</option>
+                {drivableVehicles.map((v) => (
+                  <option key={`rm-veh-${v.id}`} value={v.vehicleId}>
+                    {v.vehicleId} {v.vehicleType ? `(${v.vehicleType})` : ""}
+                  </option>
+                ))}
+                {rmVehicleNumber &&
+                  !drivableVehicles.some((v) => v.vehicleId === rmVehicleNumber) && (
+                    <option value={rmVehicleNumber}>{rmVehicleNumber}</option>
+                  )}
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                ทีม
+              </label>
+              <select
+                value={rmTeam}
+                onChange={(e) => {
+                  rmDriverTouchedRef.current = true;
+                  setRmTeam(e.target.value);
+                }}
+                aria-label="ทีมสำหรับงาน RM"
+                className="field transport-select w-full rounded-md border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:border-amber-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                style={{ height: 35, minHeight: 35, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
+              >
+                {MH_TEAMS.map((tOpt) => (
+                  <option key={`rm-team-${tOpt}`} value={tOpt}>
+                    {tOpt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="sm:col-span-3">
+              <label className="mb-1 block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                กะทำงาน
+              </label>
+              <select
+                value={rmShift}
+                onChange={(e) => {
+                  rmDriverTouchedRef.current = true;
+                  setRmShift(e.target.value);
+                }}
+                aria-label="กะทำงานสำหรับงาน RM"
+                className="field transport-select w-full rounded-md border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:border-amber-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                style={{ height: 35, minHeight: 35, padding: "6px 10px", borderRadius: 6, fontSize: 12 }}
+              >
+                {MH_SHIFTS.map((sOpt) => (
+                  <option key={`rm-shift-${sOpt}`} value={sOpt}>
+                    {sOpt}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+      ) : (
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#1e3a5f] dark:bg-[#111e38]">
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-2.5 py-2 sm:px-5 sm:py-3 dark:border-[#1e3a5f]">
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -1127,7 +1599,7 @@ export function TransportOperations({
               <Truck size={14} />
             </div>
             <h2 className="truncate text-xs font-bold whitespace-nowrap text-slate-900 sm:text-sm dark:text-white">
-              บันทึกการย้ายงานด่วน
+              บันทึกการย้ายงานด่วน (งาน FG)
             </h2>
           </div>
 
@@ -1809,18 +2281,21 @@ export function TransportOperations({
           </form>
         )}
       </section>
+      )}
 
       {/* ===================================================================== */}
-      {/* 3. HISTORY & LOG TABLE (With Team & Shift Filters)                    */}
+      {/* 3. HISTORY & LOG TABLE (With Team, Shift & FG/RM Scope Filters)       */}
       {/* ===================================================================== */}
       <section className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#1e3a5f] dark:bg-[#111e38]">
         <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-2.5 py-2 sm:px-5 sm:py-3 dark:border-[#1e3a5f]">
           <div className="flex min-w-0 items-center gap-1.5">
             <h2 className="truncate text-xs font-bold whitespace-nowrap text-slate-900 sm:text-sm dark:text-white">
-              รายการขนย้ายทั้งหมด
+              {activeScopeTab === "RM"
+                ? "รายการย้ายงาน RM ทั้งหมด"
+                : "รายการย้ายงาน FG ทั้งหมด"}
             </h2>
             <span className="shrink-0 font-mono text-xs font-semibold text-slate-500 tabular-nums whitespace-nowrap dark:text-slate-400">
-              ({filteredTransfers.length}/{transfers.length})
+              ({filteredTransfers.length}/{scopedTransfers.length})
             </span>
           </div>
 
@@ -1832,6 +2307,7 @@ export function TransportOperations({
                 setTeamFilter("All");
                 setShiftFilter("All");
                 setStatusFilter("All");
+                setRmProductFilter("All");
               }}
               className="inline-flex h-7 shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-semibold whitespace-nowrap text-cyan-700 hover:underline dark:text-cyan-400"
             >
@@ -1841,7 +2317,7 @@ export function TransportOperations({
           )}
         </div>
 
-        {/* Filter Toolbar: Search + Team + Shift + Status (Matched to FuelManagement) */}
+        {/* Filter Toolbar: Search + RM Product + Team + Shift + Status */}
         <div className="filterbar transport-filterbar flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-[18px] sm:py-3 dark:border-[#1e3a5f] dark:bg-[#0d1b33]">
           <div className="relative min-w-[220px] flex-1">
             <Search
@@ -1850,7 +2326,11 @@ export function TransportOperations({
             />
             <input
               type="text"
-              placeholder="ค้นหารหัส, พนักงาน, รถ, สินค้า..."
+              placeholder={
+                activeScopeTab === "RM"
+                  ? "ค้นหาเลขที่ใบสั่งเบิก, เครื่องจักร, FAC, Location, คนขับ..."
+                  : "ค้นหารหัส, พนักงาน, รถ, สินค้า..."
+              }
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="field transport-input w-full rounded-md border border-slate-300 bg-white pr-2.5 pl-8 text-xs font-normal text-slate-900 focus:border-cyan-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
@@ -1859,6 +2339,31 @@ export function TransportOperations({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {activeScopeTab === "RM" && (
+              <div className="inline-flex h-[35px] w-auto items-center gap-0.5 rounded-md border border-amber-200 bg-amber-50/70 p-0.5 dark:border-amber-900/60 dark:bg-[#0c162c]">
+                {(
+                  [
+                    { id: "All" as const, label: "RM ทั้งหมด" },
+                    { id: "slit" as const, label: "เหล็กม้วนสลิต" },
+                    { id: "coil" as const, label: "เหล็กม้วนคอล์ย" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={`rm-prod-${opt.id}`}
+                    type="button"
+                    onClick={() => setRmProductFilter(opt.id)}
+                    className={`h-[29px] rounded px-2 text-xs font-semibold whitespace-nowrap transition ${
+                      rmProductFilter === opt.id
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="inline-flex h-[35px] w-auto items-center gap-0.5 rounded-md border border-slate-200 bg-slate-100 p-0.5 dark:border-[#1e3a5f] dark:bg-[#0c162c]">
               <button
                 type="button"
@@ -2033,16 +2538,29 @@ export function TransportOperations({
                   <div className="overflow-x-auto border-t border-slate-200 dark:border-[#1e3a5f]">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 dark:border-[#1e3a5f] dark:bg-[#0c162c] dark:text-slate-300">
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">วันที่</th>
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">พนักงาน</th>
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">สินค้า &amp; ประเภท</th>
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เส้นทาง</th>
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">ปริมาณ / น้ำหนัก</th>
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เวลาที่ใช้ส่ง</th>
-                          <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">สถานะ</th>
-                          <th className="px-3 py-2 text-right whitespace-nowrap sm:px-4 sm:py-2.5">จัดการ</th>
-                        </tr>
+                        {activeScopeTab === "RM" ? (
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 dark:border-[#1e3a5f] dark:bg-[#0c162c] dark:text-slate-300">
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">วันที่ / เวลา</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เลขที่ใบสั่งเบิก</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">สินค้า RM</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เส้นทาง (ต้นทาง → ปลายทาง)</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">จำนวน / น้ำหนักรวม</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เวลาที่ใช้ส่ง (SLA)</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">คนขับ / รถ</th>
+                            <th className="px-3 py-2 text-right whitespace-nowrap sm:px-4 sm:py-2.5">จัดการ</th>
+                          </tr>
+                        ) : (
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold text-slate-600 dark:border-[#1e3a5f] dark:bg-[#0c162c] dark:text-slate-300">
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">วันที่</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">พนักงาน</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">สินค้า &amp; ประเภท</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เส้นทาง</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">ปริมาณ / น้ำหนัก</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">เวลาที่ใช้ส่ง</th>
+                            <th className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">สถานะ</th>
+                            <th className="px-3 py-2 text-right whitespace-nowrap sm:px-4 sm:py-2.5">จัดการ</th>
+                          </tr>
+                        )}
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
                         {group.items.length === 0 ? (
@@ -2054,6 +2572,157 @@ export function TransportOperations({
                               ไม่มีรายการในกลุ่ม &quot;{group.title}&quot;
                             </td>
                           </tr>
+                        ) : activeScopeTab === "RM" ? (
+                          group.items.map((tr) => {
+                            const durationSec = getRecordDurationSeconds(tr, nowMs);
+                            const overdue = isRecordOverdue(tr, nowMs);
+                            const durationMins = Math.floor(durationSec / 60);
+                            const weightKg = getRecordWeightKg(tr);
+                            const coilCount = tr.totalBundles ?? tr.quantity ?? 0;
+                            const isActiveRow = tr.status === "In Transit" || tr.status === "Pending";
+                            const isCoilRm =
+                              tr.rmProductType === "coil" || tr.sourceCollection === "coil_staging";
+                            const orderNoDisplay = tr.sourceOrderNo || tr.transferCode;
+
+                            return (
+                              <tr
+                                key={tr.id}
+                                className={`transition hover:bg-slate-50/80 dark:hover:bg-[#162544]/60 ${
+                                  overdue ? "bg-red-50/35 dark:bg-red-950/15" : ""
+                                }`}
+                              >
+                                {/* 1. Date & Start Time */}
+                                <td className="px-3 py-2 font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap sm:px-4 sm:py-2.5 dark:text-slate-100">
+                                  <div>{tr.workingDate}</div>
+                                  <div className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">
+                                    {tr.startTime ? tr.startTime.slice(0, 5) : "-"}
+                                    {tr.endTime ? ` → ${tr.endTime.slice(0, 5)}` : ""}
+                                  </div>
+                                </td>
+
+                                {/* 2. Order No. + Round (No raw Batch codes) */}
+                                <td className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono text-xs font-extrabold text-slate-900 dark:text-white">
+                                      {orderNoDisplay}
+                                    </span>
+                                    {tr.sourceRoundNo && (
+                                      <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-[#1a2c4e] dark:text-slate-300">
+                                        รอบที่ {tr.sourceRoundNo}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* 3. RM Product Type */}
+                                <td className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">
+                                  <span
+                                    className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-bold ${
+                                      isCoilRm
+                                        ? "border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-200"
+                                        : "border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/60 dark:text-cyan-200"
+                                    }`}
+                                  >
+                                    {isCoilRm ? "เหล็กม้วนคอล์ย" : "เหล็กม้วนสลิต"}
+                                  </span>
+                                </td>
+
+                                {/* 4. Route: Stock Origin Location -> Destination Machine FAC */}
+                                <td className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">
+                                  <div className="inline-flex items-center gap-1.5 font-bold whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1 text-sky-700 dark:text-sky-300">
+                                      <MapPin size={11} className="shrink-0" />
+                                      <span>{tr.originFacility}</span>
+                                    </span>
+                                    <ArrowRight size={12} className="shrink-0 text-slate-400" />
+                                    <span className="text-emerald-700 dark:text-emerald-300">
+                                      {tr.destinationFacility}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                {/* 5. Quantity & Total Weight */}
+                                <td className="px-3 py-2 font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap sm:px-4 sm:py-2.5 dark:text-white">
+                                  <div>
+                                    {coilCount} {tr.unit || "ม้วน"} · {weightKg.toLocaleString()} กก.
+                                  </div>
+                                  <div className="text-[10.5px] font-medium text-slate-500 dark:text-slate-400">
+                                    ({(weightKg / 1000).toFixed(2)} ตัน)
+                                  </div>
+                                </td>
+
+                                {/* 6. Duration / SLA 20 min */}
+                                <td className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">
+                                  {tr.status === "Cancelled" ? (
+                                    <span className="text-slate-400">—</span>
+                                  ) : (
+                                    <span
+                                      title={overdue ? `เกิน SLA (${durationMins} นาที)` : undefined}
+                                      className={`inline-flex items-center gap-1 font-mono text-xs font-extrabold tabular-nums whitespace-nowrap ${
+                                        overdue
+                                          ? "text-red-600 dark:text-red-400"
+                                          : "text-emerald-700 dark:text-emerald-400"
+                                      }`}
+                                    >
+                                      {overdue && <AlertTriangle size={12} className="shrink-0" />}
+                                      <span>
+                                        {isActiveRow
+                                          ? `${formatDurationClock(durationSec)} (กำลังส่ง)`
+                                          : formatDurationThai(durationSec)}
+                                      </span>
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* 7. Driver & Vehicle */}
+                                <td className="px-3 py-2 whitespace-nowrap sm:px-4 sm:py-2.5">
+                                  {isActiveRow && (!tr.driverName || tr.driverName === "รอยืนยันคนขับ") ? (
+                                    <span className="text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                                      รอยืนยันคนขับ
+                                    </span>
+                                  ) : (
+                                    <div>
+                                      <div className="font-bold text-slate-900 dark:text-white">
+                                        {tr.driverName || "-"}
+                                      </div>
+                                      {tr.vehicleNumber && tr.vehicleNumber !== "-" && (
+                                        <div className="font-mono text-[10.5px] font-medium text-slate-500 dark:text-slate-400">
+                                          {tr.vehicleNumber}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* 8. Actions */}
+                                <td className="px-3 py-2 text-right whitespace-nowrap sm:px-4 sm:py-2.5">
+                                  <div className="inline-flex items-center justify-end gap-1.5 whitespace-nowrap">
+                                    {isActiveRow && (
+                                      <button
+                                        type="button"
+                                        onClick={() => openRmConfirmModal(tr)}
+                                        className="inline-flex h-8 items-center gap-1 rounded-md bg-emerald-600 px-3 py-1 text-xs font-bold whitespace-nowrap text-white shadow-xs transition hover:bg-emerald-700"
+                                      >
+                                        <CheckCircle2 size={13} />
+                                        <span>ยืนยันการส่ง</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedRecord(tr);
+                                        setConfirmDeleteId(null);
+                                      }}
+                                      className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold whitespace-nowrap text-slate-700 transition hover:bg-slate-50 dark:border-[#2c4a75] dark:bg-[#162544] dark:text-slate-200 dark:hover:bg-[#1d3158]"
+                                    >
+                                      <FileText size={12} />
+                                      <span>รายละเอียด</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         ) : (
                           group.items.map((tr) => {
                             const durationSec = getRecordDurationSeconds(tr, nowMs);
@@ -2189,7 +2858,7 @@ export function TransportOperations({
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-3 py-2 text-xs text-slate-500 sm:px-5 sm:py-3 dark:border-[#1e3a5f] dark:text-slate-400">
           <span className="tabular-nums">
-            อยู่ระหว่างการส่ง {inProgressTransfers.length} · ส่งสินค้าสำเร็จ {completedTransfers.length} (จากทั้งหมด {transfers.length} รายการ)
+            อยู่ระหว่างการส่ง {inProgressTransfers.length} · ส่งสินค้าสำเร็จ {completedTransfers.length} (แท็บ {activeScopeTab} ทั้งหมด {scopedTransfers.length} รายการ)
           </span>
           <span>ระบบปฏิบัติการขนย้ายโฟล์คลิฟท์ (Material Handling)</span>
         </div>
@@ -2254,16 +2923,32 @@ export function TransportOperations({
       {selectedRecord && (
         <div className="modal-backdrop">
           <div
-            className="modal-container transfer-modal-card"
+            className="modal-container transfer-modal-card max-h-[calc(100dvh-32px)] flex flex-col min-h-0 overflow-hidden"
             style={{ maxWidth: 620, width: "95%" }}
           >
-            <div className="modal-header-box" style={{ padding: "18px 24px" }}>
+            <div className="modal-header-box shrink-0" style={{ padding: "18px 24px" }}>
               <div>
-                <div className="modal-title-text">
-                  รายละเอียดการขนย้าย: <span className="code">{selectedRecord.transferCode}</span>
+                <div className="modal-title-text flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10.5px] font-extrabold ${
+                      isRmTransferRecord(selectedRecord)
+                        ? "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
+                        : "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/70 dark:text-cyan-300"
+                    }`}
+                  >
+                    {isRmTransferRecord(selectedRecord) ? "ย้ายงาน RM" : "ย้ายงาน FG"}
+                  </span>
+                  <span>
+                    {isRmTransferRecord(selectedRecord) && selectedRecord.sourceOrderNo
+                      ? `ใบสั่งเบิก: ${selectedRecord.sourceOrderNo}${selectedRecord.sourceRoundNo ? ` (รอบที่ ${selectedRecord.sourceRoundNo})` : ""}`
+                      : `รายละเอียดการขนย้าย: ${selectedRecord.transferCode}`}
+                  </span>
                 </div>
                 <div className="modal-sub-text" style={{ marginTop: 2 }}>
-                  วันที่ {selectedRecord.workingDate} · บันทึกโดย {selectedRecord.driverName}
+                  วันที่ {selectedRecord.workingDate} ·{" "}
+                  {isRmTransferRecord(selectedRecord)
+                    ? `รหัสงาน ${selectedRecord.transferCode}`
+                    : `บันทึกโดย ${selectedRecord.driverName}`}
                 </div>
               </div>
               <button
@@ -2278,7 +2963,7 @@ export function TransportOperations({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 p-6 text-xs sm:grid-cols-2">
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-6 text-xs sm:grid-cols-2">
               <div>
                 <div className="modal-label-text">พนักงานขับรถ / รถ / หางลาก</div>
                 <div className="modal-val-text mt-1 font-bold">
@@ -2324,11 +3009,13 @@ export function TransportOperations({
               </div>
 
               <div>
-                <div className="modal-label-text">รายละเอียดน้ำหนัก</div>
+                <div className="modal-label-text">รายละเอียดจำนวนและน้ำหนัก</div>
                 <div className="modal-val-text mt-1 font-bold tabular-nums">
-                  {(selectedRecord.totalBundles ?? selectedRecord.quantity) || 0} มัด ·{" "}
+                  {(selectedRecord.totalBundles ?? selectedRecord.quantity) || 0}{" "}
+                  {selectedRecord.unit || (isRmTransferRecord(selectedRecord) ? "ม้วน" : "มัด")} ·{" "}
                   {getRecordWeightKg(selectedRecord).toLocaleString()} กก. ({selectedRecord.weightTon} ตัน)
-                  {typeof selectedRecord.fullBundles === "number" &&
+                  {!isRmTransferRecord(selectedRecord) &&
+                    typeof selectedRecord.fullBundles === "number" &&
                     typeof selectedRecord.weightPerBundleKg === "number" && (
                       <div className="mt-0.5 text-[11px] font-normal opacity-80">
                         {selectedRecord.fullBundles} มัดเต็ม × {selectedRecord.weightPerBundleKg} กก.
@@ -2370,7 +3057,7 @@ export function TransportOperations({
               )}
             </div>
 
-            <div className="modal-footer-box flex flex-wrap items-center justify-between gap-2">
+            <div className="modal-footer-box shrink-0 flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 {selectedRecord.status !== "Completed" && (
                   <button
@@ -2379,7 +3066,7 @@ export function TransportOperations({
                     className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
                   >
                     <CheckCircle2 size={13} />
-                    ยืนยันจบงาน
+                    {isRmTransferRecord(selectedRecord) ? "ยืนยันการส่ง" : "ยืนยันจบงาน"}
                   </button>
                 )}
 
@@ -2424,6 +3111,231 @@ export function TransportOperations({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* 6. RM 1-STEP DELIVERY CONFIRMATION MODAL                              */}
+      {/* ===================================================================== */}
+      {rmConfirmTarget && (
+        <div
+          className="modal-backdrop z-[120]!"
+          onMouseDown={() => {
+            if (!isConfirmingRm) setRmConfirmTarget(null);
+          }}
+        >
+          <form
+            onSubmit={handleConfirmRmDelivery}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="modal-container transfer-modal-card max-h-[calc(100dvh-32px)] flex flex-col min-h-0 overflow-hidden"
+            style={{ maxWidth: 540, width: "95%" }}
+          >
+            <div className="modal-header-box shrink-0" style={{ padding: "16px 22px" }}>
+              <div>
+                <div className="modal-title-text flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
+                  <span>ยืนยันการส่งงาน RM</span>
+                </div>
+                <div className="modal-sub-text" style={{ marginTop: 2 }}>
+                  ตรวจสอบชื่อคนขับและหมายเลขรถ (ดึงจากกะวันนี้ให้อัตโนมัติ · เปลี่ยนได้ก่อนยืนยัน)
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isConfirmingRm}
+                onClick={() => setRmConfirmTarget(null)}
+                className="modal-close-btn"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 text-xs">
+              {/* Summary Card */}
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 dark:border-amber-900/60 dark:bg-amber-950/25">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded bg-amber-600 px-2 py-0.5 text-[10.5px] font-extrabold text-white">
+                      {rmConfirmTarget.itemName}
+                    </span>
+                    <span className="font-mono text-sm font-extrabold text-slate-900 dark:text-white">
+                      ใบสั่ง {rmConfirmTarget.sourceOrderNo || rmConfirmTarget.transferCode}
+                    </span>
+                    {rmConfirmTarget.sourceRoundNo && (
+                      <span className="rounded bg-white/80 px-1.5 py-0.5 text-[10.5px] font-bold text-slate-700 dark:bg-[#162544] dark:text-slate-200">
+                        รอบที่ {rmConfirmTarget.sourceRoundNo}
+                      </span>
+                    )}
+                  </div>
+                  <span
+                    className={`font-mono text-xs font-extrabold tabular-nums ${
+                      isRecordOverdue(rmConfirmTarget, nowMs)
+                        ? "text-red-600 dark:text-red-400"
+                        : "text-emerald-700 dark:text-emerald-400"
+                    }`}
+                  >
+                    SLA {formatDurationClock(getRecordDurationSeconds(rmConfirmTarget, nowMs))}
+                  </span>
+                </div>
+
+                <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div>
+                    <div className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
+                      เส้นทางขนย้าย
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1 font-bold">
+                      <span className="text-sky-700 dark:text-sky-300">
+                        {rmConfirmTarget.originFacility}
+                      </span>
+                      <ArrowRight size={12} className="text-slate-400" />
+                      <span className="text-emerald-700 dark:text-emerald-300">
+                        {rmConfirmTarget.destinationFacility}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
+                      จำนวนและน้ำหนักรวมรอบนี้
+                    </div>
+                    <div className="mt-0.5 font-mono font-extrabold text-slate-900 tabular-nums dark:text-white">
+                      {(rmConfirmTarget.totalBundles ?? rmConfirmTarget.quantity) || 0}{" "}
+                      {rmConfirmTarget.unit || "ม้วน"} ·{" "}
+                      {getRecordWeightKg(rmConfirmTarget).toLocaleString()} กก. (
+                      {(getRecordWeightKg(rmConfirmTarget) / 1000).toFixed(2)} ตัน)
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Editable Driver & Vehicle Fields */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">
+                    พนักงานขับรถ <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={rmDriverName}
+                    onChange={(e) => handleSelectRmDriver(e.target.value)}
+                    className="field transport-select w-full rounded-md border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                    style={{ height: 38, minHeight: 38, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                  >
+                    <option value="">-- เลือกพนักงานขับรถ --</option>
+                    {rmDriverOptions.map((name) => (
+                      <option key={`rm-modal-drv-${name}`} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">
+                    หมายเลขรถโฟล์คลิฟท์
+                  </label>
+                  <select
+                    value={rmVehicleNumber}
+                    onChange={(e) => {
+                      rmDriverTouchedRef.current = true;
+                      setRmVehicleNumber(e.target.value);
+                    }}
+                    className="field transport-select w-full rounded-md border border-slate-300 bg-white font-mono text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                    style={{ height: 38, minHeight: 38, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                  >
+                    <option value="">-- ไม่ระบุ / เลือกหมายเลขรถ --</option>
+                    {drivableVehicles.map((v) => (
+                      <option key={`rm-modal-veh-${v.id}`} value={v.vehicleId}>
+                        {v.vehicleId} {v.vehicleType ? `(${v.vehicleType})` : ""}
+                      </option>
+                    ))}
+                    {rmVehicleNumber &&
+                      !drivableVehicles.some((v) => v.vehicleId === rmVehicleNumber) && (
+                        <option value={rmVehicleNumber}>{rmVehicleNumber}</option>
+                      )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">
+                    ทีม
+                  </label>
+                  <select
+                    value={rmTeam}
+                    onChange={(e) => {
+                      rmDriverTouchedRef.current = true;
+                      setRmTeam(e.target.value);
+                    }}
+                    className="field transport-select w-full rounded-md border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                    style={{ height: 38, minHeight: 38, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                  >
+                    {MH_TEAMS.map((tOpt) => (
+                      <option key={`rm-modal-team-${tOpt}`} value={tOpt}>
+                        {tOpt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">
+                    กะทำงาน
+                  </label>
+                  <select
+                    value={rmShift}
+                    onChange={(e) => {
+                      rmDriverTouchedRef.current = true;
+                      setRmShift(e.target.value);
+                    }}
+                    className="field transport-select w-full rounded-md border border-slate-300 bg-white text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                    style={{ height: 38, minHeight: 38, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                  >
+                    {MH_SHIFTS.map((sOpt) => (
+                      <option key={`rm-modal-shift-${sOpt}`} value={sOpt}>
+                        {sOpt}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-700 dark:text-slate-200">
+                  หมายเหตุเพิ่มเติม (ถ้ามี)
+                </label>
+                <input
+                  type="text"
+                  value={rmConfirmNotes}
+                  onChange={(e) => setRmConfirmNotes(e.target.value)}
+                  placeholder="ระบุหมายเหตุการส่งงาน (ไม่บังคับ)..."
+                  className="field transport-input w-full rounded-md border border-slate-300 bg-white text-xs text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:text-slate-100"
+                  style={{ height: 38, minHeight: 38, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                />
+              </div>
+
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-[11px] font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+                เมื่อกดยืนยัน ระบบจะปิดเวลา SLA 20 นาที และเปลี่ยนสถานะรายการในหน้าเตรียมเบิก (เหล็กสลิต/คอล์ย) จาก &quot;อยู่ระหว่างขนส่ง&quot; เป็น &quot;ส่งสำเร็จ&quot; อัตโนมัติ
+              </div>
+            </div>
+
+            <div className="modal-footer-box shrink-0 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={isConfirmingRm}
+                onClick={() => setRmConfirmTarget(null)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-[#2c4a75] dark:bg-[#162544] dark:text-slate-200"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={isConfirmingRm}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white shadow-xs transition hover:bg-emerald-700 disabled:opacity-60"
+              >
+                <CheckCircle2 size={14} />
+                <span>{isConfirmingRm ? "กำลังบันทึก..." : "ยืนยันการส่งสำเร็จ"}</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

@@ -27,10 +27,21 @@ export const MH_PRESTART_INSPECTIONS_COLLECTION = "mh_prestart_inspections";
 // ============================================================================
 export type MhTransferStatus = "Pending" | "In Transit" | "Completed" | "Cancelled";
 export type MhPriorityLevel = "Normal" | "Urgent" | "Express";
+export type MhTransferScope = "FG" | "RM";
+export type MhRmProductType = "slit" | "coil";
 
 export interface MhTransferRecord {
   id: string;
   transferCode: string;
+  transferScope?: MhTransferScope; // FG (สินค้าผลิตเสร็จ) | RM (เหล็กม้วนสลิต / เหล็กม้วนคอล์ย)
+  rmProductType?: MhRmProductType; // slit | coil
+  sourceOrderNo?: string; // เลขที่ใบสั่งเบิกต้นทาง (งาน RM)
+  sourceOrderDocId?: string; // Firestore Doc ID ของใบสั่งเบิกต้นทาง
+  sourceMachineId?: string; // เครื่องจักรปลายทาง เช่น TM01, CF01, SM01, CL01
+  sourceCollection?: "slit_picklists" | "coil_staging";
+  sourceRoundNo?: number; // รอบการสแกนส่งของใบสั่งเบิกนั้น (1, 2, ...)
+  sourceBatches?: string[]; // รายชื่อ Batch ในรอบนี้ (เก็บภายในเพื่อสะสมน้ำหนัก & ซิงค์สถานะกลับ)
+  sourceOrigins?: string[]; // รวม Location ต้นทางจาก Stock คงคลังของรอบนี้
   originFacility: string;
   destinationFacility: string;
   sku: string;
@@ -74,6 +85,68 @@ export interface MhTransferRecord {
   notes?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export const RM_MACHINE_FAC_MAP: Record<string, string> = {
+  TM01: "FAC G",
+  TM02: "FAC G",
+  TM03: "FAC G",
+  TM04: "FAC G",
+  TM05: "FAC P",
+  TM06: "FAC G",
+  TM07: "FAC D",
+  TM08: "FAC D",
+  TM09: "FAC D",
+  TM10: "FAC D",
+  TM11: "FAC F",
+  TM12: "FAC F",
+  TM13: "FAC F",
+  TM14: "FAC A",
+  CF01: "FAC G",
+  CF02: "FAC G",
+  CF03: "FAC G",
+  CF04: "FAC G",
+  CF05: "FAC G",
+  ML01: "FAC 21",
+  ML02: "FAC 21",
+  ZF01: "FAC 21",
+  ZF02: "FAC 21",
+  CL01: "FAC Cut-to-Length",
+  CL02: "FAC Cut-to-Length",
+  CL03: "FAC Cut-to-Length",
+  CL04: "FAC Cut-to-Length",
+  CL05: "FAC Cut-to-Length",
+  CL06: "FAC Cut-to-Length",
+  SM01: "FAC Slitting",
+  SM02: "FAC Slitting",
+  SM03: "FAC Slitting",
+  SM04: "FAC Slitting",
+};
+
+export function resolveMachineFacDestination(
+  machineId?: string,
+  rmProductType?: MhRmProductType
+): string {
+  const cleanMachine = String(machineId || "").trim().toUpperCase();
+  if (!cleanMachine) {
+    return rmProductType === "coil" ? "หน้าเครื่องคอล์ย" : "หน้าเครื่องสลิต";
+  }
+  const fac = RM_MACHINE_FAC_MAP[cleanMachine];
+  if (fac) {
+    return `${fac} (${cleanMachine})`;
+  }
+  if (cleanMachine.startsWith("CL")) {
+    return `FAC Cut-to-Length (${cleanMachine})`;
+  }
+  if (cleanMachine.startsWith("SM")) {
+    return `FAC Slitting (${cleanMachine})`;
+  }
+  return cleanMachine;
+}
+
+export function isRmTransferRecord(record?: Partial<MhTransferRecord> | null): boolean {
+  if (!record) return false;
+  return record.transferScope === "RM" || Boolean(record.rmProductType);
 }
 
 // ============================================================================
@@ -640,9 +713,54 @@ function sanitizeMhTransferPayload(
       ? Number((computedTotalKg / 1000).toFixed(3))
       : 0;
 
+  const cleanSourceBatches = Array.isArray(r.sourceBatches)
+    ? Array.from(
+        new Set(
+          r.sourceBatches
+            .map((b) => String(b || "").trim().toUpperCase().slice(0, 32))
+            .filter(Boolean)
+        )
+      ).slice(0, 200)
+    : undefined;
+
+  const cleanSourceOrigins = Array.isArray(r.sourceOrigins)
+    ? Array.from(
+        new Set(
+          r.sourceOrigins
+            .map((loc) => String(loc || "").trim().slice(0, 64))
+            .filter(Boolean)
+        )
+      ).slice(0, 40)
+    : undefined;
+
   return stripUndefinedDeep({
     id: docId,
     transferCode: String(r.transferCode || docId).trim().slice(0, 64),
+    transferScope:
+      r.transferScope === "RM" || r.rmProductType === "slit" || r.rmProductType === "coil"
+        ? "RM"
+        : r.transferScope === "FG"
+        ? "FG"
+        : undefined,
+    rmProductType:
+      r.rmProductType === "slit" || r.rmProductType === "coil" ? r.rmProductType : undefined,
+    sourceOrderNo: r.sourceOrderNo ? String(r.sourceOrderNo).trim().slice(0, 64) : undefined,
+    sourceOrderDocId: r.sourceOrderDocId
+      ? String(r.sourceOrderDocId).trim().slice(0, 128)
+      : undefined,
+    sourceMachineId: r.sourceMachineId
+      ? String(r.sourceMachineId).trim().toUpperCase().slice(0, 32)
+      : undefined,
+    sourceCollection:
+      r.sourceCollection === "slit_picklists" || r.sourceCollection === "coil_staging"
+        ? r.sourceCollection
+        : undefined,
+    sourceRoundNo:
+      typeof r.sourceRoundNo === "number" && !isNaN(r.sourceRoundNo)
+        ? Math.max(1, Math.floor(r.sourceRoundNo))
+        : undefined,
+    sourceBatches: cleanSourceBatches,
+    sourceOrigins: cleanSourceOrigins,
     originFacility: String(r.originFacility || "-").trim().slice(0, 128),
     destinationFacility: String(r.destinationFacility || "-").trim().slice(0, 128),
     sku: String(r.sku || "-").trim().slice(0, 64),
@@ -810,6 +928,266 @@ export async function deleteMhTransferFromCloud(id: string): Promise<boolean> {
     OperationType.DELETE,
     `${MH_TRANSFERS_COLLECTION}/${cleanId}`
   );
+}
+
+// ============================================================================
+// 1A. Automated RM Pick List -> Material Handling Transfer Sync
+// ============================================================================
+export interface RmPickListDispatchItemInput {
+  batch: string;
+  weightKg: number;
+  originLocation?: string;
+}
+
+export interface RmPickListDispatchInput {
+  rmProductType: MhRmProductType;
+  sourceCollection: "slit_picklists" | "coil_staging";
+  sourceOrderNo: string;
+  sourceOrderDocId?: string;
+  machineId: string;
+  recorderName?: string;
+  items: RmPickListDispatchItemInput[];
+}
+
+function formatAggregatedOriginLocations(
+  origins: string[],
+  rmProductType: MhRmProductType
+): string {
+  const valid = Array.from(
+    new Set(
+      origins
+        .map((loc) => String(loc || "").trim())
+        .filter(
+          (loc) =>
+            loc.length > 0 &&
+            loc !== "-" &&
+            loc !== "ไม่ระบุ" &&
+            !loc.includes("รอสแกน")
+        )
+    )
+  );
+  if (valid.length === 0) {
+    return rmProductType === "coil" ? "คลังเหล็กม้วน RM" : "คลังเหล็กสลิต";
+  }
+  if (valid.length <= 3) {
+    return valid.join(", ");
+  }
+  return `${valid.slice(0, 3).join(", ")} (+${valid.length - 3})`;
+}
+
+// Serialize concurrent RM upserts per order so rapid consecutive barcode scans never race
+const rmUpsertQueueByOrder = new Map<string, Promise<MhTransferRecord | null>>();
+
+export function upsertRmTransferFromPickListScan(
+  input: RmPickListDispatchInput
+): Promise<MhTransferRecord | null> {
+  const cleanOrderNo = String(input.sourceOrderNo || "").trim().toUpperCase();
+  const queueKey = `${input.sourceCollection}::${cleanOrderNo}`;
+  const prevPromise = rmUpsertQueueByOrder.get(queueKey) || Promise.resolve(null);
+
+  const nextPromise = prevPromise
+    .catch(() => null)
+    .then(() => runUpsertRmTransferFromPickListScan(input));
+
+  rmUpsertQueueByOrder.set(queueKey, nextPromise);
+  return nextPromise;
+}
+
+async function runUpsertRmTransferFromPickListScan(
+  input: RmPickListDispatchInput
+): Promise<MhTransferRecord | null> {
+  const cleanOrderNo = String(input.sourceOrderNo || "").trim().toUpperCase();
+  if (!cleanOrderNo) return null;
+
+  const incomingUnique = new Map<string, RmPickListDispatchItemInput>();
+  for (const itm of input.items || []) {
+    const cleanBatch = String(itm.batch || "").trim().toUpperCase();
+    if (!cleanBatch) continue;
+    if (!incomingUnique.has(cleanBatch)) {
+      incomingUnique.set(cleanBatch, {
+        batch: cleanBatch,
+        weightKg: Math.max(0, Number(itm.weightKg) || 0),
+        originLocation: String(itm.originLocation || "").trim(),
+      });
+    }
+  }
+  if (incomingUnique.size === 0) return null;
+
+  const existingTransfers = await fetchMhTransfersOnce();
+  const matchingOrderTransfers = existingTransfers.filter(
+    (tr) =>
+      isRmTransferRecord(tr) &&
+      tr.sourceCollection === input.sourceCollection &&
+      String(tr.sourceOrderNo || "").trim().toUpperCase() === cleanOrderNo &&
+      tr.status !== "Cancelled"
+  );
+
+  // Check if there is an active ("In Transit" / "Pending") round for this order
+  const activeRound = matchingOrderTransfers.find(
+    (tr) => tr.status === "In Transit" || tr.status === "Pending"
+  );
+
+  const now = new Date();
+  const nowMs = now.getTime();
+  const { timestamp, dateYmd, timeHms } = formatForkliftNowTimestamp();
+  const destinationFacility = resolveMachineFacDestination(
+    input.machineId,
+    input.rmProductType
+  );
+  const itemName =
+    input.rmProductType === "coil" ? "เหล็กม้วนคอล์ย" : "เหล็กม้วนสลิต";
+  const transferType =
+    input.rmProductType === "coil"
+      ? "เหล็กม้วนคอล์ย (RM)"
+      : "เหล็กม้วนสลิต (RM)";
+
+  if (activeRound) {
+    const existingBatches = new Set(
+      (activeRound.sourceBatches || []).map((b) => String(b).trim().toUpperCase())
+    );
+    const newlyAddedItems: RmPickListDispatchItemInput[] = [];
+    incomingUnique.forEach((itm, bKey) => {
+      if (!existingBatches.has(bKey)) {
+        newlyAddedItems.push(itm);
+        existingBatches.add(bKey);
+      }
+    });
+
+    if (newlyAddedItems.length === 0) {
+      return activeRound;
+    }
+
+    const addedWeightKg = newlyAddedItems.reduce((sum, i) => sum + i.weightKg, 0);
+    const prevWeightKg =
+      typeof activeRound.totalWeightKg === "number" && !isNaN(activeRound.totalWeightKg)
+        ? activeRound.totalWeightKg
+        : Math.round((activeRound.weightTon || 0) * 1000);
+    const nextTotalWeightKg = Math.round((prevWeightKg + addedWeightKg) * 100) / 100;
+    const nextBatches = Array.from(existingBatches);
+    const nextOrigins = Array.from(
+      new Set([
+        ...(activeRound.sourceOrigins || []),
+        ...newlyAddedItems
+          .map((i) => String(i.originLocation || "").trim())
+          .filter(
+            (loc) =>
+              loc.length > 0 &&
+              loc !== "-" &&
+              loc !== "ไม่ระบุ" &&
+              !loc.includes("รอสแกน")
+          ),
+      ])
+    );
+
+    const updatedRecord: MhTransferRecord = {
+      ...activeRound,
+      transferScope: "RM",
+      rmProductType: input.rmProductType,
+      sourceOrderNo: cleanOrderNo,
+      sourceOrderDocId:
+        activeRound.sourceOrderDocId || input.sourceOrderDocId || undefined,
+      sourceMachineId: String(input.machineId || activeRound.sourceMachineId || "")
+        .trim()
+        .toUpperCase(),
+      sourceCollection: input.sourceCollection,
+      sourceBatches: nextBatches,
+      sourceOrigins: nextOrigins,
+      originFacility: formatAggregatedOriginLocations(
+        nextOrigins,
+        input.rmProductType
+      ),
+      destinationFacility,
+      quantity: nextBatches.length,
+      totalBundles: nextBatches.length,
+      totalWeightKg: nextTotalWeightKg,
+      weightTon: Number((nextTotalWeightKg / 1000).toFixed(3)),
+      updatedAt: timestamp,
+    };
+
+    await saveMhTransferToCloud(updatedRecord);
+    return updatedRecord;
+  }
+
+  // Otherwise start a fresh round (Round 1, or Round N+1 if earlier round already Completed)
+  const maxRoundNo = matchingOrderTransfers.reduce(
+    (max, tr) => Math.max(max, tr.sourceRoundNo || 1),
+    0
+  );
+  const nextRoundNo = maxRoundNo + 1;
+  const newItemsArr = Array.from(incomingUnique.values());
+  const totalWeightKg =
+    Math.round(newItemsArr.reduce((sum, i) => sum + i.weightKg, 0) * 100) / 100;
+  const sourceBatches = newItemsArr.map((i) => i.batch);
+  const sourceOrigins = Array.from(
+    new Set(
+      newItemsArr
+        .map((i) => String(i.originLocation || "").trim())
+        .filter(
+          (loc) =>
+            loc.length > 0 &&
+            loc !== "-" &&
+            loc !== "ไม่ระบุ" &&
+            !loc.includes("รอสแกน")
+        )
+    )
+  );
+  const originFacility = formatAggregatedOriginLocations(
+    sourceOrigins,
+    input.rmProductType
+  );
+  const safeOrderSuffix = cleanOrderNo.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 48);
+  const docId = sanitizeDocId(
+    `RM_${input.rmProductType.toUpperCase()}_${safeOrderSuffix}_R${nextRoundNo}_${nowMs
+      .toString(36)
+      .slice(-4)
+      .toUpperCase()}`
+  );
+  const transferCode = (
+    nextRoundNo > 1 ? `RM-${cleanOrderNo}-R${nextRoundNo}` : `RM-${cleanOrderNo}`
+  ).slice(0, 64);
+
+  const newRecord: MhTransferRecord = {
+    id: docId,
+    transferCode,
+    transferScope: "RM",
+    rmProductType: input.rmProductType,
+    sourceOrderNo: cleanOrderNo,
+    sourceOrderDocId: input.sourceOrderDocId,
+    sourceMachineId: String(input.machineId || "").trim().toUpperCase(),
+    sourceCollection: input.sourceCollection,
+    sourceRoundNo: nextRoundNo,
+    sourceBatches,
+    sourceOrigins,
+    originFacility,
+    destinationFacility,
+    sku: String(input.machineId || "-").trim().toUpperCase(),
+    itemName,
+    productCategory: "ย้ายงาน RM",
+    transferType,
+    batchNumber: cleanOrderNo,
+    palletId: `R${nextRoundNo}`,
+    quantity: sourceBatches.length,
+    totalBundles: sourceBatches.length,
+    unit: "ม้วน",
+    totalWeightKg,
+    weightTon: Number((totalWeightKg / 1000).toFixed(3)),
+    startTime: timeHms,
+    startTimeMs: nowMs,
+    recorderName: String(input.recorderName || "ระบบเตรียมเบิก").trim().slice(0, 128),
+    workingDate: dateYmd,
+    status: "In Transit",
+    priority: "Normal",
+    vehicleNumber: "-",
+    driverName: "รอคนขับยืนยัน",
+    notes: `เชื่อมอัตโนมัติจากหน้าเตรียมเบิก ${itemName} · ใบสั่ง ${cleanOrderNo}${
+      nextRoundNo > 1 ? ` (รอบที่ ${nextRoundNo})` : ""
+    }`,
+    createdAt: `${dateYmd} ${timeHms.slice(0, 5)}`,
+    updatedAt: timestamp,
+  };
+
+  await saveMhTransferToCloud(newRecord);
+  return newRecord;
 }
 
 // ============================================================================

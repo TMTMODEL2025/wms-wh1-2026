@@ -5,6 +5,7 @@ import {
   deleteDoc,
   onSnapshot,
   writeBatch,
+  getDoc,
   getDocs,
   getDocsFromServer,
   query,
@@ -111,6 +112,11 @@ export interface CoilStagingItem {
   storageLocation?: string;
   isTemporary?: boolean;
   tempOrderRef?: string;
+  deliveryStatus?: "in_transit" | "delivered";
+  mhTransferId?: string;
+  deliveredAt?: string;
+  deliveredBy?: string;
+  deliveredVehicle?: string;
 }
 
 export interface CoilStagingOrder {
@@ -535,6 +541,16 @@ function sanitizeCoilStagingPayload(order: CoilStagingOrder): CoilStagingOrder {
     storageLocation: itm.storageLocation ? String(itm.storageLocation).trim().slice(0, 64) : undefined,
     isTemporary: Boolean(itm.isTemporary),
     tempOrderRef: itm.tempOrderRef ? String(itm.tempOrderRef).trim().slice(0, 64) : undefined,
+    deliveryStatus:
+      itm.deliveryStatus === "in_transit" || itm.deliveryStatus === "delivered"
+        ? itm.deliveryStatus
+        : undefined,
+    mhTransferId: itm.mhTransferId ? String(itm.mhTransferId).trim().slice(0, 128) : undefined,
+    deliveredAt: itm.deliveredAt ? String(itm.deliveredAt).trim().slice(0, 64) : undefined,
+    deliveredBy: itm.deliveredBy ? String(itm.deliveredBy).trim().slice(0, 128) : undefined,
+    deliveredVehicle: itm.deliveredVehicle
+      ? String(itm.deliveredVehicle).trim().slice(0, 64)
+      : undefined,
   }));
 
   const allIssued = cleanItems.length > 0 && cleanItems.every((i) => i.status === "issued");
@@ -976,6 +992,86 @@ export async function saveCoilStagingOrderToCloud(
   );
 
   return cleanOrder;
+}
+
+/**
+ * Mark staged RM Coil batches as delivered when Material Handling driver confirms delivery
+ */
+export async function markCoilStagingBatchesDelivered(params: {
+  orderDocId?: string;
+  orderNo: string;
+  batches?: string[];
+  mhTransferId: string;
+  deliveredBy: string;
+  deliveredVehicle: string;
+  deliveredAt: string;
+}): Promise<boolean> {
+  const cleanOrderNo = String(params.orderNo || "").trim().toUpperCase();
+  const docId = sanitizeDocId(params.orderDocId || `CSTG-${cleanOrderNo}`);
+  const batchSet = new Set(
+    (params.batches || []).map((b) => String(b || "").trim().toUpperCase()).filter(Boolean)
+  );
+
+  try {
+    let targetOrder: CoilStagingOrder | null = null;
+    const directSnap = await getDoc(doc(dbCoil, COIL_STAGING_COLLECTION, docId));
+    if (directSnap.exists()) {
+      targetOrder = directSnap.data() as CoilStagingOrder;
+    } else if (cleanOrderNo) {
+      const qSnap = await getDocs(
+        query(collection(dbCoil, COIL_STAGING_COLLECTION), where("orderNo", "==", cleanOrderNo))
+      );
+      if (!qSnap.empty) {
+        targetOrder = qSnap.docs[0].data() as CoilStagingOrder;
+      } else {
+        const allSnap = await getDocs(collection(dbCoil, COIL_STAGING_COLLECTION));
+        allSnap.forEach((d) => {
+          const data = d.data() as CoilStagingOrder;
+          if (!targetOrder && String(data?.orderNo || "").trim().toUpperCase() === cleanOrderNo) {
+            targetOrder = data;
+          }
+        });
+      }
+    }
+
+    if (!targetOrder || !Array.isArray(targetOrder.items)) {
+      return false;
+    }
+
+    let changed = false;
+    const updatedItems: CoilStagingItem[] = targetOrder.items.map((item) => {
+      const bKey = String(item.batch || "").trim().toUpperCase();
+      const shouldMark =
+        batchSet.size > 0
+          ? batchSet.has(bKey)
+          : item.status === "staged" && item.deliveryStatus !== "delivered";
+      if (!shouldMark) return item;
+      changed = true;
+      return {
+        ...item,
+        deliveryStatus: "delivered",
+        mhTransferId: params.mhTransferId,
+        deliveredAt: params.deliveredAt,
+        deliveredBy: params.deliveredBy,
+        deliveredVehicle: params.deliveredVehicle,
+      };
+    });
+
+    if (!changed) return true;
+
+    await saveCoilStagingOrderToCloud(
+      {
+        ...targetOrder,
+        items: updatedItems,
+        updatedAt: new Date().toISOString(),
+      },
+      false
+    );
+    return true;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${COIL_STAGING_COLLECTION}/${docId}`);
+    return false;
+  }
 }
 
 export async function batchSaveCoilStagingOrdersToCloud(

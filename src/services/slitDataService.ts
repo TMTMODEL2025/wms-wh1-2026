@@ -1149,6 +1149,21 @@ function sanitizePickListOrderPayload(order: PickListOrder): Record<string, unkn
     if (item.machineIssuedAt) {
       cleanItem.machineIssuedAt = String(item.machineIssuedAt);
     }
+    if (item.deliveryStatus === "in_transit" || item.deliveryStatus === "delivered") {
+      cleanItem.deliveryStatus = item.deliveryStatus;
+    }
+    if (item.mhTransferId) {
+      cleanItem.mhTransferId = String(item.mhTransferId).slice(0, 128);
+    }
+    if (item.deliveredAt) {
+      cleanItem.deliveredAt = String(item.deliveredAt).slice(0, 64);
+    }
+    if (item.deliveredBy) {
+      cleanItem.deliveredBy = String(item.deliveredBy).slice(0, 128);
+    }
+    if (item.deliveredVehicle) {
+      cleanItem.deliveredVehicle = String(item.deliveredVehicle).slice(0, 64);
+    }
     return stripUndefinedDeep(cleanItem);
   });
 
@@ -1213,6 +1228,82 @@ export async function savePickListToCloud(order: PickListOrder): Promise<void> {
     OperationType.WRITE,
     `${PICKLIST_COLLECTION}/${docId}`
   );
+}
+
+/**
+ * Mark scanned Slit Pick List batches as delivered when Material Handling driver confirms delivery
+ */
+export async function markSlitPickListBatchesDelivered(params: {
+  orderDocId?: string;
+  orderNo: string;
+  batches?: string[];
+  mhTransferId: string;
+  deliveredBy: string;
+  deliveredVehicle: string;
+  deliveredAt: string;
+}): Promise<boolean> {
+  const cleanOrderNo = String(params.orderNo || "").trim().toUpperCase();
+  const docId = sanitizeDocId(params.orderDocId || `ORD-${cleanOrderNo}`);
+  const batchSet = new Set(
+    (params.batches || []).map((b) => String(b || "").trim().toUpperCase()).filter(Boolean)
+  );
+
+  try {
+    let targetOrder: PickListOrder | null = null;
+    const directSnap = await getDoc(doc(db, PICKLIST_COLLECTION, docId));
+    if (directSnap.exists()) {
+      targetOrder = directSnap.data() as PickListOrder;
+    } else if (cleanOrderNo) {
+      const qSnap = await getDocs(
+        query(collection(db, PICKLIST_COLLECTION), where("orderNo", "==", params.orderNo.trim()))
+      );
+      if (!qSnap.empty) {
+        targetOrder = qSnap.docs[0].data() as PickListOrder;
+      } else {
+        const allSnap = await getDocs(collection(db, PICKLIST_COLLECTION));
+        allSnap.forEach((d) => {
+          const data = d.data() as PickListOrder;
+          if (!targetOrder && String(data?.orderNo || "").trim().toUpperCase() === cleanOrderNo) {
+            targetOrder = data;
+          }
+        });
+      }
+    }
+
+    if (!targetOrder || !Array.isArray(targetOrder.items)) {
+      return false;
+    }
+
+    let changed = false;
+    const updatedItems = targetOrder.items.map((item) => {
+      const bKey = String(item.batch || "").trim().toUpperCase();
+      const shouldMark =
+        batchSet.size > 0
+          ? batchSet.has(bKey)
+          : item.status === "verified" && item.deliveryStatus !== "delivered";
+      if (!shouldMark) return item;
+      changed = true;
+      return {
+        ...item,
+        deliveryStatus: "delivered" as const,
+        mhTransferId: params.mhTransferId,
+        deliveredAt: params.deliveredAt,
+        deliveredBy: params.deliveredBy,
+        deliveredVehicle: params.deliveredVehicle,
+      };
+    });
+
+    if (!changed) return true;
+
+    await savePickListToCloud({
+      ...targetOrder,
+      items: updatedItems,
+    });
+    return true;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `${PICKLIST_COLLECTION}/${docId}`);
+    return false;
+  }
 }
 
 /**

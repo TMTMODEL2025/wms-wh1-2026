@@ -48,6 +48,7 @@ import {
   Box,
   Minus,
   Keyboard,
+  Truck,
 } from "lucide-react";
 import { CameraBarcodeScanner } from "./CameraBarcodeScanner";
 import { CoilWarehouse3DView } from "./coil3d/CoilWarehouse3DView";
@@ -68,6 +69,7 @@ import {
 import { cleanBarcode } from "../utils/barcodeUtils";
 import { showToast } from "../utils/swalUtils";
 import { useLanguage } from "../contexts/LanguageContext";
+import { upsertRmTransferFromPickListScan } from "../services/forkliftDataService";
 import {
   CoilModeTab,
   CoilStockRecord,
@@ -2014,6 +2016,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
         ? {
             ...itm,
             status: "staged",
+            deliveryStatus: "in_transit",
             stagedAt: timestamp,
             coilNo: itm.coilNo && itm.coilNo !== "-" ? itm.coilNo : enriched.coilNo,
             grade: itm.grade && itm.grade !== "-" ? itm.grade : enriched.grade,
@@ -2044,14 +2047,41 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     setOutboundScanStatus({
       type: "success",
       message: isThai
-        ? `สแกนสำเร็จ! Batch [${cleanCode}] -> เปลี่ยนสถานะเป็น "เตรียมแล้ว" (เหลือรอเตรียมอีก ${remainingCount} รายการ)`
-        : `Scanned Batch [${cleanCode}] -> Staged (${remainingCount} remaining)`,
+        ? `สแกนสำเร็จ! Batch [${cleanCode}] -> สถานะ "อยู่ระหว่างขนส่ง" (ส่งงานไปยัง Material Handling แล้ว · เหลือรอเตรียม ${remainingCount} รายการ)`
+        : `Scanned Batch [${cleanCode}] -> In Transit (${remainingCount} remaining)`,
       scannedBatch: cleanCode,
     });
     setOutboundBarcodeInput("");
     setTimeout(() => outboundScannerInputRef.current?.focus(), 60);
 
     await saveCoilStagingOrderToCloud(updatedOrder);
+
+    // Auto-dispatch RM transfer job to Material Handling (ย้ายงาน RM)
+    const scannedWeightKg =
+      Number(targetItem.weightKg) > 0
+        ? Number(targetItem.weightKg)
+        : Number(enriched.weightKg) || 0;
+    const scannedOriginLoc =
+      enriched.sourceLocation && enriched.sourceLocation !== "-"
+        ? enriched.sourceLocation
+        : targetItem.sourceLocation && targetItem.sourceLocation !== "-"
+        ? targetItem.sourceLocation
+        : "";
+    void upsertRmTransferFromPickListScan({
+      rmProductType: "coil",
+      sourceCollection: "coil_staging",
+      sourceOrderNo: updatedOrder.orderNo,
+      sourceOrderDocId: updatedOrder.id,
+      machineId: updatedOrder.machineId,
+      items: [
+        {
+          batch: cleanCode,
+          weightKg: scannedWeightKg,
+          originLocation: scannedOriginLoc,
+        },
+      ],
+    }).catch(console.error);
+
     onLogTransaction?.(
       `Prepared Coil PickList Batch ${cleanCode} for Order ${activeOrder.orderNo} (${activeOrder.machineId})`,
       cleanCode,
@@ -2446,6 +2476,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
         weightKg: b.weightKg,
         sourceLocation: b.sourceLocation,
         status: "staged",
+        deliveryStatus: "in_transit" as const,
         stagedAt: timestamp,
         description: b.description,
         bomItem: String((idx + 1) * 10).padStart(4, "0"),
@@ -2464,6 +2495,21 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     setIsEmergencyModalOpen(false);
 
     await saveCoilStagingOrderToCloud(tempOrder);
+
+    // Auto-dispatch RM transfer job to Material Handling (ย้ายงาน RM)
+    void upsertRmTransferFromPickListScan({
+      rmProductType: "coil",
+      sourceCollection: "coil_staging",
+      sourceOrderNo: tempOrdNo,
+      sourceOrderDocId: tempOrder.id,
+      machineId: emergencyMachineId,
+      items: emergencyScannedBatches.map((b) => ({
+        batch: b.batch,
+        weightKg: Number(b.weightKg) || 0,
+        originLocation: b.sourceLocation && b.sourceLocation !== "-" ? b.sourceLocation : "",
+      })),
+    }).catch(console.error);
+
     playBeep("success");
     showToast(
       isThai
@@ -5500,10 +5546,24 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                                           {isThai ? "จ่ายแล้ว" : "Issued"}
                                         </span>
                                       ) : item.status === "staged" ? (
-                                        <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-emerald-500/20 text-emerald-500 inline-flex items-center gap-1">
-                                          <CheckCircle2 size={11} />
-                                          {isThai ? "เตรียมแล้ว" : "Staged"}
-                                        </span>
+                                        item.deliveryStatus === "delivered" ? (
+                                          <span
+                                            title={
+                                              item.deliveredBy
+                                                ? `${isThai ? "ส่งโดย" : "Delivered by"} ${item.deliveredBy}${item.deliveredVehicle && item.deliveredVehicle !== "-" ? ` (${item.deliveredVehicle})` : ""}${item.deliveredAt ? ` · ${item.deliveredAt}` : ""}`
+                                                : undefined
+                                            }
+                                            className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1"
+                                          >
+                                            <CheckCircle2 size={11} />
+                                            {isThai ? "ส่งสำเร็จ" : "Delivered"}
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-sky-500/20 text-sky-600 dark:text-sky-400 inline-flex items-center gap-1">
+                                            <Truck size={11} />
+                                            {isThai ? "อยู่ระหว่างขนส่ง" : "In Transit"}
+                                          </span>
+                                        )
                                       ) : (
                                         <span className="px-2 py-0.5 rounded text-[10.5px] font-bold bg-amber-500/20 text-amber-500">
                                           {isThai ? "รอเตรียม" : "Pending"}

@@ -116,6 +116,93 @@ interface EmployeeManagementProps {
   onNavigateToVehicles?: () => void;
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
   hideSubTabs?: boolean;
+  lockedDepartment?: string;
+  groupBy?: "department" | "position";
+}
+
+function matchesLockedDepartment(dept?: string, lockedDepartment?: string): boolean {
+  if (!lockedDepartment) return true;
+  const clean = String(dept || "").trim().toLowerCase();
+  const target = lockedDepartment.trim().toLowerCase();
+  if (clean === target) return true;
+  if (target === "material handling - fleet") {
+    return clean.includes("material handling") && clean.includes("fleet");
+  }
+  return false;
+}
+
+const ROLE_SENIORITY_RANK: Record<string, number> = {
+  Manager: 10,
+  "Assistant Manager": 20,
+  Supervisor: 30,
+  "Sr.Warehouse Officer": 40,
+  Officer: 50,
+  "Sr.Inspector": 60,
+  Inspector: 70,
+  Operator: 80,
+  Driver: 90,
+  Other: 100,
+};
+
+function getRoleSeniorityRank(role?: string): number {
+  if (!role) return 110;
+  return ROLE_SENIORITY_RANK[role] ?? 105;
+}
+
+function getJobPositionTextRank(jobPosition?: string): number | null {
+  const pos = String(jobPosition || "").trim().toLowerCase();
+  if (!pos) return null;
+  if (pos.includes("ผู้ช่วยผู้จัดการ") || pos.includes("assistant manager") || pos.includes("asst. manager") || pos.includes("asst manager")) {
+    return 20;
+  }
+  if (pos.includes("ผู้จัดการ") || pos.includes("manager")) {
+    return 10;
+  }
+  if (pos.includes("หัวหน้า") || pos.includes("supervisor") || pos.includes("foreman") || pos.includes("leader") || pos.includes("chief")) {
+    return 30;
+  }
+  if ((pos.includes("อาวุโส") || pos.includes("sr.") || pos.includes("senior")) && (pos.includes("เจ้าหน้าที่") || pos.includes("officer") || pos.includes("warehouse"))) {
+    return 40;
+  }
+  if (pos.includes("เจ้าหน้าที่") || pos.includes("officer") || pos.includes("admin") || pos.includes("ธุรการ") || pos.includes("ประสานงาน")) {
+    return 50;
+  }
+  if ((pos.includes("อาวุโส") || pos.includes("sr.") || pos.includes("senior")) && (pos.includes("ตรวจ") || pos.includes("inspector"))) {
+    return 60;
+  }
+  if (pos.includes("ตรวจ") || pos.includes("inspector") || pos.includes("qc")) {
+    return 70;
+  }
+  if (pos.includes("ปฏิบัติการ") || pos.includes("operator") || pos.includes("ช่าง") || pos.includes("technician") || pos.includes("mechanic")) {
+    return 80;
+  }
+  if (pos.includes("ขับรถ") || pos.includes("driver") || pos.includes("โฟล์คลิฟ") || pos.includes("โฟล์กลิฟ") || pos.includes("forklift") || pos.includes("เครน") || pos.includes("crane") || pos.includes("รถยก")) {
+    return 90;
+  }
+  return null;
+}
+
+function getEmployeePositionRank(emp: Employee): number {
+  const roleRank = getRoleSeniorityRank(emp.role);
+  const textRank = getJobPositionTextRank(emp.jobPosition);
+
+  // If role is explicit (not Other), anchor by role seniority and apply slight refinement for Senior/Lead titles
+  if (emp.role && emp.role !== "Other" && roleRank < 100) {
+    const posLower = String(emp.jobPosition || "").trim().toLowerCase();
+    const hasSeniorKeyword =
+      posLower.includes("อาวุโส") ||
+      posLower.includes("sr.") ||
+      posLower.includes("senior") ||
+      posLower.includes("หัวหน้า") ||
+      posLower.includes("lead");
+    return hasSeniorKeyword ? roleRank - 2 : roleRank;
+  }
+
+  if (textRank !== null) {
+    return textRank;
+  }
+
+  return roleRank;
 }
 
 export function EmployeeManagement({
@@ -128,7 +215,11 @@ export function EmployeeManagement({
   onNavigateToVehicles,
   onLogTransaction,
   hideSubTabs = false,
+  lockedDepartment,
+  groupBy = "department",
 }: EmployeeManagementProps) {
+  const isPositionMode = groupBy === "position";
+
   // Search & Filter state
   const [searchKeyword, setSearchKeyword] = useState<string>("");
   const [filterDepartment, setFilterDepartment] = useState<string>("All");
@@ -137,11 +228,11 @@ export function EmployeeManagement({
   const [filterStatus, setFilterStatus] = useState<string>("All");
 
   // Sorting state
-  const [sortKey, setSortKey] = useState<keyof Employee>("employeeId");
+  const [sortKey, setSortKey] = useState<keyof Employee>(isPositionMode ? "jobPosition" : "employeeId");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
-  // Collapsible Department / Section Groups (Default: all collapsed)
-  const [expandedDepartments, setExpandedDepartments] = useState<Record<string, boolean>>({});
+  // Collapsible Group Overrides (Department mode defaults collapsed; Position mode defaults expanded)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
@@ -221,23 +312,49 @@ export function EmployeeManagement({
     return map;
   }, [assignments]);
 
+  // Employees scoped to lockedDepartment when opened inside a department-specific menu (e.g. Material Handling - Fleet)
+  const scopedEmployees = useMemo(
+    () =>
+      lockedDepartment
+        ? employees.filter((e) => matchesLockedDepartment(e.department, lockedDepartment))
+        : employees,
+    [employees, lockedDepartment]
+  );
+
   // Distinct job positions for filter dropdown
   const availablePositions = useMemo(() => {
-    const positions = new Set<string>();
-    employees.forEach((e) => {
-      if (e.jobPosition) positions.add(e.jobPosition);
+    const positionRankMap = new Map<string, number>();
+    scopedEmployees.forEach((e) => {
+      if (e.jobPosition) {
+        const rank = getEmployeePositionRank(e);
+        const existing = positionRankMap.get(e.jobPosition);
+        if (existing === undefined || rank < existing) {
+          positionRankMap.set(e.jobPosition, rank);
+        }
+      }
     });
-    return Array.from(positions).sort();
-  }, [employees]);
+    const list = Array.from(positionRankMap.keys());
+    if (isPositionMode) {
+      return list.sort((a, b) => {
+        const rankDiff = (positionRankMap.get(a) ?? 100) - (positionRankMap.get(b) ?? 100);
+        if (rankDiff !== 0) return rankDiff;
+        return a.localeCompare(b, "th", { numeric: true });
+      });
+    }
+    return list.sort();
+  }, [scopedEmployees, isPositionMode]);
 
   // Distinct departments for filter dropdown
   const availableDepartments = useMemo(() => {
+    if (lockedDepartment) {
+      return [lockedDepartment];
+    }
     const depts = new Set<string>(MASTER_DEPARTMENTS);
     employees.forEach((e) => {
       if (e.department) depts.add(e.department);
     });
     return Array.from(depts).sort();
-  }, [employees]);
+  }, [employees, lockedDepartment]);
 
   const hasActiveAdmin = useMemo(
     () =>
@@ -251,12 +368,12 @@ export function EmployeeManagement({
 
   // Workforce KPI Metrics
   const metrics = useMemo(() => {
-    const total = employees.length;
-    const active = employees.filter((e) => e.employmentStatus === "Active").length;
-    const inactive = employees.filter((e) => e.employmentStatus === "Inactive").length;
-    const activeDrivers = employees.filter((e) => e.role === "Driver" && e.employmentStatus === "Active").length;
+    const total = scopedEmployees.length;
+    const active = scopedEmployees.filter((e) => e.employmentStatus === "Active").length;
+    const inactive = scopedEmployees.filter((e) => e.employmentStatus === "Inactive").length;
+    const activeDrivers = scopedEmployees.filter((e) => e.role === "Driver" && e.employmentStatus === "Active").length;
     const onDutyDriversToday = Array.from(activeDriverAssignmentMap.keys()).length;
-    const officersAndSupervisors = employees.filter(
+    const officersAndSupervisors = scopedEmployees.filter(
       (e) =>
         (e.role === "Officer" ||
           e.role === "Sr.Warehouse Officer" ||
@@ -274,11 +391,11 @@ export function EmployeeManagement({
       onDutyDriversToday,
       officersAndSupervisors,
     };
-  }, [employees, activeDriverAssignmentMap]);
+  }, [scopedEmployees, activeDriverAssignmentMap]);
 
   // Filtered and Sorted employees
   const filteredEmployees = useMemo(() => {
-    return employees
+    return scopedEmployees
       .filter((emp) => {
         if (searchKeyword.trim()) {
           const q = searchKeyword.toLowerCase();
@@ -297,7 +414,7 @@ export function EmployeeManagement({
           if (!searchable.includes(q)) return false;
         }
 
-        if (filterDepartment !== "All" && emp.department !== filterDepartment) {
+        if (!lockedDepartment && filterDepartment !== "All" && emp.department !== filterDepartment) {
           return false;
         }
 
@@ -316,69 +433,117 @@ export function EmployeeManagement({
         return true;
       })
       .sort((a, b) => {
+        if (sortKey === "jobPosition") {
+          const rankDiff = getEmployeePositionRank(a) - getEmployeePositionRank(b);
+          if (rankDiff !== 0) return sortOrder === "asc" ? rankDiff : -rankDiff;
+
+          const posA = a.jobPosition?.trim() || a.role || "";
+          const posB = b.jobPosition?.trim() || b.role || "";
+          const posComp = posA.localeCompare(posB, "th", { numeric: true });
+          if (posComp !== 0) return sortOrder === "asc" ? posComp : -posComp;
+
+          return String(a.employeeId ?? "").localeCompare(String(b.employeeId ?? ""), undefined, { numeric: true });
+        }
+
+        if (sortKey === "role") {
+          const roleDiff = getRoleSeniorityRank(a.role) - getRoleSeniorityRank(b.role);
+          if (roleDiff !== 0) return sortOrder === "asc" ? roleDiff : -roleDiff;
+
+          const posComp = String(a.jobPosition ?? "").localeCompare(String(b.jobPosition ?? ""), "th", { numeric: true });
+          if (posComp !== 0) return sortOrder === "asc" ? posComp : -posComp;
+
+          return String(a.employeeId ?? "").localeCompare(String(b.employeeId ?? ""), undefined, { numeric: true });
+        }
+
         const valA = a[sortKey] ?? "";
         const valB = b[sortKey] ?? "";
         const comp = String(valA).localeCompare(String(valB), undefined, { numeric: true });
         return sortOrder === "asc" ? comp : -comp;
       });
-  }, [employees, searchKeyword, filterDepartment, filterRole, filterPosition, filterStatus, sortKey, sortOrder]);
+  }, [scopedEmployees, lockedDepartment, searchKeyword, filterDepartment, filterRole, filterPosition, filterStatus, sortKey, sortOrder]);
 
-  // Group filtered employees by Department / Section
-  const groupedEmployeesByDepartment = useMemo(() => {
+  // Group filtered employees by Department / Section OR by Position (Job Position)
+  const groupedEmployees = useMemo(() => {
     const groupMap = new Map<string, Employee[]>();
     filteredEmployees.forEach((emp) => {
-      const deptKey = emp.department?.trim() || "ไม่ระบุแผนก / Unassigned";
-      const list = groupMap.get(deptKey);
+      const groupKey = isPositionMode
+        ? emp.jobPosition?.trim() || emp.role || "ไม่ระบุตำแหน่ง / Unassigned"
+        : emp.department?.trim() || "ไม่ระบุแผนก / Unassigned";
+      const list = groupMap.get(groupKey);
       if (list) {
         list.push(emp);
       } else {
-        groupMap.set(deptKey, [emp]);
+        groupMap.set(groupKey, [emp]);
       }
     });
 
-    const groups = Array.from(groupMap.entries()).map(([department, list]) => {
+    const groups = Array.from(groupMap.entries()).map(([groupKey, list]) => {
       const activeCount = list.filter((e) => e.employmentStatus === "Active").length;
       const inactiveCount = list.length - activeCount;
       const driverCount = list.filter((e) => e.role === "Driver").length;
+      const minPositionRank = Math.min(...list.map((e) => getEmployeePositionRank(e)));
       return {
-        department,
+        groupKey,
+        groupLabel: groupKey,
         employees: list,
         activeCount,
         inactiveCount,
         driverCount,
+        minPositionRank,
       };
     });
 
-    groups.sort((a, b) => {
-      const comp = a.department.localeCompare(b.department, undefined, { numeric: true });
-      return sortKey === "department" && sortOrder === "desc" ? -comp : comp;
-    });
+    if (isPositionMode) {
+      groups.sort((a, b) => {
+        const rankDiff = a.minPositionRank - b.minPositionRank;
+        if (rankDiff !== 0) {
+          return (sortKey === "jobPosition" || sortKey === "role") && sortOrder === "desc"
+            ? -rankDiff
+            : rankDiff;
+        }
+        const labelComp = a.groupLabel.localeCompare(b.groupLabel, "th", { numeric: true });
+        return (sortKey === "jobPosition" || sortKey === "role") && sortOrder === "desc"
+          ? -labelComp
+          : labelComp;
+      });
+    } else {
+      groups.sort((a, b) => {
+        const comp = a.groupLabel.localeCompare(b.groupLabel, undefined, { numeric: true });
+        return sortKey === "department" && sortOrder === "desc" ? -comp : comp;
+      });
+    }
 
     return groups;
-  }, [filteredEmployees, sortKey, sortOrder]);
+  }, [filteredEmployees, isPositionMode, sortKey, sortOrder]);
 
-  const expandedDepartmentCount = useMemo(
-    () => groupedEmployeesByDepartment.filter((g) => Boolean(expandedDepartments[g.department])).length,
-    [groupedEmployeesByDepartment, expandedDepartments]
+  const isGroupExpanded = (groupKey: string) => expandedGroups[groupKey] ?? isPositionMode;
+
+  const expandedGroupCount = useMemo(
+    () => groupedEmployees.filter((g) => expandedGroups[g.groupKey] ?? isPositionMode).length,
+    [groupedEmployees, expandedGroups, isPositionMode]
   );
 
-  const toggleDepartmentGroup = (department: string) => {
-    setExpandedDepartments((prev) => ({
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => ({
       ...prev,
-      [department]: !prev[department],
+      [groupKey]: !(prev[groupKey] ?? isPositionMode),
     }));
   };
 
-  const handleExpandAllDepartments = () => {
+  const handleExpandAllGroups = () => {
     const next: Record<string, boolean> = {};
-    groupedEmployeesByDepartment.forEach((g) => {
-      next[g.department] = true;
+    groupedEmployees.forEach((g) => {
+      next[g.groupKey] = true;
     });
-    setExpandedDepartments(next);
+    setExpandedGroups(next);
   };
 
-  const handleCollapseAllDepartments = () => {
-    setExpandedDepartments({});
+  const handleCollapseAllGroups = () => {
+    const next: Record<string, boolean> = {};
+    groupedEmployees.forEach((g) => {
+      next[g.groupKey] = false;
+    });
+    setExpandedGroups(next);
   };
 
   // Sort click helper
@@ -446,7 +611,7 @@ export function EmployeeManagement({
       id: trimmedId,
       employeeId: trimmedId,
       employeeName: form.employeeName.trim(),
-      department: form.department.trim(),
+      department: lockedDepartment ? lockedDepartment : form.department.trim(),
       jobPosition: form.jobPosition.trim(),
       role: form.role,
       phoneNumber: cleanPhone,
@@ -733,7 +898,7 @@ export function EmployeeManagement({
               <Users size={14} className={activeSubTab === "registry" ? "text-cyan-600 dark:text-cyan-400" : ""} />
               <span>ทำเนียบพนักงาน (Employee Registry)</span>
               <span className="font-mono text-[11px] font-semibold opacity-70 tabular-nums">
-                · {employees.length}
+                · {scopedEmployees.length}
               </span>
             </button>
 
@@ -837,15 +1002,15 @@ export function EmployeeManagement({
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {groupedEmployeesByDepartment.length > 0 && (
+            {groupedEmployees.length > 0 && (
               <>
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={handleExpandAllDepartments}
-                  disabled={expandedDepartmentCount === groupedEmployeesByDepartment.length}
+                  onClick={handleExpandAllGroups}
+                  disabled={expandedGroupCount === groupedEmployees.length}
                   style={{ fontSize: 11, padding: "5px 10px" }}
-                  title="ขยายทุกแผนก"
+                  title={isPositionMode ? "ขยายทุกตำแหน่ง" : "ขยายทุกแผนก"}
                 >
                   <ChevronDown size={13} />
                   ขยายทั้งหมด
@@ -853,10 +1018,10 @@ export function EmployeeManagement({
                 <button
                   type="button"
                   className="button secondary"
-                  onClick={handleCollapseAllDepartments}
-                  disabled={expandedDepartmentCount === 0}
+                  onClick={handleCollapseAllGroups}
+                  disabled={expandedGroupCount === 0}
                   style={{ fontSize: 11, padding: "5px 10px" }}
-                  title="ย่อทุกแผนก"
+                  title={isPositionMode ? "ย่อทุกตำแหน่ง" : "ย่อทุกแผนก"}
                 >
                   <ChevronRight size={13} />
                   ย่อทั้งหมด
@@ -900,23 +1065,36 @@ export function EmployeeManagement({
           </div>
 
           {/* Department Filter */}
-          <select
-            className="field"
-            style={{ flex: 1, minWidth: "160px" }}
-            value={filterDepartment}
-            onChange={(e) => {
-              setFilterDepartment(e.target.value);
-            }}
-            aria-label="Filter Department"
-            title="Filter by Department"
-          >
-            <option value="All">All Departments</option>
-            {availableDepartments.map((dept) => (
-              <option value={dept} key={dept}>
-                {dept}
-              </option>
-            ))}
-          </select>
+          {lockedDepartment ? (
+            <select
+              className="field"
+              style={{ flex: 1, minWidth: "160px", opacity: 0.9 }}
+              value={lockedDepartment}
+              disabled
+              aria-label="Locked Department"
+              title={`แสดงเฉพาะส่วนงาน ${lockedDepartment}`}
+            >
+              <option value={lockedDepartment}>{lockedDepartment}</option>
+            </select>
+          ) : (
+            <select
+              className="field"
+              style={{ flex: 1, minWidth: "160px" }}
+              value={filterDepartment}
+              onChange={(e) => {
+                setFilterDepartment(e.target.value);
+              }}
+              aria-label="Filter Department"
+              title="Filter by Department"
+            >
+              <option value="All">All Departments</option>
+              {availableDepartments.map((dept) => (
+                <option value={dept} key={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Role Filter */}
           <select
@@ -1059,14 +1237,14 @@ export function EmployeeManagement({
             </thead>
 
             <tbody>
-              {groupedEmployeesByDepartment.map((group) => {
-                const isExpanded = Boolean(expandedDepartments[group.department]);
+              {groupedEmployees.map((group) => {
+                const isExpanded = isGroupExpanded(group.groupKey);
 
                 return (
-                  <React.Fragment key={group.department}>
-                    {/* Collapsible Department / Section Group Header Row */}
+                  <React.Fragment key={group.groupKey}>
+                    {/* Collapsible Group Header Row (Department or Job Position) */}
                     <tr
-                      onClick={() => toggleDepartmentGroup(group.department)}
+                      onClick={() => toggleGroup(group.groupKey)}
                       className="cursor-pointer select-none bg-slate-100/90 hover:bg-slate-200/75 dark:bg-slate-800/80 dark:hover:bg-slate-800 border-y border-slate-200 dark:border-slate-700 transition-colors"
                       role="button"
                       tabIndex={0}
@@ -1074,7 +1252,7 @@ export function EmployeeManagement({
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          toggleDepartmentGroup(group.department);
+                          toggleGroup(group.groupKey);
                         }
                       }}
                     >
@@ -1090,9 +1268,13 @@ export function EmployeeManagement({
                             >
                               {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                             </span>
-                            <Building size={15} className="text-sky-600 dark:text-sky-400 shrink-0" />
+                            {isPositionMode ? (
+                              <Briefcase size={15} className="text-sky-600 dark:text-sky-400 shrink-0" />
+                            ) : (
+                              <Building size={15} className="text-sky-600 dark:text-sky-400 shrink-0" />
+                            )}
                             <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
-                              {group.department}
+                              {group.groupLabel}
                             </span>
                             <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-100 text-sky-800 border border-sky-200 dark:bg-sky-950/70 dark:text-sky-300 dark:border-sky-800 whitespace-nowrap">
                               {group.employees.length} คน
@@ -1384,23 +1566,23 @@ export function EmployeeManagement({
           }}
         >
           <div>
-            จัดกลุ่มตาม Department / Section:{" "}
+            {isPositionMode ? "จัดกลุ่มและเรียงตามตำแหน่ง (Job Position): " : "จัดกลุ่มตาม Department / Section: "}
             <strong className="text-slate-800 dark:text-slate-100">
-              {groupedEmployeesByDepartment.length}
+              {groupedEmployees.length}
             </strong>{" "}
-            แผนก · แสดง{" "}
+            {isPositionMode ? "ตำแหน่ง" : "แผนก"} · แสดง{" "}
             <strong className="text-slate-800 dark:text-slate-100">
               {filteredEmployees.length}
             </strong>{" "}
-            คน (Total: {employees.length})
+            คน (Total: {scopedEmployees.length})
           </div>
 
           <div className="text-[11px] font-medium">
             กำลังขยาย{" "}
             <strong className="text-slate-800 dark:text-slate-100">
-              {expandedDepartmentCount} / {groupedEmployeesByDepartment.length}
+              {expandedGroupCount} / {groupedEmployees.length}
             </strong>{" "}
-            แผนก
+            {isPositionMode ? "ตำแหน่ง" : "แผนก"}
           </div>
         </div>
       </section>

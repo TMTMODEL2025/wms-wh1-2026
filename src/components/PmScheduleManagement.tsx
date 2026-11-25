@@ -2215,116 +2215,210 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
       {/* ADD / EDIT PM SCHEDULE MODAL */}
       {isFormModalOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-container" style={{ maxWidth: 720 }}>
-            <div className="modal-header-box" style={{ padding: "16px 22px" }}>
-              <div>
+        <div className="modal-backdrop z-[120]! overflow-y-auto p-3! sm:p-5!">
+          <div className="modal-container flex flex-col w-full max-w-[740px] max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-40px)] min-h-0 overflow-hidden">
+            <div className="modal-header-box shrink-0 gap-3 px-5! py-3.5!">
+              <div className="min-w-0">
                 <div className="modal-title-text flex items-center gap-2">
-                  <Wrench size={16} className="text-[#087eaf]" />
-                  {editingScheduleId
-                    ? `แก้ไขกำหนดการ PM รถ ${formVehicleId}`
-                    : "เพิ่มกำหนดการ PM รถใหม่"}
+                  <Wrench size={16} className="text-[#087eaf] shrink-0" />
+                  <span className="truncate">
+                    {editingScheduleId
+                      ? `แก้ไขกำหนดการ PM รถ ${formVehicleId}`
+                      : "เพิ่มกำหนดการ PM รถใหม่"}
+                  </span>
                 </div>
-                <div className="modal-sub-text mt-0.5">
+                <div className="modal-sub-text mt-0.5 leading-snug">
                   สามารถตั้งรอบ PM ด้วยเลขไมล์ (ดึงเลขไมล์ล่าสุดจากหน้า ตรวจเช็ครถประจำวัน) หรือกำหนดตามจำนวนวันได้
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsFormModalOpen(false)}
-                className="modal-close-btn"
+                className="modal-close-btn shrink-0"
+                aria-label="ปิดหน้าต่าง"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSaveSchedule} className="p-5 space-y-4">
-              {formError && (
-                <div className="px-3 py-2 rounded border border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-200 text-xs">
-                  {formError}
-                </div>
-              )}
+            <form
+              onSubmit={handleSaveSchedule}
+              className="flex flex-col flex-1 min-h-0 overflow-hidden"
+            >
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-3.5">
+                {formError && (
+                  <div className="px-3 py-2 rounded border border-rose-300 bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:border-rose-800 dark:text-rose-200 text-xs">
+                    {formError}
+                  </div>
+                )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    เลือกรถ (Vehicle) *
-                  </label>
-                  <select
-                    value={formVehicleId}
-                    onChange={(e) => handleVehicleSelectChange(e.target.value)}
-                    disabled={Boolean(editingScheduleId)}
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                    required
-                  >
-                    <option value="">-- เลือกรถโฟล์คลิฟท์ / รถลากจูง --</option>
-                    {vehicles.map((v) => (
-                      <option key={v.id} value={v.vehicleId}>
-                        {v.vehicleId} · {v.vehicleType}{" "}
-                        {v.description ? `(${v.description})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    ประเภทงาน PM *
-                  </label>
-                  <select
-                    value={formPmCategory}
-                    onChange={(e) => setFormPmCategory(e.target.value)}
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  >
-                    {MH_PM_CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* MILEAGE-BASED PM CONFIGURATION BOX */}
-                <div className="sm:col-span-2 p-3.5 rounded-lg border border-sky-200 dark:border-sky-900/70 bg-sky-50/50 dark:bg-[#0d1f3a] space-y-3">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div>
-                      <div className="text-xs font-bold text-[#087eaf] dark:text-sky-300">
-                        การตั้งค่า PM ด้วยเลขไมล์ (กม.) — เชื่อมโยงหน้า ตรวจเช็ครถประจำวัน
-                      </div>
-                      <div className="text-[11px] text-slate-600 dark:text-slate-300">
-                        เมื่อพนักงานบันทึกเลขไมล์ในหน้า ตรวจเช็ครถประจำวัน ถึงระยะที่ตั้งไว้ ระบบจะแจ้งเตือนในปฏิทินทันทีว่าครบรอบต้อง PM แล้ว
-                      </div>
-                    </div>
-                    {formVehicleId && (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-white dark:bg-[#091528] border border-sky-200 dark:border-sky-800 text-slate-700 dark:text-slate-200">
-                        ไมล์ล่าสุด {formVehicleId}:{" "}
-                        {(
-                          latestMileageByVehicle.get(formVehicleId.trim().toUpperCase())
-                            ?.mileageKm ?? 0
-                        ).toLocaleString()}{" "}
-                        กม.
-                      </span>
-                    )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pb-1">
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      เลือกรถ (Vehicle) *
+                    </label>
+                    <select
+                      value={formVehicleId}
+                      onChange={(e) => handleVehicleSelectChange(e.target.value)}
+                      disabled={Boolean(editingScheduleId)}
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                      required
+                    >
+                      <option value="">-- เลือกรถโฟล์คลิฟท์ / รถลากจูง --</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.vehicleId}>
+                          {v.vehicleId} · {v.vehicleType}{" "}
+                          {v.description ? `(${v.description})` : ""}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div>
+                  <div className="min-w-0">
                     <label className="modal-label-text block text-xs mb-1.5">
-                      เลือกระยะเลขไมล์ PM ด่วน หรือระบุระยะไมล์เอง
+                      ประเภทงาน PM *
                     </label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {MILEAGE_PRESETS.map((preset) => (
+                    <select
+                      value={formPmCategory}
+                      onChange={(e) => setFormPmCategory(e.target.value)}
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    >
+                      {MH_PM_CATEGORIES.map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* MILEAGE-BASED PM CONFIGURATION BOX */}
+                  <div className="sm:col-span-2 min-w-0 p-3.5 rounded-lg border border-sky-200 dark:border-sky-900/70 bg-sky-50/50 dark:bg-[#0d1f3a] space-y-2.5">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-[#087eaf] dark:text-sky-300">
+                          การตั้งค่า PM ด้วยเลขไมล์ (กม.) — เชื่อมโยงหน้า ตรวจเช็ครถประจำวัน
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                          เมื่อพนักงานบันทึกเลขไมล์ในหน้า ตรวจเช็ครถประจำวัน ถึงระยะที่ตั้งไว้ ระบบจะแจ้งเตือนในปฏิทินทันทีว่าครบรอบต้อง PM แล้ว
+                        </div>
+                      </div>
+                      {formVehicleId && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-mono font-semibold bg-white dark:bg-[#091528] border border-sky-200 dark:border-sky-800 text-slate-700 dark:text-slate-200 shrink-0">
+                          ไมล์ล่าสุด {formVehicleId}:{" "}
+                          {(
+                            latestMileageByVehicle.get(formVehicleId.trim().toUpperCase())
+                              ?.mileageKm ?? 0
+                          ).toLocaleString()}{" "}
+                          กม.
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="modal-label-text block text-xs mb-1.5">
+                        เลือกระยะเลขไมล์ PM ด่วน หรือระบุระยะไมล์เอง
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {MILEAGE_PRESETS.map((preset) => (
+                          <button
+                            type="button"
+                            key={preset.km}
+                            onClick={() =>
+                              handleMileageCycleOrStartChange(formStartMileageKm, String(preset.km))
+                            }
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
+                              Number(formCycleMileageKm) === preset.km
+                                ? "bg-[#087eaf] text-white border-[#087eaf]"
+                                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100 dark:bg-[#091528] dark:text-slate-200 dark:border-[#1e3a5f]"
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
                         <button
                           type="button"
-                          key={preset.km}
+                          onClick={() => {
+                            setFormCycleMileageKm("");
+                            setFormTargetMileageKm("");
+                          }}
+                          className="px-2.5 py-1 rounded text-[11px] font-medium border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#132542]"
+                        >
+                          ไม่ใช้เลขไมล์
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="min-w-0">
+                        <label className="modal-label-text block text-xs mb-1">
+                          เลขไมล์เริ่มต้นตั้ง PM (กม.)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder="เช่น 0"
+                          value={formStartMileageKm}
+                          onChange={(e) =>
+                            handleMileageCycleOrStartChange(e.target.value, formCycleMileageKm)
+                          }
+                          className="field w-full font-mono tabular-nums"
+                          style={STANDARD_CONTROL_STYLE}
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="modal-label-text block text-xs mb-1">
+                          รอบระยะทาง PM (ทุกกี่ กม.)
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="เช่น 300"
+                          value={formCycleMileageKm}
+                          onChange={(e) =>
+                            handleMileageCycleOrStartChange(formStartMileageKm, e.target.value)
+                          }
+                          className="field w-full font-mono tabular-nums"
+                          style={STANDARD_CONTROL_STYLE}
+                        />
+                      </div>
+
+                      <div className="min-w-0">
+                        <label className="modal-label-text block text-xs mb-1 font-bold text-[#087eaf] dark:text-sky-300">
+                          ตั้ง PM ที่เลขไมล์ครบกำหนด (กม.)
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          placeholder="เช่น 300"
+                          value={formTargetMileageKm}
+                          onChange={(e) => setFormTargetMileageKm(e.target.value)}
+                          className="field w-full font-mono tabular-nums font-bold"
+                          style={STANDARD_CONTROL_STYLE}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* OPTIONAL DAY-BASED PM CONFIGURATION */}
+                  <div className="sm:col-span-2 min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      เลือกรอบระยะเวลา PM ด่วน หรือกำหนดจำนวนวันเอง (ไม่บังคับ)
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 mb-1">
+                      {CYCLE_PRESETS.map((preset) => (
+                        <button
+                          type="button"
+                          key={preset.days}
                           onClick={() =>
-                            handleMileageCycleOrStartChange(formStartMileageKm, String(preset.km))
+                            handleLastPmDateOrCycleChange(formLastPmDate, String(preset.days))
                           }
                           className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
-                            Number(formCycleMileageKm) === preset.km
+                            Number(formCycleDays) === preset.days
                               ? "bg-[#087eaf] text-white border-[#087eaf]"
-                              : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100 dark:bg-[#091528] dark:text-slate-200 dark:border-[#1e3a5f]"
+                              : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100 dark:bg-[#0d1b33] dark:text-slate-200 dark:border-[#1e3a5f]"
                           }`}
                         >
                           {preset.label}
@@ -2333,261 +2427,175 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                       <button
                         type="button"
                         onClick={() => {
-                          setFormCycleMileageKm("");
-                          setFormTargetMileageKm("");
+                          setFormCycleDays("");
+                          setFormNextPmDate("");
                         }}
-                        className="px-2.5 py-1 rounded text-[11px] font-medium border border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#132542]"
-                      >
-                        ไม่ใช้เลขไมล์
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="modal-label-text block text-xs mb-1">
-                        เลขไมล์เริ่มต้นตั้ง PM (กม.)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        placeholder="เช่น 0"
-                        value={formStartMileageKm}
-                        onChange={(e) =>
-                          handleMileageCycleOrStartChange(e.target.value, formCycleMileageKm)
-                        }
-                        className="field w-full font-mono tabular-nums"
-                        style={STANDARD_CONTROL_STYLE}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="modal-label-text block text-xs mb-1">
-                        รอบระยะทาง PM (ทุกกี่ กม.)
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder="เช่น 300"
-                        value={formCycleMileageKm}
-                        onChange={(e) =>
-                          handleMileageCycleOrStartChange(formStartMileageKm, e.target.value)
-                        }
-                        className="field w-full font-mono tabular-nums"
-                        style={STANDARD_CONTROL_STYLE}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="modal-label-text block text-xs mb-1 font-bold text-[#087eaf] dark:text-sky-300">
-                        ตั้ง PM ที่เลขไมล์ครบกำหนด (กม.)
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder="เช่น 300"
-                        value={formTargetMileageKm}
-                        onChange={(e) => setFormTargetMileageKm(e.target.value)}
-                        className="field w-full font-mono tabular-nums font-bold"
-                        style={STANDARD_CONTROL_STYLE}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* OPTIONAL DAY-BASED PM CONFIGURATION */}
-                <div className="sm:col-span-2">
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    เลือกรอบระยะเวลา PM ด่วน หรือกำหนดจำนวนวันเอง (ไม่บังคับ)
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 mb-1">
-                    {CYCLE_PRESETS.map((preset) => (
-                      <button
-                        type="button"
-                        key={preset.days}
-                        onClick={() =>
-                          handleLastPmDateOrCycleChange(formLastPmDate, String(preset.days))
-                        }
-                        className={`px-2.5 py-1 rounded text-[11px] font-semibold border transition-colors ${
-                          Number(formCycleDays) === preset.days
-                            ? "bg-[#087eaf] text-white border-[#087eaf]"
-                            : "bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100 dark:bg-[#0d1b33] dark:text-slate-200 dark:border-[#1e3a5f]"
+                        className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
+                          !formCycleDays && !formNextPmDate
+                            ? "bg-slate-700 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900"
+                            : "bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100 dark:bg-[#0d1b33] dark:text-slate-300 dark:border-[#1e3a5f]"
                         }`}
                       >
-                        {preset.label}
+                        ไม่กำหนดวัน (ใช้เลขไมล์อย่างเดียว)
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFormCycleDays("");
-                        setFormNextPmDate("");
-                      }}
-                      className={`px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ${
-                        !formCycleDays && !formNextPmDate
-                          ? "bg-slate-700 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900"
-                          : "bg-slate-50 text-slate-600 border-slate-300 hover:bg-slate-100 dark:bg-[#0d1b33] dark:text-slate-300 dark:border-[#1e3a5f]"
-                      }`}
-                    >
-                      ไม่กำหนดวัน (ใช้เลขไมล์อย่างเดียว)
-                    </button>
+                    </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    รอบกำหนด PM (จำนวนวัน - ไม่บังคับ)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={3650}
-                    placeholder="เว้นว่างได้หากตั้ง PM ด้วยเลขไมล์"
-                    value={formCycleDays}
-                    onChange={(e) =>
-                      handleLastPmDateOrCycleChange(formLastPmDate, e.target.value)
-                    }
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      รอบกำหนด PM (จำนวนวัน - ไม่บังคับ)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={3650}
+                      placeholder="เว้นว่างได้หากตั้ง PM ด้วยเลขไมล์"
+                      value={formCycleDays}
+                      onChange={(e) =>
+                        handleLastPmDateOrCycleChange(formLastPmDate, e.target.value)
+                      }
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    แจ้งเตือนล่วงหน้า (วันก่อนครบกำหนด)
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={90}
-                    value={formWarningDays}
-                    onChange={(e) => setFormWarningDays(Number(e.target.value) || 7)}
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      แจ้งเตือนล่วงหน้า (วันก่อนครบกำหนด)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={formWarningDays}
+                      onChange={(e) => setFormWarningDays(Number(e.target.value) || 7)}
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    วันที่เริ่มตั้ง PM / ทำ PM ล่าสุด *
-                  </label>
-                  <input
-                    type="date"
-                    value={formLastPmDate}
-                    onChange={(e) =>
-                      handleLastPmDateOrCycleChange(e.target.value, formCycleDays)
-                    }
-                    className="field w-full dark:[color-scheme:dark]"
-                    style={STANDARD_DATE_STYLE}
-                    required
-                  />
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      วันที่เริ่มตั้ง PM / ทำ PM ล่าสุด *
+                    </label>
+                    <input
+                      type="date"
+                      value={formLastPmDate}
+                      onChange={(e) =>
+                        handleLastPmDateOrCycleChange(e.target.value, formCycleDays)
+                      }
+                      className="field w-full dark:[color-scheme:dark]"
+                      style={STANDARD_DATE_STYLE}
+                      required
+                    />
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    วันครบกำหนด PM ครั้งถัดไป (ไม่บังคับ)
-                  </label>
-                  <input
-                    type="date"
-                    value={formNextPmDate}
-                    onChange={(e) => setFormNextPmDate(e.target.value)}
-                    className="field w-full dark:[color-scheme:dark]"
-                    style={STANDARD_DATE_STYLE}
-                  />
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      วันครบกำหนด PM ครั้งถัดไป (ไม่บังคับ)
+                    </label>
+                    <input
+                      type="date"
+                      value={formNextPmDate}
+                      onChange={(e) => setFormNextPmDate(e.target.value)}
+                      className="field w-full dark:[color-scheme:dark]"
+                      style={STANDARD_DATE_STYLE}
+                    />
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    รอบชั่วโมงใช้งาน (ชม. - ถ้ามี)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="เช่น 250, 500"
-                    value={formCycleHours}
-                    onChange={(e) => setFormCycleHours(e.target.value)}
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      รอบชั่วโมงใช้งาน (ชม. - ถ้ามี)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="เช่น 250, 500"
+                      value={formCycleHours}
+                      onChange={(e) => setFormCycleHours(e.target.value)}
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    ผู้รับผิดชอบ / ทีมช่าง / Vendor
-                  </label>
-                  <input
-                    type="text"
-                    list="pm-tech-suggestions"
-                    value={formResponsibleTech}
-                    onChange={(e) => setFormResponsibleTech(e.target.value)}
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
-                  <datalist id="pm-tech-suggestions">
-                    {technicianSuggestions.map((tName) => (
-                      <option key={tName} value={tName} />
-                    ))}
-                  </datalist>
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      ผู้รับผิดชอบ / ทีมช่าง / Vendor
+                    </label>
+                    <input
+                      type="text"
+                      list="pm-tech-suggestions"
+                      value={formResponsibleTech}
+                      onChange={(e) => setFormResponsibleTech(e.target.value)}
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                    <datalist id="pm-tech-suggestions">
+                      {technicianSuggestions.map((tName) => (
+                        <option key={tName} value={tName} />
+                      ))}
+                    </datalist>
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    ประมาณการค่าใช้จ่ายต่อรอบ (บาท)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="เช่น 3500"
-                    value={formEstimatedCost}
-                    onChange={(e) => setFormEstimatedCost(e.target.value)}
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      ประมาณการค่าใช้จ่ายต่อรอบ (บาท)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="เช่น 3500"
+                      value={formEstimatedCost}
+                      onChange={(e) => setFormEstimatedCost(e.target.value)}
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                  </div>
 
-                <div>
-                  <label className="modal-label-text block text-xs mb-1.5">สถานะแผน PM</label>
-                  <select
-                    value={formScheduleStatus}
-                    onChange={(e) =>
-                      setFormScheduleStatus(e.target.value as "Active" | "Paused")
-                    }
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  >
-                    <option value="Active">เปิดใช้งาน (Active)</option>
-                    <option value="Paused">พักรอบชั่วคราว (Paused)</option>
-                  </select>
-                </div>
+                  <div className="min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">สถานะแผน PM</label>
+                    <select
+                      value={formScheduleStatus}
+                      onChange={(e) =>
+                        setFormScheduleStatus(e.target.value as "Active" | "Paused")
+                      }
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    >
+                      <option value="Active">เปิดใช้งาน (Active)</option>
+                      <option value="Paused">พักรอบชั่วคราว (Paused)</option>
+                    </select>
+                  </div>
 
-                <div className="sm:col-span-2">
-                  <label className="modal-label-text block text-xs mb-1.5">
-                    รายการตรวจเช็คตามรอบ (Checklist Summary)
-                  </label>
-                  <input
-                    type="text"
-                    value={formChecklistSummary}
-                    onChange={(e) => setFormChecklistSummary(e.target.value)}
-                    placeholder="ระบุรายการอะไหล่/จุดตรวจเช็คสำคัญ..."
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
-                </div>
+                  <div className="sm:col-span-2 min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">
+                      รายการตรวจเช็คตามรอบ (Checklist Summary)
+                    </label>
+                    <input
+                      type="text"
+                      value={formChecklistSummary}
+                      onChange={(e) => setFormChecklistSummary(e.target.value)}
+                      placeholder="ระบุรายการอะไหล่/จุดตรวจเช็คสำคัญ..."
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                  </div>
 
-                <div className="sm:col-span-2">
-                  <label className="modal-label-text block text-xs mb-1.5">หมายเหตุเพิ่มเติม</label>
-                  <input
-                    type="text"
-                    value={formNotes}
-                    onChange={(e) => setFormNotes(e.target.value)}
-                    placeholder="หมายเหตุหรือข้อควรระวัง..."
-                    className="field w-full"
-                    style={STANDARD_CONTROL_STYLE}
-                  />
+                  <div className="sm:col-span-2 min-w-0">
+                    <label className="modal-label-text block text-xs mb-1.5">หมายเหตุเพิ่มเติม</label>
+                    <input
+                      type="text"
+                      value={formNotes}
+                      onChange={(e) => setFormNotes(e.target.value)}
+                      placeholder="หมายเหตุหรือข้อควรระวัง..."
+                      className="field w-full"
+                      style={STANDARD_CONTROL_STYLE}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-200 dark:border-[#1e3a5f]">
+              <div className="modal-footer-box shrink-0 flex-wrap px-5! py-3!">
                 <button
                   type="button"
                   onClick={() => setIsFormModalOpen(false)}

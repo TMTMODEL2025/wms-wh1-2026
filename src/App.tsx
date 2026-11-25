@@ -6828,6 +6828,8 @@ function WmsApp({
                 onLogTransaction={(activity, reference, status) => {
                   logModuleActivity("Employee Management", activity, reference, status, "employees");
                 }}
+                lockedDepartment="Material Handling - Fleet"
+                groupBy="position"
               />
             ) : active === "fix-flush" ? (
               <FixFlushManagement vehicles={vehicles} employees={employeeRoster} />

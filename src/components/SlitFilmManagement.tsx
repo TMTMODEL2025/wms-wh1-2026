@@ -120,6 +120,7 @@ import {
   SlitQueryOptions,
   SAP_CHUNK_SIZE,
 } from "../services/slitDataService";
+import { upsertRmTransferFromPickListScan } from "../services/forkliftDataService";
 
 export interface SapMasterItem {
   salesDoc: string;
@@ -192,6 +193,11 @@ export interface PickListItem {
   isTemporary?: boolean;
   tempOrderRef?: string;
   matchedAt?: string;
+  deliveryStatus?: "in_transit" | "delivered";
+  mhTransferId?: string;
+  deliveredAt?: string;
+  deliveredBy?: string;
+  deliveredVehicle?: string;
 }
 
 export interface PickListOrder {
@@ -2423,7 +2429,9 @@ export function SlitFilmManagement({
     batchSaveOutboundToCloud(newOutboundRecords).catch(console.error);
 
     // 4. Create PickListOrder marked as temporary emergency (Status: "in_progress" / "เตรียมแล้ว")
+    const tempOrderDocId = `ORD-${tempOrderNo.trim().replace(/[^a-zA-Z0-9_\-]/g, "_")}`;
     const tempOrder: PickListOrder = {
+      id: tempOrderDocId,
       orderNo: tempOrderNo,
       machineId: emergencyMachineId,
       machineType: mType,
@@ -2440,6 +2448,7 @@ export function SlitFilmManagement({
         unit: "KG",
         batch: b.batch,
         status: "verified",
+        deliveryStatus: "in_transit" as const,
         scannedAt: nowStr,
         machineIssued: false,
         isTemporary: true,
@@ -2449,6 +2458,20 @@ export function SlitFilmManagement({
 
     setPickLists((prev) => [tempOrder, ...prev]);
     savePickListToCloud(tempOrder).catch(console.error);
+
+    // Auto-dispatch RM transfer job to Material Handling (ย้ายงาน RM)
+    void upsertRmTransferFromPickListScan({
+      rmProductType: "slit",
+      sourceCollection: "slit_picklists",
+      sourceOrderNo: tempOrderNo,
+      sourceOrderDocId: tempOrderDocId,
+      machineId: emergencyMachineId,
+      items: emergencyScannedBatches.map((b) => ({
+        batch: b.batch,
+        weightKg: Number(b.weightKg) || 0,
+        originLocation: b.sourceLoc || findInboundLocation(b.batch) || "",
+      })),
+    }).catch(console.error);
 
     setIsEmergencyModalOpen(false);
     setEmergencyScannedBatches([]);
@@ -3051,7 +3074,13 @@ export function SlitFilmManagement({
     const nextItems = latestTargetOrder.items.map((itm) => {
       if (itm.batch && itm.batch.trim().toUpperCase() === trimmed) {
         const { machineIssuedAt: _unusedMachineIssuedAt, ...restItm } = itm;
-        return { ...restItm, status: "verified" as const, scannedAt: nowTime, machineIssued: false };
+        return {
+          ...restItm,
+          status: "verified" as const,
+          deliveryStatus: "in_transit" as const,
+          scannedAt: nowTime,
+          machineIssued: false,
+        };
       }
       return itm;
     });
@@ -3079,6 +3108,33 @@ export function SlitFilmManagement({
 
     // Immediately persist updated PickListOrder to Firestore & central state
     void savePickListToCloud(updatedActiveOrder).catch(console.error);
+
+    // Auto-dispatch RM transfer job to Material Handling (ย้ายงาน RM)
+    const matchedInboundRec = inboundList.find((r) => r.batch.trim().toUpperCase() === trimmed);
+    const resolvedOriginLoc =
+      findInboundLocation(trimmed) ||
+      matchedInboundRec?.location ||
+      matchedItem.storageLocation ||
+      "";
+    const resolvedWeightKg =
+      Number(sapMasterMap.get(trimmed)?.weightKg) ||
+      Number(matchedInboundRec?.weightKg) ||
+      Number(matchedItem.reqQty) ||
+      0;
+    void upsertRmTransferFromPickListScan({
+      rmProductType: "slit",
+      sourceCollection: "slit_picklists",
+      sourceOrderNo: updatedActiveOrder.orderNo,
+      sourceOrderDocId: updatedActiveOrder.id,
+      machineId: updatedActiveOrder.machineId,
+      items: [
+        {
+          batch: trimmed,
+          weightKg: resolvedWeightKg,
+          originLocation: resolvedOriginLoc,
+        },
+      ],
+    }).catch(console.error);
 
     if (isAllVerified) {
       syncVerifiedOrderInboundRefs(updatedActiveOrder);
@@ -7882,10 +7938,24 @@ export function SlitFilmManagement({
                                           <td className="!py-1.5 !px-1.5 sm:!px-2.5 !text-center align-middle">
                                             <div className="inline-flex items-center justify-center">
                                               {isVerified ? (
-                                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
-                                                  <Check size={11} />
-                                                  <span>{isThai ? "อยู่ระหว่างการขนส่ง" : "In Transit"}</span>
-                                                </span>
+                                                item.deliveryStatus === "delivered" || isItemMachineIssued(item) ? (
+                                                  <span
+                                                    title={
+                                                      item.deliveredBy
+                                                        ? `${isThai ? "ส่งโดย" : "Delivered by"} ${item.deliveredBy}${item.deliveredVehicle && item.deliveredVehicle !== "-" ? ` (${item.deliveredVehicle})` : ""}${item.deliveredAt ? ` · ${item.deliveredAt}` : ""}`
+                                                        : undefined
+                                                    }
+                                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300"
+                                                  >
+                                                    <CheckCircle2 size={11} />
+                                                    <span>{isThai ? "ส่งสำเร็จ" : "Delivered"}</span>
+                                                  </span>
+                                                ) : (
+                                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-bold bg-sky-100 dark:bg-sky-900/60 text-sky-800 dark:text-sky-300">
+                                                    <Truck size={11} />
+                                                    <span>{isThai ? "อยู่ระหว่างขนส่ง" : "In Transit"}</span>
+                                                  </span>
+                                                )
                                               ) : (
                                                 <span className="px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-medium bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
                                                   {isThai ? "รอเตรียม" : "Pending"}

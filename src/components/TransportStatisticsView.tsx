@@ -29,6 +29,7 @@ import {
   MhTransferRecord,
   fetchMhTransfersOnce,
   subscribeToMhTransfers,
+  isRmTransferRecord,
 } from "../services/forkliftDataService";
 import { TransportStatisticsCharts } from "./TransportStatisticsCharts";
 
@@ -39,6 +40,7 @@ interface TransportStatisticsViewProps {
 
 type DatePreset = "today" | "yesterday" | "last7" | "thisMonth" | "all" | "custom";
 type StatusScope = "active" | "completed" | "all";
+type TransferScopeFilter = "all" | "FG" | "RM";
 type StatsTab = "overview" | "vehicles" | "drivers" | "products" | "trips";
 
 const SLA_LIMIT_SECONDS = 20 * 60;
@@ -163,6 +165,7 @@ export function TransportStatisticsView({
   const [startDate, setStartDate] = useState<string>(todayYmd);
   const [endDate, setEndDate] = useState<string>(todayYmd);
   const [statusScope, setStatusScope] = useState<StatusScope>("active");
+  const [transferScopeFilter, setTransferScopeFilter] = useState<TransferScopeFilter>("all");
   const [selectedTeam, setSelectedTeam] = useState<string>("all");
   const [selectedShift, setSelectedShift] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -310,6 +313,12 @@ export function TransportStatisticsView({
         if (endDate && ymd && ymd > endDate) return false;
         if ((startDate || endDate) && !ymd) return false;
       }
+      if (transferScopeFilter === "FG" && isRmTransferRecord(r)) {
+        return false;
+      }
+      if (transferScopeFilter === "RM" && !isRmTransferRecord(r)) {
+        return false;
+      }
       if (selectedTeam !== "all" && (r.team || "").trim() !== selectedTeam) {
         return false;
       }
@@ -319,6 +328,8 @@ export function TransportStatisticsView({
       if (q) {
         const haystack = [
           r.transferCode,
+          r.sourceOrderNo,
+          r.sourceMachineId,
           r.vehicleNumber,
           r.trailerNumber,
           r.driverName,
@@ -338,7 +349,16 @@ export function TransportStatisticsView({
       }
       return true;
     });
-  }, [transfers, datePreset, startDate, endDate, selectedTeam, selectedShift, searchQuery]);
+  }, [
+    transfers,
+    datePreset,
+    startDate,
+    endDate,
+    transferScopeFilter,
+    selectedTeam,
+    selectedShift,
+    searchQuery,
+  ]);
 
   // Status counts in the selected date/filter window
   const statusSummary = useMemo(() => {
@@ -873,6 +893,37 @@ export function TransportStatisticsView({
                 className="field rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-xs font-mono font-normal text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:border-blue-500 focus:outline-none"
                 style={{ height: 35, minHeight: 35, padding: "6px 8px", borderRadius: 6, fontSize: 12 }}
               />
+            </div>
+
+            {/* FG / RM Scope Segmented Toggle */}
+            <div className="inline-flex min-h-[35px] items-center rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#0c162c] p-0.5 gap-0.5 shrink-0">
+              {(
+                [
+                  { id: "all" as TransferScopeFilter, label: "งานทั้งหมด" },
+                  { id: "FG" as TransferScopeFilter, label: "ย้ายงาน FG" },
+                  { id: "RM" as TransferScopeFilter, label: "ย้ายงาน RM" },
+                ] as const
+              ).map((opt) => {
+                const isActive = transferScopeFilter === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setTransferScopeFilter(opt.id)}
+                    className={`h-[29px] rounded px-2.5 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isActive
+                        ? opt.id === "RM"
+                          ? "bg-amber-600 text-white shadow-xs"
+                          : opt.id === "FG"
+                          ? "bg-cyan-600 text-white shadow-xs"
+                          : "bg-white dark:bg-[#162544] text-blue-600 dark:text-blue-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Select Option Filters on the same row */}
@@ -1656,7 +1707,23 @@ export function TransportStatisticsView({
                             </div>
                           </td>
                           <td className="ts-left px-4 py-3 whitespace-nowrap font-mono font-medium text-slate-900 dark:text-slate-100">
-                            {r.transferCode}
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold ${
+                                  isRmTransferRecord(r)
+                                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300"
+                                    : "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/70 dark:text-cyan-300"
+                                }`}
+                              >
+                                {isRmTransferRecord(r) ? "RM" : "FG"}
+                              </span>
+                              <span>{isRmTransferRecord(r) && r.sourceOrderNo ? r.sourceOrderNo : r.transferCode}</span>
+                            </div>
+                            {isRmTransferRecord(r) && r.sourceRoundNo && (
+                              <div className="text-[10.5px] text-slate-400">
+                                รอบที่ {r.sourceRoundNo} · {r.transferCode}
+                              </div>
+                            )}
                           </td>
                           <td className="ts-left px-4 py-3 whitespace-nowrap font-mono text-slate-800 dark:text-slate-200">
                             <div>{r.vehicleNumber || "-"}</div>
