@@ -215,6 +215,151 @@ function getStatusThai(status?: string): string {
   return "รอมอบหมาย";
 }
 
+const POSTER_TABLE_ISOLATION_CSS = `
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table,
+  .slit-ig-poster-light table.slit-ig-roster-table {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table thead tr,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table thead tr,
+  .slit-ig-poster-light table.slit-ig-roster-table thead tr {
+    background-color: #eef2f7 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table thead th,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table thead th,
+  .slit-ig-poster-light table.slit-ig-roster-table thead th {
+    background-color: #eef2f7 !important;
+    color: #0f172a !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+    font-weight: 700 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table tbody tr,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table tbody tr,
+  .slit-ig-poster-light table.slit-ig-roster-table tbody tr {
+    background-color: #ffffff !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table tbody tr.slit-ig-row-alt,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table tbody tr.slit-ig-row-alt,
+  .slit-ig-poster-light table.slit-ig-roster-table tbody tr.slit-ig-row-alt {
+    background-color: #f8fafc !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table tbody tr:hover,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table tbody tr:hover,
+  .slit-ig-poster-light table.slit-ig-roster-table tbody tr:hover {
+    background-color: #f1f5f9 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table tbody td,
+  .shell.theme-light .slit-ig-poster-light table.slit-ig-roster-table tbody td,
+  .slit-ig-poster-light table.slit-ig-roster-table tbody td {
+    color: #0f172a !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-index,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-index {
+    color: #475569 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-avatar-initials,
+  .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-avatar-initials {
+    background-color: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-emp-name,
+  .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-emp-name {
+    color: #0f172a !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-emp-id,
+  .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-emp-id {
+    color: #475569 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-area,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-area {
+    color: #1e293b !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-machines-assigned,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-machines-assigned {
+    color: #0369a1 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-machines-empty,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-machines-empty {
+    color: #475569 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-duty,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-cell-duty {
+    color: #0f172a !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-cell-notes,
+  .slit-ig-poster-light table.slit-ig-roster-table td .slit-ig-cell-notes {
+    color: #475569 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-active,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-active {
+    color: #047857 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-standby,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-standby {
+    color: #b45309 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-completed,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-completed {
+    color: #334155 !important;
+  }
+  .shell.theme-dark .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-pending,
+  .slit-ig-poster-light table.slit-ig-roster-table td.slit-ig-status-pending {
+    color: #475569 !important;
+  }
+
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table,
+  .slit-ig-poster-dark table.slit-ig-roster-table {
+    background-color: #0d1c36 !important;
+    color: #f1f5f9 !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table thead th,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table thead th,
+  .slit-ig-poster-dark table.slit-ig-roster-table thead th {
+    background-color: #112445 !important;
+    color: #cbd5e1 !important;
+    border-bottom: 1px solid #334155 !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table tbody tr,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table tbody tr,
+  .slit-ig-poster-dark table.slit-ig-roster-table tbody tr {
+    background-color: #0d1c36 !important;
+    border-bottom: 1px solid #1e293b !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table tbody tr.slit-ig-row-alt,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table tbody tr.slit-ig-row-alt,
+  .slit-ig-poster-dark table.slit-ig-roster-table tbody tr.slit-ig-row-alt {
+    background-color: #0a172e !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table tbody td,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table tbody td,
+  .slit-ig-poster-dark table.slit-ig-roster-table tbody td {
+    color: #e2e8f0 !important;
+    border-bottom: 1px solid #1e293b !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-cell-machines-assigned,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-cell-machines-assigned,
+  .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-cell-machines-assigned {
+    color: #7dd3fc !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-status-active,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-status-active,
+  .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-status-active {
+    color: #34d399 !important;
+  }
+  .shell.theme-light .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-status-standby,
+  .shell.theme-dark .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-status-standby,
+  .slit-ig-poster-dark table.slit-ig-roster-table td.slit-ig-status-standby {
+    color: #fbbf24 !important;
+  }
+`;
+
 export function SlitWorkforceInfographicReport({
   isThai = true,
   selectedDate,
@@ -586,7 +731,7 @@ export function SlitWorkforceInfographicReport({
             </h4>
             <span
               className={`text-xs font-mono tabular-nums ${
-                isDarkPoster ? "text-slate-400" : "text-slate-500"
+                isDarkPoster ? "text-slate-400" : "text-slate-600"
               }`}
             >
               {timeWindow}
@@ -594,7 +739,7 @@ export function SlitWorkforceInfographicReport({
           </div>
           <span
             className={`text-xs font-mono font-bold tabular-nums ${
-              isDarkPoster ? "text-sky-300" : "text-slate-700"
+              isDarkPoster ? "text-sky-300" : "text-slate-900"
             }`}
           >
             {list.length} {isThai ? "คน" : "staff"}
@@ -605,10 +750,10 @@ export function SlitWorkforceInfographicReport({
           className={`rounded-lg border overflow-hidden ${
             isDarkPoster
               ? "border-slate-700/80 bg-[#0d1c36]"
-              : "border-slate-200 bg-white"
+              : "border-slate-300 bg-white"
           }`}
         >
-          <table className="w-full table-fixed text-left border-collapse">
+          <table className="slit-ig-roster-table w-full table-fixed text-left border-collapse">
             <colgroup>
               <col className="w-[5%]" />
               <col className="w-[24%]" />
@@ -619,10 +764,10 @@ export function SlitWorkforceInfographicReport({
             </colgroup>
             <thead>
               <tr
-                className={`text-[11px] font-semibold border-b ${
+                className={`text-[11px] font-bold border-b ${
                   isDarkPoster
                     ? "bg-[#112445] text-slate-300 border-slate-700/80"
-                    : "bg-slate-50 text-slate-600 border-slate-200"
+                    : "bg-slate-100 text-slate-900 border-slate-300"
                 }`}
               >
                 <th className="py-2 pl-3 pr-1">#</th>
@@ -637,7 +782,7 @@ export function SlitWorkforceInfographicReport({
             </thead>
             <tbody
               className={`divide-y text-xs ${
-                isDarkPoster ? "divide-slate-800/90" : "divide-slate-100"
+                isDarkPoster ? "divide-slate-800/90" : "divide-slate-200"
               }`}
             >
               {list.map((row, idx) => {
@@ -646,6 +791,14 @@ export function SlitWorkforceInfographicReport({
                 const duty = asn?.duty && asn.duty !== "-" ? asn.duty : "-";
                 const machinesText = formatMachinesForReport(asn, isThai);
                 const statusText = getStatusThai(asn?.status);
+                const statusClass =
+                  asn?.status === "active"
+                    ? "slit-ig-status-active"
+                    : asn?.status === "standby"
+                    ? "slit-ig-status-standby"
+                    : asn?.status === "completed"
+                    ? "slit-ig-status-completed"
+                    : "slit-ig-status-pending";
                 const statusColor =
                   asn?.status === "active"
                     ? isDarkPoster
@@ -655,9 +808,13 @@ export function SlitWorkforceInfographicReport({
                     ? isDarkPoster
                       ? "text-amber-400"
                       : "text-amber-700"
+                    : asn?.status === "completed"
+                    ? isDarkPoster
+                      ? "text-slate-300"
+                      : "text-slate-700"
                     : isDarkPoster
                     ? "text-slate-400"
-                    : "text-slate-500";
+                    : "text-slate-600";
                 const canShowImg = Boolean(row.photoUrl) && !brokenPhotos[row.rowKey];
 
                 return (
@@ -666,14 +823,16 @@ export function SlitWorkforceInfographicReport({
                     className={
                       idx % 2 === 1
                         ? isDarkPoster
-                          ? "bg-[#0a172e]/60"
-                          : "bg-slate-50/50"
-                        : ""
+                          ? "slit-ig-row-alt bg-[#0a172e]/60"
+                          : "slit-ig-row-alt bg-slate-50"
+                        : isDarkPoster
+                        ? "bg-[#0d1c36]"
+                        : "bg-white"
                     }
                   >
                     <td
-                      className={`py-2 pl-3 pr-1 align-top font-mono tabular-nums text-[11px] ${
-                        isDarkPoster ? "text-slate-500" : "text-slate-400"
+                      className={`slit-ig-cell-index py-2 pl-3 pr-1 align-top font-mono tabular-nums text-[11px] font-medium ${
+                        isDarkPoster ? "text-slate-400" : "text-slate-600"
                       }`}
                     >
                       {idx + 1}
@@ -690,15 +849,15 @@ export function SlitWorkforceInfographicReport({
                               setBrokenPhotos((prev) => ({ ...prev, [row.rowKey]: true }))
                             }
                             className={`w-7 h-7 rounded-full object-cover shrink-0 border ${
-                              isDarkPoster ? "border-slate-600" : "border-slate-200"
+                              isDarkPoster ? "border-slate-600" : "border-slate-300"
                             }`}
                           />
                         ) : (
                           <div
-                            className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 border ${
+                            className={`slit-ig-avatar-initials w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 border ${
                               isDarkPoster
                                 ? "bg-[#152a4e] border-slate-600 text-sky-200"
-                                : "bg-slate-100 border-slate-200 text-slate-700"
+                                : "bg-slate-200 border-slate-300 text-slate-900"
                             }`}
                           >
                             {getInitials(row.employeeName)}
@@ -706,7 +865,7 @@ export function SlitWorkforceInfographicReport({
                         )}
                         <div className="min-w-0 flex-1">
                           <div
-                            className={`font-semibold leading-snug break-words ${
+                            className={`slit-ig-emp-name font-semibold leading-snug break-words ${
                               isDarkPoster ? "text-white" : "text-slate-900"
                             }`}
                           >
@@ -714,8 +873,8 @@ export function SlitWorkforceInfographicReport({
                           </div>
                           {row.employeeId && (
                             <div
-                              className={`text-[10px] font-mono break-all ${
-                                isDarkPoster ? "text-slate-400" : "text-slate-500"
+                              className={`slit-ig-emp-id text-[10px] font-mono break-all ${
+                                isDarkPoster ? "text-slate-400" : "text-slate-600"
                               }`}
                             >
                               {row.employeeId}
@@ -725,35 +884,37 @@ export function SlitWorkforceInfographicReport({
                       </div>
                     </td>
                     <td
-                      className={`py-2 px-2 align-top font-medium leading-snug whitespace-normal break-words ${
-                        isDarkPoster ? "text-slate-200" : "text-slate-700"
+                      className={`slit-ig-cell-area py-2 px-2 align-top font-medium leading-snug whitespace-normal break-words ${
+                        isDarkPoster ? "text-slate-200" : "text-slate-800"
                       }`}
                     >
                       {area}
                     </td>
                     <td
-                      className={`py-2 px-2 align-top font-mono text-[11px] font-semibold leading-snug whitespace-normal break-words ${
+                      className={`${
+                        asn ? "slit-ig-cell-machines-assigned" : "slit-ig-cell-machines-empty"
+                      } py-2 px-2 align-top font-mono text-[11px] font-semibold leading-snug whitespace-normal break-words ${
                         asn
                           ? isDarkPoster
                             ? "text-sky-300"
                             : "text-sky-700"
                           : isDarkPoster
-                          ? "text-slate-500"
-                          : "text-slate-400"
+                          ? "text-slate-400"
+                          : "text-slate-600"
                       }`}
                     >
                       {machinesText}
                     </td>
                     <td
-                      className={`py-2 px-2 align-top leading-snug whitespace-normal break-words ${
-                        isDarkPoster ? "text-slate-200" : "text-slate-700"
+                      className={`slit-ig-cell-duty py-2 px-2 align-top leading-snug whitespace-normal break-words ${
+                        isDarkPoster ? "text-slate-200" : "text-slate-900"
                       }`}
                     >
                       {duty}
                       {asn?.notes && (
                         <div
-                          className={`text-[10px] mt-0.5 leading-snug break-words ${
-                            isDarkPoster ? "text-slate-400" : "text-slate-500"
+                          className={`slit-ig-cell-notes text-[10px] mt-0.5 leading-snug break-words ${
+                            isDarkPoster ? "text-slate-400" : "text-slate-600"
                           }`}
                         >
                           {asn.notes}
@@ -761,7 +922,7 @@ export function SlitWorkforceInfographicReport({
                       )}
                     </td>
                     <td
-                      className={`py-2 pl-2 pr-3 align-top text-right text-[11px] font-semibold whitespace-nowrap ${statusColor}`}
+                      className={`${statusClass} py-2 pl-2 pr-3 align-top text-right text-[11px] font-bold whitespace-nowrap ${statusColor}`}
                     >
                       {statusText}
                     </td>
@@ -777,6 +938,7 @@ export function SlitWorkforceInfographicReport({
 
   return (
     <div className="space-y-4">
+      <style>{POSTER_TABLE_ISOLATION_CSS}</style>
       {/* Action & Configuration Toolbar (Not included in exported PNG) */}
       <div className="bg-white dark:bg-[#0f1d36] border border-slate-200 dark:border-[#1e3a5f] rounded-xl p-4 space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
@@ -955,8 +1117,8 @@ export function SlitWorkforceInfographicReport({
           ref={posterRef}
           className={`mx-auto w-[820px] rounded-2xl border overflow-hidden shadow-lg ${
             isDarkPoster
-              ? "bg-[#071426] border-slate-700/80 text-slate-100"
-              : "bg-white border-slate-200 text-slate-900"
+              ? "slit-ig-poster-dark bg-[#071426] border-slate-700/80 text-slate-100"
+              : "slit-ig-poster-light bg-white border-slate-200 text-slate-900"
           }`}
         >
           {/* 1. Executive Poster Header Banner */}
@@ -1323,12 +1485,16 @@ export function SlitWorkforceInfographicReport({
                   }`}
                 >
                   <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                    <span
+                      className={`font-semibold ${
+                        isDarkPoster ? "text-amber-400" : "text-amber-700"
+                      }`}
+                    >
                       {isThai ? "กะเช้า" : "Day"} {stats.dayCount} ({stats.dayPct}%)
                     </span>
                     <span
                       className={`font-semibold ${
-                        isDarkPoster ? "text-indigo-400" : "text-indigo-600"
+                        isDarkPoster ? "text-indigo-400" : "text-indigo-700"
                       }`}
                     >
                       {isThai ? "กะดึก" : "Night"} {stats.nightCount} ({stats.nightPct}%)
@@ -1416,8 +1582,8 @@ export function SlitWorkforceInfographicReport({
                               active
                                 ? "text-white border-transparent"
                                 : isDarkPoster
-                                ? "bg-[#091529] border-slate-700/80 text-slate-500"
-                                : "bg-white border-slate-200 text-slate-400"
+                                ? "bg-[#091529] border-slate-700/80 text-slate-400"
+                                : "bg-white border-slate-300 text-slate-600"
                             }`}
                             style={active ? { backgroundColor: grp.barColor } : undefined}
                           >

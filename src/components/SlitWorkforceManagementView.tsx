@@ -1414,11 +1414,6 @@ export function SlitWorkforceManagementView({
                 : "Workforce Management — Slit / Film"}
             </h2>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            {isThai
-              ? "ดึงรายชื่อพนักงานส่วนงานฟิล์มพร้อมกะทำงานจากตารางจัดกะอัตโนมัติ — เลือกพื้นที่/อาคาร เครื่องจักร (TM, CF, ML, ZF) และหน้าที่ได้ทันที"
-              : "Auto-pulls Film/Slit staff and shift schedules — assign area/building, machines (TM, CF, ML, ZF), and duties directly"}
-          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">

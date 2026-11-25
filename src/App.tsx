@@ -7,6 +7,7 @@ import {
   Disc,
   Users,
   Package,
+  Box,
   Boxes,
   MapPin,
   Search,
@@ -5402,7 +5403,7 @@ function WmsApp({
     }
     return false;
   });
-  const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "return_warehouse" | "daily_report" | "equipment_inspection" | "workforce_management" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
+  const [slitMode, setSlitMode] = useState<"inbound" | "outbound" | "operator_receive" | "movement_history" | "relocate_layout" | "stock_balance" | "space_management" | "location_3d" | "return_warehouse" | "daily_report" | "equipment_inspection" | "workforce_management" | "transfer_car_report" | "tmt_recheck" | "tmt_recheck_report">("inbound");
   const [coilMode, setCoilMode] = useState<CoilModeTab>("inbound");
   const [rmMode, setRmMode] = useState<RmModeTab>("inbound");
   const [adminTab, setAdminTab] = useState<AdminWorkforceTab>("workforce");
@@ -6436,6 +6437,26 @@ function WmsApp({
                                              <Boxes size={14} />
                                            </span>
                                            <span>พื้นที่</span>
+                                         </button>
+
+                                         <button
+                                           type="button"
+                                           tabIndex={slitMenuExpanded ? 0 : -1}
+                                           className={`nav-sub-btn ${slitMode === "location_3d" ? "active" : ""}`}
+                                           onClick={() => {
+                                             setActive("slit");
+                                             setSlitMode("location_3d");
+                                             setSelectedRecord(null);
+                                             if (typeof window !== "undefined" && window.innerWidth <= 768) {
+                                               setSidebarCollapsed(true);
+                                             }
+                                           }}
+                                           title={language === "th" ? "Location 3D ตะกร้าฟ้า" : "3D Blue Basket Location"}
+                                         >
+                                           <span className="nav-icon" style={{ width: 16, height: 16, color: "#3b82f6" }}>
+                                             <Box size={14} />
+                                           </span>
+                                           <span>{language === "th" ? "Location 3D ตะกร้าฟ้า" : "3D Blue Basket"}</span>
                                          </button>
 
                                          <button
