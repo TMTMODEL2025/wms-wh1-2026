@@ -321,7 +321,7 @@ export function DailyReportView({
   }, [selectedDate, selectedShift, onSelectedDateChange]);
 
   // Storage Space Report Filter States
-  const [spaceReportSubTab, setSpaceReportSubTab] = useState<"all" | "warehouse" | "machine">("all");
+  const [spaceReportSubTab, setSpaceReportSubTab] = useState<"warehouse" | "machine">("warehouse");
   const [spaceBuildingFilter, setSpaceBuildingFilter] = useState<string>("all");
   const [spaceBasketStatusFilter, setSpaceBasketStatusFilter] = useState<string>("all");
   const [spaceMachineCategoryFilter, setSpaceMachineCategoryFilter] = useState<"all" | "pipe" | "c_channel">("all");
@@ -5432,19 +5432,8 @@ export function DailyReportView({
             </div>
 
             <div className="flex items-center justify-start lg:justify-end gap-1 sm:gap-2 flex-nowrap sm:flex-wrap w-full lg:w-auto max-w-full min-w-0 shrink-0">
-              {/* Sub-view Switcher: All vs Warehouse vs Machine */}
+              {/* Sub-view Switcher: Warehouse vs Machine */}
               <div className="flex items-center justify-between sm:inline-flex w-full sm:w-auto min-w-0 rounded-md sm:rounded-xl p-0.5 sm:p-1 bg-slate-100 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] gap-0.5 sm:gap-0 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setSpaceReportSubTab("all")}
-                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-2.5 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center cursor-pointer whitespace-nowrap text-center ${
-                    spaceReportSubTab === "all"
-                      ? "bg-cyan-600 text-white shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
-                >
-                  <span>{isThai ? "แสดงทั้งหมด" : "All Areas"}</span>
-                </button>
                 <button
                   type="button"
                   onClick={() => setSpaceReportSubTab("warehouse")}
@@ -5493,244 +5482,298 @@ export function DailyReportView({
             </div>
           </div>
 
-          {/* 4 TOP SUMMARY CARDS FOR STORAGE SPACE REPORT (Matching SpaceManagementView Style) */}
-          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-2.5 sm:p-5 text-white shadow-xl border border-cyan-500/30 dark:border-cyan-500/40">
-            <div className="absolute -right-12 -bottom-12 opacity-10 pointer-events-none hidden sm:block">
-              <Boxes size={240} />
-            </div>
+          {/* TOP SUMMARY CARDS FOR STORAGE SPACE REPORT (Warehouse: 4 cards / Machine Staging: 3 cards) */}
+          {(() => {
+            const isMachineTab = spaceReportSubTab === "machine";
+            const { tm, cf } = storageSpaceAnalytics.machineGroupSummaries;
 
-            {filteredSpaceData.selectedBuilding && (
-              <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/15">
-                <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-cyan-200">
-                  <Building2 size={15} className="text-cyan-400 shrink-0" />
-                  <span>
-                    {isThai
-                      ? `กำลังแสดงข้อมูลสรุป: ${filteredSpaceData.selectedBuilding.buildingNameTh}`
-                      : `Filtered Summary: ${filteredSpaceData.selectedBuilding.buildingNameEn}`}
-                  </span>
+            const machineSummaryStats =
+              spaceMachineCategoryFilter === "pipe"
+                ? tm
+                : spaceMachineCategoryFilter === "c_channel"
+                ? cf
+                : (() => {
+                    const totalCapacityMeters = tm.totalCapacityMeters + cf.totalCapacityMeters;
+                    const usedMeters = tm.usedMeters + cf.usedMeters;
+                    const availableMeters = tm.availableMeters + cf.availableMeters;
+                    const usagePercent =
+                      totalCapacityMeters > 0 ? Math.round((usedMeters / totalCapacityMeters) * 100) : 0;
+                    return {
+                      totalCapacityTons: tm.totalCapacityTons + cf.totalCapacityTons,
+                      usedTons: tm.usedTons + cf.usedTons,
+                      availableTons: tm.availableTons + cf.availableTons,
+                      usagePercent,
+                    };
+                  })();
+
+            const totalMaxCapacityTons = isMachineTab
+              ? Number(machineSummaryStats.totalCapacityTons.toFixed(2))
+              : filteredSpaceData.spaceCapacitySummary.totalMaxCapacityTons;
+            const totalUsedSpaceTons = isMachineTab
+              ? Number(machineSummaryStats.usedTons.toFixed(2))
+              : filteredSpaceData.spaceCapacitySummary.totalUsedSpaceTons;
+            const totalRemainingSpaceTons = isMachineTab
+              ? Number(machineSummaryStats.availableTons.toFixed(2))
+              : filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons;
+            const spacePercent = isMachineTab
+              ? machineSummaryStats.usagePercent
+              : filteredSpaceData.spaceCapacitySummary.spacePercent;
+
+            return (
+              <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-2.5 sm:p-5 text-white shadow-xl border border-cyan-500/30 dark:border-cyan-500/40">
+                <div className="absolute -right-12 -bottom-12 opacity-10 pointer-events-none hidden sm:block">
+                  <Boxes size={240} />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setSpaceBuildingFilter("all")}
-                  className="px-2.5 py-1 rounded-lg text-[10.5px] sm:text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 transition-all cursor-pointer flex items-center gap-1"
+
+                {!isMachineTab && filteredSpaceData.selectedBuilding && (
+                  <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/15">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-cyan-200">
+                      <Building2 size={15} className="text-cyan-400 shrink-0" />
+                      <span>
+                        {isThai
+                          ? `กำลังแสดงข้อมูลสรุป: ${filteredSpaceData.selectedBuilding.buildingNameTh}`
+                          : `Filtered Summary: ${filteredSpaceData.selectedBuilding.buildingNameEn}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSpaceBuildingFilter("all")}
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] sm:text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <X size={12} />
+                      <span>{isThai ? "แสดงทุกอาคาร" : "Show All Buildings"}</span>
+                    </button>
+                  </div>
+                )}
+
+                {isMachineTab && spaceMachineCategoryFilter !== "all" && (
+                  <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/15">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-cyan-200">
+                      <Cpu size={15} className="text-cyan-400 shrink-0" />
+                      <span>
+                        {spaceMachineCategoryFilter === "pipe"
+                          ? isThai
+                            ? "กำลังแสดงข้อมูลสรุป: เครื่องผลิตท่อ (TM 01 - TM 14)"
+                            : "Filtered Summary: Pipe Forming (TM 01 - TM 14)"
+                          : isThai
+                          ? "กำลังแสดงข้อมูลสรุป: เครื่องผลิตตัวซี (CF 1, 2, 4, 5)"
+                          : "Filtered Summary: C-Channel (CF 1, 2, 4, 5)"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSpaceMachineCategoryFilter("all")}
+                      className="px-2.5 py-1 rounded-lg text-[10.5px] sm:text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <X size={12} />
+                      <span>{isThai ? "แสดงทุกกลุ่มเครื่องจักร" : "Show All Machines"}</span>
+                    </button>
+                  </div>
+                )}
+
+                <div
+                  className={`relative z-10 grid gap-1.5 sm:gap-3 ${
+                    isMachineTab ? "grid-cols-3" : "grid-cols-2 lg:grid-cols-4"
+                  }`}
                 >
-                  <X size={12} />
-                  <span>{isThai ? "แสดงทุกอาคาร" : "Show All Buildings"}</span>
-                </button>
-              </div>
-            )}
+                  {/* 1. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
+                  <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-slate-300 text-[10px] sm:text-xs font-semibold truncate">
+                          <span className="sm:hidden">{isThai ? "ความจุรวม" : "Total Cap."}</span>
+                          <span className="hidden sm:inline">
+                            {isThai ? "พื้นที่จัดเก็บทั้งหมด (ตัน)" : "Total Storage Capacity (Tons)"}
+                          </span>
+                        </span>
+                        <span className="text-[10px] font-black font-mono tabular-nums text-cyan-300 bg-cyan-500/20 px-1.5 py-0.2 rounded border border-cyan-400/30 shrink-0">
+                          100%
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-white tabular-nums leading-tight">
+                        {totalMaxCapacityTons.toLocaleString(undefined, {
+                          maximumFractionDigits: isMachineTab ? 2 : 3,
+                        })}{" "}
+                        <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                          {isThai ? "ตัน" : "Tons"}
+                        </span>
+                      </div>
+                    </div>
 
-            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-3">
-              {/* 1. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-slate-300 text-[10px] sm:text-xs font-semibold truncate">
-                      <span className="sm:hidden">{isThai ? "ความจุรวม" : "Total Cap."}</span>
-                      <span className="hidden sm:inline">
-                        {isThai ? "พื้นที่จัดเก็บทั้งหมด (ตัน)" : "Total Storage Capacity (Tons)"}
-                      </span>
-                    </span>
-                    <span className="text-[10px] font-black font-mono tabular-nums text-cyan-300 bg-cyan-500/20 px-1.5 py-0.2 rounded border border-cyan-400/30 shrink-0">
-                      100%
-                    </span>
+                    {/* Progress Bar with Percentage Label */}
+                    <div className="mt-2.5 space-y-1">
+                      <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-cyan-300">
+                        <span>{isThai ? "ความจุรวมเต็มพิกัด" : "Full Capacity"}</span>
+                        <span>100%</span>
+                      </div>
+                      <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-400 rounded-full transition-all duration-300 w-full" />
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-white tabular-nums leading-tight">
-                    {filteredSpaceData.spaceCapacitySummary.totalMaxCapacityTons.toLocaleString()}{" "}
-                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
-                      {isThai ? "ตัน" : "Tons"}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Progress Bar with Percentage Label */}
-                <div className="mt-2.5 space-y-1">
-                  <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-cyan-300">
-                    <span>{isThai ? "ความจุรวมเต็มพิกัด" : "Full Capacity"}</span>
-                    <span>100%</span>
-                  </div>
-                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
-                    <div className="h-full bg-cyan-400 rounded-full transition-all duration-300 w-full" />
-                  </div>
-                </div>
-              </div>
+                  {/* 2. พื้นที่ใช้ไป (ตัน) */}
+                  <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-amber-300 text-[10px] sm:text-xs font-semibold truncate">
+                          <span className="sm:hidden">{isThai ? "ใช้ไป" : "Used"}</span>
+                          <span className="hidden sm:inline">{isThai ? "พื้นที่ใช้ไป (ตัน)" : "Used Space (Tons)"}</span>
+                        </span>
+                        <span className="text-[10px] font-black font-mono tabular-nums text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400/30 shrink-0">
+                          {spacePercent}%
+                        </span>
+                      </div>
+                      <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-amber-300 tabular-nums leading-tight">
+                        {totalUsedSpaceTons.toLocaleString(undefined, {
+                          maximumFractionDigits: isMachineTab ? 2 : 3,
+                        })}{" "}
+                        <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                          {isThai ? "ตัน" : "Tons"}
+                        </span>
+                      </div>
+                    </div>
 
-              {/* 2. พื้นที่ใช้ไป (ตัน) */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-amber-300 text-[10px] sm:text-xs font-semibold truncate">
-                      <span className="sm:hidden">{isThai ? "ใช้ไป" : "Used"}</span>
-                      <span className="hidden sm:inline">{isThai ? "พื้นที่ใช้ไป (ตัน)" : "Used Space (Tons)"}</span>
-                    </span>
-                    <span className="text-[10px] font-black font-mono tabular-nums text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded border border-amber-400/30 shrink-0">
-                      {filteredSpaceData.spaceCapacitySummary.spacePercent}%
-                    </span>
+                    {/* Progress Bar with Percentage Label */}
+                    <div className="mt-2.5 space-y-1">
+                      <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-amber-300">
+                        <span>{isThai ? "สัดส่วนพื้นที่ใช้ไป" : "Used Space Ratio"}</span>
+                        <span>{spacePercent}%</span>
+                      </div>
+                      <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, spacePercent)}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-amber-300 tabular-nums leading-tight">
-                    {filteredSpaceData.spaceCapacitySummary.totalUsedSpaceTons.toLocaleString(undefined, {
-                      maximumFractionDigits: 3,
-                    })}{" "}
-                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
-                      {isThai ? "ตัน" : "Tons"}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Progress Bar with Percentage Label */}
-                <div className="mt-2.5 space-y-1">
-                  <div className="flex justify-between text-[9.5px] sm:text-[10px] font-bold text-amber-300">
-                    <span>{isThai ? "สัดส่วนพื้นที่ใช้ไป" : "Used Space Ratio"}</span>
-                    <span>{filteredSpaceData.spaceCapacitySummary.spacePercent}%</span>
-                  </div>
-                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, filteredSpaceData.spaceCapacitySummary.spacePercent)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 3. พื้นที่คงเหลือ (ตัน) */}
-              <div
-                className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border flex flex-col justify-between ${
-                  filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                    ? "bg-rose-500/20 border-rose-400/40"
-                    : "bg-white/10 border-white/15"
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span
-                      className={`text-[10px] sm:text-xs font-semibold truncate ${
-                        filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                          ? "text-rose-300"
-                          : "text-emerald-300"
-                      }`}
-                    >
-                      <span className="sm:hidden">{isThai ? "คงเหลือ" : "Remaining"}</span>
-                      <span className="hidden sm:inline">
-                        {isThai ? "พื้นที่คงเหลือ (ตัน)" : "Remaining Space (Tons)"}
-                      </span>
-                    </span>
-                    <span
-                      className={`text-[10px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded border shrink-0 ${
-                        filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                          ? "text-rose-300 bg-rose-500/30 border-rose-400/40"
-                          : "text-emerald-300 bg-emerald-500/20 border-emerald-400/30"
-                      }`}
-                    >
-                      {filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                        ? "0%"
-                        : `${Math.max(0, 100 - filteredSpaceData.spaceCapacitySummary.spacePercent)}%`}
-                    </span>
-                  </div>
+                  {/* 3. พื้นที่คงเหลือ (ตัน) */}
                   <div
-                    className={`mt-1 font-mono text-base sm:text-xl md:text-2xl font-black tabular-nums leading-tight ${
-                      filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                        ? "text-rose-400"
-                        : "text-emerald-400"
+                    className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border flex flex-col justify-between ${
+                      totalRemainingSpaceTons < 0
+                        ? "bg-rose-500/20 border-rose-400/40"
+                        : "bg-white/10 border-white/15"
                     }`}
                   >
-                    {filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons.toLocaleString(undefined, {
-                      maximumFractionDigits: 3,
-                    })}{" "}
-                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
-                      {isThai ? "ตัน" : "Tons"}
-                    </span>
-                  </div>
-                </div>
+                    <div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span
+                          className={`text-[10px] sm:text-xs font-semibold truncate ${
+                            totalRemainingSpaceTons < 0 ? "text-rose-300" : "text-emerald-300"
+                          }`}
+                        >
+                          <span className="sm:hidden">{isThai ? "คงเหลือ" : "Remaining"}</span>
+                          <span className="hidden sm:inline">
+                            {isThai ? "พื้นที่คงเหลือ (ตัน)" : "Remaining Space (Tons)"}
+                          </span>
+                        </span>
+                        <span
+                          className={`text-[10px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded border shrink-0 ${
+                            totalRemainingSpaceTons < 0
+                              ? "text-rose-300 bg-rose-500/30 border-rose-400/40"
+                              : "text-emerald-300 bg-emerald-500/20 border-emerald-400/30"
+                          }`}
+                        >
+                          {totalRemainingSpaceTons < 0 ? "0%" : `${Math.max(0, 100 - spacePercent)}%`}
+                        </span>
+                      </div>
+                      <div
+                        className={`mt-1 font-mono text-base sm:text-xl md:text-2xl font-black tabular-nums leading-tight ${
+                          totalRemainingSpaceTons < 0 ? "text-rose-400" : "text-emerald-400"
+                        }`}
+                      >
+                        {totalRemainingSpaceTons.toLocaleString(undefined, {
+                          maximumFractionDigits: isMachineTab ? 2 : 3,
+                        })}{" "}
+                        <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                          {isThai ? "ตัน" : "Tons"}
+                        </span>
+                      </div>
+                    </div>
 
-                {/* Progress Bar with Percentage Label */}
-                <div className="mt-2.5 space-y-1">
-                  <div
-                    className={`flex justify-between text-[9.5px] sm:text-[10px] font-bold ${
-                      filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                        ? "text-rose-300"
-                        : "text-emerald-300"
-                    }`}
-                  >
-                    <span>
-                      {filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                        ? isThai
-                          ? "พื้นที่เกินความจุ!"
-                          : "Over Capacity!"
-                        : isThai
-                        ? "สัดส่วนพื้นที่คงเหลือ"
-                        : "Remaining Space Ratio"}
-                    </span>
-                    <span>
-                      {filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                        ? "0%"
-                        : `${Math.max(0, 100 - filteredSpaceData.spaceCapacitySummary.spacePercent)}%`}
-                    </span>
+                    {/* Progress Bar with Percentage Label */}
+                    <div className="mt-2.5 space-y-1">
+                      <div
+                        className={`flex justify-between text-[9.5px] sm:text-[10px] font-bold ${
+                          totalRemainingSpaceTons < 0 ? "text-rose-300" : "text-emerald-300"
+                        }`}
+                      >
+                        <span>
+                          {totalRemainingSpaceTons < 0
+                            ? isThai
+                              ? "พื้นที่เกินความจุ!"
+                              : "Over Capacity!"
+                            : isThai
+                            ? "สัดส่วนพื้นที่คงเหลือ"
+                            : "Remaining Space Ratio"}
+                        </span>
+                        <span>{totalRemainingSpaceTons < 0 ? "0%" : `${Math.max(0, 100 - spacePercent)}%`}</span>
+                      </div>
+                      <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            totalRemainingSpaceTons < 0 ? "bg-rose-500" : "bg-emerald-400"
+                          }`}
+                          style={{
+                            width: `${totalRemainingSpaceTons < 0 ? 100 : Math.max(0, 100 - spacePercent)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${
-                        filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                          ? "bg-rose-500"
-                          : "bg-emerald-400"
-                      }`}
-                      style={{
-                        width: `${
-                          filteredSpaceData.spaceCapacitySummary.totalRemainingSpaceTons < 0
-                            ? 100
-                            : Math.max(0, 100 - filteredSpaceData.spaceCapacitySummary.spacePercent)
-                        }%`,
-                      }}
-                    />
-                  </div>
+
+                  {/* 4. สต๊อกปัจจุบันSAP (แสดงเฉพาะแท็บคลังตะกร้าอาคาร) */}
+                  {!isMachineTab && (
+                    <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
+                            {isThai ? "สต๊อกปัจจุบันSAP" : "Current SAP Stock"}
+                          </span>
+                          <span className="text-[10px] font-black font-mono tabular-nums text-violet-200 dark:text-violet-300 bg-violet-500/25 px-1.5 py-0.2 rounded border border-violet-400/35 shrink-0">
+                            {filteredSpaceData.sapCurrentStockSummary.capacityPercent}%
+                          </span>
+                        </div>
+                        <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-violet-200 dark:text-violet-300 tabular-nums leading-tight">
+                          {filteredSpaceData.sapCurrentStockSummary.totalTons.toLocaleString(undefined, {
+                            minimumFractionDigits: 3,
+                            maximumFractionDigits: 3,
+                          })}{" "}
+                          <span className="text-[10px] sm:text-xs font-normal text-slate-300">
+                            {isThai ? "ตัน" : "Tons"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar & SAP Record Count */}
+                      <div className="mt-2.5 space-y-1">
+                        <div className="flex justify-between gap-1 text-[9.5px] sm:text-[10px] font-bold text-violet-200 dark:text-violet-300">
+                          <span className="truncate">
+                            {filteredSpaceData.sapCurrentStockSummary.itemCount > 0
+                              ? isThai
+                                ? `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} รายการ)`
+                                : `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} items)`
+                              : isThai
+                              ? "ยังไม่มีข้อมูล SAP"
+                              : "No SAP Data"}
+                          </span>
+                          <span className="shrink-0">{filteredSpaceData.sapCurrentStockSummary.capacityPercent}%</span>
+                        </div>
+                        <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-violet-400 rounded-full transition-all duration-300"
+                            style={{ width: `${Math.min(100, filteredSpaceData.sapCurrentStockSummary.capacityPercent)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {/* 4. สต๊อกปัจจุบันSAP */}
-              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
-                      {isThai ? "สต๊อกปัจจุบันSAP" : "Current SAP Stock"}
-                    </span>
-                    <span className="text-[10px] font-black font-mono tabular-nums text-violet-200 dark:text-violet-300 bg-violet-500/25 px-1.5 py-0.2 rounded border border-violet-400/35 shrink-0">
-                      {filteredSpaceData.sapCurrentStockSummary.capacityPercent}%
-                    </span>
-                  </div>
-                  <div className="mt-1 font-mono text-base sm:text-xl md:text-2xl font-black text-violet-200 dark:text-violet-300 tabular-nums leading-tight">
-                    {filteredSpaceData.sapCurrentStockSummary.totalTons.toLocaleString(undefined, {
-                      minimumFractionDigits: 3,
-                      maximumFractionDigits: 3,
-                    })}{" "}
-                    <span className="text-[10px] sm:text-xs font-normal text-slate-300">
-                      {isThai ? "ตัน" : "Tons"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress Bar & SAP Record Count */}
-                <div className="mt-2.5 space-y-1">
-                  <div className="flex justify-between gap-1 text-[9.5px] sm:text-[10px] font-bold text-violet-200 dark:text-violet-300">
-                    <span className="truncate">
-                      {filteredSpaceData.sapCurrentStockSummary.itemCount > 0
-                        ? isThai
-                          ? `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} รายการ)`
-                          : `SAP (${filteredSpaceData.sapCurrentStockSummary.itemCount.toLocaleString()} items)`
-                        : isThai
-                        ? "ยังไม่มีข้อมูล SAP"
-                        : "No SAP Data"}
-                    </span>
-                    <span className="shrink-0">{filteredSpaceData.sapCurrentStockSummary.capacityPercent}%</span>
-                  </div>
-                  <div className="w-full bg-white/20 h-1.5 sm:h-2 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-violet-400 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(100, filteredSpaceData.sapCurrentStockSummary.capacityPercent)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* =========================================================================
               MACHINE GROUP SUMMARY CARDS: TM (TM 01 - TM 14) & CF (CF 1, CF 2, CF 4, CF 5)
@@ -6110,7 +6153,7 @@ export function DailyReportView({
           {/* =========================================================================
               BUILDING SPACE SUMMARY CARDS & WAREHOUSE BUILDING SELECTOR (H, F, E9, E10, I)
               ========================================================================= */}
-          {(spaceReportSubTab === "all" || spaceReportSubTab === "warehouse") && (
+          {spaceReportSubTab === "warehouse" && (
             <div className="bg-white dark:bg-[#111e38] rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md border border-slate-200 dark:border-[#1e3a5f]">
               <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 px-0.5 sm:px-1 pb-2.5 mb-2.5 sm:mb-3 border-b border-slate-200/80 dark:border-[#1e3a5f]">
                 <div className="flex items-center gap-2 text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
@@ -6326,7 +6369,7 @@ export function DailyReportView({
           {/* =========================================================================
               RAW MATERIAL SUMMARY TABLE (GROUPED BY BATCH PREFIX)
               ========================================================================= */}
-          {(spaceReportSubTab === "all" || spaceReportSubTab === "warehouse") && (
+          {spaceReportSubTab === "warehouse" && (
             <section className="rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md overflow-hidden">
               <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -6378,7 +6421,7 @@ export function DailyReportView({
                       <th className="!p-1.5 sm:!p-3 !text-center w-10">#</th>
                       <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "ประเภทวัตถุดิบ" : "Material Type"}</th>
                       <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนักรวม (ตัน)" : "Weight (Tons)"}</th>
-                      <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "สัดส่วน (%)" : "Share (%)"}</th>
+                      <th className="!p-1.5 sm:!p-3 !text-center w-[38%] sm:w-[45%] min-w-[140px]">{isThai ? "สัดส่วน (%)" : "Share (%)"}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
@@ -6406,15 +6449,15 @@ export function DailyReportView({
                               maximumFractionDigits: 3,
                             })}
                           </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center">
-                            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
-                              <div className="w-14 sm:w-20 bg-slate-200 dark:bg-slate-700 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                          <td className="!p-1.5 sm:!p-3">
+                            <div className="w-full flex items-center gap-2 sm:gap-3">
+                              <div className="flex-1 min-w-[80px] bg-slate-200 dark:bg-slate-700 h-2 sm:h-2.5 rounded-full overflow-hidden">
                                 <div
                                   className={`h-full rounded-full transition-all duration-300 ${mat.barClass}`}
                                   style={{ width: `${Math.min(100, mat.weightPercent)}%` }}
                                 />
                               </div>
-                              <span className="font-mono tabular-nums font-bold text-[10px] sm:text-[11px] w-10 sm:w-11 text-right text-slate-700 dark:text-slate-200">
+                              <span className="font-mono tabular-nums font-bold text-[10px] sm:text-[11px] w-10 sm:w-11 shrink-0 text-right text-slate-700 dark:text-slate-200">
                                 {mat.weightPercent.toFixed(1)}%
                               </span>
                             </div>
@@ -6444,7 +6487,7 @@ export function DailyReportView({
                         })}{" "}
                         {isThai ? "ตัน" : "T"}
                       </td>
-                      <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-black text-indigo-600 dark:text-indigo-400">
+                      <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-indigo-600 dark:text-indigo-400">
                         {filteredSpaceData.materialSummary.totals.totalWeightKg > 0 ? "100.0%" : "0.0%"}
                       </td>
                     </tr>
@@ -6455,171 +6498,9 @@ export function DailyReportView({
           )}
 
           {/* =========================================================================
-              PART 1: คลังจัดเก็บตะกร้าเหล็กสลิต อาคาร (อาคาร H, F, E9, E10, I)
-              ========================================================================= */}
-          {(spaceReportSubTab === "all" || spaceReportSubTab === "warehouse") && (
-            <div className="space-y-3 sm:space-y-6">
-              {/* Building Summary Table & Chart */}
-              <section className="rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md overflow-hidden">
-                <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
-                      <Building2 size={16} className="sm:w-5 sm:h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-                        <span>
-                          {filteredSpaceData.selectedBuilding
-                            ? isThai
-                              ? `ส่วนที่ 1: รายงานคลังจัดเก็บตะกร้าเหล็กสลิต (${filteredSpaceData.selectedBuilding.buildingNameTh})`
-                              : `Part 1: Warehouse Basket Storage Report (${filteredSpaceData.selectedBuilding.buildingNameEn})`
-                            : isThai
-                            ? "ส่วนที่ 1: รายงานคลังจัดเก็บตะกร้าเหล็กสลิต แยกตามอาคาร (อาคาร H, F, E9, E10, I)"
-                            : "Part 1: Warehouse Basket Storage Report by Building (H, F, E9, E10, I)"}
-                        </span>
-                      </h3>
-                      <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        {isThai
-                          ? "สรุปจำนวนตะกร้า แถบเหล็กสลิต น้ำหนักรวม และอัตราการใช้พื้นที่ของแต่ละอาคารคลังสินค้า"
-                          : "Summary of storage baskets, coils, net weight and occupancy rate by warehouse building"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-left sm:text-right font-mono text-[11px] sm:text-xs font-bold text-cyan-600 dark:text-cyan-400 tabular-nums">
-                    {filteredSpaceData.selectedBuilding
-                      ? isThai
-                        ? `น้ำหนักรวม${filteredSpaceData.selectedBuilding.buildingNameTh}: `
-                        : `${filteredSpaceData.selectedBuilding.buildingNameEn} Weight: `
-                      : isThai
-                      ? "น้ำหนักรวมทุกอาคาร: "
-                      : "Total Building Weight: "}
-                    <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white">
-                      {filteredSpaceData.warehouseTotals.totalWeightKg.toLocaleString()} kg
-                    </span>{" "}
-                    ({(filteredSpaceData.warehouseTotals.totalWeightKg / 1000).toFixed(3)} TON)
-                  </div>
-                </div>
-
-                {/* Building Summary Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-[10.5px] sm:text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
-                        <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "อาคาร" : "Building"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "จำนวนแถว" : "Rows"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "จำนวนเมตรทั้งหมด" : "Total Meters"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center !text-emerald-600 dark:!text-emerald-400">{isThai ? "ว่าง" : "Avail"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center !text-amber-600 dark:!text-amber-400">{isThai ? "ใช้งาน" : "Occupied"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center !text-rose-600 dark:!text-rose-400">{isThai ? "เต็ม" : "Full"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center !text-slate-500">{isThai ? "ซ่อมบำรุง" : "Maint."}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "จำนวนแถบ" : "Coils"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-right">{isThai ? "น้ำหนักรวม (kg)" : "Weight (kg)"}</th>
-                        <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "อัตราการใช้งาน" : "Occupancy"}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-                      {filteredSpaceData.filteredBuildings.map((b) => (
-                        <tr
-                          key={b.buildingId}
-                          className="hover:bg-cyan-50/40 dark:hover:bg-cyan-950/20 transition-colors whitespace-nowrap"
-                        >
-                          <td className="!p-1.5 sm:!p-3 !text-left font-mono font-black text-cyan-600 dark:text-cyan-400 whitespace-nowrap">
-                            {isThai ? b.buildingNameTh : b.buildingNameEn}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold">
-                            {b.rowCount}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-cyan-600 dark:text-cyan-400">
-                            {b.totalMeters.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ม.
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
-                            {b.availableBaskets}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-amber-600 dark:text-amber-400">
-                            {b.occupiedBaskets}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-rose-600 dark:text-rose-400">
-                            {b.fullBaskets}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-slate-500">
-                            {b.maintenanceBaskets}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-bold">
-                            {b.totalCoils.toLocaleString()}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-slate-900 dark:text-white">
-                            {b.totalWeightKg.toLocaleString()} kg
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center">
-                            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
-                              <div className="w-14 sm:w-20 bg-slate-200 dark:bg-slate-700 h-1.5 sm:h-2 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    b.occupancyPercent >= 85
-                                      ? "bg-rose-500"
-                                      : b.occupancyPercent >= 50
-                                      ? "bg-amber-500"
-                                      : "bg-emerald-500"
-                                  }`}
-                                  style={{ width: `${Math.min(100, b.occupancyPercent)}%` }}
-                                />
-                              </div>
-                              <span className="font-mono tabular-nums font-bold text-[10px] sm:text-[11px] w-8 sm:w-9 text-right">
-                                {b.occupancyPercent}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-slate-100 dark:bg-[#0c1930] font-bold border-t-2 border-slate-300 dark:border-[#1e3a5f] whitespace-nowrap">
-                      <tr>
-                        <td colSpan={2} className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                          {filteredSpaceData.selectedBuilding
-                            ? isThai
-                              ? `รวม${filteredSpaceData.selectedBuilding.buildingNameTh} (Total)`
-                              : `${filteredSpaceData.selectedBuilding.buildingNameEn} Total`
-                            : isThai
-                            ? "รวมทุกอาคารคลังสินค้า (Total)"
-                            : "All Buildings Total"}
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-black text-cyan-600 dark:text-cyan-400">
-                          {filteredSpaceData.warehouseTotals.totalMeters.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ม.
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                          {filteredSpaceData.warehouseTotals.availableBaskets}
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                          {filteredSpaceData.warehouseTotals.occupiedBaskets}
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-rose-600 dark:text-rose-400">
-                          {filteredSpaceData.warehouseTotals.fullBaskets}
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-slate-500">
-                          {filteredSpaceData.warehouseTotals.maintenanceBaskets}
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums text-cyan-600 dark:text-cyan-400">
-                          {filteredSpaceData.warehouseTotals.totalCoils.toLocaleString()}
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black text-cyan-600 dark:text-cyan-400">
-                          {filteredSpaceData.warehouseTotals.totalWeightKg.toLocaleString()} kg
-                        </td>
-                        <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-black">
-                          {filteredSpaceData.warehouseOccupancyPercent}%
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </section>
-            </div>
-          )}
-
-          {/* =========================================================================
               PART 2: พื้นที่วางวัตถุดิบรอผลิตหน้าเครื่องจักร (TM 1-14 / CF 1, 2, 4, 5)
               ========================================================================= */}
-          {(spaceReportSubTab === "all" || spaceReportSubTab === "machine") && (
+          {spaceReportSubTab === "machine" && (
             <section className="rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md overflow-hidden">
               <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
@@ -6701,19 +6582,14 @@ export function DailyReportView({
                         <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-[#1e3a5f] whitespace-nowrap">
                           <th className="!p-1.5 sm:!p-3 !text-center w-10 sm:w-14">#</th>
                           <th className="!p-1.5 sm:!p-3 !text-left">{isThai ? "เครื่องจักร" : "Machine"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "แคร่ทั้งหมด" : "Total Racks"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-center !text-emerald-600 dark:!text-emerald-400">{isThai ? "ว่าง" : "Avail"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-center !text-amber-600 dark:!text-amber-400">{isThai ? "ใช้งาน" : "Occupied"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-center !text-rose-600 dark:!text-rose-400">{isThai ? "เต็ม" : "Full"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "พื้นที่ใช้ / ความจุ (m)" : "Used / Cap (m)"}</th>
-                          <th className="!p-1.5 sm:!p-3 !text-center">{isThai ? "อัตราใช้พื้นที่" : "Utilization"}</th>
+                          <th className="!p-1.5 sm:!p-3 !text-center w-[42%] sm:w-[48%] min-w-[140px]">{isThai ? "อัตราใช้พื้นที่" : "Utilization"}</th>
                           <th className="!p-1.5 sm:!p-3 !text-center min-w-[190px] sm:min-w-[220px]">{isThai ? "สถานะการผลิต" : "Production Status"}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
                         {filteredMachines.length === 0 ? (
                           <tr>
-                            <td colSpan={9} className="!p-5 sm:!p-8 !text-center text-slate-400 text-[11px] sm:text-xs font-medium">
+                            <td colSpan={4} className="!p-5 sm:!p-8 !text-center text-slate-400 text-[11px] sm:text-xs font-medium">
                               {isThai
                                 ? "ไม่พบเครื่องจักรที่ตรงกับเงื่อนไขตัวกรอง"
                                 : "No machine staging records match the filter."}
@@ -6729,26 +6605,11 @@ export function DailyReportView({
                               <td className="!p-1.5 sm:!p-3 !text-left font-mono font-black text-amber-600 dark:text-amber-400 whitespace-nowrap">
                                 {m.machineCode}
                               </td>
-                              <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold">
-                                {m.totalRacks}
-                              </td>
-                              <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
-                                {m.availableRacks}
-                              </td>
-                              <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-amber-600 dark:text-amber-400">
-                                {m.occupiedRacks}
-                              </td>
-                              <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold text-rose-600 dark:text-rose-400">
-                                {m.fullRacks}
-                              </td>
-                              <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-bold">
-                                {m.totalUsedMeters} / {m.totalCapacityMeters} m
-                              </td>
-                              <td className="!p-1.5 sm:!p-3 !text-center">
-                                <div className="flex items-center justify-center gap-1.5 sm:gap-2">
-                                  <div className="w-12 sm:w-16 bg-slate-200 dark:bg-slate-700 h-1.5 sm:h-2 rounded-full overflow-hidden">
+                              <td className="!p-1.5 sm:!p-3">
+                                <div className="w-full flex items-center gap-2 sm:gap-3">
+                                  <div className="flex-1 min-w-[80px] bg-slate-200 dark:bg-slate-700 h-2 sm:h-2.5 rounded-full overflow-hidden">
                                     <div
-                                      className={`h-full rounded-full ${
+                                      className={`h-full rounded-full transition-all duration-300 ${
                                         m.utilizationPercent >= 85
                                           ? "bg-rose-500"
                                           : m.utilizationPercent >= 50
@@ -6758,7 +6619,7 @@ export function DailyReportView({
                                       style={{ width: `${Math.min(100, m.utilizationPercent)}%` }}
                                     />
                                   </div>
-                                  <span className="font-mono tabular-nums font-bold text-[10px] sm:text-[11px] w-8 sm:w-9 text-right">
+                                  <span className="font-mono tabular-nums font-bold text-[10px] sm:text-[11px] w-8 sm:w-9 shrink-0 text-right">
                                     {m.utilizationPercent}%
                                   </span>
                                 </div>
@@ -6880,23 +6741,7 @@ export function DailyReportView({
                           <td colSpan={2} className="!p-1.5 sm:!p-3 !text-left uppercase tracking-wider text-slate-700 dark:text-slate-200">
                             {isThai ? "รวมพื้นที่หน้าเครื่องจักรทั้งหมด (Total)" : "All Machines Total"}
                           </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums">
-                            {storageSpaceAnalytics.machineTotals.totalRacks}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
-                            {storageSpaceAnalytics.machineTotals.availableRacks}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                            {storageSpaceAnalytics.machineTotals.occupiedRacks}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-rose-600 dark:text-rose-400">
-                            {storageSpaceAnalytics.machineTotals.fullRacks}
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                            {storageSpaceAnalytics.machineTotals.totalUsedMeters} /{" "}
-                            {storageSpaceAnalytics.machineTotals.totalCapacityMeters} m
-                          </td>
-                          <td className="!p-1.5 sm:!p-3 !text-center font-mono tabular-nums font-black">
+                          <td className="!p-1.5 sm:!p-3 !text-right font-mono tabular-nums font-black">
                             {storageSpaceAnalytics.machineUtilizationPercent}%
                           </td>
                           <td className="!p-1.5 sm:!p-3 !text-center font-mono text-[10.5px] sm:text-xs min-w-[190px] sm:min-w-[220px]">
