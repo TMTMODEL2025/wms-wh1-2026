@@ -2016,7 +2016,6 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
         ? {
             ...itm,
             status: "staged",
-            deliveryStatus: "in_transit",
             stagedAt: timestamp,
             coilNo: itm.coilNo && itm.coilNo !== "-" ? itm.coilNo : enriched.coilNo,
             grade: itm.grade && itm.grade !== "-" ? itm.grade : enriched.grade,
@@ -2037,6 +2036,13 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
+    // Keep local state synchronously updated so clicking "เสร็จสิ้นการสแกน" right away includes this batch
+    setStagingOrders((prev) =>
+      prev.map((o) =>
+        o.orderNo.toUpperCase() === updatedOrder.orderNo.toUpperCase() ? updatedOrder : o
+      )
+    );
+
     // Expand this order table so user sees the updated status
     setExpandedOrderNos((prev) =>
       prev.includes(activeOrder.orderNo) ? prev : [...prev, activeOrder.orderNo]
@@ -2047,40 +2053,14 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     setOutboundScanStatus({
       type: "success",
       message: isThai
-        ? `สแกนสำเร็จ! Batch [${cleanCode}] -> สถานะ "อยู่ระหว่างขนส่ง" (ส่งงานไปยัง Material Handling แล้ว · เหลือรอเตรียม ${remainingCount} รายการ)`
-        : `Scanned Batch [${cleanCode}] -> In Transit (${remainingCount} remaining)`,
+        ? `สแกนสำเร็จ! Batch [${cleanCode}] -> เตรียมแล้ว (กด "เสร็จสิ้นการสแกน" เพื่อส่งงานให้คนขับ · เหลือรอเตรียม ${remainingCount} รายการ)`
+        : `Scanned Batch [${cleanCode}] -> Staged (${remainingCount} remaining)`,
       scannedBatch: cleanCode,
     });
     setOutboundBarcodeInput("");
     setTimeout(() => outboundScannerInputRef.current?.focus(), 60);
 
     await saveCoilStagingOrderToCloud(updatedOrder);
-
-    // Auto-dispatch RM transfer job to Material Handling (ย้ายงาน RM)
-    const scannedWeightKg =
-      Number(targetItem.weightKg) > 0
-        ? Number(targetItem.weightKg)
-        : Number(enriched.weightKg) || 0;
-    const scannedOriginLoc =
-      enriched.sourceLocation && enriched.sourceLocation !== "-"
-        ? enriched.sourceLocation
-        : targetItem.sourceLocation && targetItem.sourceLocation !== "-"
-        ? targetItem.sourceLocation
-        : "";
-    void upsertRmTransferFromPickListScan({
-      rmProductType: "coil",
-      sourceCollection: "coil_staging",
-      sourceOrderNo: updatedOrder.orderNo,
-      sourceOrderDocId: updatedOrder.id,
-      machineId: updatedOrder.machineId,
-      items: [
-        {
-          batch: cleanCode,
-          weightKg: scannedWeightKg,
-          originLocation: scannedOriginLoc,
-        },
-      ],
-    }).catch(console.error);
 
     onLogTransaction?.(
       `Prepared Coil PickList Batch ${cleanCode} for Order ${activeOrder.orderNo} (${activeOrder.machineId})`,
@@ -2094,17 +2074,102 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
     processOutboundBarcodeScan(outboundBarcodeInput);
   };
 
-  const handleFinishOutboundScan = () => {
+  const handleFinishOutboundScan = async (dispatchToMh = false) => {
     setIsOutboundCameraActive(false);
     setIsOutboundScannerOpen(false);
     if (!activeOrder) return;
-    const preparedCount = activeOrder.items.filter(
+
+    const latestOrder =
+      stagingOrders.find((o) => o.orderNo.toUpperCase() === activeOrder.orderNo.toUpperCase()) ||
+      activeOrder;
+
+    const preparedCount = latestOrder.items.filter(
       (i) => i.status === "staged" || i.status === "issued"
     ).length;
+
+    // Dispatch undispatched staged coils to Material Handling ONLY when user presses "เสร็จสิ้นการสแกน"
+    const undispatchedItems = dispatchToMh
+      ? latestOrder.items.filter(
+          (itm) =>
+            itm.status === "staged" &&
+            itm.deliveryStatus !== "delivered" &&
+            !itm.mhTransferId &&
+            Boolean(itm.batch && itm.batch.trim())
+        )
+      : [];
+
+    if (dispatchToMh && undispatchedItems.length > 0) {
+      let dispatchedTransferId: string | undefined;
+      try {
+        const dispatchInputs = undispatchedItems.map((itm) => {
+          const cleanCode = itm.batch.trim().toUpperCase();
+          const enriched = enrichBatchFromCoilStockOrSap(cleanCode);
+          const scannedWeightKg =
+            Number(itm.weightKg) > 0 ? Number(itm.weightKg) : Number(enriched.weightKg) || 0;
+          const scannedOriginLoc =
+            itm.sourceLocation && itm.sourceLocation !== "-"
+              ? itm.sourceLocation
+              : enriched.sourceLocation && enriched.sourceLocation !== "-"
+              ? enriched.sourceLocation
+              : "";
+          return {
+            batch: cleanCode,
+            weightKg: scannedWeightKg,
+            originLocation: scannedOriginLoc,
+          };
+        });
+
+        const rmTransfer = await upsertRmTransferFromPickListScan({
+          rmProductType: "coil",
+          sourceCollection: "coil_staging",
+          sourceOrderNo: latestOrder.orderNo,
+          sourceOrderDocId: latestOrder.id,
+          machineId: latestOrder.machineId,
+          items: dispatchInputs,
+        });
+        dispatchedTransferId = rmTransfer?.id;
+      } catch (err) {
+        console.error("Failed to dispatch Coil RM transfer to Material Handling:", err);
+      }
+
+      const undispatchedBatchSet = new Set(
+        undispatchedItems.map((itm) => itm.batch.trim().toUpperCase())
+      );
+
+      const syncedOrder: CoilStagingOrder = {
+        ...latestOrder,
+        items: latestOrder.items.map((itm) =>
+          undispatchedBatchSet.has(itm.batch.trim().toUpperCase())
+            ? {
+                ...itm,
+                deliveryStatus: "in_transit" as const,
+                ...(dispatchedTransferId ? { mhTransferId: dispatchedTransferId } : {}),
+              }
+            : itm
+        ),
+        updatedAt: new Date().toISOString(),
+      };
+
+      setStagingOrders((prev) =>
+        prev.map((o) =>
+          o.orderNo.toUpperCase() === syncedOrder.orderNo.toUpperCase() ? syncedOrder : o
+        )
+      );
+      await saveCoilStagingOrderToCloud(syncedOrder, false);
+
+      showToast(
+        isThai
+          ? `ส่งงานย้าย RM Order ${syncedOrder.orderNo} (${undispatchedItems.length} ม้วน) ไปยังตารางคนขับรถ Material Handling เรียบร้อยแล้ว`
+          : `Dispatched Coil RM transfer Order ${syncedOrder.orderNo} (${undispatchedItems.length} coils) to Material Handling.`,
+        "success"
+      );
+      return;
+    }
+
     showToast(
       isThai
-        ? `บันทึกการสแกนเตรียมเบิก Order ${activeOrder.orderNo} เรียบร้อย (${preparedCount}/${activeOrder.items.length} รายการ)`
-        : `Saved Pick List scan progress (${preparedCount}/${activeOrder.items.length})`,
+        ? `บันทึกการสแกนเตรียมเบิก Order ${latestOrder.orderNo} เรียบร้อย (${preparedCount}/${latestOrder.items.length} รายการ)`
+        : `Saved Pick List scan progress (${preparedCount}/${latestOrder.items.length})`,
       "success"
     );
   };
@@ -5558,10 +5623,15 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
                                             <CheckCircle2 size={11} />
                                             {isThai ? "ส่งสำเร็จ" : "Delivered"}
                                           </span>
-                                        ) : (
+                                        ) : item.deliveryStatus === "in_transit" || Boolean(item.mhTransferId) ? (
                                           <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-sky-500/20 text-sky-600 dark:text-sky-400 inline-flex items-center gap-1">
                                             <Truck size={11} />
                                             {isThai ? "อยู่ระหว่างขนส่ง" : "In Transit"}
+                                          </span>
+                                        ) : (
+                                          <span className="px-2 py-0.5 rounded text-[10.5px] font-extrabold bg-teal-500/20 text-teal-600 dark:text-teal-400 inline-flex items-center gap-1">
+                                            <CheckCircle2 size={11} />
+                                            {isThai ? "เตรียมแล้ว (รอส่ง)" : "Staged"}
                                           </span>
                                         )
                                       ) : (
@@ -6563,7 +6633,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               </div>
               <button
                 type="button"
-                onClick={handleFinishOutboundScan}
+                onClick={() => void handleFinishOutboundScan(false)}
                 className="p-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white cursor-pointer"
               >
                 <X size={16} />
@@ -6709,7 +6779,7 @@ export const CoilManagement: React.FC<CoilManagementProps> = ({
               <div className="flex justify-end pt-2">
                 <button
                   type="button"
-                  onClick={handleFinishOutboundScan}
+                  onClick={() => void handleFinishOutboundScan(true)}
                   className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold cursor-pointer"
                 >
                   {isThai ? "เสร็จสิ้นการสแกน" : "Done"}

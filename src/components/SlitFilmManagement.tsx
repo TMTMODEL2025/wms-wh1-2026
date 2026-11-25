@@ -2957,8 +2957,8 @@ export function SlitFilmManagement({
     [isThai, sapMasterMap]
   );
 
-  // Handler: Finish Outbound Scanning modal & immediately persist prepared items to Firestore/central state
-  const handleFinishOutboundScan = async () => {
+  // Handler: Finish Outbound Scanning modal & persist prepared items; dispatch to Material Handling RM queue only when "เสร็จสิ้นการสแกน" is explicitly pressed
+  const handleFinishOutboundScan = async (dispatchToMh = false) => {
     setIsOutboundCameraActive(false);
     setIsOutboundScannerOpen(false);
 
@@ -2982,16 +2982,79 @@ export function SlitFilmManagement({
       : verifiedCountNow > 0
       ? "in_progress"
       : "pending";
+    const resolvedOrderDocId =
+      latestOrder.id || `ORD-${latestOrder.orderNo.trim().replace(/[^a-zA-Z0-9_\-]/g, "_")}`;
+
+    // Identify verified batches not yet dispatched to Material Handling
+    const undispatchedItems = dispatchToMh
+      ? (latestOrder.items || []).filter(
+          (itm) =>
+            itm.status === "verified" &&
+            !itm.machineIssued &&
+            itm.deliveryStatus !== "delivered" &&
+            !itm.mhTransferId &&
+            Boolean(itm.batch && itm.batch.trim())
+        )
+      : [];
+
+    let dispatchedTransferId: string | undefined;
+    if (dispatchToMh && undispatchedItems.length > 0) {
+      const dispatchInputs = undispatchedItems.map((itm) => {
+        const bKey = itm.batch.trim().toUpperCase();
+        const matchedInboundRec = inboundList.find((r) => r.batch.trim().toUpperCase() === bKey);
+        const resolvedOriginLoc =
+          findInboundLocation(bKey) ||
+          matchedInboundRec?.location ||
+          itm.storageLocation ||
+          "";
+        const resolvedWeightKg =
+          Number(sapMasterMap.get(bKey)?.weightKg) ||
+          Number(matchedInboundRec?.weightKg) ||
+          Number(itm.reqQty) ||
+          0;
+        return {
+          batch: bKey,
+          weightKg: resolvedWeightKg,
+          originLocation: resolvedOriginLoc,
+        };
+      });
+
+      try {
+        const rmTransfer = await upsertRmTransferFromPickListScan({
+          rmProductType: "slit",
+          sourceCollection: "slit_picklists",
+          sourceOrderNo: latestOrder.orderNo,
+          sourceOrderDocId: resolvedOrderDocId,
+          machineId: latestOrder.machineId,
+          items: dispatchInputs,
+        });
+        dispatchedTransferId = rmTransfer?.id;
+      } catch (err) {
+        console.error("Failed to dispatch Slit RM transfer to Material Handling:", err);
+      }
+    }
+
+    const undispatchedBatchSet = new Set(
+      undispatchedItems.map((itm) => itm.batch.trim().toUpperCase())
+    );
 
     const syncedOrder: PickListOrder = {
       ...latestOrder,
-      id: latestOrder.id || `ORD-${latestOrder.orderNo.trim().replace(/[^a-zA-Z0-9_\-]/g, "_")}`,
+      id: resolvedOrderDocId,
       status: resolvedStatus,
-      items: (latestOrder.items || []).map((itm) =>
-        itm.status === "verified"
-          ? { ...itm, machineIssued: Boolean(itm.machineIssued) }
-          : itm
-      ),
+      items: (latestOrder.items || []).map((itm) => {
+        if (itm.status !== "verified") return itm;
+        const bKey = (itm.batch || "").trim().toUpperCase();
+        if (dispatchToMh && undispatchedBatchSet.has(bKey)) {
+          return {
+            ...itm,
+            machineIssued: Boolean(itm.machineIssued),
+            deliveryStatus: "in_transit" as const,
+            ...(dispatchedTransferId ? { mhTransferId: dispatchedTransferId } : {}),
+          };
+        }
+        return { ...itm, machineIssued: Boolean(itm.machineIssued) };
+      }),
     };
 
     const nextPickLists = pickListsRef.current.map((o) =>
@@ -3008,12 +3071,19 @@ export function SlitFilmManagement({
 
     try {
       await savePickListToCloud(syncedOrder);
-      if (verifiedCountNow > 0) {
+      if (dispatchToMh && undispatchedItems.length > 0) {
         setNotificationToast({
           type: "success",
           message: isThai
-            ? `บันทึกสถานะเตรียมเบิกใบสั่ง [${syncedOrder.orderNo}] (${verifiedCountNow}/${checkPool.length} รายการ) สถานะ "เตรียมแล้ว (รอรับเข้า)" พร้อมซิงค์หน้าจ่ายหน้าเครื่องแล้ว`
-            : `Synced Pick List [${syncedOrder.orderNo}] (${verifiedCountNow}/${checkPool.length} prepared) to Machine Issue.`,
+            ? `ส่งงานย้าย RM ใบสั่ง [${syncedOrder.orderNo}] (${undispatchedItems.length} รายการ) ไปยังตารางคนขับรถ Material Handling เรียบร้อยแล้ว`
+            : `Dispatched RM transfer [${syncedOrder.orderNo}] (${undispatchedItems.length} items) to Material Handling.`,
+        });
+      } else if (verifiedCountNow > 0) {
+        setNotificationToast({
+          type: "success",
+          message: isThai
+            ? `บันทึกสถานะเตรียมเบิกใบสั่ง [${syncedOrder.orderNo}] (${verifiedCountNow}/${checkPool.length} รายการ) เรียบร้อยแล้ว`
+            : `Synced Pick List [${syncedOrder.orderNo}] (${verifiedCountNow}/${checkPool.length} prepared).`,
         });
       }
     } catch (error) {
@@ -3070,6 +3140,7 @@ export function SlitFilmManagement({
     }
 
     // Mark item as verified safely across all items in the latest order snapshot
+    // (RM dispatch to Material Handling is deferred until the user clicks "เสร็จสิ้นการสแกน")
     const nowTime = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
     const nextItems = latestTargetOrder.items.map((itm) => {
       if (itm.batch && itm.batch.trim().toUpperCase() === trimmed) {
@@ -3077,7 +3148,6 @@ export function SlitFilmManagement({
         return {
           ...restItm,
           status: "verified" as const,
-          deliveryStatus: "in_transit" as const,
           scannedAt: nowTime,
           machineIssued: false,
         };
@@ -3108,33 +3178,6 @@ export function SlitFilmManagement({
 
     // Immediately persist updated PickListOrder to Firestore & central state
     void savePickListToCloud(updatedActiveOrder).catch(console.error);
-
-    // Auto-dispatch RM transfer job to Material Handling (ย้ายงาน RM)
-    const matchedInboundRec = inboundList.find((r) => r.batch.trim().toUpperCase() === trimmed);
-    const resolvedOriginLoc =
-      findInboundLocation(trimmed) ||
-      matchedInboundRec?.location ||
-      matchedItem.storageLocation ||
-      "";
-    const resolvedWeightKg =
-      Number(sapMasterMap.get(trimmed)?.weightKg) ||
-      Number(matchedInboundRec?.weightKg) ||
-      Number(matchedItem.reqQty) ||
-      0;
-    void upsertRmTransferFromPickListScan({
-      rmProductType: "slit",
-      sourceCollection: "slit_picklists",
-      sourceOrderNo: updatedActiveOrder.orderNo,
-      sourceOrderDocId: updatedActiveOrder.id,
-      machineId: updatedActiveOrder.machineId,
-      items: [
-        {
-          batch: trimmed,
-          weightKg: resolvedWeightKg,
-          originLocation: resolvedOriginLoc,
-        },
-      ],
-    }).catch(console.error);
 
     if (isAllVerified) {
       syncVerifiedOrderInboundRefs(updatedActiveOrder);
@@ -7950,10 +7993,15 @@ export function SlitFilmManagement({
                                                     <CheckCircle2 size={11} />
                                                     <span>{isThai ? "ส่งสำเร็จ" : "Delivered"}</span>
                                                   </span>
-                                                ) : (
+                                                ) : item.deliveryStatus === "in_transit" || Boolean(item.mhTransferId) ? (
                                                   <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-bold bg-sky-100 dark:bg-sky-900/60 text-sky-800 dark:text-sky-300">
                                                     <Truck size={11} />
                                                     <span>{isThai ? "อยู่ระหว่างขนส่ง" : "In Transit"}</span>
+                                                  </span>
+                                                ) : (
+                                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9.5px] sm:text-[10px] font-bold bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300">
+                                                    <Check size={11} />
+                                                    <span>{isThai ? "เตรียมแล้ว (รอส่ง)" : "Prepared"}</span>
                                                   </span>
                                                 )
                                               ) : (
@@ -12099,7 +12147,7 @@ export function SlitFilmManagement({
       {isOutboundScannerOpen && activePickListOrder && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center p-0 pt-0 sm:px-4 sm:pt-0 bg-slate-950/75 backdrop-blur-sm animate-fade-in"
-          onMouseDown={() => void handleFinishOutboundScan()}
+          onMouseDown={() => void handleFinishOutboundScan(false)}
         >
           <div
             className="w-full max-w-xl max-h-[95vh] flex flex-col mt-0 rounded-b-2xl rounded-t-none border-t-0 border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
@@ -12117,7 +12165,7 @@ export function SlitFilmManagement({
               </div>
               <button
                 type="button"
-                onClick={() => void handleFinishOutboundScan()}
+                onClick={() => void handleFinishOutboundScan(false)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
               >
                 <X size={20} />
@@ -12295,7 +12343,7 @@ export function SlitFilmManagement({
               <div className="pt-2 border-t border-slate-100 dark:border-[#1e3a5f] flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => void handleFinishOutboundScan()}
+                  onClick={() => void handleFinishOutboundScan(true)}
                   className="w-full py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
                 >
                   {isThai ? "เสร็จสิ้นการสแกน" : "Done Scanning"}
