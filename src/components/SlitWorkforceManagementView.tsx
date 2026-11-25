@@ -21,7 +21,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  BarChart3,
 } from "lucide-react";
+import { SlitWorkforceInfographicReport } from "./SlitWorkforceInfographicReport";
 import {
   subscribeToWmsEmployees,
   getActiveRecorderDisplay,
@@ -446,6 +448,7 @@ export function SlitWorkforceManagementView({
   const [savingRowKeys, setSavingRowKeys] = useState<Record<string, boolean>>({});
   const [brokenPhotoIds, setBrokenPhotoIds] = useState<Record<string, boolean>>({});
   const [inlineFeedback, setInlineFeedback] = useState<string>("");
+  const [activeView, setActiveView] = useState<"table" | "infographic">("table");
 
   // Filter states
   const [departmentScope, setDepartmentScope] = useState<string>("film_slit");
@@ -1385,6 +1388,19 @@ export function SlitWorkforceManagementView({
     return { film: filmSectionEmployees, others };
   }, [filmSectionEmployees, activeEmployees]);
 
+  if (activeView === "infographic") {
+    return (
+      <SlitWorkforceInfographicReport
+        isThai={isThai}
+        selectedDate={selectedDate}
+        onChangeDate={setSelectedDate}
+        rows={unifiedRows}
+        onBackToTable={() => setActiveView("table")}
+        onLogTransaction={onLogTransaction}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header Bar with Date Selector */}
@@ -1447,6 +1463,15 @@ export function SlitWorkforceManagementView({
               {isThai ? "วันนี้" : "Today"}
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={() => setActiveView("infographic")}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          >
+            <BarChart3 size={15} />
+            <span>{isThai ? "รายงาน Infographic (ส่ง LINE)" : "LINE Infographic Report"}</span>
+          </button>
 
           <button
             type="button"
