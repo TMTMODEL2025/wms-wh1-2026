@@ -24,6 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
+import { getVehicleSearchableText, getVehicleTypeDisplayLabel } from "../utils/vehicleHelpers";
 import {
   MhFuelStockRecord,
   subscribeToMhFuelStock,
@@ -227,7 +228,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
     const totalCostNum = Number((qtyNum * latestPrice).toFixed(2));
 
     const targetVehicle = vehicles.find((v) => v.vehicleId === outVehicleId);
-    const vehicleLabel = targetVehicle ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})` : `${outVehicleId} - Warehouse Fleet`;
+    const vehicleLabel = targetVehicle ? `${targetVehicle.vehicleId} - ${getVehicleTypeDisplayLabel(targetVehicle.vehicleType, targetVehicle)} (${targetVehicle.description || "Fleet"})` : `${outVehicleId} - Warehouse Fleet`;
     const txId = `FUEL-${new Date().getFullYear()}-${String(transactions.length + 1).padStart(3, "0")}-${Date.now().toString().slice(-4)}`;
     const nowStr = new Date().toISOString().replace("T", " ").substring(0, 16);
 
@@ -278,11 +279,15 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
   };
 
   const filteredTransactions = transactions.filter((t) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchedVeh = vehicles.find((v) => t.referenceSource.startsWith(v.vehicleId));
     const matchesSearch =
-      t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.recorderName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.referenceSource.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.purposeOrNotes.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      t.id.toLowerCase().includes(q) ||
+      t.recorderName.toLowerCase().includes(q) ||
+      t.referenceSource.toLowerCase().includes(q) ||
+      t.purposeOrNotes.toLowerCase().includes(q) ||
+      (matchedVeh ? getVehicleSearchableText(matchedVeh).includes(q) : false);
 
     const matchesType = typeFilter === "All" || t.type.includes(typeFilter);
     const matchesFuelType = fuelTypeFilter === "All" || t.fuelType.includes(fuelTypeFilter);
@@ -718,7 +723,7 @@ export function FuelManagement({ vehicles }: FuelManagementProps) {
                   <option value="">-- เลือกรถ / Select Vehicle --</option>
                   {vehicles.map((v) => (
                     <option key={v.id} value={v.vehicleId}>
-                      {v.vehicleId} - {v.vehicleType} ({v.description || "Active Fleet"})
+                      {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)} ({v.description || "Active Fleet"})
                     </option>
                   ))}
                 </select>

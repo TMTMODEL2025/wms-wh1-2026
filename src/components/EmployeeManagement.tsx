@@ -43,7 +43,7 @@ import {
   AssignmentStatus,
   WmsSectionId,
 } from "../types/officer";
-import { EMPLOYEE_ROLES, MASTER_DEPARTMENTS } from "../data/officerData";
+import { EMPLOYEE_ROLES, isDriverRole, MASTER_DEPARTMENTS } from "../data/officerData";
 import {
   getDefaultSectionsForRoleAndDept,
   getSectionMeta,
@@ -140,7 +140,11 @@ const ROLE_SENIORITY_RANK: Record<string, number> = {
   "Sr.Inspector": 60,
   Inspector: 70,
   Operator: 80,
-  Driver: 90,
+  "Technical Service Forklift": 82,
+  "Sr.Forklift Driver": 85,
+  "Forklift Driver": 90,
+  "Tractor Driver": 92,
+  Driver: 95,
   Other: 100,
 };
 
@@ -371,7 +375,7 @@ export function EmployeeManagement({
     const total = scopedEmployees.length;
     const active = scopedEmployees.filter((e) => e.employmentStatus === "Active").length;
     const inactive = scopedEmployees.filter((e) => e.employmentStatus === "Inactive").length;
-    const activeDrivers = scopedEmployees.filter((e) => e.role === "Driver" && e.employmentStatus === "Active").length;
+    const activeDrivers = scopedEmployees.filter((e) => isDriverRole(e.role) && e.employmentStatus === "Active").length;
     const onDutyDriversToday = Array.from(activeDriverAssignmentMap.keys()).length;
     const officersAndSupervisors = scopedEmployees.filter(
       (e) =>
@@ -480,7 +484,7 @@ export function EmployeeManagement({
     const groups = Array.from(groupMap.entries()).map(([groupKey, list]) => {
       const activeCount = list.filter((e) => e.employmentStatus === "Active").length;
       const inactiveCount = list.length - activeCount;
-      const driverCount = list.filter((e) => e.role === "Driver").length;
+      const driverCount = list.filter((e) => isDriverRole(e.role)).length;
       const minPositionRank = Math.min(...list.map((e) => getEmployeePositionRank(e)));
       return {
         groupKey,
@@ -618,9 +622,9 @@ export function EmployeeManagement({
       employmentStatus: form.employmentStatus,
       allowedSections: form.allowedSections,
       photoUrl: form.photoUrl || undefined,
-      licenseType: form.role === "Driver" ? form.licenseType?.trim() || "Class 2 Industrial Heavy Equipment" : undefined,
+      licenseType: isDriverRole(form.role) ? form.licenseType?.trim() || "Class 2 Industrial Heavy Equipment" : undefined,
       notes: form.notes?.trim() || undefined,
-      legacyDriverId: form.role === "Driver" ? trimmedId : undefined,
+      legacyDriverId: isDriverRole(form.role) ? trimmedId : undefined,
       createdAt: timestampStr,
       updatedAt: timestampStr,
     };
@@ -712,7 +716,7 @@ export function EmployeeManagement({
           employmentStatus: form.employmentStatus,
           allowedSections: form.allowedSections,
           photoUrl: form.photoUrl || undefined,
-          licenseType: form.role === "Driver" ? form.licenseType?.trim() || emp.licenseType : undefined,
+          licenseType: isDriverRole(form.role) ? form.licenseType?.trim() || emp.licenseType : undefined,
           notes: form.notes?.trim() || undefined,
           updatedAt: timestampStr,
         };
@@ -1360,7 +1364,7 @@ export function EmployeeManagement({
                                 : ""}
                             </div>
                           )}
-                          {!todayDuty && emp.role === "Driver" && todayAssignment && (
+                          {!todayDuty && isDriverRole(emp.role) && todayAssignment && (
                             <div
                               style={{
                                 fontSize: 10,
@@ -1425,7 +1429,7 @@ export function EmployeeManagement({
                             {todayDuty.team} | {todayDuty.shift} | {todayDuty.workArea}
                           </span>
                         </div>
-                      ) : emp.role === "Driver" ? (
+                      ) : isDriverRole(emp.role) ? (
                         todayAssignment ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                             <span className="status status-inuse" style={{ padding: "2px 6px", fontSize: 11, fontWeight: 700 }}>
@@ -1631,8 +1635,13 @@ export function EmployeeManagement({
 // ROLE BADGE COMPONENT
 function RoleBadge({ role }: { role: EmployeeRole }) {
   switch (role) {
+    case "Sr.Forklift Driver":
+    case "Forklift Driver":
+    case "Tractor Driver":
     case "Driver":
-      return <span className="status status-inuse">Driver</span>;
+      return <span className="status status-inuse">{role}</span>;
+    case "Technical Service Forklift":
+      return <span className="status status-maintenance">{role}</span>;
     case "Officer":
     case "Sr.Warehouse Officer":
       return <span className="status status-officer">{role}</span>;
@@ -1789,11 +1798,11 @@ function AddEmployeeModal({
   const [employeeName, setEmployeeName] = useState<string>("");
   const [department, setDepartment] = useState<string>(defaultDept);
   const [jobPosition, setJobPosition] = useState<string>("");
-  const [role, setRole] = useState<EmployeeRole>("Driver");
+  const [role, setRole] = useState<EmployeeRole>("Forklift Driver");
   const [phoneNumber, setPhoneNumber] = useState<string>("");
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>("Active");
   const [allowedSections, setAllowedSections] = useState<WmsSectionId[]>(() =>
-    getDefaultSectionsForRoleAndDept("Driver", defaultDept)
+    getDefaultSectionsForRoleAndDept("Forklift Driver", defaultDept)
   );
   const [hasCustomizedSections, setHasCustomizedSections] = useState<boolean>(false);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(undefined);
@@ -1835,7 +1844,7 @@ function AddEmployeeModal({
       employmentStatus,
       allowedSections,
       photoUrl,
-      licenseType: role === "Driver" ? licenseType : undefined,
+      licenseType: isDriverRole(role) ? licenseType : undefined,
       notes: notes.trim() || undefined,
     });
 
@@ -1964,12 +1973,13 @@ function AddEmployeeModal({
                 {role}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {EMPLOYEE_ROLES.map((r) => {
                 const checked = role === r;
                 return (
                   <label
                     key={r}
+                    title={r}
                     className={`flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition ${
                       checked
                         ? "border-sky-400 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-100"
@@ -2058,7 +2068,7 @@ function AddEmployeeModal({
             </div>
           </div>
 
-          {role === "Driver" && (
+          {isDriverRole(role) && (
             <label className="form-field">
               Industrial Equipment Driver License
               <input
@@ -2134,7 +2144,9 @@ function EditEmployeeModal({
   const [employeeName, setEmployeeName] = useState<string>(employee.employeeName);
   const [department, setDepartment] = useState<string>(employee.department);
   const [jobPosition, setJobPosition] = useState<string>(employee.jobPosition);
-  const [role, setRole] = useState<EmployeeRole>(employee.role);
+  const [role, setRole] = useState<EmployeeRole>(() =>
+    EMPLOYEE_ROLES.includes(employee.role) ? employee.role : "Forklift Driver"
+  );
   const [phoneNumber, setPhoneNumber] = useState<string>(employee.phoneNumber || "");
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>(employee.employmentStatus);
   const [allowedSections, setAllowedSections] = useState<WmsSectionId[]>(() =>
@@ -2173,7 +2185,7 @@ function EditEmployeeModal({
       employmentStatus,
       allowedSections,
       photoUrl,
-      licenseType: role === "Driver" ? licenseType : undefined,
+      licenseType: isDriverRole(role) ? licenseType : undefined,
       notes: notes.trim() || undefined,
     });
 
@@ -2311,7 +2323,7 @@ function EditEmployeeModal({
             </label>
           </div>
 
-          {role === "Driver" && (
+          {isDriverRole(role) && (
             <label className="form-field">
               Industrial Equipment License
               <input
@@ -2562,7 +2574,7 @@ function ViewEmployeeDetailsModal({
               </div>
             </div>
 
-            {employee.role === "Driver" && (
+            {isDriverRole(employee.role) && (
               <div style={{ gridColumn: "span 2" }}>
                 <span>Industrial License:</span>
                 <div style={{ fontWeight: 600, marginTop: 2 }}>
@@ -2596,7 +2608,7 @@ function ViewEmployeeDetailsModal({
           </div>
 
           {/* Operational Assignment Status Card */}
-          {employee.role === "Driver" && (
+          {isDriverRole(employee.role) && (
             <div
               className="vehicle-info-box"
               style={{

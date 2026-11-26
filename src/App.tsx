@@ -91,8 +91,10 @@ import {
   saveStoredVehicles,
   loadStoredEmployees,
   saveStoredEmployees,
+  isDriverRole,
 } from "./data/officerData";
 import { Employee, Vehicle, VehicleAssignment, WmsActivityLogRecord } from "./types/officer";
+import { isForkliftVehicle } from "./utils/vehicleHelpers";
 import { LanguageProvider, useLanguage, Translations } from "./contexts/LanguageContext";
 import { APP_VERSION, APP_BUILD_LABEL, APP_UPDATED_DATE } from "./config/version";
 
@@ -4352,7 +4354,7 @@ function DashboardView({
       if (v.operationalStatus === "Maintenance" || v.status === "Maintenance") {
         maintList.push(v);
       }
-      if (v.vehicleType === "Forklift" || v.vehicleId.startsWith("FL")) {
+      if (isForkliftVehicle(v)) {
         forkliftList.push(v);
       }
     }
@@ -4393,7 +4395,7 @@ function DashboardView({
       if (isActive) {
         activeCount++;
       }
-      if (e.role === "Driver") {
+      if (isDriverRole(e.role)) {
         driversAll.push(e);
         if (isActive) driversActive.push(e);
       } else if (
@@ -6805,6 +6807,12 @@ function WmsApp({
                 onNavigateToAssignment={() => {
                   setActive("employees");
                   setSelectedRecord(null);
+                }}
+                onNavigateToFixFlush={() => {
+                  if (canAccessMenu("fix-flush")) {
+                    setActive("fix-flush");
+                    setSelectedRecord(null);
+                  }
                 }}
                 onLogTransaction={(activity, reference, status) => {
                   logModuleActivity("Vehicle Management", activity, reference, status, "vehicles");

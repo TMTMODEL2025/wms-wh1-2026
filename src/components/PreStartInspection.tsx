@@ -5,7 +5,6 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  ShieldCheck,
   CheckCircle2,
   AlertTriangle,
   Search,
@@ -13,15 +12,17 @@ import {
   Plus,
   X,
   FileText,
-  Truck,
-  Wrench,
-  Clock,
   Check,
   Trash2,
   RotateCcw,
   Gauge,
+  ChevronDown,
+  ChevronUp,
+  Image as ImageIcon,
+  Wrench,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
+import { getVehicleSearchableText, getVehicleTypeDisplayLabel } from "../utils/vehicleHelpers";
 import {
   appendWmsActivityLog,
   getActiveRecorderDisplay,
@@ -45,22 +46,127 @@ const INITIAL_INSPECTIONS: InspectionRecord[] = [];
 
 interface ChecklistTemplateItem {
   id?: string;
+  orderNo?: number;
   categoryThai: string;
   categoryEnglish: string;
+  criteriaLines?: string[];
+  imageUrl?: string;
   isCustom?: boolean;
 }
 
 const CUSTOM_CHECKLIST_STORAGE_KEY = "tmt_prestart_custom_checklist_items_v1";
+const FULL_REFERENCE_POSTER_URL = "/assets/aistudio/image_7b6bdcc5.png";
 
+/**
+ * มาตรฐานจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) 12 รายการ พร้อมรูปภาพประกอบ
+ */
 const DEFAULT_CHECKLIST_TEMPLATE: ChecklistTemplateItem[] = [
-  { categoryThai: "ระบบเบรกและเบรกมือ", categoryEnglish: "Braking System & Parking Brake" },
-  { categoryThai: "ระบบบังคับเลี้ยว", categoryEnglish: "Steering Control" },
-  { categoryThai: "คันโยกและกระบอกไฮดรอลิก", categoryEnglish: "Hydraulic Lift Levers & Cylinders" },
-  { categoryThai: "สภาพล้อ โครงยาง และน็อตล้อ", categoryEnglish: "Tires & Lug Nuts" },
-  { categoryThai: "แตรสัญญาณถอย และไฟส่องสว่าง", categoryEnglish: "Horn, Backup Alarm & LED Lights" },
-  { categoryThai: "ตรวจสอบการรั่วซึมของน้ำมัน", categoryEnglish: "Fluid Leaks Check" },
-  { categoryThai: "ระดับน้ำมันเชื้อเพลิงและแบตเตอรี่", categoryEnglish: "Fuel & Battery Level" },
+  {
+    id: "daily-01",
+    orderNo: 1,
+    categoryThai: "1. ระดับน้ำมันเครื่อง",
+    categoryEnglish: "ระดับต้องอยู่ระหว่าง MIN - MAX",
+    criteriaLines: ["ระดับต้องอยู่ระหว่าง MIN - MAX"],
+    imageUrl: "/assets/prestart/check-01.png",
+  },
+  {
+    id: "daily-02",
+    orderNo: 2,
+    categoryThai: "2. ระดับน้ำหล่อเย็น",
+    categoryEnglish: "ระดับต้องอยู่ระหว่าง FULL - LOW",
+    criteriaLines: ["ระดับต้องอยู่ระหว่าง FULL - LOW"],
+    imageUrl: "/assets/prestart/check-02.png",
+  },
+  {
+    id: "daily-03",
+    orderNo: 3,
+    categoryThai: "3. ระดับน้ำมันเชื้อเพลิง",
+    categoryEnglish: "ตรวจสอบปริมาณน้ำมันเพียงพอ",
+    criteriaLines: ["ตรวจสอบปริมาณน้ำมันเพียงพอ"],
+    imageUrl: "/assets/prestart/check-03.png",
+  },
+  {
+    id: "daily-04",
+    orderNo: 4,
+    categoryThai: "4. กรองอากาศ",
+    categoryEnglish: "ไม่อุดตัน / ไม่สกปรก",
+    criteriaLines: ["ไม่อุดตัน / ไม่สกปรก"],
+    imageUrl: "/assets/prestart/check-04.png",
+  },
+  {
+    id: "daily-05",
+    orderNo: 5,
+    categoryThai: "5. สายพาน",
+    categoryEnglish: "ไม่ชำรุด / ไม่หย่อน",
+    criteriaLines: ["ไม่ชำรุด / ไม่หย่อน"],
+    imageUrl: "/assets/prestart/check-05.png",
+  },
+  {
+    id: "daily-06",
+    orderNo: 6,
+    categoryThai: "6. น้ำมันเบรก",
+    categoryEnglish: "ระดับต้องอยู่ระหว่าง MIN - MAX",
+    criteriaLines: ["ระดับต้องอยู่ระหว่าง MIN - MAX"],
+    imageUrl: "/assets/prestart/check-06.png",
+  },
+  {
+    id: "daily-07",
+    orderNo: 7,
+    categoryThai: "7. ระบบไฟ / แสงสว่าง",
+    categoryEnglish: "ไฟหน้า / ไฟท้าย / ไฟเลี้ยว / แตร / ไฟเบรก",
+    criteriaLines: ["ไฟหน้า / ไฟท้าย / ไฟเลี้ยว", "แตร / ไฟเบรก"],
+    imageUrl: "/assets/prestart/check-07.png",
+  },
+  {
+    id: "daily-08",
+    orderNo: 8,
+    categoryThai: "8. ลมยาง / สภาพยาง",
+    categoryEnglish: "ลมยางตามกำหนด ดอกยางไม่สึกหรอ",
+    criteriaLines: ["ลมยางตามกำหนด ดอกยางไม่สึกหรอ"],
+    imageUrl: "/assets/prestart/check-08.png",
+  },
+  {
+    id: "daily-09",
+    orderNo: 9,
+    categoryThai: "9. การรั่วซึม",
+    categoryEnglish: "น้ำมันเครื่อง / น้ำมันเชื้อเพลิง / น้ำมันไฮดรอลิก / น้ำหล่อเย็น",
+    criteriaLines: ["น้ำมันเครื่อง / น้ำมันเชื้อเพลิง", "น้ำมันไฮดรอลิก / น้ำหล่อเย็น"],
+    imageUrl: "/assets/prestart/check-09.png",
+  },
+  {
+    id: "daily-10",
+    orderNo: 10,
+    categoryThai: "10. ระบบเบรก",
+    categoryEnglish: "เบรกทำงานปกติ ไม่จม / ไม่แข็ง",
+    criteriaLines: ["เบรกทำงานปกติ ไม่จม / ไม่แข็ง"],
+    imageUrl: "/assets/prestart/check-10.png",
+  },
+  {
+    id: "daily-11",
+    orderNo: 11,
+    categoryThai: "11. พวงมาลัย",
+    categoryEnglish: "หมุนได้ลื่น ไม่หลวม",
+    criteriaLines: ["หมุนได้ลื่น ไม่หลวม"],
+    imageUrl: "/assets/prestart/check-11.png",
+  },
+  {
+    id: "daily-12",
+    orderNo: 12,
+    categoryThai: "12. ข้อต่อลาก / ชุดลาก",
+    categoryEnglish: "สลักล็อกแน่นหนา ไม่มีการชำรุด",
+    criteriaLines: ["สลักล็อกแน่นหนา ไม่มีการชำรุด"],
+    imageUrl: "/assets/prestart/check-12.png",
+  },
 ];
+
+function resolveTemplateMetaForItem(item: ChecklistItem): ChecklistTemplateItem | undefined {
+  const byId = DEFAULT_CHECKLIST_TEMPLATE.find((t) => t.id === item.id);
+  if (byId) return byId;
+  const cleanTitle = (item.categoryThai || "").trim();
+  return DEFAULT_CHECKLIST_TEMPLATE.find(
+    (t) => t.categoryThai === cleanTitle || cleanTitle.includes(t.categoryThai.replace(/^\d+\.\s*/, ""))
+  );
+}
 
 function loadCustomChecklistTemplate(): ChecklistTemplateItem[] {
   try {
@@ -96,7 +202,7 @@ function saveCustomChecklistTemplate(items: ChecklistTemplateItem[]): void {
 
 function buildChecklistFormItems(customItems: ChecklistTemplateItem[]): ChecklistItem[] {
   const defaults: ChecklistItem[] = DEFAULT_CHECKLIST_TEMPLATE.map((t, idx) => ({
-    id: `item-${idx}`,
+    id: t.id || `daily-${String(idx + 1).padStart(2, "0")}`,
     categoryThai: t.categoryThai,
     categoryEnglish: t.categoryEnglish,
     status: "Pass",
@@ -112,6 +218,39 @@ function buildChecklistFormItems(customItems: ChecklistTemplateItem[]): Checklis
   return [...defaults, ...customs];
 }
 
+function InspectionThumb({
+  src,
+  alt,
+  className = "h-28 w-full",
+}: {
+  src?: string;
+  alt: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <div
+        className={`flex flex-col items-center justify-center rounded-md bg-slate-100 text-slate-400 dark:bg-[#10203a] dark:text-slate-500 ${className}`}
+      >
+        <Wrench size={20} />
+        <span className="mt-1 text-[10px] font-medium">รายการเพิ่มเติม</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className={`rounded-md object-cover bg-slate-900 ${className}`}
+    />
+  );
+}
+
 export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [inspections, setInspections] = useState<InspectionRecord[]>(INITIAL_INSPECTIONS);
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,6 +258,8 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<InspectionRecord | null>(null);
   const [pmMileageNotice, setPmMileageNotice] = useState<string | null>(null);
+  const [showVisualGuide, setShowVisualGuide] = useState<boolean>(true);
+  const [showPosterModal, setShowPosterModal] = useState<boolean>(false);
 
   // Saved Custom Template Items State
   const [customTemplateItems, setCustomTemplateItems] = useState<ChecklistTemplateItem[]>(() =>
@@ -151,6 +292,12 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   }, []);
 
   useEffect(() => {
+    if (!vehicleId && vehicles.length > 0) {
+      setVehicleId(vehicles[0].vehicleId);
+    }
+  }, [vehicles, vehicleId]);
+
+  useEffect(() => {
     if (!pmMileageNotice) return;
     const t = setTimeout(() => setPmMileageNotice(null), 6000);
     return () => clearTimeout(t);
@@ -172,15 +319,15 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   };
 
   const updateItemStatus = (index: number, status: "Pass" | "Fail" | "NA") => {
-    const updated = [...formItems];
-    updated[index].status = status;
-    setFormItems(updated);
+    setFormItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, status } : item))
+    );
   };
 
   const updateItemRemark = (index: number, remark: string) => {
-    const updated = [...formItems];
-    updated[index].remark = remark;
-    setFormItems(updated);
+    setFormItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, remark } : item))
+    );
   };
 
   const handleAddChecklistItem = () => {
@@ -203,7 +350,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
     const newChecklistItem: ChecklistItem = {
       id: newId,
       categoryThai: thai,
-      categoryEnglish: eng || "Additional Safety Check",
+      categoryEnglish: eng || "เกณฑ์ตรวจสอบเพิ่มเติม",
       status: "Pass",
       isCustom: true,
     };
@@ -220,7 +367,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
           {
             id: newId,
             categoryThai: thai,
-            categoryEnglish: eng || "Additional Safety Check",
+            categoryEnglish: eng || "เกณฑ์ตรวจสอบเพิ่มเติม",
             isCustom: true,
           },
         ];
@@ -256,15 +403,19 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   };
 
   const hasAnyFail = formItems.some((item) => item.status === "Fail");
+  const passedFormCount = formItems.filter((item) => item.status === "Pass").length;
+  const failedFormCount = formItems.filter((item) => item.status === "Fail").length;
   const overallResult: "Passed (พร้อมใช้งาน)" | "Grounded / Needs Repair (งดใช้ชั่วคราว)" = hasAnyFail
     ? "Grounded / Needs Repair (งดใช้ชั่วคราว)"
     : "Passed (พร้อมใช้งาน)";
 
   const handleCreateInspection = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!vehicleId) return;
+
     const targetVehicle = vehicles.find((v) => v.vehicleId === vehicleId);
     const vehicleDescription = targetVehicle
-      ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "Fleet"})`
+      ? `${targetVehicle.vehicleId} - ${getVehicleTypeDisplayLabel(targetVehicle.vehicleType, targetVehicle)} (${targetVehicle.description || "Fleet"})`
       : `${vehicleId} - Warehouse Fleet Unit`;
 
     const resolvedOperator = operatorName.trim() || getActiveRecorderDisplay("WMS Operator").label;
@@ -298,7 +449,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       );
     } else {
       setPmMileageNotice(
-        `บันทึกตรวจเช็ครถ ${vehicleId} สำเร็จ (เลขไมล์ ${parsedMileage.toLocaleString()} กม. ซิงค์ไปยังหน้ากำหนดการ PM แล้ว)`
+        `บันทึกตรวจเช็ครถ ${vehicleId} สำเร็จ (${passedFormCount}/${formItems.length} รายการปกติ · เลขไมล์ ${parsedMileage.toLocaleString()} กม.)`
       );
     }
 
@@ -306,7 +457,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       module: "Pre-Start Inspection",
       sectionId: "fleet_ops",
       reference: newRecord.id,
-      activity: `ตรวจเช็คก่อนเริ่มงานรถ ${vehicleId} เลขไมล์ ${parsedMileage.toLocaleString()} กม. (${overallResult})`,
+      activity: `ตรวจเช็คก่อนเริ่มงานรถ ${vehicleId} (${formItems.length} รายการ) เลขไมล์ ${parsedMileage.toLocaleString()} กม. (${overallResult})`,
       status: hasAnyFail ? "Attention" : "Completed",
     });
   };
@@ -315,11 +466,20 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const groundedCount = inspections.filter((i) => i.overallResult.includes("Grounded")).length;
 
   const filteredInspections = inspections.filter((i) => {
+    const q = searchQuery.trim().toLowerCase();
+    const matchedVeh = vehicles.find((v) => v.vehicleId === i.vehicleId);
     const matchesSearch =
-      i.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.vehicleId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.operatorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.vehicleDescription.toLowerCase().includes(searchQuery.toLowerCase());
+      !q ||
+      i.id.toLowerCase().includes(q) ||
+      i.vehicleId.toLowerCase().includes(q) ||
+      i.operatorName.toLowerCase().includes(q) ||
+      i.vehicleDescription.toLowerCase().includes(q) ||
+      getVehicleSearchableText({
+        vehicleId: i.vehicleId,
+        vehicleDescription: i.vehicleDescription,
+        vehicleType: matchedVeh?.vehicleType,
+        description: matchedVeh?.description,
+      }).includes(q);
 
     const matchesResult = resultFilter === "All" || i.overallResult.includes(resultFilter);
     return matchesSearch && matchesResult;
@@ -346,7 +506,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
           <button
             type="button"
             onClick={() => setPmMileageNotice(null)}
-            className="opacity-70 hover:opacity-100"
+            className="opacity-70 hover:opacity-100 cursor-pointer"
           >
             <X size={14} />
           </button>
@@ -354,42 +514,123 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       )}
 
       {/* Top Header */}
-      <div className="prestart-header-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, background: "#fff", padding: "12px 20px", borderRadius: 8, border: "1px solid #d9e0e5", flexWrap: "wrap", gap: 12 }}>
+      <div className="prestart-header-card mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0d1d35]">
         <div>
-          <div className="prestart-modal-title" style={{ fontSize: 16, fontWeight: 700, color: "#1e3648" }}>
-            Forklift Pre-Start Safety Inspection Checklist (แบบตรวจสอบก่อนใช้งาน)
+          <div className="prestart-modal-title text-base font-bold text-[#1e3648] dark:text-slate-100">
+            ตรวจเช็ครถประจำวัน — จุดตรวจสอบก่อนใช้งานทุกครั้ง (12 รายการมาตรฐาน)
+          </div>
+          <div className="prestart-modal-sub mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            Pre-Start Safety Inspection Checklist · บันทึกผลตรวจพร้อมเลขไมล์เชื่อมโยงรอบ PM อัตโนมัติ
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="button primary whitespace-nowrap shrink-0" onClick={openNewChecklistModal}>
-            <Plus size={14} /> + New Safety Checklist (ตรวจสภาพรถ)
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="button secondary whitespace-nowrap shrink-0"
+            onClick={() => setShowPosterModal(true)}
+          >
+            <ImageIcon size={14} /> ดูผังภาพต้นฉบับ
+          </button>
+          <button
+            type="button"
+            className="button primary whitespace-nowrap shrink-0"
+            onClick={openNewChecklistModal}
+          >
+            <Plus size={14} /> ตรวจสภาพรถ (12 รายการ)
           </button>
         </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="kpi-grid" style={{ marginBottom: 16 }}>
+      <div className="kpi-grid mb-4">
         <div className="kpi" style={{ borderTopColor: "#10b981" }}>
           <div className="kpi-label">Passed Safety Inspection</div>
-          <div className="kpi-value" style={{ color: "#10b981" }}>{passedCount}</div>
+          <div className="kpi-value font-mono tabular-nums" style={{ color: "#10b981" }}>
+            {passedCount}
+          </div>
         </div>
 
         <div className="kpi" style={{ borderTopColor: "#ef4444" }}>
           <div className="kpi-label">Grounded / Needs Maintenance</div>
-          <div className="kpi-value" style={{ color: "#ef4444" }}>{groundedCount}</div>
+          <div className="kpi-value font-mono tabular-nums" style={{ color: "#ef4444" }}>
+            {groundedCount}
+          </div>
         </div>
 
         <div className="kpi" style={{ borderTopColor: "#f59e0b" }}>
           <div className="kpi-label">Service Interval Alert (250km/250h)</div>
-          <div className="kpi-value" style={{ color: "#d97706" }}>{inspections.filter((i) => (i.mileageKm ?? i.operatingHours) >= 250).length} Units</div>
+          <div className="kpi-value font-mono tabular-nums" style={{ color: "#d97706" }}>
+            {inspections.filter((i) => (i.mileageKm ?? i.operatingHours) >= 250).length} Units
+          </div>
         </div>
 
         <div className="kpi" style={{ borderTopColor: "#087eaf" }}>
           <div className="kpi-label">Total Daily Checklists</div>
-          <div className="kpi-value" style={{ color: "#087eaf" }}>{inspections.length}</div>
+          <div className="kpi-value font-mono tabular-nums" style={{ color: "#087eaf" }}>
+            {inspections.length}
+          </div>
         </div>
       </div>
+
+      {/* Visual 12-Point Daily Pre-Start Inspection Guide Grid */}
+      <section className="panel mb-4 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0b2a5b] px-4 py-2.5 text-white dark:bg-[#0a234c]">
+          <div className="flex items-center gap-2 text-sm font-bold tracking-tight">
+            <span>1. จุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง)</span>
+            <span className="text-xs font-normal text-sky-200">· 12 รายการมาตรฐานพร้อมรูปภาพประกอบ</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openNewChecklistModal}
+              className="rounded-md bg-sky-500 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-400 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              เริ่มบันทึกตรวจเช็ค
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowVisualGuide((prev) => !prev)}
+              className="inline-flex items-center gap-1 rounded-md border border-white/25 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-white/10 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              {showVisualGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {showVisualGuide ? "ย่อคู่มือภาพ" : "แสดงคู่มือภาพ 12 จุด"}
+            </button>
+          </div>
+        </div>
+
+        {showVisualGuide && (
+          <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 bg-white sm:grid-cols-3 lg:grid-cols-4 dark:divide-[#1e3a5f] dark:bg-[#0d1d35]">
+            {DEFAULT_CHECKLIST_TEMPLATE.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-col p-3 transition-colors hover:bg-slate-50/80 dark:hover:bg-[#112645]"
+              >
+                <div className="mb-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                  {item.categoryThai}
+                </div>
+                <div className="mb-2 overflow-hidden rounded-md border border-slate-200 dark:border-[#22406d]">
+                  <InspectionThumb
+                    src={item.imageUrl}
+                    alt={item.categoryThai}
+                    className="aspect-[16/11] w-full"
+                  />
+                </div>
+                <div className="mt-auto space-y-0.5 text-[11px] leading-snug text-slate-700 dark:text-slate-300">
+                  {(item.criteriaLines || [item.categoryEnglish]).map((line, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <span className="mt-0.5 font-bold text-emerald-600 dark:text-emerald-400">
+                        •
+                      </span>
+                      <span>{line}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Main Table Section */}
       <section className="panel">
@@ -400,36 +641,30 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         </div>
 
         {/* Toolbar & Filter */}
-        <div className="prestart-filterbar" style={{ padding: "12px 18px", borderBottom: "1px solid #e7ecef", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", background: "#f8fafc" }}>
-          <div style={{ position: "relative", flex: 1, minWidth: 240 }}>
-            <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#647786" }} />
+        <div className="prestart-filterbar flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-[#1e3a5f] dark:bg-[#0a1628]">
+          <div className="relative min-w-[240px] flex-1">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+            />
             <input
               type="text"
               placeholder="Search by ID, vehicle, operator name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="prestart-form-input"
-              style={{
-                width: "100%",
-                height: 35,
-                minHeight: 35,
-                padding: "7px 10px 7px 32px",
-                borderRadius: 6,
-                border: "1px solid #cbd5e1",
-                fontSize: 12,
-                outline: "none",
-              }}
+              className="prestart-form-input h-[35px] w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-xs outline-none dark:border-[#1e3a5f] dark:bg-[#0d1d35] dark:text-slate-100"
             />
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Filter size={14} color="#647786" />
-            <span className="prestart-modal-label" style={{ fontSize: 12, fontWeight: 600, color: "#475569" }}>Inspection Result:</span>
+          <div className="flex items-center gap-2">
+            <Filter size={14} className="text-slate-500" />
+            <span className="prestart-modal-label text-xs font-semibold text-slate-600 dark:text-slate-300">
+              Inspection Result:
+            </span>
             <select
               value={resultFilter}
               onChange={(e) => setResultFilter(e.target.value)}
-              className="prestart-form-select"
-              style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
+              className="prestart-form-select h-[35px] rounded-md border border-slate-300 bg-white px-2.5 text-xs dark:border-[#1e3a5f] dark:bg-[#0d1d35] dark:text-slate-100"
             >
               <option value="All">All Results</option>
               <option value="Passed">Passed (พร้อมใช้งาน)</option>
@@ -453,7 +688,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
             <tbody>
               {filteredInspections.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: "center", padding: 30, color: "#647786" }}>
+                  <td colSpan={6} className="py-8 text-center text-xs text-slate-500">
                     No safety inspection records found matching your criteria.
                   </td>
                 </tr>
@@ -461,26 +696,39 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                 filteredInspections.map((ins) => (
                   <tr key={ins.id}>
                     <td>
-                      <span className="code" style={{ fontWeight: 700 }}>{ins.id}</span>
-                      <div className="prestart-modal-sub" style={{ fontSize: 10, color: "#647786", marginTop: 2 }}>{ins.inspectionDate}</div>
-                    </td>
-                    <td>
-                      <div className="prestart-modal-val" style={{ fontWeight: 700, color: "#1e3648" }}>{ins.vehicleId}</div>
-                      <div className="prestart-modal-sub font-mono tabular-nums" style={{ fontSize: 11, color: "#087eaf", fontWeight: 600 }}>
-                        เลขไมล์: {(ins.mileageKm ?? ins.operatingHours ?? 0).toLocaleString()} กม.
-                        {ins.operatingHours && ins.operatingHours !== ins.mileageKm ? ` · ${ins.operatingHours.toLocaleString()} ชม.` : ""}
+                      <span className="code font-mono font-bold">{ins.id}</span>
+                      <div className="prestart-modal-sub mt-0.5 font-mono tabular-nums text-[10px] text-slate-500">
+                        {ins.inspectionDate}
                       </div>
                     </td>
                     <td>
-                      <div className="prestart-modal-val" style={{ fontWeight: 600, color: "#334155" }}>{ins.operatorName}</div>
-                      <div className="prestart-modal-sub" style={{ fontSize: 10, color: "#647786" }}>{ins.shift}</div>
+                      <div className="prestart-modal-val font-bold text-[#1e3648] dark:text-slate-100">
+                        {ins.vehicleId}
+                      </div>
+                      <div className="prestart-modal-sub font-mono tabular-nums text-[11px] font-semibold text-[#087eaf] dark:text-sky-400">
+                        เลขไมล์: {(ins.mileageKm ?? ins.operatingHours ?? 0).toLocaleString()} กม.
+                        {ins.operatingHours && ins.operatingHours !== ins.mileageKm
+                          ? ` · ${ins.operatingHours.toLocaleString()} ชม.`
+                          : ""}
+                      </div>
                     </td>
                     <td>
-                      <div className="prestart-modal-val" style={{ fontSize: 11, color: "#0f172a", fontWeight: 600 }}>
-                        {ins.items.filter((i) => i.status === "Pass").length} / {ins.items.length} items passed
+                      <div className="prestart-modal-val font-semibold text-slate-700 dark:text-slate-200">
+                        {ins.operatorName}
+                      </div>
+                      <div className="prestart-modal-sub text-[10px] text-slate-500">
+                        {ins.shift}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="prestart-modal-val font-mono tabular-nums text-[11px] font-semibold text-slate-900 dark:text-slate-100">
+                        {ins.items.filter((i) => i.status === "Pass").length} / {ins.items.length}{" "}
+                        items passed
                       </div>
                       {ins.items.some((i) => i.status === "Fail") && (
-                        <div style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>⚠️ Has defect remarks</div>
+                        <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                          พบรายการชำรุด {ins.items.filter((i) => i.status === "Fail").length} จุด
+                        </div>
                       )}
                     </td>
                     <td>
@@ -497,8 +745,8 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                     </td>
                     <td>
                       <button
-                        className="button secondary"
-                        style={{ padding: "4px 8px", fontSize: 11 }}
+                        type="button"
+                        className="button secondary whitespace-nowrap shrink-0 !px-2.5 !py-1 !text-[11px]"
                         onClick={() => setSelectedInspection(ins)}
                       >
                         <FileText size={12} /> View Checklist
@@ -511,135 +759,182 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
           </table>
         </div>
 
-        <div
-          className="prestart-filterbar"
-          style={{
-            padding: "10px 18px",
-            borderTop: "1px solid #e7ecef",
-            background: "#fafbfc",
-            fontSize: 11,
-            color: "#647786",
-            display: "flex",
-            justifyContent: "space-between",
-          }}
-        >
-          <span className="prestart-modal-sub">Showing {filteredInspections.length} of {inspections.length} pre-start safety checklists.</span>
-          <span className="prestart-modal-sub">WMS Material Handling - Pre-Start Inspection</span>
+        <div className="prestart-filterbar flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] text-slate-500 dark:border-[#1e3a5f] dark:bg-[#0a1628] dark:text-slate-400">
+          <span className="prestart-modal-sub font-mono tabular-nums">
+            Showing {filteredInspections.length} of {inspections.length} pre-start safety checklists.
+          </span>
+          <span className="prestart-modal-sub">WMS Material Handling · Pre-Start Inspection</span>
         </div>
       </section>
 
-      {/* New Pre-Start Inspection Modal */}
-      {isModalOpen && (
-        <div className="prestart-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
-          <div className="prestart-modal-card" style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 800, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)" }}>
-            <div className="prestart-modal-header" style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc", borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
-              <div>
-                <div className="prestart-modal-title" style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>Forklift Pre-Start Safety Inspection Checklist</div>
+      {/* Full Original Reference Poster Modal */}
+      {showPosterModal && (
+        <div
+          className="prestart-modal-backdrop fixed inset-0 z-[1050] flex items-center justify-center bg-slate-900/70 p-4"
+          onMouseDown={() => setShowPosterModal(false)}
+        >
+          <div
+            className="prestart-modal-card flex max-h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-[#1e3a5f] dark:bg-[#0d1d35]"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="prestart-modal-header flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0a1628]">
+              <div className="prestart-modal-title text-sm font-bold text-slate-900 dark:text-slate-100">
+                ผังภาพประกอบจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) 12 รายการ
               </div>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}><X size={20} /></button>
+              <button
+                type="button"
+                onClick={() => setShowPosterModal(false)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 text-center">
+              <img
+                src={FULL_REFERENCE_POSTER_URL}
+                alt="จุดตรวจสอบประจำวันก่อนใช้งานทุกครั้ง 12 รายการ"
+                referrerPolicy="no-referrer"
+                className="mx-auto max-h-[75vh] w-auto rounded-lg border border-slate-200 dark:border-[#1e3a5f]"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Pre-Start Inspection Modal (12 Visual Photo Cards) */}
+      {isModalOpen && (
+        <div className="prestart-modal-backdrop fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/65 p-3 sm:p-5">
+          <div className="prestart-modal-card flex max-h-[92vh] w-full max-w-[1080px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-[#1e3a5f] dark:bg-[#0d1d35]">
+            <div className="prestart-modal-header flex shrink-0 items-center justify-between border-b border-slate-200 bg-[#0b2a5b] px-5 py-3.5 text-white dark:border-[#1e3a5f]">
+              <div>
+                <div className="text-base font-bold">
+                  แบบตรวจสอบรถประจำวันก่อนใช้งาน — 12 จุดตรวจสอบมาตรฐาน
+                </div>
+                <div className="mt-0.5 text-xs text-sky-200">
+                  Pre-Start Safety Inspection Checklist · ตรวจสอบครบทั้ง 12 จุดตามภาพประกอบก่อนออกปฏิบัติงาน
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-md p-1 text-sky-100 transition-colors hover:bg-white/15 cursor-pointer"
+                aria-label="ปิดหน้าต่าง"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <form onSubmit={handleCreateInspection} style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Vehicle to Inspect (เลือกรถโฟล์คลิฟท์ / รถลากจูง) *</label>
-                <select
-                  value={vehicleId}
-                  onChange={(e) => setVehicleId(e.target.value)}
-                  className="prestart-form-select"
-                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  <option value="">-- เลือกรถ / Select Vehicle --</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.vehicleId}>
-                      {v.vehicleId} - {v.vehicleType} ({v.description || "Active Fleet"})
-                    </option>
-                  ))}
-                </select>
+            <form
+              onSubmit={handleCreateInspection}
+              className="flex-1 overflow-y-auto p-5"
+            >
+              {/* Vehicle & Operator Metadata Inputs */}
+              <div className="mb-5 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                <div>
+                  <label className="prestart-modal-label mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    เลือกรถที่ตรวจเช็ค (Vehicle) *
+                  </label>
+                  <select
+                    value={vehicleId}
+                    onChange={(e) => setVehicleId(e.target.value)}
+                    required
+                    className="prestart-form-select h-[36px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
+                  >
+                    <option value="">-- เลือกรถ / Select Vehicle --</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.vehicleId}>
+                        {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)} ({v.description || "Active Fleet"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="prestart-modal-label mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    ชื่อผู้ตรวจสอบ / พนักงานขับรถ *
+                  </label>
+                  <input
+                    type="text"
+                    value={operatorName}
+                    onChange={(e) => setOperatorName(e.target.value)}
+                    required
+                    className="prestart-form-input h-[36px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="prestart-modal-label mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    กะการทำงาน (Operation Shift) *
+                  </label>
+                  <select
+                    value={shift}
+                    onChange={(e) => setShift(e.target.value)}
+                    className="prestart-form-select h-[36px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
+                  >
+                    <option value="Shift 1 (08:00 - 16:00)">Shift 1 (08:00 - 16:00)</option>
+                    <option value="Shift 2 (16:00 - 00:00)">Shift 2 (16:00 - 00:00)</option>
+                    <option value="Shift 3 (00:00 - 08:00)">Shift 3 (00:00 - 08:00)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="prestart-modal-label mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    วันที่ตรวจเช็ค (Inspection Date) *
+                  </label>
+                  <input
+                    type="date"
+                    value={inspectionDate}
+                    onChange={(e) => setInspectionDate(e.target.value)}
+                    required
+                    className="prestart-form-input h-[36px] w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="prestart-modal-label mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    <Gauge size={13} className="mr-1 inline text-[#087eaf]" />
+                    เลขไมล์ปัจจุบัน (กม. / Odometer) *
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="เช่น 300 (คำนวณรอบ PM อัตโนมัติ)"
+                    value={mileageKm}
+                    onChange={(e) => setMileageKm(e.target.value)}
+                    required
+                    className="prestart-form-input h-[36px] w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
+                  />
+                </div>
+
+                <div>
+                  <label className="prestart-modal-label mb-1.5 block text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    ชั่วโมงการทำงาน (Operating Hours - ถ้ามี)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="ระบุชั่วโมงทำงาน (ถ้ามี)"
+                    value={operatingHours}
+                    onChange={(e) => setOperatingHours(e.target.value)}
+                    className="prestart-form-input h-[36px] w-full rounded-md border border-slate-300 bg-white px-2.5 font-mono text-xs dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Operator Name (ชื่อผู้ตรวจสอบ / พนักงานขับรถ) *</label>
-                <input
-                  type="text"
-                  value={operatorName}
-                  onChange={(e) => setOperatorName(e.target.value)}
-                  required
-                  className="prestart-form-input"
-                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Operation Shift (กะการทำงาน) *</label>
-                <select
-                  value={shift}
-                  onChange={(e) => setShift(e.target.value)}
-                  className="prestart-form-select"
-                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                >
-                  <option value="Shift 1 (08:00 - 16:00)">Shift 1 (08:00 - 16:00)</option>
-                  <option value="Shift 2 (16:00 - 00:00)">Shift 2 (16:00 - 00:00)</option>
-                  <option value="Shift 3 (00:00 - 08:00)">Shift 3 (00:00 - 08:00)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  Inspection Date (วันที่ตรวจเช็ค) *
-                </label>
-                <input
-                  type="date"
-                  value={inspectionDate}
-                  onChange={(e) => setInspectionDate(e.target.value)}
-                  required
-                  className="prestart-form-input"
-                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  <Gauge size={13} className="inline mr-1 text-[#087eaf]" />
-                  เลขไมล์ปัจจุบัน (กม. / Mileage Odometer) *
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="เช่น 300 (ใช้คำนวณรอบ PM ตามเลขไมล์อัตโนมัติ)"
-                  value={mileageKm}
-                  onChange={(e) => setMileageKm(e.target.value)}
-                  required
-                  className="prestart-form-input"
-                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              <div>
-                <label className="prestart-modal-label" style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#334155", marginBottom: 6 }}>
-                  ชั่วโมงการทำงานปัจจุบัน (Operating Hours - ถ้ามี)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="ระบุชั่วโมงทำงาน (ถ้ามี)"
-                  value={operatingHours}
-                  onChange={(e) => setOperatingHours(e.target.value)}
-                  className="prestart-form-input"
-                  style={{ width: "100%", padding: 8, borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 12 }}
-                />
-              </div>
-
-              {/* Checklist Items Table */}
-              <div className="prestart-item-box col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3.5">
-                <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                  <div className="prestart-modal-title text-[13px] font-bold text-slate-900">
-                    Pre-Start Inspection Items (รายการตรวจสอบความปลอดภัย)
-                    <span className="prestart-modal-sub ml-2 text-[11px] font-medium text-slate-500">
-                      ({formItems.length} รายการ)
+              {/* 12-Item Visual Photo Checklist Section */}
+              <div className="prestart-item-box rounded-lg border border-slate-200 bg-slate-50/70 p-4 dark:border-[#1e3a5f] dark:bg-[#091529]">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="prestart-modal-title text-sm font-bold text-slate-900 dark:text-slate-100">
+                      จุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง)
+                    </span>
+                    <span className="prestart-modal-sub font-mono tabular-nums text-xs text-slate-500 dark:text-slate-400">
+                      · {formItems.length} รายการ · ปกติ {passedFormCount}
+                      {failedFormCount > 0 ? ` · ชำรุด ${failedFormCount}` : ""}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {formItems.length < DEFAULT_CHECKLIST_TEMPLATE.length + customTemplateItems.length && (
                       <button
                         type="button"
@@ -664,9 +959,9 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                 </div>
 
                 {showAddItemForm && (
-                  <div className="prestart-item-box mb-3 rounded-md border border-sky-200 bg-white p-3">
+                  <div className="prestart-item-box mb-4 rounded-md border border-sky-200 bg-white p-3 dark:border-sky-800 dark:bg-[#0d1d35]">
                     <div className="mb-2 flex items-center justify-between">
-                      <span className="prestart-item-title text-xs font-bold text-slate-800">
+                      <span className="prestart-item-title text-xs font-bold text-slate-800 dark:text-slate-100">
                         เพิ่มรายการตรวจสอบความปลอดภัยใหม่
                       </span>
                       <button
@@ -675,7 +970,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                           setShowAddItemForm(false);
                           setAddItemError("");
                         }}
-                        className="text-slate-400 hover:text-slate-600"
+                        className="text-slate-400 hover:text-slate-600 cursor-pointer"
                         aria-label="ปิดฟอร์มเพิ่มรายการ"
                       >
                         <X size={15} />
@@ -684,7 +979,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
 
                     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                       <div>
-                        <label className="prestart-modal-label mb-1 block text-[11px] font-semibold text-slate-700">
+                        <label className="prestart-modal-label mb-1 block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
                           ชื่อรายการตรวจสอบ (ภาษาไทย) *
                         </label>
                         <input
@@ -700,15 +995,15 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                               handleAddChecklistItem();
                             }
                           }}
-                          placeholder="เช่น ตรวจสอบสายชาร์จแบตเตอรี่ / เข็มขัดนิรภัย"
-                          className="prestart-form-input w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs outline-none"
+                          placeholder="เช่น 13. ตรวจสอบสายชาร์จแบตเตอรี่ / เข็มขัดนิรภัย"
+                          className="prestart-form-input w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
                           autoFocus
                         />
                       </div>
 
                       <div>
-                        <label className="prestart-modal-label mb-1 block text-[11px] font-semibold text-slate-700">
-                          รายละเอียด / ชื่อภาษาอังกฤษ (ถ้ามี)
+                        <label className="prestart-modal-label mb-1 block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                          เกณฑ์การตรวจสอบ / รายละเอียด (ถ้ามี)
                         </label>
                         <input
                           type="text"
@@ -720,20 +1015,20 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                               handleAddChecklistItem();
                             }
                           }}
-                          placeholder="เช่น Battery Cable & Seatbelt Check"
-                          className="prestart-form-input w-full rounded border border-slate-300 px-2.5 py-1.5 text-xs outline-none"
+                          placeholder="เช่น สภาพสมบูรณ์ ไม่ฉีกขาด ล็อกได้ปกติ"
+                          className="prestart-form-input w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
                         />
                       </div>
                     </div>
 
                     {addItemError && (
-                      <div className="mt-2 text-[11px] font-semibold text-red-600">
+                      <div className="mt-2 text-[11px] font-semibold text-rose-600">
                         {addItemError}
                       </div>
                     )}
 
                     <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
-                      <label className="prestart-modal-sub flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-600 select-none">
+                      <label className="prestart-modal-sub flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-600 select-none dark:text-slate-300">
                         <input
                           type="checkbox"
                           checked={saveAsTemplateItem}
@@ -769,83 +1064,150 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                 )}
 
                 {!showAddItemForm && addItemError && (
-                  <div className="mb-2 text-[11px] font-semibold text-red-600">
-                    {addItemError}
-                  </div>
+                  <div className="mb-2 text-[11px] font-semibold text-rose-600">{addItemError}</div>
                 )}
 
-                <div className="grid gap-2.5">
-                  {formItems.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className="prestart-item-box grid grid-cols-1 items-center gap-2.5 rounded-md border border-slate-200 bg-white p-2.5 md:grid-cols-[2fr_auto_2fr_auto]"
-                    >
-                      <div>
-                        <div className="prestart-item-title flex flex-wrap items-center gap-1.5 text-xs font-bold text-slate-800">
-                          <span>{item.categoryThai}</span>
-                          {item.isCustom && (
-                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
-                              เพิ่มเอง
-                            </span>
-                          )}
-                        </div>
-                        <div className="prestart-item-sub text-[10px] text-slate-500">{item.categoryEnglish}</div>
-                      </div>
+                {/* Visual Photo-Illustrated 12-Item Checklist Grid */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {formItems.map((item, idx) => {
+                    const meta = resolveTemplateMetaForItem(item);
+                    const isFail = item.status === "Fail";
+                    const criteriaList = meta?.criteriaLines || [item.categoryEnglish];
 
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className={`button whitespace-nowrap shrink-0 ${item.status === "Pass" ? "primary" : "secondary"}`}
-                          style={{ padding: "4px 10px", fontSize: 11, background: item.status === "Pass" ? "#15803d" : "#fff", color: item.status === "Pass" ? "#fff" : "#15803d", borderColor: "#86efac" }}
-                          onClick={() => updateItemStatus(idx, "Pass")}
-                        >
-                          Pass (ปกติ)
-                        </button>
-                        <button
-                          type="button"
-                          className={`button whitespace-nowrap shrink-0 ${item.status === "Fail" ? "primary" : "secondary"}`}
-                          style={{ padding: "4px 10px", fontSize: 11, background: item.status === "Fail" ? "#b91c1c" : "#fff", color: item.status === "Fail" ? "#fff" : "#b91c1c", borderColor: "#fca5a5" }}
-                          onClick={() => updateItemStatus(idx, "Fail")}
-                        >
-                          Fail (ชำรุด)
-                        </button>
-                      </div>
-
-                      <input
-                        type="text"
-                        placeholder="Remark or defect description if failed..."
-                        value={item.remark || ""}
-                        onChange={(e) => updateItemRemark(idx, e.target.value)}
-                        className="prestart-form-input w-full rounded border border-slate-300 px-2 py-1.5 text-[11px] outline-none"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveChecklistItem(item.id)}
-                        disabled={formItems.length <= 1}
-                        title={formItems.length <= 1 ? "ต้องมีอย่างน้อย 1 รายการ" : "ลบรายการนี้"}
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-slate-200 text-slate-400 transition hover:border-red-300 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label={`ลบรายการ ${item.categoryThai}`}
+                    return (
+                      <div
+                        key={item.id}
+                        className={`prestart-item-box flex flex-col rounded-lg border p-3 transition-colors ${
+                          isFail
+                            ? "border-rose-300 bg-rose-50/60 dark:border-rose-800 dark:bg-rose-950/30"
+                            : "border-slate-200 bg-white dark:border-[#1e3a5f] dark:bg-[#0d1d35]"
+                        }`}
                       >
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  ))}
+                        <div className="mb-2 flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="prestart-item-title text-xs font-bold text-slate-900 dark:text-slate-100">
+                              {item.categoryThai}
+                            </div>
+                            {item.isCustom && (
+                              <div className="text-[10px] font-medium text-sky-600 dark:text-sky-400">
+                                รายการเพิ่มเติม
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveChecklistItem(item.id)}
+                            disabled={formItems.length <= 1}
+                            title={formItems.length <= 1 ? "ต้องมีอย่างน้อย 1 รายการ" : "ลบรายการนี้"}
+                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 text-slate-400 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-[#1e3a5f] cursor-pointer"
+                            aria-label={`ลบรายการ ${item.categoryThai}`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+
+                        {/* Reference Inspection Photo */}
+                        <div className="mb-2 overflow-hidden rounded-md border border-slate-200 dark:border-[#1e3a5f]">
+                          <InspectionThumb
+                            src={meta?.imageUrl}
+                            alt={item.categoryThai}
+                            className="aspect-[16/10] w-full"
+                          />
+                        </div>
+
+                        {/* Criteria Guide */}
+                        <div className="mb-2.5 space-y-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300">
+                          {criteriaList.filter(Boolean).map((line, lineIdx) => (
+                            <div key={lineIdx} className="flex items-start gap-1.5">
+                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                •
+                              </span>
+                              <span>{line}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Pass / Fail Controls */}
+                        <div className="mt-auto grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => updateItemStatus(idx, "Pass")}
+                            className={`rounded-md border px-2 py-1.5 text-[11px] font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                              item.status === "Pass"
+                                ? "border-emerald-700 bg-emerald-600 text-white"
+                                : "border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:bg-[#091529] dark:text-emerald-300"
+                            }`}
+                          >
+                            ✓ ปกติ (Pass)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateItemStatus(idx, "Fail")}
+                            className={`rounded-md border px-2 py-1.5 text-[11px] font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                              isFail
+                                ? "border-rose-700 bg-rose-600 text-white"
+                                : "border-rose-300 bg-white text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:bg-[#091529] dark:text-rose-300"
+                            }`}
+                          >
+                            ✗ ชำรุด (Fail)
+                          </button>
+                        </div>
+
+                        {/* Defect Remark Field */}
+                        <input
+                          type="text"
+                          placeholder={
+                            isFail
+                              ? "ระบุอาการชำรุดที่พบ *"
+                              : "หมายเหตุเพิ่มเติม (ถ้ามี)..."
+                          }
+                          value={item.remark || ""}
+                          onChange={(e) => updateItemRemark(idx, e.target.value)}
+                          className={`prestart-form-input mt-2 w-full rounded border px-2 py-1.5 text-[11px] outline-none ${
+                            isFail
+                              ? "border-rose-300 bg-white text-rose-900 placeholder:text-rose-400 dark:border-rose-700 dark:bg-[#1a0f18] dark:text-rose-100"
+                              : "border-slate-200 bg-slate-50/70 text-slate-700 dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-200"
+                          }`}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", background: overallResult.includes("Passed") ? "#dcfce7" : "#fee2e2", padding: "10px 14px", borderRadius: 6, border: `1px solid ${overallResult.includes("Passed") ? "#86efac" : "#fca5a5"}` }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: overallResult.includes("Passed") ? "#15803d" : "#b91c1c" }}>
-                    Overall Safety Clearance Status: {overallResult}
+                {/* Overall Clearance Banner */}
+                <div
+                  className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border px-3.5 py-2.5 ${
+                    overallResult.includes("Passed")
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                      : "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200"
+                  }`}
+                >
+                  <div className="text-xs font-bold">
+                    สรุปผลการตรวจเช็ค: {overallResult}
                   </div>
-                  <div className="prestart-modal-sub" style={{ fontSize: 11, color: "#475569" }}>
-                    {hasAnyFail ? "Vehicle is grounded until defect is resolved in Fix & Flush." : "Vehicle is fully cleared for warehouse operations."}
+                  <div className="text-[11px] opacity-85">
+                    {hasAnyFail
+                      ? "ตรวจพบจุดชำรุด — ควรงดใช้งานชั่วคราวและแจ้งซ่อมในระบบแจ้งซ่อม"
+                      : "รถผ่านเกณฑ์ความปลอดภัยครบทุกจุด พร้อมปฏิบัติงาน"}
                   </div>
                 </div>
               </div>
 
-              <div style={{ gridColumn: "span 2", display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
-                <button type="button" className="button secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
-                <button type="submit" className="button primary">Submit Safety Checklist</button>
+              <div className="mt-4 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  className="button secondary whitespace-nowrap shrink-0"
+                  onClick={() => setIsModalOpen(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="button primary whitespace-nowrap shrink-0"
+                >
+                  <Check size={14} /> บันทึกผลตรวจเช็ครถประจำวัน
+                </button>
               </div>
             </form>
           </div>
@@ -854,76 +1216,147 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
 
       {/* Inspection Details Modal ("Safety Checklist Report") */}
       {selectedInspection && (
-        <div className="prestart-modal-backdrop" style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
-          <div className="prestart-modal-card" style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 680, boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
-            <div className="prestart-modal-header" style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc", borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
+        <div
+          className="prestart-modal-backdrop fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/65 p-4"
+          onMouseDown={() => setSelectedInspection(null)}
+        >
+          <div
+            className="prestart-modal-card flex max-h-[90vh] w-full max-w-[780px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-[#1e3a5f] dark:bg-[#0d1d35]"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="prestart-modal-header flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-[#1e3a5f] dark:bg-[#0a1628]">
               <div>
-                <div className="prestart-modal-title" style={{ fontSize: 16, fontWeight: 700, color: "#0f172a" }}>
-                  Safety Checklist Report: <span className="code">{selectedInspection.id}</span>
+                <div className="prestart-modal-title text-base font-bold text-slate-900 dark:text-slate-100">
+                  รายงานตรวจเช็ครถประจำวัน:{" "}
+                  <span className="code font-mono">{selectedInspection.id}</span>
                 </div>
-                <div className="prestart-modal-sub" style={{ fontSize: 12, color: "#647786", marginTop: 2 }}>
-                  Inspected on {selectedInspection.inspectionDate} by {selectedInspection.operatorName}
+                <div className="prestart-modal-sub mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  วันที่ตรวจ {selectedInspection.inspectionDate} · ผู้ตรวจสอบ{" "}
+                  {selectedInspection.operatorName}
                 </div>
               </div>
-              <button onClick={() => setSelectedInspection(null)} style={{ background: "transparent", border: "none", cursor: "pointer", color: "#647786" }}><X size={20} /></button>
+              <button
+                type="button"
+                onClick={() => setSelectedInspection(null)}
+                className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                <X size={20} />
+              </button>
             </div>
 
-            <div style={{ padding: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, fontSize: 12, overflowY: "auto", flex: 1 }}>
+            <div className="grid flex-1 grid-cols-1 gap-3.5 overflow-y-auto p-5 text-xs sm:grid-cols-2">
               <div>
-                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600 }}>Vehicle:</div>
-                <div className="prestart-modal-val" style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedInspection.vehicleDescription}</div>
+                <div className="prestart-modal-label font-semibold text-slate-500">รถที่ตรวจเช็ค:</div>
+                <div className="prestart-modal-val mt-0.5 font-bold text-slate-900 dark:text-slate-100">
+                  {selectedInspection.vehicleDescription}
+                </div>
               </div>
               <div>
-                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600 }}>Safety Clearance:</div>
-                <div style={{ fontWeight: 700, color: selectedInspection.overallResult.includes("Passed") ? "#15803d" : "#ef4444", marginTop: 2 }}>{selectedInspection.overallResult}</div>
-              </div>
-
-              <div>
-                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600 }}>Operator & Shift:</div>
-                <div className="prestart-modal-val" style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>{selectedInspection.operatorName} ({selectedInspection.shift})</div>
-              </div>
-              <div>
-                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600 }}>เลขไมล์ / ชั่วโมงใช้งาน:</div>
-                <div className="prestart-modal-val font-mono tabular-nums" style={{ fontWeight: 700, color: "#0f172a", marginTop: 2 }}>
-                  {(selectedInspection.mileageKm ?? selectedInspection.operatingHours ?? 0).toLocaleString()} กม.
-                  {selectedInspection.operatingHours ? ` (${selectedInspection.operatingHours.toLocaleString()} HRS)` : ""}
+                <div className="prestart-modal-label font-semibold text-slate-500">ผลการประเมิน:</div>
+                <div
+                  className={`mt-0.5 font-bold ${
+                    selectedInspection.overallResult.includes("Passed")
+                      ? "text-emerald-700 dark:text-emerald-400"
+                      : "text-rose-600 dark:text-rose-400"
+                  }`}
+                >
+                  {selectedInspection.overallResult}
                 </div>
               </div>
 
-              <div style={{ gridColumn: "span 2" }}>
-                <div className="prestart-modal-label" style={{ color: "#647786", fontWeight: 600, marginBottom: 6 }}>Pre-Start Checklist Details:</div>
-                <div className="prestart-table-border" style={{ border: "1px solid #e2e8f0", borderRadius: 6, overflow: "hidden" }}>
-                  <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+              <div>
+                <div className="prestart-modal-label font-semibold text-slate-500">
+                  ผู้ตรวจสอบและกะทำงาน:
+                </div>
+                <div className="prestart-modal-val mt-0.5 font-bold text-slate-900 dark:text-slate-100">
+                  {selectedInspection.operatorName} ({selectedInspection.shift})
+                </div>
+              </div>
+              <div>
+                <div className="prestart-modal-label font-semibold text-slate-500">
+                  เลขไมล์ / ชั่วโมงใช้งาน:
+                </div>
+                <div className="prestart-modal-val mt-0.5 font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100">
+                  {(selectedInspection.mileageKm ?? selectedInspection.operatingHours ?? 0).toLocaleString()}{" "}
+                  กม.
+                  {selectedInspection.operatingHours
+                    ? ` (${selectedInspection.operatingHours.toLocaleString()} HRS)`
+                    : ""}
+                </div>
+              </div>
+
+              <div className="sm:col-span-2">
+                <div className="prestart-modal-label mb-2 font-semibold text-slate-500">
+                  รายละเอียดผลการตรวจสอบ ({selectedInspection.items.length} รายการ):
+                </div>
+                <div className="prestart-table-border overflow-hidden rounded-lg border border-slate-200 dark:border-[#1e3a5f]">
+                  <table className="w-full border-collapse text-[11px]">
                     <thead>
-                      <tr className="prestart-table-header" style={{ background: "#f1f5f9" }}>
-                        <th style={{ padding: "8px 12px", textAlign: "left" }}>Inspection Item</th>
-                        <th style={{ padding: "8px 12px", textAlign: "center" }}>Status</th>
-                        <th style={{ padding: "8px 12px", textAlign: "left" }}>Defect Remarks</th>
+                      <tr className="prestart-table-header bg-slate-100 dark:bg-[#091529]">
+                        <th className="px-3 py-2 text-left">จุดตรวจสอบและภาพประกอบ</th>
+                        <th className="px-3 py-2 text-center">ผลตรวจ</th>
+                        <th className="px-3 py-2 text-left">หมายเหตุ / อาการชำรุด</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedInspection.items.map((item, idx) => (
-                        <tr key={idx} className="prestart-table-row" style={{ borderBottom: "1px solid #e2e8f0" }}>
-                          <td style={{ padding: "8px 12px" }}>
-                            <div className="prestart-item-title" style={{ fontWeight: 700, color: "#1e3648" }}>{item.categoryThai}</div>
-                            <div className="prestart-item-sub" style={{ fontSize: 10, color: "#647786" }}>{item.categoryEnglish}</div>
-                          </td>
-                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
-                            <span style={{ fontWeight: 700, color: item.status === "Pass" ? "#16a34a" : "#ef4444" }}>
-                              {item.status === "Pass" ? "✓ Pass" : "✗ Fail"}
-                            </span>
-                          </td>
-                          <td className="prestart-item-remark" style={{ padding: "8px 12px", color: "#334155" }}>{item.remark || "-"}</td>
-                        </tr>
-                      ))}
+                      {selectedInspection.items.map((item, idx) => {
+                        const meta = resolveTemplateMetaForItem(item);
+                        return (
+                          <tr
+                            key={idx}
+                            className="prestart-table-row border-b border-slate-200 last:border-b-0 dark:border-[#1e3a5f]"
+                          >
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2.5">
+                                {meta?.imageUrl && (
+                                  <img
+                                    src={meta.imageUrl}
+                                    alt={item.categoryThai}
+                                    referrerPolicy="no-referrer"
+                                    className="h-10 w-14 shrink-0 rounded border border-slate-200 object-cover dark:border-[#1e3a5f]"
+                                  />
+                                )}
+                                <div>
+                                  <div className="prestart-item-title font-bold text-[#1e3648] dark:text-slate-100">
+                                    {item.categoryThai}
+                                  </div>
+                                  <div className="prestart-item-sub text-[10px] text-slate-500 dark:text-slate-400">
+                                    {item.categoryEnglish}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-center whitespace-nowrap">
+                              <span
+                                className={`font-bold ${
+                                  item.status === "Pass"
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : "text-rose-600 dark:text-rose-400"
+                                }`}
+                              >
+                                {item.status === "Pass" ? "✓ ปกติ" : "✗ ชำรุด"}
+                              </span>
+                            </td>
+                            <td className="prestart-item-remark px-3 py-2 text-slate-700 dark:text-slate-300">
+                              {item.remark || "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               </div>
             </div>
 
-            <div className="prestart-modal-footer" style={{ padding: "12px 20px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 10, background: "#f8fafc", borderBottomLeftRadius: 12, borderBottomRightRadius: 12 }}>
-              <button className="button primary" onClick={() => setSelectedInspection(null)}>Close</button>
+            <div className="prestart-modal-footer flex justify-end gap-2.5 border-t border-slate-200 bg-slate-50 px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0a1628]">
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => setSelectedInspection(null)}
+              >
+                ปิดหน้าต่าง
+              </button>
             </div>
           </div>
         </div>

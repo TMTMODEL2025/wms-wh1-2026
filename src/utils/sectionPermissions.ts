@@ -4,6 +4,7 @@
  */
 
 import { Employee, EmployeeRole, WmsSectionId } from "../types/officer";
+import { isDriverRole } from "../data/officerData";
 
 export interface WmsSectionMeta {
   id: WmsSectionId;
@@ -146,7 +147,7 @@ export function getDefaultSectionsForRoleAndDept(
     if (!sections.includes("overview")) sections.push("overview");
     if (!sections.includes("admin_hr")) sections.push("admin_hr");
   }
-  if (dept.includes("material handling") || dept.includes("fleet") || role === "Driver") {
+  if (dept.includes("material handling") || dept.includes("fleet") || isDriverRole(role)) {
     if (!sections.includes("fleet_ops")) sections.push("fleet_ops");
   }
   if (dept.includes("slit") || dept.includes("shipping") || dept.includes("logistics")) {

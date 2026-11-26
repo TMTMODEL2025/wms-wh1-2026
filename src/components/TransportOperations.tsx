@@ -74,7 +74,7 @@ import {
   showSuccessAlert,
   showWarningAlert,
 } from "../utils/swalUtils";
-import { isTrailerVehicle } from "../utils/vehicleHelpers";
+import { getVehicleTypeDisplayLabel, isTrailerVehicle } from "../utils/vehicleHelpers";
 
 type TransportTransferRecord = MhTransferRecord;
 
@@ -1536,7 +1536,7 @@ export function TransportOperations({
                 <option value="">-- เลือกหมายเลขรถ --</option>
                 {drivableVehicles.map((v) => (
                   <option key={`rm-veh-${v.id}`} value={v.vehicleId}>
-                    {v.vehicleId} {v.vehicleType ? `(${v.vehicleType})` : ""}
+                    {v.vehicleId} ({getVehicleTypeDisplayLabel(v.vehicleType, v)})
                   </option>
                 ))}
                 {rmVehicleNumber &&
@@ -1763,7 +1763,7 @@ export function TransportOperations({
                         )}
                         {drivableVehicles.map((v) => (
                           <option key={v.id} value={v.vehicleId}>
-                            {v.vehicleId} ({v.vehicleType})
+                            {v.vehicleId} ({getVehicleTypeDisplayLabel(v.vehicleType, v)})
                           </option>
                         ))}
                       </select>
@@ -3245,7 +3245,7 @@ export function TransportOperations({
                     <option value="">-- ไม่ระบุ / เลือกหมายเลขรถ --</option>
                     {drivableVehicles.map((v) => (
                       <option key={`rm-modal-veh-${v.id}`} value={v.vehicleId}>
-                        {v.vehicleId} {v.vehicleType ? `(${v.vehicleType})` : ""}
+                        {v.vehicleId} ({getVehicleTypeDisplayLabel(v.vehicleType, v)})
                       </option>
                     ))}
                     {rmVehicleNumber &&

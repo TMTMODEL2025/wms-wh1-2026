@@ -59,6 +59,12 @@ import {
 } from "../services/authWorkforceService";
 import { useAuth } from "../contexts/AuthContext";
 import { Pm3dInteractiveWorkspace } from "./pm3d/Pm3dInteractiveWorkspace";
+import {
+  getVehicleSearchableText,
+  getVehicleTypeDisplayLabel,
+  matchesVehicleTypeFilter,
+  resolveVehicleType,
+} from "../utils/vehicleHelpers";
 
 interface PmScheduleManagementProps {
   vehicles: Vehicle[];
@@ -528,8 +534,8 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
   const vehicleTypes = useMemo(() => {
     const set = new Set<string>();
-    vehicles.forEach((v) => v.vehicleType && set.add(v.vehicleType));
-    schedules.forEach((s) => s.vehicleType && set.add(s.vehicleType));
+    vehicles.forEach((v) => set.add(resolveVehicleType(v)));
+    schedules.forEach((s) => set.add(resolveVehicleType(s)));
     return Array.from(set);
   }, [vehicles, schedules]);
 
@@ -618,14 +624,12 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       if (q) {
         const hay = [
           schedule.pmNo,
-          schedule.vehicleId,
-          schedule.vehicleType,
-          schedule.vehicleDescription,
           schedule.pmTitle,
           schedule.pmCategory,
           schedule.responsibleTech,
           schedule.checklistSummary,
           schedule.notes,
+          getVehicleSearchableText(schedule),
         ]
           .filter(Boolean)
           .join(" ")
@@ -633,7 +637,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         if (!hay.includes(q)) return false;
       }
 
-      if (vehicleTypeFilter !== "All" && schedule.vehicleType !== vehicleTypeFilter) {
+      if (!matchesVehicleTypeFilter(schedule, vehicleTypeFilter)) {
         return false;
       }
 
@@ -670,7 +674,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     rows.sort((a, b) => (b.entry.completedDate || "").localeCompare(a.entry.completedDate || ""));
     const q = searchQuery.trim().toLowerCase();
     return rows.filter(({ entry, schedule }) => {
-      if (vehicleTypeFilter !== "All" && schedule.vehicleType !== vehicleTypeFilter) {
+      if (!matchesVehicleTypeFilter(schedule, vehicleTypeFilter)) {
         return false;
       }
       if (categoryFilter !== "All" && schedule.pmCategory !== categoryFilter) {
@@ -680,12 +684,11 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       const hay = [
         entry.pmNo,
         schedule.pmNo,
-        schedule.vehicleId,
-        schedule.vehicleType,
         schedule.pmCategory,
         entry.performedBy,
         entry.notes,
         entry.completedDate,
+        getVehicleSearchableText(schedule),
       ]
         .filter(Boolean)
         .join(" ")
@@ -992,7 +995,11 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         pmNo: assignedPmNo,
         vehicleId: matchedVehicle?.vehicleId || cleanVehicleId,
         vehicleNumber: matchedVehicle?.number || matchedVehicle?.vehicleId || cleanVehicleId,
-        vehicleType: matchedVehicle?.vehicleType || existing?.vehicleType || "Forklift",
+        vehicleType: resolveVehicleType({
+          vehicleId: matchedVehicle?.vehicleId || cleanVehicleId,
+          vehicleType: matchedVehicle?.vehicleType || existing?.vehicleType || "Forklift",
+          description: matchedVehicle?.description || existing?.vehicleDescription,
+        }),
         vehicleDescription: matchedVehicle?.description || existing?.vehicleDescription || "",
         pmTitle: formPmTitle.trim() || formPmCategory,
         pmCategory: formPmCategory,
@@ -1286,7 +1293,11 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       pmNo: newPmNo,
       vehicleId: cleanVehicleId,
       vehicleNumber: payload.vehicle?.number || cleanVehicleId,
-      vehicleType: payload.vehicle?.vehicleType || "Material Handling",
+      vehicleType: resolveVehicleType({
+        vehicleId: cleanVehicleId,
+        vehicleType: payload.vehicle?.vehicleType || "Material Handling",
+        description: payload.vehicle?.description,
+      }),
       vehicleDescription: payload.vehicle?.description || "",
       pmTitle: "PM 3D Interactive Inspection",
       pmCategory: MH_PM_CATEGORIES[0],
@@ -1348,7 +1359,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
           pmNo: nextPmNo,
           vehicleId: v.vehicleId,
           vehicleNumber: v.number || v.vehicleId,
-          vehicleType: v.vehicleType || "Forklift",
+          vehicleType: resolveVehicleType(v),
           vehicleDescription: v.description || "",
           pmTitle: batchCategory,
           pmCategory: batchCategory,
@@ -1767,7 +1778,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                 <option value="All">ประเภทรถ: ทั้งหมด</option>
                 {vehicleTypes.map((vt) => (
                   <option key={vt} value={vt}>
-                    {vt}
+                    {getVehicleTypeDisplayLabel(vt)}
                   </option>
                 ))}
               </select>
@@ -1885,7 +1896,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                               {schedule.vehicleId}
                             </span>
                             <span className="text-xs text-slate-500 dark:text-slate-400">
-                              · {schedule.vehicleType}
+                              · {getVehicleTypeDisplayLabel(schedule.vehicleType, schedule)}
                             </span>
                           </div>
                           {schedule.vehicleDescription && (
@@ -2355,7 +2366,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                                 </span>
                               )}
                               <span className="code font-bold text-xs text-[#087eaf] dark:text-sky-300">
-                                {ev.schedule.vehicleId} · {ev.schedule.vehicleType}
+                                {ev.schedule.vehicleId} · {getVehicleTypeDisplayLabel(ev.schedule.vehicleType, ev.schedule)}
                               </span>
                             </div>
                             <span
@@ -2538,7 +2549,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                         <span className="code font-bold text-[#087eaf] dark:text-sky-300">
                           {schedule.vehicleId}
                         </span>
-                        <div className="table-sub-text text-[11px]">{schedule.vehicleType}</div>
+                        <div className="table-sub-text text-[11px]">{getVehicleTypeDisplayLabel(schedule.vehicleType, schedule)}</div>
                       </td>
                       <td>
                         <div className="table-item-name text-xs font-medium">
@@ -2688,7 +2699,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                       <option value="">-- เลือกรถโฟล์คลิฟท์ / รถลากจูง --</option>
                       {vehicles.map((v) => (
                         <option key={v.id} value={v.vehicleId}>
-                          {v.vehicleId} · {v.vehicleType}{" "}
+                          {v.vehicleId} · {getVehicleTypeDisplayLabel(v.vehicleType, v)}{" "}
                           {v.description ? `(${v.description})` : ""}
                         </option>
                       ))}

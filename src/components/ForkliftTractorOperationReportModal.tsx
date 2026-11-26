@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
+import { isElectricTractorVehicle, isForkliftVehicle } from "../utils/vehicleHelpers";
 import {
   MhDailyDutyRecord,
   MhMaintenanceRecord,
@@ -215,6 +216,7 @@ function resolveVehicleSpecFromFleet(
     else if (descUpper.includes("XINYUAN")) brand = "Xinyuan";
     else if (cleanCode.startsWith("FL-")) brand = "TCM";
     else if (cleanCode.startsWith("SC-")) brand = "Xinyuan";
+    else if (cleanCode.startsWith("TTEV")) brand = "BYD (EV)";
     else {
       const num = parseInt(cleanCode.replace(/\D/g, ""), 10);
       if (!isNaN(num) && num >= 19) brand = "BYD (EV)";
@@ -238,7 +240,21 @@ function resolveVehicleSpecFromFleet(
   let areaTableCategory: VehicleCatalogSpec["areaTableCategory"] =
     preset?.areaTableCategory || "Tractor";
 
-  if (cleanCode.startsWith("FL-") || matchedVehicle?.vehicleType === "Forklift") {
+  const isEvByRule = isElectricTractorVehicle({
+    vehicleId: cleanCode,
+    vehicleType: matchedVehicle?.vehicleType,
+    description: matchedVehicle?.description,
+  });
+
+  if (isEvByRule) {
+    category = "Tractor (EV)";
+    areaTableCategory = "Tractor";
+  } else if (
+    isForkliftVehicle({
+      vehicleId: cleanCode,
+      vehicleType: matchedVehicle?.vehicleType,
+    })
+  ) {
     category = "Forklift";
     areaTableCategory = "Forklift";
   } else if (cleanCode.startsWith("SC-") || brand === "Xinyuan") {

@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import { Vehicle } from "../../types/officer";
+import { getVehicleTypeDisplayLabel, resolveVehicleType } from "../../utils/vehicleHelpers";
 import {
   MhMaintenanceRecord,
   MhPm3dModelType,
@@ -556,8 +557,11 @@ export function Pm3dInteractiveWorkspace({
         requesterName: recorderName,
         vehicleId: effectiveVehicleId,
         vehicleNumber: activeSchedule?.vehicleNumber || activeVehicle?.number || effectiveVehicleId,
-        vehicleType:
-          activeSchedule?.vehicleType || activeVehicle?.vehicleType || PM3D_MODELS[modelType].shortLabel,
+        vehicleType: resolveVehicleType({
+          vehicleType: activeSchedule?.vehicleType || activeVehicle?.vehicleType || PM3D_MODELS[modelType].shortLabel,
+          vehicleId: effectiveVehicleId,
+          description: vehicleDesc,
+        }),
         vehicleDescription: `${effectiveVehicleId} - ${vehicleDesc}`,
         repairType: repairCategory,
         repairDescription: `[พบปัญหาจาก PM 3D${pmRefLabel}]\n${detailLines.join("\n")}`.slice(0, 990),
@@ -825,7 +829,7 @@ export function Pm3dInteractiveWorkspace({
                 <optgroup label="รถในฟลีท (สร้างกำหนดการ PM ใหม่อัตโนมัติ)">
                   {vehicles.map((v) => (
                     <option key={v.id} value={`veh:${v.vehicleId}`}>
-                      {v.vehicleId} · {v.vehicleType} {v.description ? `(${v.description})` : ""}
+                      {v.vehicleId} · {getVehicleTypeDisplayLabel(v.vehicleType, v)} {v.description ? `(${v.description})` : ""}
                     </option>
                   ))}
                 </optgroup>

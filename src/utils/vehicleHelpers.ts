@@ -3,20 +3,75 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Vehicle, VehicleType } from "../types/officer";
+import { VehicleType } from "../types/officer";
 
-export function isTrailerVehicle(
-  v: Pick<Vehicle, "vehicleType" | "vehicleId" | "number">
-): boolean {
-  const id = (v.vehicleId || v.number || "").trim().toUpperCase();
-  return v.vehicleType === "Trailer" || id.startsWith("TTL-");
+export type VehicleTypeCandidate = {
+  vehicleType?: string;
+  type?: string;
+  vehicleId?: string;
+  number?: string;
+  id?: string;
+  description?: string;
+  vehicleDescription?: string;
+  registrationNumber?: string;
+  department?: string;
+};
+
+function getPrimaryVehicleCodeUpper(v: VehicleTypeCandidate): string {
+  return String(v.vehicleId || v.number || v.id || "")
+    .trim()
+    .toUpperCase();
 }
 
-export function isTractorVehicle(
-  v: Pick<Vehicle, "vehicleType" | "vehicleId" | "number">
-): boolean {
-  if (isTrailerVehicle(v)) return false;
-  const id = (v.vehicleId || v.number || "").trim().toUpperCase();
+function startsWithTtevToken(value?: string): boolean {
+  const clean = String(value || "").trim().toUpperCase();
+  return clean.startsWith("TTEV");
+}
+
+/**
+ * Returns true if the vehicle is an Electric Tractor ("หัวลากไฟฟ้า"),
+ * matching any vehicle whose code/ID or name/description starts with "TTEV"
+ * (e.g., TTEV-19 through TTEV-27) or whose vehicleType explicitly denotes ElectricTractor / หัวลากไฟฟ้า.
+ */
+export function isElectricTractorVehicle(v: VehicleTypeCandidate): boolean {
+  const rawType = String(v.vehicleType || "").trim();
+  const rawTypeLower = rawType.toLowerCase();
+  const rawLegacyTypeLower = String(v.type || "").trim().toLowerCase();
+
+  if (
+    rawType === "ElectricTractor" ||
+    rawType === "หัวลากไฟฟ้า" ||
+    rawTypeLower === "electric tractor" ||
+    rawTypeLower === "electrictractor" ||
+    rawTypeLower.includes("หัวลากไฟฟ้า") ||
+    rawLegacyTypeLower.includes("หัวลากไฟฟ้า") ||
+    rawLegacyTypeLower.includes("electrictractor")
+  ) {
+    return true;
+  }
+
+  return (
+    startsWithTtevToken(v.vehicleId) ||
+    startsWithTtevToken(v.number) ||
+    startsWithTtevToken(v.id) ||
+    startsWithTtevToken(v.description) ||
+    startsWithTtevToken(v.vehicleDescription) ||
+    startsWithTtevToken(v.registrationNumber)
+  );
+}
+
+export function isTrailerVehicle(v: VehicleTypeCandidate): boolean {
+  if (isElectricTractorVehicle(v)) return false;
+  const id = getPrimaryVehicleCodeUpper(v);
+  return v.vehicleType === "Trailer" || v.vehicleType === "หางลาก" || id.startsWith("TTL-");
+}
+
+/**
+ * Returns true for standard (non-EV) tractors / tuggers (e.g., TT-*).
+ */
+export function isStandardTractorVehicle(v: VehicleTypeCandidate): boolean {
+  if (isTrailerVehicle(v) || isElectricTractorVehicle(v)) return false;
+  const id = getPrimaryVehicleCodeUpper(v);
   return (
     v.vehicleType === "Tractor" ||
     v.vehicleType === "Tugger" ||
@@ -24,16 +79,63 @@ export function isTractorVehicle(
   );
 }
 
-export function isForkliftVehicle(
-  v: Pick<Vehicle, "vehicleType" | "vehicleId" | "number">
-): boolean {
-  if (isTrailerVehicle(v)) return false;
-  const id = (v.vehicleId || v.number || "").trim().toUpperCase();
+/**
+ * Returns true for all tractor-class vehicles (both standard Tractor/Tugger and ElectricTractor TTEV-*).
+ */
+export function isTractorVehicle(v: VehicleTypeCandidate): boolean {
+  return isElectricTractorVehicle(v) || isStandardTractorVehicle(v);
+}
+
+export function isForkliftVehicle(v: VehicleTypeCandidate): boolean {
+  if (isTrailerVehicle(v) || isElectricTractorVehicle(v)) return false;
+  const id = getPrimaryVehicleCodeUpper(v);
   return v.vehicleType === "Forklift" || id.startsWith("FL-");
 }
 
-export function getVehicleTypeDisplayLabel(vehicleType: VehicleType): string {
-  switch (vehicleType) {
+/**
+ * Resolves the canonical VehicleType code using the system-wide rule:
+ * TTEV* -> "ElectricTractor" ("หัวลากไฟฟ้า") takes priority over legacy Tractor/Forklift fields.
+ */
+export function resolveVehicleType(v: VehicleTypeCandidate): VehicleType {
+  if (isElectricTractorVehicle(v)) return "ElectricTractor";
+  if (isTrailerVehicle(v)) return "Trailer";
+  if (isForkliftVehicle(v)) return "Forklift";
+  if (v.vehicleType === "Tugger") return "Tugger";
+  if (isStandardTractorVehicle(v)) return "Tractor";
+  if (
+    v.vehicleType === "Tractor" ||
+    v.vehicleType === "Forklift" ||
+    v.vehicleType === "Tugger" ||
+    v.vehicleType === "Trailer" ||
+    v.vehicleType === "Other"
+  ) {
+    return v.vehicleType;
+  }
+  return "Other";
+}
+
+/**
+ * Returns the canonical display label for a vehicle type (e.g., "หัวลากไฟฟ้า").
+ * Pass `vehicle` whenever available so TTEV-* records always display "หัวลากไฟฟ้า"
+ * even if legacy stored records still carry an older `vehicleType`.
+ */
+export function getVehicleTypeDisplayLabel(
+  vehicleType?: string,
+  vehicle?: VehicleTypeCandidate
+): string {
+  const candidate: VehicleTypeCandidate = {
+    ...(vehicle || {}),
+    vehicleType: vehicle?.vehicleType ?? vehicleType,
+  };
+
+  if (isElectricTractorVehicle(candidate)) {
+    return "หัวลากไฟฟ้า";
+  }
+
+  const resolved = resolveVehicleType(candidate);
+  switch (resolved) {
+    case "ElectricTractor":
+      return "หัวลากไฟฟ้า";
     case "Tractor":
       return "รถหัวลาก (Tractor)";
     case "Tugger":
@@ -42,7 +144,83 @@ export function getVehicleTypeDisplayLabel(vehicleType: VehicleType): string {
       return "รถโฟล์คลิฟท์ (Forklift)";
     case "Trailer":
       return "หางลาก (Trailer)";
-    default:
+    default: {
+      const raw = String(vehicleType || vehicle?.vehicleType || "").trim();
+      if (raw && raw !== "Other") return raw;
       return "อื่นๆ (Other)";
+    }
   }
+}
+
+/**
+ * Returns normalized lowercase searchable text containing IDs, descriptions,
+ * resolved Thai/English vehicle type labels, and keywords such as "หัวลากไฟฟ้า" / "TTEV".
+ */
+export function getVehicleSearchableText(v: VehicleTypeCandidate): string {
+  const resolved = resolveVehicleType(v);
+  const displayLabel = getVehicleTypeDisplayLabel(v.vehicleType, v);
+
+  const extraKeywords =
+    resolved === "ElectricTractor"
+      ? "หัวลากไฟฟ้า electric tractor ttev หัวลาก"
+      : resolved === "Trailer"
+      ? "หางลาก trailer ttl"
+      : resolved === "Forklift"
+      ? "รถโฟล์คลิฟท์ โฟล์คลิฟท์ forklift fl"
+      : resolved === "Tractor" || resolved === "Tugger"
+      ? "รถหัวลาก หัวลาก รถลากจูง tractor tugger tt"
+      : "";
+
+  return [
+    v.vehicleId,
+    v.number,
+    v.id,
+    v.registrationNumber,
+    v.description,
+    v.vehicleDescription,
+    v.vehicleType,
+    v.type,
+    v.department,
+    resolved,
+    displayLabel,
+    extraKeywords,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+/**
+ * Shared vehicle type filter matcher across Vehicle Management, PM Schedule, etc.
+ */
+export function matchesVehicleTypeFilter(
+  v: VehicleTypeCandidate,
+  filterValue: string
+): boolean {
+  const cleanFilter = String(filterValue || "").trim();
+  if (!cleanFilter || cleanFilter === "All") return true;
+
+  const resolved = resolveVehicleType(v);
+  const filterLower = cleanFilter.toLowerCase();
+
+  if (
+    cleanFilter === "ElectricTractor" ||
+    cleanFilter === "หัวลากไฟฟ้า" ||
+    filterLower === "electric tractor" ||
+    filterLower === "ttev"
+  ) {
+    return resolved === "ElectricTractor";
+  }
+
+  if (cleanFilter === "Tractor") return resolved === "Tractor";
+  if (cleanFilter === "Tugger") return resolved === "Tugger";
+  if (cleanFilter === "Forklift") return resolved === "Forklift";
+  if (cleanFilter === "Trailer") return resolved === "Trailer";
+  if (cleanFilter === "Other") return resolved === "Other";
+
+  return (
+    resolved.toLowerCase() === filterLower ||
+    getVehicleTypeDisplayLabel(v.vehicleType, v).toLowerCase().includes(filterLower) ||
+    String(v.vehicleType || "").toLowerCase() === filterLower
+  );
 }

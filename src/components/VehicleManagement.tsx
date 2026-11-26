@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Truck,
   Plus,
@@ -15,10 +15,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
-  ShieldCheck,
-  Calendar,
-  Layers,
-  FileText
+  Box,
+  Table2,
+  Wrench,
+  FileText,
 } from "lucide-react";
 import {
   Vehicle,
@@ -29,17 +29,32 @@ import {
 } from "../types/officer";
 import { MASTER_DEPARTMENTS } from "../data/officerData";
 import {
+  getVehicleSearchableText,
   getVehicleTypeDisplayLabel,
+  isElectricTractorVehicle,
   isForkliftVehicle,
-  isTractorVehicle,
+  isStandardTractorVehicle,
   isTrailerVehicle,
+  matchesVehicleTypeFilter,
+  resolveVehicleType,
 } from "../utils/vehicleHelpers";
+import {
+  MhMaintenanceRecord,
+  subscribeForkliftCloudRealtimeMode,
+  subscribeToMhMaintenance,
+} from "../services/forkliftDataService";
+import {
+  VehicleParkingYard3D,
+  isMaintenanceRecordOpen,
+  resolveOpenRepairMeta,
+} from "./fleet3d/VehicleParkingYard3D";
 
 interface VehicleManagementProps {
   vehicles: Vehicle[];
   assignments: VehicleAssignment[];
   onUpdateVehicles: (updated: Vehicle[]) => void;
   onNavigateToAssignment?: () => void;
+  onNavigateToFixFlush?: () => void;
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
 }
 
@@ -48,10 +63,39 @@ export function VehicleManagement({
   assignments,
   onUpdateVehicles,
   onNavigateToAssignment,
+  onNavigateToFixFlush,
   onLogTransaction,
 }: VehicleManagementProps) {
+  // View mode: Table vs 3D Parking Yard
+  const [viewMode, setViewMode] = useState<"table" | "yard3d">("table");
+
+  // Live Maintenance / Repair records from FixFlush (ระบบแจ้งซ่อม)
+  const [maintenanceRecords, setMaintenanceRecords] = useState<MhMaintenanceRecord[]>([]);
+  const [cloudRealtimeTick, setCloudRealtimeTick] = useState<number>(0);
+
+  useEffect(() => {
+    const unsubMode = subscribeForkliftCloudRealtimeMode(() => {
+      setCloudRealtimeTick((prev) => prev + 1);
+    });
+    return unsubMode;
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeToMhMaintenance(
+      (records) => {
+        setMaintenanceRecords(records);
+      },
+      (err) => {
+        console.warn("VehicleManagement: failed to subscribe to mh_maintenance", err);
+      }
+    );
+    return () => {
+      unsub();
+    };
+  }, [cloudRealtimeTick]);
+
   // Category Tab & Search & Filter state
-  const [activeTab, setActiveTab] = useState<"all" | "tractor" | "forklift" | "trailer">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "tractor" | "ev_tractor" | "forklift" | "trailer">("all");
   const [searchKeyword, setSearchKeyword] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("All");
   const [filterActiveStatus, setFilterActiveStatus] = useState<string>("All");
@@ -92,6 +136,44 @@ export function VehicleManagement({
     return map;
   }, [assignments, todayDate]);
 
+  // Map open maintenance tickets by normalized vehicle code
+  const openRepairsByVehicle = useMemo(() => {
+    const map = new Map<string, MhMaintenanceRecord[]>();
+    maintenanceRecords.forEach((rec) => {
+      if (!isMaintenanceRecordOpen(rec)) return;
+      const keys = new Set<string>();
+      const pushKey = (raw?: string) => {
+        const clean = String(raw || "").trim().toUpperCase();
+        if (!clean) return;
+        keys.add(clean);
+        const token = clean.split(/[\s(·|/]+/)[0];
+        if (token) keys.add(token);
+      };
+      pushKey(rec.vehicleId);
+      pushKey(rec.vehicleNumber);
+      keys.forEach((k) => {
+        const existing = map.get(k) || [];
+        if (!existing.some((item) => item.id === rec.id)) {
+          existing.push(rec);
+          map.set(k, existing);
+        }
+      });
+    });
+    return map;
+  }, [maintenanceRecords]);
+
+  const openRepairVehicleCount = useMemo(() => {
+    let count = 0;
+    vehicles.forEach((v) => {
+      const k1 = String(v.vehicleId || "").trim().toUpperCase();
+      const k2 = String(v.number || "").trim().toUpperCase();
+      const k3 = String(v.id || "").trim().toUpperCase();
+      const list = openRepairsByVehicle.get(k1) || openRepairsByVehicle.get(k2) || openRepairsByVehicle.get(k3);
+      if (list && list.length > 0) count++;
+    });
+    return count;
+  }, [vehicles, openRepairsByVehicle]);
+
   // Dynamic operational status resolver
   const getResolvedOperationalStatus = (vehicle: Vehicle): VehicleOperationalStatus => {
     if (vehicle.activeStatus === "Inactive") {
@@ -121,13 +203,15 @@ export function VehicleManagement({
     let outOfService = 0;
     let available = 0;
     let tractorCount = 0;
+    let evTractorCount = 0;
     let forkliftCount = 0;
     let trailerCount = 0;
 
     vehicles.forEach((v) => {
-      if (isTrailerVehicle(v)) trailerCount++;
+      if (isElectricTractorVehicle(v)) evTractorCount++;
+      else if (isTrailerVehicle(v)) trailerCount++;
       else if (isForkliftVehicle(v)) forkliftCount++;
-      else if (isTractorVehicle(v)) tractorCount++;
+      else if (isStandardTractorVehicle(v)) tractorCount++;
 
       const status = getResolvedOperationalStatus(v);
       if (status === "In Use") inUse++;
@@ -145,6 +229,7 @@ export function VehicleManagement({
       outOfService,
       available,
       tractorCount,
+      evTractorCount,
       forkliftCount,
       trailerCount,
     };
@@ -153,27 +238,17 @@ export function VehicleManagement({
   // Filtered vehicles
   const filteredVehicles = useMemo(() => {
     return vehicles.filter((vehicle) => {
-      if (activeTab === "tractor" && !isTractorVehicle(vehicle)) return false;
+      if (activeTab === "tractor" && !isStandardTractorVehicle(vehicle)) return false;
+      if (activeTab === "ev_tractor" && !isElectricTractorVehicle(vehicle)) return false;
       if (activeTab === "forklift" && !isForkliftVehicle(vehicle)) return false;
       if (activeTab === "trailer" && !isTrailerVehicle(vehicle)) return false;
 
       if (searchKeyword.trim()) {
-        const query = searchKeyword.toLowerCase();
-        const searchable = [
-          vehicle.vehicleId,
-          vehicle.number,
-          vehicle.registrationNumber || "",
-          vehicle.description,
-          vehicle.vehicleType,
-          vehicle.department,
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (!searchable.includes(query)) return false;
+        const query = searchKeyword.trim().toLowerCase();
+        if (!getVehicleSearchableText(vehicle).includes(query)) return false;
       }
 
-      if (filterType !== "All" && vehicle.vehicleType !== filterType) {
+      if (!matchesVehicleTypeFilter(vehicle, filterType)) {
         return false;
       }
 
@@ -222,12 +297,21 @@ export function VehicleManagement({
       " " +
       now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
+    const resolvedVehicleType = resolveVehicleType({
+      vehicleId: trimmedId,
+      vehicleType: form.vehicleType,
+      description: form.description.trim(),
+      registrationNumber: form.registrationNumber.trim(),
+    });
+    const resolvedLabel =
+      resolvedVehicleType === "ElectricTractor" ? "หัวลากไฟฟ้า" : resolvedVehicleType;
+
     const newVehicle: Vehicle = {
       id: trimmedId,
       vehicleId: trimmedId,
       number: trimmedId,
-      vehicleType: form.vehicleType,
-      type: `${form.vehicleType} ${form.capacityTon ? `${form.capacityTon}T` : ""}`.trim(),
+      vehicleType: resolvedVehicleType,
+      type: `${resolvedLabel} ${form.capacityTon ? `${form.capacityTon}T` : ""}`.trim(),
       description: form.description.trim(),
       registrationNumber: form.registrationNumber.trim() || `TMT-${trimmedId}`,
       department: form.department,
@@ -245,7 +329,7 @@ export function VehicleManagement({
     showToast(`Vehicle ${newVehicle.vehicleId} registered successfully and synced to Cloud.`);
 
     onLogTransaction?.(
-      `Registered new vehicle ${newVehicle.vehicleId} (${newVehicle.vehicleType})`,
+      `Registered new vehicle ${newVehicle.vehicleId} (${getVehicleTypeDisplayLabel(newVehicle.vehicleType, newVehicle)})`,
       newVehicle.vehicleId,
       "Completed"
     );
@@ -270,10 +354,20 @@ export function VehicleManagement({
       " " +
       now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
+    const resolvedVehicleType = resolveVehicleType({
+      vehicleId: editingVehicle.vehicleId,
+      number: editingVehicle.number,
+      vehicleType: form.vehicleType,
+      description: form.description.trim(),
+      registrationNumber: form.registrationNumber.trim(),
+    });
+    const resolvedLabel =
+      resolvedVehicleType === "ElectricTractor" ? "หัวลากไฟฟ้า" : resolvedVehicleType;
+
     const updatedVehicle: Vehicle = {
       ...editingVehicle,
-      vehicleType: form.vehicleType,
-      type: `${form.vehicleType} ${form.capacityTon ? `${form.capacityTon}T` : ""}`.trim(),
+      vehicleType: resolvedVehicleType,
+      type: `${resolvedLabel} ${form.capacityTon ? `${form.capacityTon}T` : ""}`.trim(),
       description: form.description.trim(),
       registrationNumber: form.registrationNumber.trim(),
       department: form.department,
@@ -372,7 +466,7 @@ export function VehicleManagement({
           <div className="kpi-label">Total Fleet Size</div>
           <div className="kpi-value">{metrics.total}</div>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-            หัวลาก {metrics.tractorCount} · โฟล์คลิฟท์ {metrics.forkliftCount} · หางลาก {metrics.trailerCount}
+            หัวลาก {metrics.tractorCount} · หัวลากไฟฟ้า {metrics.evTractorCount} · โฟล์คลิฟท์ {metrics.forkliftCount} · หางลาก {metrics.trailerCount}
           </div>
         </div>
 
@@ -400,12 +494,56 @@ export function VehicleManagement({
 
       {/* Main Panel */}
       <section className="panel">
-        <div className="panel-header">
+        <div className="panel-header" style={{ flexWrap: "wrap", gap: 10 }}>
           <div>
             <div className="panel-title">Fleet & Vehicle Management Registry</div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            {/* View Mode Switcher: Table View vs 3D Parking Yard */}
+            <div
+              className="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100/90 dark:bg-slate-800/80 p-0.5"
+              role="group"
+              aria-label="มุมมองการแสดงผลยานพาหนะ"
+            >
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  viewMode === "table"
+                    ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Table2 size={14} />
+                <span>มุมมองตาราง</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("yard3d")}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                  viewMode === "yard3d"
+                    ? "bg-sky-600 text-white shadow-sm"
+                    : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Box size={14} />
+                <span>ลานจอดรถ 3D</span>
+                {openRepairVehicleCount > 0 && (
+                  <span
+                    className={`ml-0.5 rounded px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                      viewMode === "yard3d"
+                        ? "bg-rose-500 text-white"
+                        : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                    }`}
+                    title={`มีรถแจ้งซ่อมค้าง ${openRepairVehicleCount} คัน`}
+                  >
+                    ซ่อม {openRepairVehicleCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
             <button
               className="button"
               onClick={() => setShowAddModal(true)}
@@ -413,6 +551,8 @@ export function VehicleManagement({
               <Plus size={14} />
               {activeTab === "trailer"
                 ? "+ เพิ่มหางลาก (TTL-)"
+                : activeTab === "ev_tractor"
+                ? "+ เพิ่มหัวลากไฟฟ้า (TTEV-)"
                 : activeTab === "tractor"
                 ? "+ เพิ่มรถหัวลาก (TT-)"
                 : activeTab === "forklift"
@@ -422,11 +562,12 @@ export function VehicleManagement({
           </div>
         </div>
 
-        {/* Category Tabs: All | รถหัวลาก (TT-) | รถโฟล์คลิฟท์ (FL-) | หางลาก (TTL-) */}
+        {/* Category Tabs: All | รถหัวลาก (TT-) | หัวลากไฟฟ้า (TTEV-) | รถโฟล์คลิฟท์ (FL-) | หางลาก (TTL-) */}
         <div className="px-4 pt-3 pb-1 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
           {[
             { id: "all" as const, label: `ทั้งหมด (${metrics.total})` },
             { id: "tractor" as const, label: `รถหัวลาก TT- (${metrics.tractorCount})` },
+            { id: "ev_tractor" as const, label: `หัวลากไฟฟ้า TTEV- (${metrics.evTractorCount})` },
             { id: "forklift" as const, label: `รถโฟล์คลิฟท์ FL- (${metrics.forkliftCount})` },
             { id: "trailer" as const, label: `หางลาก TTL- (${metrics.trailerCount})` },
           ].map((tab) => {
@@ -457,7 +598,7 @@ export function VehicleManagement({
               style={{ paddingLeft: 30 }}
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="Search Vehicle ID (e.g. TT-01, FL-01, TTL-01), Registration, description..."
+              placeholder="ค้นหา Vehicle ID (TT-01, TTEV-19, FL-01, TTL-01), หัวลากไฟฟ้า, ทะเบียน, รายละเอียด..."
               aria-label="Search vehicles"
             />
           </div>
@@ -472,6 +613,7 @@ export function VehicleManagement({
           >
             <option value="All">All Vehicle Types</option>
             <option value="Tractor">Tractor (รถหัวลาก · TT-)</option>
+            <option value="ElectricTractor">หัวลากไฟฟ้า (Electric Tractor · TTEV-)</option>
             <option value="Tugger">Tugger (รถลากจูง · TT-)</option>
             <option value="Forklift">Forklift (รถโฟล์คลิฟท์ · FL-)</option>
             <option value="Trailer">Trailer (หางลาก · TTL-)</option>
@@ -521,6 +663,20 @@ export function VehicleManagement({
           </button>
         </div>
 
+        {/* Conditional View: Table vs 3D Parking Yard */}
+        {viewMode === "yard3d" ? (
+          <div className="p-3 sm:p-4">
+            <VehicleParkingYard3D
+              vehicles={filteredVehicles}
+              maintenanceRecords={maintenanceRecords}
+              vehicleAssignmentMap={vehicleAssignmentMap}
+              onEditVehicle={(v) => setEditingVehicle(v)}
+              onViewVehicleDetails={(v) => setViewingVehicle(v)}
+              onNavigateToFixFlush={onNavigateToFixFlush}
+            />
+          </div>
+        ) : (
+          <>
         {/* Vehicle Table */}
         <div className="table-wrap">
           <table>
@@ -545,6 +701,13 @@ export function VehicleManagement({
                 const resolvedOpStatus = getResolvedOperationalStatus(vehicle);
                 const isInactive = vehicle.activeStatus === "Inactive";
                 const isConfirming = confirmingDeactivateId === vehicle.id;
+                const vehicleOpenRepairs =
+                  openRepairsByVehicle.get(String(vehicle.vehicleId || "").trim().toUpperCase()) ||
+                  openRepairsByVehicle.get(String(vehicle.number || "").trim().toUpperCase()) ||
+                  openRepairsByVehicle.get(String(vehicle.id || "").trim().toUpperCase()) ||
+                  [];
+                const primaryOpenRepairMeta =
+                  vehicleOpenRepairs.length > 0 ? resolveOpenRepairMeta(vehicleOpenRepairs[0]) : null;
 
                 return (
                   <tr
@@ -570,7 +733,7 @@ export function VehicleManagement({
                         }}
                       >
                         <Truck size={13} color="#087eaf" />
-                        {getVehicleTypeDisplayLabel(vehicle.vehicleType)}
+                        {getVehicleTypeDisplayLabel(vehicle.vehicleType, vehicle)}
                       </span>
                       {vehicle.capacityTon && (
                         <div className="table-sub-text" style={{ fontSize: 10, color: "#8a9ba8" }}>
@@ -581,10 +744,12 @@ export function VehicleManagement({
 
                     <td>
                       <div className="table-item-name" style={{ fontWeight: 600 }}>
-                        {vehicle.description}
+                        {vehicle.description || (isElectricTractorVehicle(vehicle) ? "หัวลากไฟฟ้า" : "-")}
                       </div>
                       <div className="table-sub-text" style={{ fontSize: 10, color: "#8a9ba8" }}>
-                        Dept: {vehicle.department}
+                        {isElectricTractorVehicle(vehicle)
+                          ? `ประเภท: หัวลากไฟฟ้า · Dept: ${vehicle.department}`
+                          : `Dept: ${vehicle.department}`}
                       </div>
                     </td>
 
@@ -625,7 +790,23 @@ export function VehicleManagement({
                     </td>
 
                     <td>
-                      <VehicleOperationalStatusBadge status={resolvedOpStatus} />
+                      <div className="flex flex-col items-start gap-1">
+                        <VehicleOperationalStatusBadge status={resolvedOpStatus} />
+                        {primaryOpenRepairMeta && (
+                          <button
+                            type="button"
+                            onClick={() => setViewMode("yard3d")}
+                            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800 cursor-pointer"
+                            title={`${primaryOpenRepairMeta.label} (${vehicleOpenRepairs.length} ใบงาน) · คลิกเพื่อดูในลานจอด 3D`}
+                          >
+                            <Wrench size={10} />
+                            <span>
+                              แจ้งซ่อม: {primaryOpenRepairMeta.shortLabel}
+                              {vehicleOpenRepairs.length > 1 ? ` (${vehicleOpenRepairs.length})` : ""}
+                            </span>
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     <td>
@@ -748,6 +929,8 @@ export function VehicleManagement({
             Showing <strong>{filteredVehicles.length}</strong> of <strong>{vehicles.length}</strong> total fleet assets
           </div>
         </div>
+          </>
+        )}
       </section>
 
       {/* MODAL 1: ADD VEHICLE */}
@@ -757,6 +940,8 @@ export function VehicleManagement({
           defaultVehicleType={
             activeTab === "trailer"
               ? "Trailer"
+              : activeTab === "ev_tractor"
+              ? "ElectricTractor"
               : activeTab === "tractor"
               ? "Tractor"
               : activeTab === "forklift"
@@ -879,6 +1064,8 @@ function AddVehicleModal({
   const initialPrefix =
     defaultVehicleType === "Trailer"
       ? "TTL-"
+      : defaultVehicleType === "ElectricTractor"
+      ? "TTEV-"
       : defaultVehicleType === "Tractor"
       ? "TT-"
       : defaultVehicleType === "Forklift"
@@ -897,11 +1084,26 @@ function AddVehicleModal({
   const handleVehicleTypeChange = (nextType: VehicleType) => {
     setVehicleType(nextType);
     const trimmed = vehicleId.trim().toUpperCase();
-    if (!trimmed || trimmed === "TT-" || trimmed === "FL-" || trimmed === "TTL-") {
+    if (!trimmed || trimmed === "TT-" || trimmed === "TTEV-" || trimmed === "FL-" || trimmed === "TTL-") {
       if (nextType === "Trailer") setVehicleId("TTL-");
+      else if (nextType === "ElectricTractor") setVehicleId("TTEV-");
       else if (nextType === "Tractor" || nextType === "Tugger") setVehicleId("TT-");
       else if (nextType === "Forklift") setVehicleId("FL-");
       else setVehicleId("");
+    }
+  };
+
+  const handleVehicleIdChange = (rawVal: string) => {
+    setVehicleId(rawVal);
+    const upper = rawVal.trim().toUpperCase();
+    if (upper.startsWith("TTEV")) {
+      setVehicleType("ElectricTractor");
+    } else if (upper.startsWith("TTL-")) {
+      setVehicleType("Trailer");
+    } else if (upper.startsWith("FL-")) {
+      setVehicleType("Forklift");
+    } else if (upper.startsWith("TT-") && vehicleType === "ElectricTractor") {
+      setVehicleType("Tractor");
     }
   };
 
@@ -910,11 +1112,11 @@ function AddVehicleModal({
     setErrorMessage(null);
 
     const trimmedId = vehicleId.trim().toUpperCase();
-    if (!trimmedId || trimmedId === "TTL-" || trimmedId === "TT-" || trimmedId === "FL-") {
+    if (!trimmedId || trimmedId === "TTL-" || trimmedId === "TT-" || trimmedId === "TTEV-" || trimmedId === "FL-") {
       setErrorMessage(
         vehicleType === "Trailer"
           ? "กรุณาระบุรหัสหางลากให้ครบถ้วน (เช่น TTL-01)"
-          : "Please specify a unique Vehicle ID (e.g. TT-06, FL-003, TTL-01)."
+          : "Please specify a unique Vehicle ID (e.g. TT-06, TTEV-19, FL-003, TTL-01)."
       );
       return;
     }
@@ -984,8 +1186,8 @@ function AddVehicleModal({
               <input
                 className="field"
                 value={vehicleId}
-                onChange={(e) => setVehicleId(e.target.value)}
-                placeholder={vehicleType === "Trailer" ? "e.g. TTL-01, TTL-02" : "e.g. TT-06, FL-003, TTL-01"}
+                onChange={(e) => handleVehicleIdChange(e.target.value)}
+                placeholder={vehicleType === "Trailer" ? "e.g. TTL-01, TTL-02" : "e.g. TT-06, TTEV-19, FL-003, TTL-01"}
                 required
                 autoFocus
               />
@@ -1000,6 +1202,7 @@ function AddVehicleModal({
                 required
               >
                 <option value="Tractor">Tractor (รถหัวลาก · TT-)</option>
+                <option value="ElectricTractor">หัวลากไฟฟ้า (Electric Tractor · TTEV-)</option>
                 <option value="Tugger">Tugger (รถลากจูง · TT-)</option>
                 <option value="Forklift">Forklift (รถโฟล์คลิฟท์ · FL-)</option>
                 <option value="Trailer">Trailer (หางลาก · TTL-)</option>
@@ -1126,7 +1329,7 @@ function EditVehicleModal({
     operationalStatus: VehicleOperationalStatus;
   }) => { success: boolean; error?: string };
 }) {
-  const [vehicleType, setVehicleType] = useState<VehicleType>(vehicle.vehicleType);
+  const [vehicleType, setVehicleType] = useState<VehicleType>(() => resolveVehicleType(vehicle));
   const [description, setDescription] = useState<string>(vehicle.description);
   const [registrationNumber, setRegistrationNumber] = useState<string>(vehicle.registrationNumber || "");
   const [department, setDepartment] = useState<string>(vehicle.department);
@@ -1217,6 +1420,7 @@ function EditVehicleModal({
                 required
               >
                 <option value="Tractor">Tractor (รถหัวลาก · TT-)</option>
+                <option value="ElectricTractor">หัวลากไฟฟ้า (Electric Tractor · TTEV-)</option>
                 <option value="Tugger">Tugger (รถลากจูง · TT-)</option>
                 <option value="Forklift">Forklift (รถโฟล์คลิฟท์ · FL-)</option>
                 <option value="Trailer">Trailer (หางลาก · TTL-)</option>
@@ -1418,7 +1622,7 @@ function VehicleDetailsModal({
             </div>
             <div className="vehicle-spec-box" style={{ padding: "8px 12px", border: "1px solid #f1f5f9", borderRadius: 4 }}>
               <span>Vehicle Type: </span>
-              <strong>{vehicle.vehicleType}</strong>
+              <strong>{getVehicleTypeDisplayLabel(vehicle.vehicleType, vehicle)}</strong>
             </div>
             <div className="vehicle-spec-box" style={{ padding: "8px 12px", border: "1px solid #f1f5f9", borderRadius: 4 }}>
               <span>Registration License: </span>

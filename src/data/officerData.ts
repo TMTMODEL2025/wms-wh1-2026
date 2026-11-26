@@ -6,7 +6,10 @@
 import { Driver, Employee, EmployeeRole, Vehicle, VehicleAssignment } from "../types/officer";
 
 export const EMPLOYEE_ROLES: EmployeeRole[] = [
-  "Driver",
+  "Sr.Forklift Driver",
+  "Technical Service Forklift",
+  "Forklift Driver",
+  "Tractor Driver",
   "Officer",
   "Sr.Warehouse Officer",
   "Inspector",
@@ -17,6 +20,18 @@ export const EMPLOYEE_ROLES: EmployeeRole[] = [
   "Manager",
   "Other",
 ];
+
+export const DRIVER_ROLES: readonly string[] = [
+  "Sr.Forklift Driver",
+  "Technical Service Forklift",
+  "Forklift Driver",
+  "Tractor Driver",
+  "Driver", // legacy compatibility for previously saved records
+];
+
+export function isDriverRole(role?: string): boolean {
+  return Boolean(role && DRIVER_ROLES.includes(role));
+}
 
 export const MASTER_DEPARTMENTS: string[] = [
   "Material Handling - Fleet",
@@ -69,7 +84,7 @@ export function saveStoredEmployees(employees: Employee[]): void {
  */
 export function getActiveDriversFromEmployees(employees: Employee[]): Driver[] {
   return employees
-    .filter((emp) => emp.role === "Driver" && emp.employmentStatus === "Active")
+    .filter((emp) => isDriverRole(emp.role) && emp.employmentStatus === "Active")
     .map((emp) => ({
       id: emp.legacyDriverId || emp.employeeId,
       name: emp.employeeName,

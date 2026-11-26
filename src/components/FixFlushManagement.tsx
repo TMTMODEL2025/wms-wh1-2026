@@ -45,6 +45,11 @@ import {
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
 import {
+  getVehicleSearchableText,
+  getVehicleTypeDisplayLabel,
+  resolveVehicleType,
+} from "../utils/vehicleHelpers";
+import {
   MH_REPAIR_CATEGORIES,
   MhMaintenanceRecord,
   MhRepairPhotoItem,
@@ -433,7 +438,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       const cost = getMaintenanceRecordTotalCost(r);
       const entry = otherVehicleMap.get(vid) || {
         vehicleId: r.vehicleId || "-",
-        vehicleType: r.vehicleType || "Forklift",
+        vehicleType: getVehicleTypeDisplayLabel(r.vehicleType, r),
         count: 0,
         costCount: 0,
         totalCost: 0,
@@ -715,8 +720,12 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     setIsSubmittingRequest(true);
     try {
       const targetVehicle = vehicles.find((v) => v.vehicleId === cleanVehicleId);
+      const resolvedVehType = resolveVehicleType(
+        targetVehicle || { vehicleId: cleanVehicleId, vehicleType: "Forklift" }
+      );
+      const resolvedVehLabel = getVehicleTypeDisplayLabel(resolvedVehType, targetVehicle || { vehicleId: cleanVehicleId });
       const vehicleDescription = targetVehicle
-        ? `${targetVehicle.vehicleId} - ${targetVehicle.vehicleType} (${targetVehicle.description || "-"})`
+        ? `${targetVehicle.vehicleId} - ${resolvedVehLabel} (${targetVehicle.description || "-"})`
         : cleanVehicleId;
 
       const parsedDate = reqWorkingDate ? new Date(`${reqWorkingDate}T00:00:00`) : new Date();
@@ -730,7 +739,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         requesterName: cleanRequester,
         vehicleId: cleanVehicleId,
         vehicleNumber: cleanVehicleId,
-        vehicleType: targetVehicle?.vehicleType || "Forklift",
+        vehicleType: resolvedVehType,
         vehicleDescription,
         repairType: reqRepairType,
         repairDescription: cleanDesc,
@@ -1440,7 +1449,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         r.vehicleId.toLowerCase().includes(q) ||
         r.repairType.toLowerCase().includes(q) ||
         r.repairDescription.toLowerCase().includes(q) ||
-        r.technicianName.toLowerCase().includes(q)
+        r.technicianName.toLowerCase().includes(q) ||
+        getVehicleSearchableText(r).includes(q)
       );
     });
   }, [records, activeTab, supervisorSubFilter, stageFilter, repairCategoryFilter, searchQuery]);
@@ -1991,7 +2001,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       {rec.vehicleId}
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                      {rec.vehicleType || "Forklift"}
+                      {getVehicleTypeDisplayLabel(rec.vehicleType, rec)}
                       {rec.operatingHours > 0 ? ` · ${rec.operatingHours} ชม.` : ""}
                     </div>
                   </td>
@@ -2371,7 +2381,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     <option value="">-- เลือกเบอร์รถ --</option>
                     {vehicles.map((v) => (
                       <option key={v.id} value={v.vehicleId}>
-                        {v.vehicleId} - {v.vehicleType} ({v.description || "Fleet"})
+                        {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)} ({v.description || "Fleet"})
                       </option>
                     ))}
                   </select>
@@ -3696,7 +3706,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                                             {other.vehicleId}
                                           </div>
                                           <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                            {other.vehicleType || "Forklift"}
+                                            {getVehicleTypeDisplayLabel(other.vehicleType, other)}
                                           </div>
                                         </td>
                                         <td className="ts-left whitespace-nowrap tabular-nums">

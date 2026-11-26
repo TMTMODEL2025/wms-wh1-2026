@@ -589,6 +589,9 @@ export function inferPm3dModelType(
   }
 
   if (
+    combined.includes("ttev") ||
+    combined.includes("หัวลากไฟฟ้า") ||
+    combined.includes("electrictractor") ||
     combined.includes("ev") ||
     combined.includes("electric") ||
     combined.includes("ไฟฟ้า") ||

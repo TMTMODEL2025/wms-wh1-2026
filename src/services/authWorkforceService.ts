@@ -36,6 +36,7 @@ import {
   getSectionMeta,
   resolveEmployeeAllowedSections,
 } from "../utils/sectionPermissions";
+import { resolveVehicleType } from "../utils/vehicleHelpers";
 
 export const WMS_EMPLOYEES_COLLECTION = "wms_employees";
 export const WMS_VEHICLES_COLLECTION = "wms_vehicles";
@@ -310,11 +311,13 @@ export async function saveWmsVehicleToCloud(vehicle: Vehicle): Promise<void> {
     .trim()
     .toUpperCase();
   const docId = sanitizeDocId(normalizedVehicleId);
+  const resolvedType = resolveVehicleType({ ...vehicle, vehicleId: normalizedVehicleId });
   const payload = stripUndefinedDeep({
     ...vehicle,
     id: vehicle.id || docId,
     vehicleId: normalizedVehicleId,
     number: normalizedVehicleId,
+    vehicleType: resolvedType,
     updatedAt: vehicle.updatedAt || formatLocalTimestamp().timestamp,
   });
 
@@ -363,11 +366,13 @@ export async function syncVehicleFleetDiffToCloud(
         .trim()
         .toUpperCase();
       const docId = sanitizeDocId(normalizedVehicleId);
+      const resolvedType = resolveVehicleType({ ...v, vehicleId: normalizedVehicleId });
       const payload = stripUndefinedDeep({
         ...v,
         id: v.id || docId,
         vehicleId: normalizedVehicleId,
         number: normalizedVehicleId,
+        vehicleType: resolvedType,
         updatedAt: v.updatedAt || formatLocalTimestamp().timestamp,
       });
       batch.set(doc(db, WMS_VEHICLES_COLLECTION, docId), payload, { merge: true });
@@ -396,7 +401,10 @@ export async function syncVehicleFleetDiffToCloud(
 export function subscribeToWmsVehicles(
   onUpdate: (vehicles: Vehicle[]) => void
 ): () => void {
-  const cached = loadStoredVehicles();
+  const cached = loadStoredVehicles().map((raw) => ({
+    ...raw,
+    vehicleType: resolveVehicleType(raw),
+  }));
   if (cached.length > 0) {
     onUpdate(cached);
   }
@@ -410,13 +418,21 @@ export function subscribeToWmsVehicles(
         const normalizedVehicleId = String(raw.vehicleId || raw.number || d.id)
           .trim()
           .toUpperCase();
+        const resolvedType = resolveVehicleType({
+          ...raw,
+          vehicleId: normalizedVehicleId,
+          vehicleType: raw.vehicleType || "Forklift",
+        });
         return {
           ...raw,
           id: raw.id || d.id,
           vehicleId: normalizedVehicleId,
           number: raw.number || normalizedVehicleId,
-          vehicleType: raw.vehicleType || "Forklift",
-          type: raw.type || raw.vehicleType || "Forklift",
+          vehicleType: resolvedType,
+          type:
+            resolvedType === "ElectricTractor"
+              ? `หัวลากไฟฟ้า ${raw.capacityTon ? `${raw.capacityTon}T` : ""}`.trim()
+              : raw.type || resolvedType,
           description: raw.description || "",
           registrationNumber: raw.registrationNumber || `TMT-${normalizedVehicleId}`,
           activeStatus: raw.activeStatus || "Active",

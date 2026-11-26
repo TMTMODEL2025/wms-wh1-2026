@@ -8,6 +8,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { dbForklift, handleFirestoreError, OperationType } from "./firebase";
+import { resolveVehicleType } from "../utils/vehicleHelpers";
 
 // ============================================================================
 // Dedicated Firestore Collections for Material Handling (Forklift) (100% Isolated)
@@ -1369,7 +1370,14 @@ function sanitizeMhMaintenancePayload(r: MhMaintenanceRecord): MhMaintenanceReco
       : "-",
     vehicleId: String(r.vehicleId || "").trim().slice(0, 64),
     vehicleNumber: String(r.vehicleNumber || r.vehicleId || "").trim().slice(0, 64),
-    vehicleType: String(r.vehicleType || "Forklift").trim().slice(0, 64),
+    vehicleType: String(
+      resolveVehicleType({
+        vehicleId: r.vehicleId,
+        number: r.vehicleNumber,
+        vehicleDescription: r.vehicleDescription,
+        vehicleType: r.vehicleType || "Forklift",
+      })
+    ).slice(0, 64),
     vehicleDescription: String(r.vehicleDescription || "-").trim().slice(0, 256),
     repairType: String(r.repairType || "ซ่อมทั่วไป (MN)").trim().slice(0, 128),
     repairDescription: String(r.repairDescription || "-").trim().slice(0, 1000),
@@ -2396,7 +2404,14 @@ function sanitizeMhPmSchedulePayload(
     pmNo: cleanPmNo,
     vehicleId: cleanVehicleId,
     vehicleNumber: cleanVehicleNumber,
-    vehicleType: String(r.vehicleType || "Forklift").trim().slice(0, 64),
+    vehicleType: String(
+      resolveVehicleType({
+        vehicleId: cleanVehicleId,
+        number: cleanVehicleNumber,
+        vehicleDescription: r.vehicleDescription,
+        vehicleType: r.vehicleType || "Forklift",
+      })
+    ).slice(0, 64),
     vehicleDescription: r.vehicleDescription
       ? String(r.vehicleDescription).trim().slice(0, 256)
       : undefined,

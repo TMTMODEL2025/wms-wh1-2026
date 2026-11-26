@@ -21,7 +21,11 @@ import {
   Truck,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
-import { isTrailerVehicle } from "../utils/vehicleHelpers";
+import {
+  getVehicleSearchableText,
+  getVehicleTypeDisplayLabel,
+  isTrailerVehicle,
+} from "../utils/vehicleHelpers";
 import {
   MhTireStockRecord,
   subscribeToMhTireStock,
@@ -235,23 +239,13 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const filteredDrivableVehicles = useMemo(() => {
     const q = vehicleFilterQuery.trim().toLowerCase();
     if (!q) return drivableVehicles;
-    return drivableVehicles.filter(
-      (v) =>
-        v.vehicleId.toLowerCase().includes(q) ||
-        (v.vehicleType || "").toLowerCase().includes(q) ||
-        (v.description || "").toLowerCase().includes(q)
-    );
+    return drivableVehicles.filter((v) => getVehicleSearchableText(v).includes(q));
   }, [drivableVehicles, vehicleFilterQuery]);
 
   const filteredTrailerVehicles = useMemo(() => {
     const q = vehicleFilterQuery.trim().toLowerCase();
     if (!q) return trailerVehicles;
-    return trailerVehicles.filter(
-      (v) =>
-        v.vehicleId.toLowerCase().includes(q) ||
-        (v.vehicleType || "").toLowerCase().includes(q) ||
-        (v.description || "").toLowerCase().includes(q)
-    );
+    return trailerVehicles.filter((v) => getVehicleSearchableText(v).includes(q));
   }, [trailerVehicles, vehicleFilterQuery]);
 
   const toggleCompatibleVehicle = (vehicleId: string) => {
@@ -1091,7 +1085,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                 key={v.id}
                                 type="button"
                                 onClick={() => toggleCompatibleVehicle(v.vehicleId)}
-                                title={`${v.vehicleId} - ${v.vehicleType}${v.description ? ` (${v.description})` : ""}`}
+                                title={`${v.vehicleId} - ${getVehicleTypeDisplayLabel(v.vehicleType, v)}${v.description ? ` (${v.description})` : ""}`}
                                 className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded border text-left transition-colors ${
                                   selected
                                     ? "bg-sky-600 text-white border-sky-600 shadow-xs"
@@ -1107,7 +1101,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                       selected ? "text-sky-100" : "text-slate-400 dark:text-slate-400"
                                     }`}
                                   >
-                                    {v.vehicleType}
+                                    {getVehicleTypeDisplayLabel(v.vehicleType, v)}
                                   </div>
                                 </div>
                                 {selected && <Check size={12} className="shrink-0" />}
@@ -1153,7 +1147,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                 key={v.id}
                                 type="button"
                                 onClick={() => toggleCompatibleVehicle(v.vehicleId)}
-                                title={`${v.vehicleId} - ${v.vehicleType}${v.description ? ` (${v.description})` : ""}`}
+                                title={`${v.vehicleId} - ${getVehicleTypeDisplayLabel(v.vehicleType, v)}${v.description ? ` (${v.description})` : ""}`}
                                 className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded border text-left transition-colors ${
                                   selected
                                     ? "bg-amber-600 text-white border-amber-600 shadow-xs"
@@ -1204,7 +1198,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                               );
                             return (
                               <option key={v.id} value={v.vehicleId}>
-                                {v.vehicleId} - {v.vehicleType}
+                                {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)}
                                 {v.description ? ` (${v.description})` : ""}
                                 {isCompat ? " ★ ใช้ยางขนาดนี้" : ""}
                               </option>
@@ -1222,7 +1216,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                               );
                             return (
                               <option key={v.id} value={v.vehicleId}>
-                                {v.vehicleId} - {v.vehicleType}
+                                {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)}
                                 {v.description ? ` (${v.description})` : ""}
                                 {isCompat ? " ★ ใช้ยางขนาดนี้" : ""}
                               </option>

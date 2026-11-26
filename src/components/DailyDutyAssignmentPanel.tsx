@@ -25,6 +25,7 @@ import {
   FileText,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
+import { isElectricTractorVehicle, isTrailerVehicle } from "../utils/vehicleHelpers";
 import { ForkliftTractorOperationReportModal } from "./ForkliftTractorOperationReportModal";
 import {
   MH_TEAMS,
@@ -221,10 +222,11 @@ export function DailyDutyAssignmentPanel({
       vehicles.filter((v) => {
         if (v.activeStatus !== "Active") return false;
         const code = String(v.vehicleId || v.number || "").trim().toUpperCase();
-        if (!code || code.startsWith("TTL") || v.vehicleType === "Trailer") {
+        if (!code || isTrailerVehicle(v)) {
           return false;
         }
         return (
+          isElectricTractorVehicle(v) ||
           code.startsWith("TT-") ||
           code.startsWith("FL-") ||
           code.startsWith("SC")

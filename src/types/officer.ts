@@ -11,7 +11,10 @@ export type AssignmentStatus =
   | "Cancelled";
 
 export type EmployeeRole =
-  | "Driver"
+  | "Sr.Forklift Driver"
+  | "Technical Service Forklift"
+  | "Forklift Driver"
+  | "Tractor Driver"
   | "Officer"
   | "Sr.Warehouse Officer"
   | "Inspector"
@@ -20,7 +23,8 @@ export type EmployeeRole =
   | "Supervisor"
   | "Assistant Manager"
   | "Manager"
-  | "Other";
+  | "Other"
+  | "Driver"; // Legacy saved records compatibility (removed from UI choices)
 
 export type EmploymentStatus = "Active" | "Inactive";
 
@@ -90,7 +94,7 @@ export interface Driver {
   status: "Active" | "On Leave" | "Inactive";
 }
 
-export type VehicleType = "Tractor" | "Forklift" | "Tugger" | "Trailer" | "Other";
+export type VehicleType = "Tractor" | "ElectricTractor" | "Forklift" | "Tugger" | "Trailer" | "Other";
 export type VehicleActiveStatus = "Active" | "Inactive";
 export type VehicleOperationalStatus = "Available" | "In Use" | "Maintenance" | "Out of Service";
 
