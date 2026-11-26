@@ -708,7 +708,7 @@ function createBayFloorTexture(
   ctx.fillStyle = isRepair ? "#3b171b" : "#1e293b";
   ctx.fillRect(0, 0, 256, 384);
 
-  // Outer bay border lines
+  // Keep repair border highlight for vehicles with open repairs; omit standard divider lines on normal bays
   const borderColor = isRepair
     ? "#ef4444"
     : statusMode === "inuse"
@@ -717,9 +717,11 @@ function createBayFloorTexture(
     ? "#64748b"
     : zoneAccentCss;
 
-  ctx.strokeStyle = borderColor;
-  ctx.lineWidth = isRepair ? 10 : 6;
-  ctx.strokeRect(6, 6, 244, 372);
+  if (isRepair) {
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 10;
+    ctx.strokeRect(6, 6, 244, 372);
+  }
 
   // Hazard diagonal warning stripes along front & rear aprons for vehicles under repair
   if (isRepair) {
@@ -1397,11 +1399,6 @@ export function VehicleParkingYard3D({
     baseGround.receiveShadow = true;
     scene.add(baseGround);
 
-    // Subtle Yard Grid
-    const grid = new THREE.GridHelper(160, 40, 0x334155, 0x1e293b);
-    grid.position.y = -0.005;
-    scene.add(grid);
-
     // Shared Vehicle Textures + Persistent Merged Vehicle Template Cache
     const texturePack: Pm3dTexturePack = createPm3dTexturePack(
       Math.min(4, renderer.capabilities.getMaxAnisotropy())
@@ -1488,9 +1485,6 @@ export function VehicleParkingYard3D({
           metalness: 0.1,
         })
       );
-      const roadLineMat = trackMat(
-        new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
-      );
       const hitHiddenMat = trackMat(new THREE.MeshBasicMaterial({ visible: false }));
       const padMat = trackMat(
         new THREE.MeshStandardMaterial({
@@ -1574,48 +1568,13 @@ export function VehicleParkingYard3D({
         sunLight.shadow.camera.updateProjectionMatrix();
       }
 
-      // Central Cross Aisle Dashed Centerlines using 2 InstancedMeshes (instead of 50+ separate meshes)
-      const dashPositionsX: number[] = [];
-      for (let x = Math.floor(yardMinX); x <= Math.ceil(yardMaxX); x += 3.2) {
-        dashPositionsX.push(x);
-      }
-      if (dashPositionsX.length > 0) {
-        const dashGeoX = trackGeo(new THREE.BoxGeometry(1.6, 0.014, 0.14));
-        const instX = new THREE.InstancedMesh(dashGeoX, roadLineMat, dashPositionsX.length);
-        const m4 = new THREE.Matrix4();
-        dashPositionsX.forEach((x, idx) => {
-          m4.makeTranslation(x, 0.008, 0);
-          instX.setMatrixAt(idx, m4);
-        });
-        instX.instanceMatrix.needsUpdate = true;
-        instX.computeBoundingSphere();
-        yardRoot.add(instX);
-      }
-
-      const dashPositionsZ: number[] = [];
-      for (let z = Math.floor(yardMinZ); z <= Math.ceil(yardMaxZ); z += 3.2) {
-        dashPositionsZ.push(z);
-      }
-      if (dashPositionsZ.length > 0) {
-        const dashGeoZ = trackGeo(new THREE.BoxGeometry(0.14, 0.014, 1.6));
-        const instZ = new THREE.InstancedMesh(dashGeoZ, roadLineMat, dashPositionsZ.length);
-        const m4 = new THREE.Matrix4();
-        dashPositionsZ.forEach((z, idx) => {
-          m4.makeTranslation(0, 0.008, z);
-          instZ.setMatrixAt(idx, m4);
-        });
-        instZ.instanceMatrix.needsUpdate = true;
-        instZ.computeBoundingSphere();
-        yardRoot.add(instZ);
-      }
-
       // Shared Stall Floor / WheelStop / Hitbox Geometries keyed by bay size
       const floorGeoCache = new Map<string, THREE.PlaneGeometry>();
       const rimGeoCache = new Map<string, THREE.RingGeometry>();
       const wheelStopGeoCache = new Map<number, THREE.BoxGeometry>();
       const hitGeoCache = new Map<string, THREE.BoxGeometry>();
 
-      // Build each of the 4 Zones
+      // Build each of the 5 Zones
       layouts.forEach((zl) => {
         const zw = zl.maxX - zl.minX;
         const zd = zl.maxZ - zl.minZ;
@@ -2293,28 +2252,30 @@ export function VehicleParkingYard3D({
           />
         </div>
 
-        {/* Top-Right Compact Quick-Select Active Repair Strip (if any open repairs exist and no drawer open) */}
+        {/* Top-Right Quick-Select Active Repair List (expands vertically to show all open repairs) */}
         {repairStalls.length > 0 && !selectedStall && (
           <div
-            className="absolute top-2.5 right-2.5 z-10 max-w-[250px] rounded-lg border border-rose-500/40 p-2 text-white"
-            style={{ backgroundColor: "rgba(28, 13, 18, 0.88)" }}
+            className="absolute top-2.5 right-2.5 z-10 w-[224px] max-w-[calc(100%-20px)] max-h-[calc(100%-64px)] flex flex-col rounded-lg border border-rose-500/40 p-2 text-white shadow-lg"
+            style={{ backgroundColor: "rgba(28, 13, 18, 0.90)" }}
           >
-            <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-rose-200 mb-1">
+            <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-rose-200 mb-1.5 shrink-0">
               <span className="inline-flex items-center gap-1">
                 <Wrench size={11} className="text-rose-400" />
                 รถที่แจ้งซ่อมค้าง ({repairStalls.length} คัน)
               </span>
             </div>
-            <div className="flex flex-wrap gap-1 max-h-[84px] overflow-y-auto">
+            <div className="flex flex-col gap-1 overflow-y-auto pr-0.5">
               {repairStalls.map((st) => (
                 <button
                   key={st.vehicle.vehicleId}
                   type="button"
                   onClick={() => focusVehicleIn3D(st)}
-                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-600/80 hover:bg-rose-500 text-white border border-rose-400/50 transition-colors cursor-pointer whitespace-nowrap"
+                  className="w-full px-2 py-1 rounded text-[10px] font-semibold bg-rose-600/80 hover:bg-rose-500 text-white border border-rose-400/50 transition-colors cursor-pointer flex items-center justify-between gap-2 text-left"
                 >
-                  {st.vehicle.vehicleId}
-                  {st.primaryRepairMeta ? ` · ${st.primaryRepairMeta.shortLabel}` : ""}
+                  <span className="font-mono font-bold shrink-0">{st.vehicle.vehicleId}</span>
+                  <span className="truncate text-[10px] text-rose-100">
+                    {st.primaryRepairMeta ? st.primaryRepairMeta.shortLabel : "ซ่อมบำรุง"}
+                  </span>
                 </button>
               ))}
             </div>

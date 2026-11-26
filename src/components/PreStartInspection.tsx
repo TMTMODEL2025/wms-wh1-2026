@@ -57,6 +57,41 @@ import check10Img from "../assets/images/prestart_brake_pedal_1795685541524.jpg"
 import check11Img from "../assets/images/prestart_steering_wheel_1795685541414.jpg";
 import check12Img from "../assets/images/prestart_tow_hitch_1795685543090.jpg";
 
+import evCheck01Img from "../assets/images/ev_brake_pedals_1795695870014.jpg";
+import evCheck02Img from "../assets/images/ev_steering_cab_1795695870972.jpg";
+import evCheck03Img from "../assets/images/ev_lights_horn_1795695871003.jpg";
+import evCheck04Img from "../assets/images/ev_wheel_tire_1795695873910.jpg";
+import evCheck05Img from "../assets/images/ev_tow_hitch_1795695873869.jpg";
+import evCheck06Img from "../assets/images/ev_battery_pack_1795695873842.jpg";
+import evCheck07Img from "../assets/images/ev_fluid_reservoir_1795695875544.jpg";
+import evCheck08Img from "../assets/images/ev_digital_display_1795695876842.jpg";
+import evCheck09Img from "../assets/images/ev_tractor_safety_1795695878041.jpg";
+
+import trailerCheck01Img from "../assets/images/trailer_tow_ring_1795696874025.jpg";
+import trailerCheck02Img from "../assets/images/trailer_drawbar_frame_1795696874062.jpg";
+import trailerCheck03Img from "../assets/images/trailer_air_electric_1795696874722.jpg";
+import trailerCheck04Img from "../assets/images/trailer_flatbed_deck_1795696877246.jpg";
+import trailerCheck05Img from "../assets/images/trailer_wheel_tire_1795696876222.jpg";
+import trailerCheck06Img from "../assets/images/trailer_brake_assembly_1795696877894.jpg";
+import trailerCheck07Img from "../assets/images/trailer_leaf_spring_1795696879427.jpg";
+import trailerCheck08Img from "../assets/images/trailer_landing_leg_1795696881068.jpg";
+import trailerCheck09Img from "../assets/images/trailer_lashing_ring_1795696883123.jpg";
+import trailerCheck10Img from "../assets/images/trailer_rear_lights_1795696882272.jpg";
+import trailerCheck11Img from "../assets/images/trailer_chassis_structure_1795696882971.jpg";
+
+import forkliftCheck01Img from "../assets/images/forklift_lights_horn_1795697502219.jpg";
+import forkliftCheck02Img from "../assets/images/forklift_wheel_tire_1795697507181.jpg";
+import forkliftCheck03Img from "../assets/images/forklift_forks_carriage_1795697508087.jpg";
+import forkliftCheck04Img from "../assets/images/forklift_mast_chains_1795697509568.jpg";
+import forkliftCheck05Img from "../assets/images/forklift_hydraulic_tank_1795697511170.jpg";
+import forkliftCheck06Img from "../assets/images/forklift_fluid_reservoir_1795697510458.jpg";
+import forkliftCheck07Img from "../assets/images/forklift_battery_compartment_1795697510574.jpg";
+import forkliftCheck08Img from "../assets/images/forklift_brake_pedals_1795697511937.jpg";
+import forkliftCheck09Img from "../assets/images/forklift_steering_column_1795697512417.jpg";
+import forkliftCheck10Img from "../assets/images/forklift_seat_seatbelt_1795697514904.jpg";
+import forkliftCheck11Img from "../assets/images/forklift_lift_mast_1795697515761.jpg";
+import forkliftCheck12Img from "../assets/images/forklift_overhead_guard_1795697515387.jpg";
+
 type ChecklistItem = MhPreStartChecklistItem;
 type InspectionRecord = MhPreStartInspectionRecord;
 
@@ -79,6 +114,9 @@ interface ChecklistTemplateItem {
 
 const CUSTOM_CHECKLIST_STORAGE_KEY = "tmt_prestart_custom_checklist_items_v1";
 const FULL_REFERENCE_POSTER_URL = "/assets/aistudio/image_7b6bdcc5.png";
+const EV_REFERENCE_POSTER_URL = "/assets/aistudio/image_08197eb4.png";
+const TRAILER_REFERENCE_POSTER_URL = "/assets/aistudio/image_3d9e8b1f.png";
+const FORKLIFT_REFERENCE_POSTER_URL = "/assets/aistudio/image_9006648b.png";
 
 /**
  * มาตรฐานจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) 12 รายการ พร้อมรูปภาพประกอบความละเอียดสูง
@@ -182,12 +220,445 @@ const DEFAULT_CHECKLIST_TEMPLATE: ChecklistTemplateItem[] = [
   },
 ];
 
+/**
+ * มาตรฐานจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) เฉพาะรถหัวลากไฟฟ้า EV 9 รายการ พร้อมรูปภาพประกอบความละเอียดสูง
+ */
+const EV_CHECKLIST_TEMPLATE: ChecklistTemplateItem[] = [
+  {
+    id: "ev-01",
+    orderNo: 1,
+    categoryThai: "1. ระบบเบรก",
+    categoryEnglish: "ตรวจความแน่นของแป้นเบรก / ระยะฟรีของแป้น / เบรกมือทำงานปกติ",
+    criteriaLines: [
+      "ตรวจความแน่นของแป้นเบรก",
+      "ระยะฟรีของแป้น",
+      "เบรกมือทำงานปกติ",
+    ],
+    imageUrl: evCheck01Img,
+  },
+  {
+    id: "ev-02",
+    orderNo: 2,
+    categoryThai: "2. พวงมาลัย",
+    categoryEnglish: "หมุนเลี้ยวได้ปกติ / ไม่มีเสียงผิดปกติ / พวงมาลัยไม่หลวม",
+    criteriaLines: [
+      "หมุนเลี้ยวได้ปกติ",
+      "ไม่มีเสียงผิดปกติ",
+      "พวงมาลัยไม่หลวม",
+    ],
+    imageUrl: evCheck02Img,
+  },
+  {
+    id: "ev-03",
+    orderNo: 3,
+    categoryThai: "3. สัญญาณไฟ / แตร",
+    categoryEnglish: "ไฟหน้า / ไฟท้าย / ไฟเลี้ยว / ไฟเบรก / ไฟสัญญาณ / ไฟฉุกเฉิน / แตรดังปกติ",
+    criteriaLines: [
+      "ไฟหน้า / ไฟท้าย",
+      "ไฟเลี้ยว / ไฟเบรก",
+      "ไฟสัญญาณ / ไฟฉุกเฉิน",
+      "แตรดังปกติ",
+    ],
+    imageUrl: evCheck03Img,
+  },
+  {
+    id: "ev-04",
+    orderNo: 4,
+    categoryThai: "4. ล้อ / ยาง",
+    categoryEnglish: "ลมยางเหมาะสม / ดอกยางไม่สึกผิดปกติ / ไม่มีรอยบวม ฉีกขาด / น็อตล้อแน่น",
+    criteriaLines: [
+      "ลมยางเหมาะสม",
+      "ดอกยางไม่สึกผิดปกติ",
+      "ไม่มีรอยบวม / ฉีกขาด",
+      "น็อตล้อแน่น",
+    ],
+    imageUrl: evCheck04Img,
+  },
+  {
+    id: "ev-05",
+    orderNo: 5,
+    categoryThai: "5. อุปกรณ์ลากจูง",
+    categoryEnglish: "สลักล็อกแน่น / ไม่มีรอยแตกร้าว / สลักตัวล็อกทำงานปกติ / ไม่สึกหรอผิดปกติ",
+    criteriaLines: [
+      "สลักล็อกแน่น",
+      "ไม่มีรอยแตกร้าว",
+      "สลัก/ตัวล็อกทำงานปกติ",
+      "ไม่มีการสึกหรอผิดปกติ",
+    ],
+    imageUrl: evCheck05Img,
+  },
+  {
+    id: "ev-06",
+    orderNo: 6,
+    categoryThai: "6. แบตเตอรี่ (รถไฟฟ้า)",
+    categoryEnglish: "ระดับน้ำกลั่น (ถ้ามี) / ขั้วแบตเตอรี่แน่น / ไม่มีคราบขาว การกัดกร่อน / สายไฟไม่ชำรุด",
+    criteriaLines: [
+      "ระดับน้ำกลั่น (ถ้ามี)",
+      "ขั้วแบตเตอรี่แน่น",
+      "ไม่มีคราบขาว / การกัดกร่อน",
+      "สายไฟไม่ชำรุด",
+    ],
+    imageUrl: evCheck06Img,
+  },
+  {
+    id: "ev-07",
+    orderNo: 7,
+    categoryThai: "7. ของเหลว",
+    categoryEnglish: "ระดับน้ำมันเบรก / ระดับน้ำหล่อเย็น (ถ้ามี) / ไม่มีรอยรั่วซึม",
+    criteriaLines: [
+      "ระดับน้ำมันเบรก",
+      "ระดับน้ำหล่อเย็น (ถ้ามี)",
+      "ไม่มีรอยรั่วซึม",
+    ],
+    imageUrl: evCheck07Img,
+  },
+  {
+    id: "ev-08",
+    orderNo: 8,
+    categoryThai: "8. ระบบไฟ / หน้าจอ",
+    categoryEnglish: "หน้าจอแสดงผลปกติ / ไม่มี Code แจ้งเตือน / เกจวัดต่างๆ ทำงานปกติ",
+    criteriaLines: [
+      "หน้าจอแสดงผลปกติ",
+      "ไม่มี Code แจ้งเตือน",
+      "เกจวัดต่างๆ ทำงานปกติ",
+    ],
+    imageUrl: evCheck08Img,
+  },
+  {
+    id: "ev-09",
+    orderNo: 9,
+    categoryThai: "9. ความสะอาด / ความปลอดภัย",
+    categoryEnglish: "กระจกมองหลัง / กระจกไฟส่องสว่าง / ไม่มีสิ่งกีดขวางการขับขี่ / อุปกรณ์เซฟตี้ครบ",
+    criteriaLines: [
+      "กระจกมองหลัง",
+      "กระจก/ไฟส่องสว่าง",
+      "ไม่มีสิ่งกีดขวางการขับขี่",
+      "อุปกรณ์เซฟตี้ครบ",
+    ],
+    imageUrl: evCheck09Img,
+  },
+];
+
+/**
+ * มาตรฐานจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) เฉพาะหางลาก 11 รายการ พร้อมรูปภาพประกอบความละเอียดสูง
+ */
+const TRAILER_CHECKLIST_TEMPLATE: ChecklistTemplateItem[] = [
+  {
+    id: "trailer-01",
+    orderNo: 1,
+    categoryThai: "1. หัวลาก / ห่วงลาก",
+    categoryEnglish: "ตรวจสอบการสึกหรอ แตกหัก / ห่วงลากไม่บิดเบี้ยว / สลักล็อกแน่นหนา / จาระบีหล่อลื่น",
+    criteriaLines: [
+      "ตรวจสอบการสึกหรอ / แตกหัก",
+      "ห่วงลากไม่บิดเบี้ยว",
+      "สลักล็อกแน่นหนา",
+      "จาระบีหล่อลื่น",
+    ],
+    imageUrl: trailerCheck01Img,
+  },
+  {
+    id: "trailer-02",
+    orderNo: 2,
+    categoryThai: "2. แกนลาก (Drawbar)",
+    categoryEnglish: "ตรวจสอบการบิดงอ รอยแตก / น็อตยึดแน่น ไม่หลวม / สภาพโดยรวมแข็งแรงดี",
+    criteriaLines: [
+      "ตรวจสอบการบิดงอ / รอยแตก",
+      "น็อตยึดแน่น ไม่หลวม",
+      "สภาพโดยรวมแข็งแรงดี",
+    ],
+    imageUrl: trailerCheck02Img,
+  },
+  {
+    id: "trailer-03",
+    orderNo: 3,
+    categoryThai: "3. สายลม / สายไฟ",
+    categoryEnglish: "สายลมไม่แตกร้าว รั่วซึม / ข้อต่อลมแน่น ไม่รั่ว / สายไฟไม่ชำรุด / ไฟทุกดวงใช้งานได้",
+    criteriaLines: [
+      "สายลมไม่แตกร้าว/รั่วซึม",
+      "ข้อต่อลมแน่น ไม่รั่ว",
+      "สายไฟไม่ชำรุด",
+      "ไฟทุกดวงใช้งานได้",
+    ],
+    imageUrl: trailerCheck03Img,
+  },
+  {
+    id: "trailer-04",
+    orderNo: 4,
+    categoryThai: "4. พื้นหางลาก (Deck)",
+    categoryEnglish: "พื้นไม่บิดงอ แตกหัก / เชื่อมต่อแน่นหนา / ไม่มีของหลวมบนพื้น",
+    criteriaLines: [
+      "พื้นไม่บิดงอ / แตกหัก",
+      "เชื่อมต่อแน่นหนา",
+      "ไม่มีของหลวมบนพื้น",
+    ],
+    imageUrl: trailerCheck04Img,
+  },
+  {
+    id: "trailer-05",
+    orderNo: 5,
+    categoryThai: "5. ล้อ และยาง",
+    categoryEnglish: "ลมยางเหมาะสม / ดอกยางไม่สึกหรอเกินไป / ไม่มีบาดแผล ฉีกขาด / น็อตล้อแน่นครบทุกตัว",
+    criteriaLines: [
+      "ลมยางเหมาะสม",
+      "ดอกยางไม่สึกหรอเกินไป",
+      "ไม่มีบาดแผล / ฉีกขาด",
+      "น็อตล้อแน่นครบทุกตัว",
+    ],
+    imageUrl: trailerCheck05Img,
+  },
+  {
+    id: "trailer-06",
+    orderNo: 6,
+    categoryThai: "6. ระบบเบรก",
+    categoryEnglish: "เบรกทำงานปกติ / ผ้าเบรกไม่สึกหรอเกินไป / ไม่มีรอยรั่วของลม / ปรับตั้งระยะเบรกเหมาะสม",
+    criteriaLines: [
+      "เบรกทำงานปกติ",
+      "ผ้าเบรกไม่สึกหรอเกินไป",
+      "ไม่มีรอยรั่วของลม",
+      "ปรับตั้งระยะเบรกเหมาะสม",
+    ],
+    imageUrl: trailerCheck06Img,
+  },
+  {
+    id: "trailer-07",
+    orderNo: 7,
+    categoryThai: "7. แหนบ / ช่วงล่าง",
+    categoryEnglish: "แหนบไม่แตก หัก / น็อตยึดแน่น / ไม่มีเสียงผิดปกติ / โช้คอัพไม่รั่ว",
+    criteriaLines: [
+      "แหนบไม่แตก / หัก",
+      "น็อตยึดแน่น",
+      "ไม่มีเสียงผิดปกติ",
+      "โช้คอัพไม่รั่ว",
+    ],
+    imageUrl: trailerCheck07Img,
+  },
+  {
+    id: "trailer-08",
+    orderNo: 8,
+    categoryThai: "8. ตัวรองรับ (ขาตั้ง)",
+    categoryEnglish: "ขาตั้งยกขึ้น-ลงได้ปกติ / แข็งแรง ไม่บิดงอ / สลักล็อกใช้งานได้",
+    criteriaLines: [
+      "ขาตั้งยกขึ้น-ลงได้ปกติ",
+      "แข็งแรง ไม่บิดงอ",
+      "สลักล็อกใช้งานได้",
+    ],
+    imageUrl: trailerCheck08Img,
+  },
+  {
+    id: "trailer-09",
+    orderNo: 9,
+    categoryThai: "9. อุปกรณ์ยึดสินค้า",
+    categoryEnglish: "ห่วงยึดไม่หลวม ไม่หัก / ใช้งานได้ดีทุกจุด / ไม่มีการเชื่อมที่แตกหัก",
+    criteriaLines: [
+      "ห่วงยึดไม่หลวม / ไม่หัก",
+      "ใช้งานได้ดีทุกจุด",
+      "ไม่มีการเชื่อมที่แตกหัก",
+    ],
+    imageUrl: trailerCheck09Img,
+  },
+  {
+    id: "trailer-10",
+    orderNo: 10,
+    categoryThai: "10. ไฟ / แผ่นสะท้อนแสง",
+    categoryEnglish: "ไฟท้าย ไฟเบรก ไฟเลี้ยว / ไฟส่องป้ายทะเบียน / แผ่นสะท้อนแสงครบ / สะอาด มองเห็นชัดเจน",
+    criteriaLines: [
+      "ไฟท้าย, ไฟเบรก, ไฟเลี้ยว",
+      "ไฟส่องป้ายทะเบียน",
+      "แผ่นสะท้อนแสงครบ",
+      "สะอาด มองเห็นชัดเจน",
+    ],
+    imageUrl: trailerCheck10Img,
+  },
+  {
+    id: "trailer-11",
+    orderNo: 11,
+    categoryThai: "11. โครงสร้างโดยรวม",
+    categoryEnglish: "โครงสร้างไม่บิดงอ / ไม่มีรอยแตก รอยเชื่อมฉีก / สีไม่หลุดกร่อนมากผิดปกติ / ความสะอาดเรียบร้อย",
+    criteriaLines: [
+      "โครงสร้างไม่บิดงอ",
+      "ไม่มีรอยแตก / รอยเชื่อมฉีก",
+      "สีไม่หลุดกร่อนมากผิดปกติ",
+      "ความสะอาดเรียบร้อย",
+    ],
+    imageUrl: trailerCheck11Img,
+  },
+];
+
+/**
+ * มาตรฐานจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) เฉพาะรถโฟล์คลิฟท์ 12 รายการ พร้อมรูปภาพประกอบความละเอียดสูง
+ */
+const FORKLIFT_CHECKLIST_TEMPLATE: ChecklistTemplateItem[] = [
+  {
+    id: "forklift-01",
+    orderNo: 1,
+    categoryThai: "1. ระบบไฟ / สัญญาณ",
+    categoryEnglish: "ไฟหน้า, ไฟท้าย / ไฟเลี้ยว, ไฟเบรก / ไฟสัญญาณถอยหลัง / แตร",
+    criteriaLines: [
+      "ไฟหน้า, ไฟท้าย",
+      "ไฟเลี้ยว, ไฟเบรก",
+      "ไฟสัญญาณถอยหลัง",
+      "แตร",
+    ],
+    imageUrl: forkliftCheck01Img,
+  },
+  {
+    id: "forklift-02",
+    orderNo: 2,
+    categoryThai: "2. ยาง / ล้อ",
+    categoryEnglish: "สภาพดอกยาง / แรงดันลม (ถ้าเป็นลม) / น็อตล้อแน่น",
+    criteriaLines: [
+      "สภาพดอกยาง",
+      "แรงดันลม (ถ้าเป็นลม)",
+      "น็อตล้อแน่น",
+    ],
+    imageUrl: forkliftCheck02Img,
+  },
+  {
+    id: "forklift-03",
+    orderNo: 3,
+    categoryThai: "3. งา / โครงงา",
+    categoryEnglish: "งาไม่บิดงอ แตกร้าว / สลักล็อกแน่น / โครงงาไม่ร้าว หัก",
+    criteriaLines: [
+      "งาไม่บิดงอ / แตกร้าว",
+      "สลักล็อกแน่น",
+      "โครงงาไม่ร้าว / หัก",
+    ],
+    imageUrl: forkliftCheck03Img,
+  },
+  {
+    id: "forklift-04",
+    orderNo: 4,
+    categoryThai: "4. โซ่ / สายไฮดรอลิก",
+    categoryEnglish: "โซ่ไม่หย่อน หล่อลื่น / สายไฮดรอลิกไม่รั่ว / ข้อต่อไม่หลวม",
+    criteriaLines: [
+      "โซ่ไม่หย่อน / หล่อลื่น",
+      "สายไฮดรอลิกไม่รั่ว",
+      "ข้อต่อไม่หลวม",
+    ],
+    imageUrl: forkliftCheck04Img,
+  },
+  {
+    id: "forklift-05",
+    orderNo: 5,
+    categoryThai: "5. น้ำมันไฮดรอลิก",
+    categoryEnglish: "ระดับน้ำมันอยู่ในเกณฑ์ / น้ำมันไม่ขุ่น ไม่มีกลิ่นไหม้",
+    criteriaLines: [
+      "ระดับน้ำมันอยู่ในเกณฑ์",
+      "น้ำมันไม่ขุ่น / ไม่มีกลิ่นไหม้",
+    ],
+    imageUrl: forkliftCheck05Img,
+  },
+  {
+    id: "forklift-06",
+    orderNo: 6,
+    categoryThai: "6. ระดับน้ำ / ของเหลว",
+    categoryEnglish: "น้ำหล่อเย็น (Radiator) / น้ำกลั่นแบตเตอรี่ / น้ำมันเบรก",
+    criteriaLines: [
+      "น้ำหล่อเย็น (Radiator)",
+      "น้ำกลั่นแบตเตอรี่",
+      "น้ำมันเบรก",
+    ],
+    imageUrl: forkliftCheck06Img,
+  },
+  {
+    id: "forklift-07",
+    orderNo: 7,
+    categoryThai: "7. แบตเตอรี่ (ไฟฟ้า)",
+    categoryEnglish: "ระดับน้ำกลั่น / ขั้วแบตไม่หลวม ไม่เป็นสนิม / สายไฟไม่ชำรุด",
+    criteriaLines: [
+      "ระดับน้ำกลั่น",
+      "ขั้วแบตไม่หลวม / ไม่เป็นสนิม",
+      "สายไฟไม่ชำรุด",
+    ],
+    imageUrl: forkliftCheck07Img,
+  },
+  {
+    id: "forklift-08",
+    orderNo: 8,
+    categoryThai: "8. เบรก",
+    categoryEnglish: "เบรกเท้าเหยียบแล้วอยู่ / เบรกมือใช้งานได้ดี",
+    criteriaLines: [
+      "เบรกเท้าเหยียบแล้วอยู่",
+      "เบรกมือใช้งานได้ดี",
+    ],
+    imageUrl: forkliftCheck08Img,
+  },
+  {
+    id: "forklift-09",
+    orderNo: 9,
+    categoryThai: "9. พวงมาลัย / ชุดบังคับเลี้ยว (Power Steering)",
+    categoryEnglish: "พวงมาลัยหมุนปกติ / ไม่มีเสียงผิดปกติ / Power Steering น้ำมันไม่รั่ว",
+    criteriaLines: [
+      "พวงมาลัยหมุนปกติ",
+      "ไม่มีเสียงผิดปกติ",
+      "Power Steering น้ำมันไม่รั่ว",
+    ],
+    imageUrl: forkliftCheck09Img,
+  },
+  {
+    id: "forklift-10",
+    orderNo: 10,
+    categoryThai: "10. กระจก / ที่นั่ง / เข็มขัด",
+    categoryEnglish: "กระจกมองหลัง / ที่นั่งไม่ชำรุด / เข็มขัดนิรภัยใช้งานได้",
+    criteriaLines: [
+      "กระจกมองหลัง",
+      "ที่นั่งไม่ชำรุด",
+      "เข็มขัดนิรภัยใช้งานได้",
+    ],
+    imageUrl: forkliftCheck10Img,
+  },
+  {
+    id: "forklift-11",
+    orderNo: 11,
+    categoryThai: "11. เสายก / ไฮดรอลิก",
+    categoryEnglish: "ยกขึ้น-ลง นิ่ม ไหลลื่น / ไม่รั่วซึม / เอียงหน้า-หลังปกติ",
+    criteriaLines: [
+      "ยกขึ้น-ลง นิ่ม ไหลลื่น",
+      "ไม่รั่วซึม",
+      "เอียงหน้า-หลังปกติ",
+    ],
+    imageUrl: forkliftCheck11Img,
+  },
+  {
+    id: "forklift-12",
+    orderNo: 12,
+    categoryThai: "12. โครงหลังคา / ไฟสัญญาณ",
+    categoryEnglish: "โครงหลังคาแน่นหนา / ไฟสัญญาณหมุน / สติกเกอร์ความปลอดภัย",
+    criteriaLines: [
+      "โครงหลังคาแน่นหนา",
+      "ไฟสัญญาณหมุน",
+      "สติกเกอร์ความปลอดภัย",
+    ],
+    imageUrl: forkliftCheck12Img,
+  },
+];
+
+const ALL_CHECKLIST_TEMPLATES: ChecklistTemplateItem[] = [
+  ...FORKLIFT_CHECKLIST_TEMPLATE,
+  ...TRAILER_CHECKLIST_TEMPLATE,
+  ...EV_CHECKLIST_TEMPLATE,
+  ...DEFAULT_CHECKLIST_TEMPLATE,
+];
+
+function getChecklistTemplateForCategory(
+  category?: PreStartVehicleCategoryKey | "all"
+): ChecklistTemplateItem[] {
+  if (category === "ev_tractor") return EV_CHECKLIST_TEMPLATE;
+  if (category === "trailer") return TRAILER_CHECKLIST_TEMPLATE;
+  if (category === "forklift") return FORKLIFT_CHECKLIST_TEMPLATE;
+  return DEFAULT_CHECKLIST_TEMPLATE;
+}
+
 function resolveTemplateMetaForItem(item: ChecklistItem): ChecklistTemplateItem | undefined {
-  const byId = DEFAULT_CHECKLIST_TEMPLATE.find((t) => t.id === item.id);
-  if (byId) return byId;
+  if (item.id) {
+    const byId = ALL_CHECKLIST_TEMPLATES.find((t) => t.id === item.id);
+    if (byId) return byId;
+  }
   const cleanTitle = (item.categoryThai || "").trim();
-  return DEFAULT_CHECKLIST_TEMPLATE.find(
-    (t) => t.categoryThai === cleanTitle || cleanTitle.includes(t.categoryThai.replace(/^\d+\.\s*/, ""))
+  const exactTitle = ALL_CHECKLIST_TEMPLATES.find((t) => t.categoryThai === cleanTitle);
+  if (exactTitle) return exactTitle;
+  return ALL_CHECKLIST_TEMPLATES.find((t) =>
+    cleanTitle.includes(t.categoryThai.replace(/^\d+\.\s*/, ""))
   );
 }
 
@@ -250,8 +721,8 @@ const VEHICLE_CATEGORY_TABS: VehicleCategoryTabMeta[] = [
     label: "หัวลากไฟฟ้า EV",
     shortCode: "TTEV-",
     helperNote:
-      "รายการเฉพาะเครื่องยนต์ (น้ำมันเครื่อง, เชื้อเพลิง, กรองอากาศ, สายพาน) ตั้งค่าเป็น 'ไม่เกี่ยว' ให้อัตโนมัติ (ปรับเปลี่ยนได้)",
-    defaultNaItemIds: ["daily-01", "daily-03", "daily-04", "daily-05"],
+      "ตรวจสอบครบทั้ง 9 จุดมาตรฐานเฉพาะรถหัวลากไฟฟ้า EV (เบรก, พวงมาลัย, สัญญาณไฟ/แตร, ล้อ/ยาง, อุปกรณ์ลากจูง, แบตเตอรี่, ของเหลว, หน้าจอ, ความปลอดภัย)",
+    defaultNaItemIds: [],
     activeTabClass:
       "border-emerald-700 bg-emerald-600 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600",
     badgeClass:
@@ -262,16 +733,8 @@ const VEHICLE_CATEGORY_TABS: VehicleCategoryTabMeta[] = [
     label: "หางลาก",
     shortCode: "TTL-",
     helperNote:
-      "เน้นตรวจระบบไฟ, ลมยาง/สภาพยาง, การรั่วซึม/โครงสร้าง, ระบบเบรก และข้อต่อลาก (รายการเครื่องยนต์ตั้งเป็น 'ไม่เกี่ยว' และไม่บังคับกรอกเลขไมล์)",
-    defaultNaItemIds: [
-      "daily-01",
-      "daily-02",
-      "daily-03",
-      "daily-04",
-      "daily-05",
-      "daily-06",
-      "daily-11",
-    ],
+      "ตรวจสอบครบทั้ง 11 จุดมาตรฐานเฉพาะหางลาก (หัวลาก/ห่วงลาก, แกนลาก, สายลม/สายไฟ, พื้นหางลาก, ล้อ/ยาง, ระบบเบรก, แหนบ/ช่วงล่าง, ขาตั้ง, อุปกรณ์ยึดสินค้า, ไฟ/แผ่นสะท้อนแสง, โครงสร้าง — ไม่บังคับกรอกเลขไมล์)",
+    defaultNaItemIds: [],
     activeTabClass:
       "border-amber-700 bg-amber-600 text-white shadow-sm dark:border-amber-500 dark:bg-amber-600",
     badgeClass:
@@ -281,7 +744,8 @@ const VEHICLE_CATEGORY_TABS: VehicleCategoryTabMeta[] = [
     key: "forklift",
     label: "โฟล์คลิฟท์",
     shortCode: "FL-",
-    helperNote: "ตรวจสอบครบทั้ง 12 จุดมาตรฐานสำหรับรถโฟล์คลิฟท์",
+    helperNote:
+      "ตรวจสอบครบทั้ง 12 จุดมาตรฐานเฉพาะรถโฟล์คลิฟท์ (ระบบไฟ/สัญญาณ, ยาง/ล้อ, งา/โครงงา, โซ่/สายไฮดรอลิก, น้ำมันไฮดรอลิก, ของเหลว, แบตเตอรี่, เบรก, พวงมาลัย, ที่นั่ง/เข็มขัด, เสายก, โครงหลังคา)",
     defaultNaItemIds: [],
     activeTabClass:
       "border-indigo-700 bg-indigo-600 text-white shadow-sm dark:border-indigo-500 dark:bg-indigo-600",
@@ -344,9 +808,18 @@ function buildChecklistFormItems(
   customItems: ChecklistTemplateItem[],
   category: PreStartVehicleCategoryKey = "diesel_tractor"
 ): ChecklistItem[] {
+  const template = getChecklistTemplateForCategory(category);
   const defaultNaSet = new Set(VEHICLE_CATEGORY_MAP[category]?.defaultNaItemIds || []);
-  const defaults: ChecklistItem[] = DEFAULT_CHECKLIST_TEMPLATE.map((t, idx) => {
-    const id = t.id || `daily-${String(idx + 1).padStart(2, "0")}`;
+  const defaults: ChecklistItem[] = template.map((t, idx) => {
+    const idPrefix =
+      category === "ev_tractor"
+        ? "ev"
+        : category === "trailer"
+        ? "trailer"
+        : category === "forklift"
+        ? "forklift"
+        : "daily";
+    const id = t.id || `${idPrefix}-${String(idx + 1).padStart(2, "0")}`;
     return {
       id,
       categoryThai: t.categoryThai,
@@ -410,6 +883,9 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
   const [pmMileageNotice, setPmMileageNotice] = useState<string | null>(null);
   const [showVisualGuide, setShowVisualGuide] = useState<boolean>(true);
   const [showPosterModal, setShowPosterModal] = useState<boolean>(false);
+  const [posterVariant, setPosterVariant] = useState<"standard" | "ev" | "trailer" | "forklift">(
+    "standard"
+  );
   const [previewItem, setPreviewItem] = useState<ChecklistTemplateItem | null>(null);
 
   // Saved Custom Template Items State
@@ -451,6 +927,11 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
 
   const modalTabVehicles = vehiclesByCategory[modalCategoryTab];
   const activeModalTabMeta = VEHICLE_CATEGORY_MAP[modalCategoryTab];
+  const activeModalTemplate = getChecklistTemplateForCategory(modalCategoryTab);
+  const isEvPageTab = activePageTab === "ev_tractor";
+  const isTrailerPageTab = activePageTab === "trailer";
+  const isForkliftPageTab = activePageTab === "forklift";
+  const activePageGuideTemplate = getChecklistTemplateForCategory(activePageTab);
 
   // Form State
   const [vehicleId, setVehicleId] = useState(
@@ -765,7 +1246,13 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       <div className="prestart-header-card mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0d1d35]">
         <div>
           <div className="prestart-modal-title text-base font-bold text-[#1e3648] dark:text-slate-100">
-            ตรวจเช็ครถประจำวัน — จุดตรวจสอบก่อนใช้งานทุกครั้ง (12 รายการมาตรฐาน)
+            {isEvPageTab
+              ? "ตรวจเช็ครถประจำวัน — หัวลากไฟฟ้า EV (9 รายการมาตรฐาน)"
+              : isTrailerPageTab
+              ? "ตรวจเช็ครถประจำวัน — หางลาก (11 รายการมาตรฐาน)"
+              : isForkliftPageTab
+              ? "ตรวจเช็ครถประจำวัน — โฟล์คลิฟท์ (12 รายการมาตรฐาน)"
+              : "ตรวจเช็ครถประจำวัน — จุดตรวจสอบก่อนใช้งานทุกครั้ง (12 รายการมาตรฐาน)"}
           </div>
           <div className="prestart-modal-sub mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Pre-Start Safety Inspection Checklist · บันทึกผลตรวจพร้อมเลขไมล์เชื่อมโยงรอบ PM อัตโนมัติ
@@ -776,7 +1263,18 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
           <button
             type="button"
             className="button secondary whitespace-nowrap shrink-0"
-            onClick={() => setShowPosterModal(true)}
+            onClick={() => {
+              setPosterVariant(
+                isEvPageTab
+                  ? "ev"
+                  : isTrailerPageTab
+                  ? "trailer"
+                  : isForkliftPageTab
+                  ? "forklift"
+                  : "standard"
+              );
+              setShowPosterModal(true);
+            }}
           >
             <ImageIcon size={14} /> ดูผังภาพต้นฉบับ
           </button>
@@ -785,7 +1283,14 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
             className="button primary whitespace-nowrap shrink-0"
             onClick={() => openNewChecklistModal()}
           >
-            <Plus size={14} /> ตรวจสภาพรถ (12 รายการ)
+            <Plus size={14} />{" "}
+            {isEvPageTab
+              ? "ตรวจสภาพรถ EV (9 รายการ)"
+              : isTrailerPageTab
+              ? "ตรวจสภาพหางลาก (11 รายการ)"
+              : isForkliftPageTab
+              ? "ตรวจสภาพโฟล์คลิฟท์ (12 รายการ)"
+              : "ตรวจสภาพรถ (12 รายการ)"}
           </button>
         </div>
       </div>
@@ -872,20 +1377,74 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         </div>
       </div>
 
-      {/* Visual 12-Point Daily Pre-Start Inspection Guide Grid */}
+      {/* Visual Daily Pre-Start Inspection Guide Grid (9 EV / 11 Trailer / 12 Forklift / 12 Standard) */}
       <section className="panel mb-4 overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0b2a5b] px-4 py-2.5 text-white dark:bg-[#0a234c]">
-          <div className="flex items-center gap-2 text-sm font-bold tracking-tight">
-            <span>1. จุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง)</span>
-            <span className="text-xs font-normal text-sky-200">· 12 รายการมาตรฐานพร้อมรูปภาพประกอบ</span>
+        <div
+          className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-white ${
+            isEvPageTab
+              ? "bg-emerald-800 dark:bg-emerald-950"
+              : isTrailerPageTab
+              ? "bg-amber-700 dark:bg-amber-950"
+              : isForkliftPageTab
+              ? "bg-indigo-800 dark:bg-indigo-950"
+              : "bg-[#0b2a5b] dark:bg-[#0a234c]"
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-2 text-sm font-bold tracking-tight">
+            <span>
+              {isEvPageTab
+                ? "1. การตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) — หัวลากไฟฟ้า EV"
+                : isTrailerPageTab
+                ? "1. จุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) — หางลาก"
+                : isForkliftPageTab
+                ? "1. จุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) — โฟล์คลิฟท์"
+                : "1. จุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง)"}
+            </span>
+            <span
+              className={`text-xs font-normal ${
+                isEvPageTab
+                  ? "text-emerald-200"
+                  : isTrailerPageTab
+                  ? "text-amber-100"
+                  : isForkliftPageTab
+                  ? "text-indigo-200"
+                  : "text-sky-200"
+              }`}
+            >
+              · {activePageGuideTemplate.length} รายการมาตรฐานพร้อมรูปภาพประกอบ
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => openNewChecklistModal()}
-              className="rounded-md bg-sky-500 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-400 whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={() =>
+                openNewChecklistModal(
+                  isEvPageTab
+                    ? "ev_tractor"
+                    : isTrailerPageTab
+                    ? "trailer"
+                    : isForkliftPageTab
+                    ? "forklift"
+                    : undefined
+                )
+              }
+              className={`rounded-md px-3 py-1 text-xs font-semibold text-white transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                isEvPageTab
+                  ? "bg-emerald-600 hover:bg-emerald-500"
+                  : isTrailerPageTab
+                  ? "bg-amber-500 hover:bg-amber-400"
+                  : isForkliftPageTab
+                  ? "bg-indigo-600 hover:bg-indigo-500"
+                  : "bg-sky-500 hover:bg-sky-400"
+              }`}
             >
-              เริ่มบันทึกตรวจเช็ค
+              {isEvPageTab
+                ? "เริ่มบันทึกตรวจเช็ค EV (9 ข้อ)"
+                : isTrailerPageTab
+                ? "เริ่มบันทึกตรวจเช็คหางลาก (11 ข้อ)"
+                : isForkliftPageTab
+                ? "เริ่มบันทึกตรวจเช็คโฟล์คลิฟท์ (12 ข้อ)"
+                : "เริ่มบันทึกตรวจเช็ค"}
             </button>
             <button
               type="button"
@@ -893,14 +1452,20 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               className="inline-flex items-center gap-1 rounded-md border border-white/25 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-white/10 whitespace-nowrap shrink-0 cursor-pointer"
             >
               {showVisualGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              {showVisualGuide ? "ย่อคู่มือภาพ" : "แสดงคู่มือภาพ 12 จุด"}
+              {showVisualGuide
+                ? "ย่อคู่มือภาพ"
+                : `แสดงคู่มือภาพ ${activePageGuideTemplate.length} จุด`}
             </button>
           </div>
         </div>
 
         {showVisualGuide && (
-          <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 bg-white sm:grid-cols-3 lg:grid-cols-4 dark:divide-[#1e3a5f] dark:bg-[#0d1d35]">
-            {DEFAULT_CHECKLIST_TEMPLATE.map((item) => (
+          <div
+            className={`grid grid-cols-2 divide-x divide-y divide-slate-200 bg-white sm:grid-cols-3 ${
+              isEvPageTab ? "lg:grid-cols-3" : "lg:grid-cols-4"
+            } dark:divide-[#1e3a5f] dark:bg-[#0d1d35]`}
+          >
+            {activePageGuideTemplate.map((item) => (
               <div
                 key={item.id}
                 className="flex flex-col p-3 transition-colors hover:bg-slate-50/80 dark:hover:bg-[#112645]"
@@ -1144,25 +1709,93 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
           onMouseDown={() => setShowPosterModal(false)}
         >
           <div
-            className="prestart-modal-card flex max-h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-[#1e3a5f] dark:bg-[#0d1d35]"
+            className="prestart-modal-card flex max-h-[92vh] w-full max-w-[920px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-[#1e3a5f] dark:bg-[#0d1d35]"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="prestart-modal-header flex items-center justify-between border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0a1628]">
+            <div className="prestart-modal-header flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0a1628]">
               <div className="prestart-modal-title text-sm font-bold text-slate-900 dark:text-slate-100">
-                ผังภาพประกอบจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) 12 รายการ
+                {posterVariant === "ev"
+                  ? "ผังภาพประกอบจุดตรวจสอบประจำวัน — หัวลากไฟฟ้า EV (9 รายการ)"
+                  : posterVariant === "trailer"
+                  ? "ผังภาพประกอบจุดตรวจสอบประจำวัน — หางลาก (11 รายการ)"
+                  : posterVariant === "forklift"
+                  ? "ผังภาพประกอบจุดตรวจสอบประจำวัน — โฟล์คลิฟท์ (12 รายการ)"
+                  : "ผังภาพประกอบจุดตรวจสอบประจำวัน (ก่อนใช้งานทุกครั้ง) 12 รายการ"}
               </div>
-              <button
-                type="button"
-                onClick={() => setShowPosterModal(false)}
-                className="rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPosterVariant("standard")}
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                    posterVariant === "standard"
+                      ? "border-[#0b2a5b] bg-[#0b2a5b] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-[#1e3a5f] dark:bg-[#0d1d35] dark:text-slate-300"
+                  }`}
+                >
+                  มาตรฐานทั่วไป (12 ข้อ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosterVariant("ev")}
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                    posterVariant === "ev"
+                      ? "border-emerald-700 bg-emerald-600 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-[#1e3a5f] dark:bg-[#0d1d35] dark:text-slate-300"
+                  }`}
+                >
+                  หัวลากไฟฟ้า EV (9 ข้อ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosterVariant("trailer")}
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                    posterVariant === "trailer"
+                      ? "border-amber-700 bg-amber-600 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-[#1e3a5f] dark:bg-[#0d1d35] dark:text-slate-300"
+                  }`}
+                >
+                  หางลาก (11 ข้อ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosterVariant("forklift")}
+                  className={`rounded-md border px-2.5 py-1 text-[11px] font-bold transition-colors cursor-pointer ${
+                    posterVariant === "forklift"
+                      ? "border-indigo-700 bg-indigo-600 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-[#1e3a5f] dark:bg-[#0d1d35] dark:text-slate-300"
+                  }`}
+                >
+                  โฟล์คลิฟท์ (12 ข้อ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPosterModal(false)}
+                  className="ml-1 rounded p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
             <div className="overflow-y-auto p-4 text-center">
               <img
-                src={FULL_REFERENCE_POSTER_URL}
-                alt="จุดตรวจสอบประจำวันก่อนใช้งานทุกครั้ง 12 รายการ"
+                src={
+                  posterVariant === "ev"
+                    ? EV_REFERENCE_POSTER_URL
+                    : posterVariant === "trailer"
+                    ? TRAILER_REFERENCE_POSTER_URL
+                    : posterVariant === "forklift"
+                    ? FORKLIFT_REFERENCE_POSTER_URL
+                    : FULL_REFERENCE_POSTER_URL
+                }
+                alt={
+                  posterVariant === "ev"
+                    ? "จุดตรวจสอบประจำวันหัวลากไฟฟ้า EV 9 รายการ"
+                    : posterVariant === "trailer"
+                    ? "จุดตรวจสอบประจำวันหางลาก 11 รายการ"
+                    : posterVariant === "forklift"
+                    ? "จุดตรวจสอบประจำวันโฟล์คลิฟท์ 12 รายการ"
+                    : "จุดตรวจสอบประจำวันก่อนใช้งานทุกครั้ง 12 รายการ"
+                }
                 referrerPolicy="no-referrer"
                 className="mx-auto max-h-[75vh] w-auto rounded-lg border border-slate-200 dark:border-[#1e3a5f]"
               />
@@ -1171,17 +1804,43 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         </div>
       )}
 
-      {/* New Pre-Start Inspection Modal (12 Visual Photo Cards) */}
+      {/* New Pre-Start Inspection Modal (Visual Photo Cards — 9 EV / 11 Trailer / 12 Forklift / 12 Standard) */}
       {isModalOpen && (
         <div className="prestart-modal-backdrop fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/65 p-3 sm:p-5">
           <div className="prestart-modal-card flex max-h-[92vh] w-full max-w-[1080px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-[#1e3a5f] dark:bg-[#0d1d35]">
-            <div className="prestart-modal-header flex shrink-0 items-center justify-between border-b border-slate-200 bg-[#0b2a5b] px-5 py-3.5 text-white dark:border-[#1e3a5f]">
+            <div
+              className={`prestart-modal-header flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-3.5 text-white dark:border-[#1e3a5f] ${
+                modalCategoryTab === "ev_tractor"
+                  ? "bg-emerald-800"
+                  : modalCategoryTab === "trailer"
+                  ? "bg-amber-700"
+                  : modalCategoryTab === "forklift"
+                  ? "bg-indigo-800"
+                  : "bg-[#0b2a5b]"
+              }`}
+            >
               <div>
                 <div className="text-base font-bold">
-                  แบบตรวจสอบรถประจำวันก่อนใช้งาน — 12 จุดตรวจสอบมาตรฐาน
+                  {modalCategoryTab === "ev_tractor"
+                    ? "แบบตรวจสอบรถประจำวันก่อนใช้งาน — หัวลากไฟฟ้า EV (9 จุดตรวจสอบมาตรฐาน)"
+                    : modalCategoryTab === "trailer"
+                    ? "แบบตรวจสอบรถประจำวันก่อนใช้งาน — หางลาก (11 จุดตรวจสอบมาตรฐาน)"
+                    : modalCategoryTab === "forklift"
+                    ? "แบบตรวจสอบรถประจำวันก่อนใช้งาน — โฟล์คลิฟท์ (12 จุดตรวจสอบมาตรฐาน)"
+                    : "แบบตรวจสอบรถประจำวันก่อนใช้งาน — 12 จุดตรวจสอบมาตรฐาน"}
                 </div>
-                <div className="mt-0.5 text-xs text-sky-200">
-                  เลือกแท็บประเภทรถด้านล่าง เพื่อแยกตรวจระหว่างรถหัวลากดีเซล หัวลากไฟฟ้า EV หางลาก โฟล์คลิฟท์ และรถ หแ-01 (รถคีบ)
+                <div
+                  className={`mt-0.5 text-xs ${
+                    modalCategoryTab === "ev_tractor"
+                      ? "text-emerald-100"
+                      : modalCategoryTab === "trailer"
+                      ? "text-amber-100"
+                      : modalCategoryTab === "forklift"
+                      ? "text-indigo-100"
+                      : "text-sky-200"
+                  }`}
+                >
+                  เลือกแท็บประเภทรถด้านล่าง เพื่อแยกตรวจระหว่างรถหัวลากดีเซล หัวลากไฟฟ้า EV (9 ข้อ) หางลาก (11 ข้อ) โฟล์คลิฟท์ (12 ข้อ) และรถ หแ-01 (รถคีบ)
                 </div>
               </div>
               <button
@@ -1366,7 +2025,7 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                         <Check size={12} /> ปกติทั้งหมด
                       </button>
                     )}
-                    {formItems.length < DEFAULT_CHECKLIST_TEMPLATE.length + customTemplateItems.length && (
+                    {formItems.length < activeModalTemplate.length + customTemplateItems.length && (
                       <button
                         type="button"
                         onClick={handleResetDefaultChecklist}
@@ -1426,7 +2085,15 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                               handleAddChecklistItem();
                             }
                           }}
-                          placeholder="เช่น 13. ตรวจสอบสายชาร์จแบตเตอรี่ / เข็มขัดนิรภัย"
+                          placeholder={
+                            modalCategoryTab === "ev_tractor"
+                              ? "เช่น 10. ตรวจสอบหัวชาร์จ / สายชาร์จไฟแรงสูง"
+                              : modalCategoryTab === "trailer"
+                              ? "เช่น 12. ตรวจสอบผ้าใบคลุมสินค้า / เชือกรัด"
+                              : modalCategoryTab === "forklift"
+                              ? "เช่น 13. ตรวจสอบถังดับเพลิง / ไฟส่องพื้นสีฟ้า (Blue Spot)"
+                              : "เช่น 13. ตรวจสอบสายชาร์จแบตเตอรี่ / เข็มขัดนิรภัย"
+                          }
                           className="prestart-form-input w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs outline-none dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-100"
                           autoFocus
                         />
@@ -1541,14 +2208,29 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
                           </button>
                         </div>
 
-                        {/* Reference Inspection Photo */}
-                        <div className="mb-2 overflow-hidden rounded-md border border-slate-200 dark:border-[#1e3a5f]">
-                          <InspectionThumb
-                            src={meta?.imageUrl}
-                            alt={item.categoryThai}
-                            className="aspect-[4/3] w-full"
-                          />
-                        </div>
+                        {/* Reference Inspection Photo (click to enlarge) */}
+                        {meta?.imageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => setPreviewItem(meta)}
+                            className="mb-2 block w-full overflow-hidden rounded-md border border-slate-200 dark:border-[#1e3a5f] cursor-zoom-in group"
+                            title={`คลิกเพื่อขยายภาพ ${item.categoryThai}`}
+                          >
+                            <InspectionThumb
+                              src={meta.imageUrl}
+                              alt={item.categoryThai}
+                              className="aspect-[4/3] w-full transition-transform duration-200 group-hover:scale-[1.03]"
+                            />
+                          </button>
+                        ) : (
+                          <div className="mb-2 overflow-hidden rounded-md border border-slate-200 dark:border-[#1e3a5f]">
+                            <InspectionThumb
+                              src={meta?.imageUrl}
+                              alt={item.categoryThai}
+                              className="aspect-[4/3] w-full"
+                            />
+                          </div>
+                        )}
 
                         {/* Criteria Guide */}
                         <div className="mb-2.5 space-y-0.5 text-[11px] leading-snug text-slate-600 dark:text-slate-300">

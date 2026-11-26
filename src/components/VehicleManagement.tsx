@@ -67,8 +67,8 @@ export function VehicleManagement({
   onNavigateToFixFlush,
   onLogTransaction,
 }: VehicleManagementProps) {
-  // View mode: Table vs 3D Parking Yard
-  const [viewMode, setViewMode] = useState<"table" | "yard3d">("table");
+  // View mode: Table vs 3D Parking Yard (defaults to 3D Parking Yard)
+  const [viewMode, setViewMode] = useState<"table" | "yard3d">("yard3d");
 
   // Live Maintenance / Repair records from FixFlush (ระบบแจ้งซ่อม)
   const [maintenanceRecords, setMaintenanceRecords] = useState<MhMaintenanceRecord[]>([]);
