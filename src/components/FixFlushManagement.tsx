@@ -32,6 +32,7 @@ import {
   ZoomIn,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ClipboardCheck,
   RotateCcw,
   Calculator,
@@ -332,6 +333,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     "all_sup" | "Submitted" | "MoreInfo" | "ManagerApproved" | "InRepair"
   >("all_sup");
   const [repairCategoryFilter, setRepairCategoryFilter] = useState<string>("All");
+  // Collapsible status groups for "ตารางแจ้งซ่อมและติดตามสถานะ Material Handling" (default: all collapsed)
+  const [expandedStageGroups, setExpandedStageGroups] = useState<Record<string, boolean>>({});
 
   // Modals & Inspection Drawer State
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
@@ -1442,6 +1445,135 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     });
   }, [records, activeTab, supervisorSubFilter, stageFilter, repairCategoryFilter, searchQuery]);
 
+  // Group filtered records by "สถานะ 3 ช่วง" for the main Material Handling status tracking table
+  const groupedStatusSections = useMemo(() => {
+    const groupDefs: {
+      key: string;
+      title: string;
+      stageLabel: string;
+      badgeClass: string;
+      headerBgClass: string;
+      dotClass: string;
+    }[] = [
+      {
+        key: "Submitted",
+        title: "รอหัวหน้างานตรวจสอบ / ส่งกลับแก้ไข",
+        stageLabel: "ช่วงที่ 1",
+        badgeClass:
+          "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800",
+        headerBgClass:
+          "bg-amber-50/70 hover:bg-amber-100/70 dark:bg-amber-950/25 dark:hover:bg-amber-950/40",
+        dotClass: "bg-amber-500",
+      },
+      {
+        key: "MoreInfo",
+        title: "รอหัวหน้างานตอบข้อมูลเพิ่ม",
+        stageLabel: "ช่วงที่ 2",
+        badgeClass:
+          "bg-purple-50 text-purple-800 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800",
+        headerBgClass:
+          "bg-purple-50/70 hover:bg-purple-100/70 dark:bg-purple-950/25 dark:hover:bg-purple-950/40",
+        dotClass: "bg-purple-600",
+      },
+      {
+        key: "SupervisorChecked",
+        title: "รอผู้จัดการอนุมัติ",
+        stageLabel: "ช่วงที่ 3",
+        badgeClass:
+          "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800",
+        headerBgClass:
+          "bg-sky-50/70 hover:bg-sky-100/70 dark:bg-sky-950/25 dark:hover:bg-sky-950/40",
+        dotClass: "bg-sky-600",
+      },
+      {
+        key: "ManagerApproved",
+        title: "รอคิวซ่อม (อนุมัติแล้ว)",
+        stageLabel: "อนุมัติแล้ว",
+        badgeClass:
+          "bg-indigo-50 text-indigo-800 border-indigo-200 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800",
+        headerBgClass:
+          "bg-indigo-50/70 hover:bg-indigo-100/70 dark:bg-indigo-950/25 dark:hover:bg-indigo-950/40",
+        dotClass: "bg-indigo-600",
+      },
+      {
+        key: "InRepair",
+        title: "กำลังซ่อม",
+        stageLabel: "ดำเนินการซ่อม",
+        badgeClass:
+          "bg-orange-50 text-orange-800 border-orange-200 dark:bg-orange-950/50 dark:text-orange-300 dark:border-orange-800",
+        headerBgClass:
+          "bg-orange-50/70 hover:bg-orange-100/70 dark:bg-orange-950/25 dark:hover:bg-orange-950/40",
+        dotClass: "bg-orange-500",
+      },
+      {
+        key: "Completed",
+        title: "ซ่อมเสร็จ",
+        stageLabel: "ปิดงานแล้ว",
+        badgeClass:
+          "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
+        headerBgClass:
+          "bg-emerald-50/70 hover:bg-emerald-100/70 dark:bg-emerald-950/25 dark:hover:bg-emerald-950/40",
+        dotClass: "bg-emerald-600",
+      },
+      {
+        key: "Rejected",
+        title: "ไม่อนุมัติ",
+        stageLabel: "ช่วงที่ 3",
+        badgeClass:
+          "bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-800",
+        headerBgClass:
+          "bg-rose-50/70 hover:bg-rose-100/70 dark:bg-rose-950/25 dark:hover:bg-rose-950/40",
+        dotClass: "bg-rose-600",
+      },
+    ];
+
+    const buckets = new Map<string, FixFlushRecord[]>();
+    groupDefs.forEach((def) => buckets.set(def.key, []));
+
+    filteredRecords.forEach((r) => {
+      const stage = inferMhWorkflowStage(r);
+      const isMoreInfo =
+        stage === "SupervisorChecked" && r.managerStatus === "More Info Requested";
+      const key = isMoreInfo ? "MoreInfo" : stage;
+      const list = buckets.get(key);
+      if (list) {
+        list.push(r);
+      } else {
+        buckets.set(key, [r]);
+      }
+    });
+
+    return groupDefs
+      .map((def) => {
+        const items = buckets.get(def.key) || [];
+        const totalCost = items.reduce(
+          (sum, item) => sum + getMaintenanceRecordTotalCost(item),
+          0
+        );
+        return { ...def, items, totalCost };
+      })
+      .filter((group) => group.items.length > 0);
+  }, [filteredRecords]);
+
+  const toggleStageGroup = (groupKey: string) => {
+    setExpandedStageGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  const handleExpandAllGroups = () => {
+    const next: Record<string, boolean> = {};
+    groupedStatusSections.forEach((g) => {
+      next[g.key] = true;
+    });
+    setExpandedStageGroups(next);
+  };
+
+  const handleCollapseAllGroups = () => {
+    setExpandedStageGroups({});
+  };
+
   const activeEmployeeNames = useMemo(() => {
     return employees
       .filter((e) => e.employmentStatus === "Active")
@@ -1806,260 +1938,339 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                 ))}
               </select>
             </div>
+
+            {activeTab === "requester" && groupedStatusSections.length > 0 && (
+              <div className="flex items-center gap-1.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={handleExpandAllGroups}
+                  className="inline-flex h-[35px] items-center gap-1 px-2.5 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap"
+                >
+                  <ChevronDown size={13} />
+                  <span>ขยายทั้งหมด</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCollapseAllGroups}
+                  className="inline-flex h-[35px] items-center gap-1 px-2.5 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap"
+                >
+                  <ChevronRight size={13} />
+                  <span>ย่อทั้งหมด</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Work Orders Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 text-left">
-                  <th className="py-3 px-4 font-bold">เลขที่ขอซ่อม / ผู้แจ้ง</th>
-                  <th className="py-3 px-4 font-bold">เบอร์รถ</th>
-                  <th className="py-3 px-4 font-bold">ประเภท & อาการที่แจ้ง</th>
-                  <th className="py-3 px-4 font-bold text-right">ค่าอะไหล่ / ค่าแรง / รวม</th>
-                  <th className="py-3 px-4 font-bold">สถานะ 3 ช่วง</th>
-                  <th className="py-3 px-4 font-bold text-right">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-                {filteredRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 px-4 text-center">
-                      <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        ไม่พบรายการแจ้งซ่อมตามเงื่อนไขที่เลือก
+          {(() => {
+            const renderWorkOrderRow = (rec: FixFlushRecord) => {
+              const meta = getStageMeta(rec);
+              const photos = rec.photos || [];
+              const partsCostVal = Number(rec.partsCost) || 0;
+              const laborCostVal = Number(rec.laborCost) || 0;
+              const totalCostVal =
+                Number(rec.estimatedCost) || partsCostVal + laborCostVal;
+
+              return (
+                <tr
+                  key={rec.id}
+                  onClick={() => openInspectModal(rec, false)}
+                  className="hover:bg-sky-50/50 dark:hover:bg-[#162744]/70 cursor-pointer transition-colors"
+                >
+                  <td className="ts-left align-top whitespace-nowrap">
+                    <div className="font-bold text-[#087eaf] dark:text-sky-400 tabular-nums">
+                      {rec.workOrderNo}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {rec.workingDate} · {rec.requesterName || "-"}
+                    </div>
+                  </td>
+
+                  <td className="ts-left align-top whitespace-nowrap">
+                    <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                      {rec.vehicleId}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {rec.vehicleType || "Forklift"}
+                      {rec.operatingHours > 0 ? ` · ${rec.operatingHours} ชม.` : ""}
+                    </div>
+                  </td>
+
+                  <td className="ts-left ts-wrap align-top max-w-[320px]">
+                    <div className="font-semibold text-slate-900 dark:text-slate-100">
+                      {rec.repairType}
+                    </div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
+                      {rec.repairDescription}
+                    </div>
+                    {(photos.length > 0 || rec.feedbackThread.length > 0 || rec.vendorName) && (
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                        {rec.vendorName && (
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">
+                            Vendor: {rec.vendorName}
+                          </span>
+                        )}
+                        {rec.vendorName && (photos.length > 0 || rec.feedbackThread.length > 0) && (
+                          <span aria-hidden="true">·</span>
+                        )}
+                        {photos.length > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Camera size={11} /> {photos.length} รูป
+                          </span>
+                        )}
+                        {photos.length > 0 && rec.feedbackThread.length > 0 && (
+                          <span aria-hidden="true">·</span>
+                        )}
+                        {rec.feedbackThread.length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 font-medium">
+                            <MessageSquare size={11} /> {rec.feedbackThread.length} ข้อความ
+                          </span>
+                        )}
                       </div>
-                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                        {activeTab === "supervisor"
-                          ? "ไม่มีงานค้างรอหัวหน้างานตรวจสอบในขณะนี้"
-                          : activeTab === "manager"
-                          ? "ไม่มีงานค้างรอผู้จัดการอนุมัติในขณะนี้"
-                          : "เริ่มต้นแจ้งซ่อมรถโฟล์คลิฟท์หรือเปลี่ยนตัวกรองเพื่อดูรายการอื่น"}
-                      </p>
-                      {activeTab === "requester" && (
+                    )}
+                  </td>
+
+                  <td className="ts-right align-top tabular-nums whitespace-nowrap">
+                    {meta.stage === "Submitted" && totalCostVal === 0 ? (
+                      <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                        รอหัวหน้างานประเมิน
+                      </span>
+                    ) : (
+                      <div>
+                        <div className="font-bold text-slate-900 dark:text-slate-100">
+                          {totalCostVal.toLocaleString()} บาท
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          อะไหล่ {partsCostVal.toLocaleString()} · แรง{" "}
+                          {laborCostVal.toLocaleString()} ({rec.spareParts.length} รายการ)
+                        </div>
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="ts-left align-top whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold whitespace-nowrap ${meta.badgeClass}`}
+                    >
+                      {meta.stage === "Completed" ? (
+                        <CheckCircle2 size={12} />
+                      ) : meta.stage === "InRepair" ? (
+                        <Wrench size={12} />
+                      ) : meta.stage === "Rejected" ? (
+                        <Ban size={12} />
+                      ) : (
+                        <Clock size={12} />
+                      )}
+                      <span>{meta.labelTh}</span>
+                    </span>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                      {rec.supervisorName
+                        ? `ตรวจ: ${rec.supervisorName}`
+                        : "ยังไม่ผ่านหัวหน้าตรวจสอบ"}
+                      {rec.managerName ? ` · อนุมัติ: ${rec.managerName}` : ""}
+                    </div>
+                  </td>
+
+                  <td
+                    className="ts-right align-top whitespace-nowrap"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="inline-flex items-center gap-1.5 justify-end">
+                      {meta.stage === "Submitted" && (
                         <button
                           type="button"
-                          onClick={() => setIsRequestModalOpen(true)}
-                          className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white"
+                          onClick={() => openInspectModal(rec, true)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
                         >
-                          <Plus size={14} />
-                          <span>+ แจ้งซ่อมใบแรก</span>
+                          <ClipboardCheck size={12} />
+                          <span>ตรวจสอบ & ประเมินราคา</span>
                         </button>
                       )}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredRecords.map((rec) => {
-                    const meta = getStageMeta(rec);
-                    const photos = rec.photos || [];
-                    const partsCostVal = Number(rec.partsCost) || 0;
-                    const laborCostVal = Number(rec.laborCost) || 0;
-                    const totalCostVal =
-                      Number(rec.estimatedCost) || partsCostVal + laborCostVal;
 
-                    return (
-                      <tr
-                        key={rec.id}
-                        onClick={() => openInspectModal(rec, false)}
-                        className="hover:bg-sky-50/50 dark:hover:bg-[#162744]/70 cursor-pointer transition-colors"
-                      >
-                        <td className="py-3 px-4 align-top">
-                          <div className="font-bold text-[#087eaf] dark:text-sky-400 tabular-nums">
-                            {rec.workOrderNo}
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            {rec.workingDate} · {rec.requesterName || "-"}
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4 align-top">
-                          <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                            {rec.vehicleId}
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                            {rec.vehicleType || "Forklift"}
-                            {rec.operatingHours > 0 ? ` · ${rec.operatingHours} ชม.` : ""}
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4 align-top max-w-[320px] whitespace-normal">
-                          <div className="font-semibold text-slate-900 dark:text-slate-100">
-                            {rec.repairType}
-                          </div>
-                          <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
-                            {rec.repairDescription}
-                          </div>
-                          {(photos.length > 0 || rec.feedbackThread.length > 0 || rec.vendorName) && (
-                            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                              {rec.vendorName && (
-                                <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                  Vendor: {rec.vendorName}
-                                </span>
-                              )}
-                              {rec.vendorName && (photos.length > 0 || rec.feedbackThread.length > 0) && (
-                                <span aria-hidden="true">·</span>
-                              )}
-                              {photos.length > 0 && (
-                                <span className="inline-flex items-center gap-1">
-                                  <Camera size={11} /> {photos.length} รูป
-                                </span>
-                              )}
-                              {photos.length > 0 && rec.feedbackThread.length > 0 && (
-                                <span aria-hidden="true">·</span>
-                              )}
-                              {rec.feedbackThread.length > 0 && (
-                                <span className="inline-flex items-center gap-1 text-purple-600 dark:text-purple-400 font-medium">
-                                  <MessageSquare size={11} /> {rec.feedbackThread.length} ข้อความ
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 align-top text-right tabular-nums">
-                          {meta.stage === "Submitted" && totalCostVal === 0 ? (
-                            <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                              รอหัวหน้างานประเมิน
-                            </span>
-                          ) : (
-                            <div>
-                              <div className="font-bold text-slate-900 dark:text-slate-100">
-                                {totalCostVal.toLocaleString()} บาท
-                              </div>
-                              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                อะไหล่ {partsCostVal.toLocaleString()} · แรง{" "}
-                                {laborCostVal.toLocaleString()} ({rec.spareParts.length} รายการ)
-                              </div>
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 align-top">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold whitespace-nowrap ${meta.badgeClass}`}
+                      {meta.stage === "SupervisorChecked" &&
+                        rec.managerStatus === "More Info Requested" && (
+                          <button
+                            type="button"
+                            onClick={() => openInspectModal(rec, false)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-purple-700 hover:bg-purple-800 text-white whitespace-nowrap"
                           >
-                            {meta.stage === "Completed" ? (
-                              <CheckCircle2 size={12} />
-                            ) : meta.stage === "InRepair" ? (
-                              <Wrench size={12} />
-                            ) : meta.stage === "Rejected" ? (
-                              <Ban size={12} />
-                            ) : (
-                              <Clock size={12} />
-                            )}
-                            <span>{meta.labelTh}</span>
-                          </span>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                            {rec.supervisorName
-                              ? `ตรวจ: ${rec.supervisorName}`
-                              : "ยังไม่ผ่านหัวหน้าตรวจสอบ"}
-                            {rec.managerName ? ` · อนุมัติ: ${rec.managerName}` : ""}
-                          </div>
-                        </td>
+                            <MessageSquare size={12} />
+                            <span>ตอบข้อมูลเพิ่ม</span>
+                          </button>
+                        )}
 
-                        <td
-                          className="py-3 px-4 align-top text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="inline-flex items-center gap-1.5 justify-end">
-                            {meta.stage === "Submitted" && (
-                              <button
-                                type="button"
-                                onClick={() => openInspectModal(rec, true)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white whitespace-nowrap"
-                              >
-                                <ClipboardCheck size={12} />
-                                <span>ตรวจสอบ & ประเมินราคา</span>
-                              </button>
-                            )}
-
-                            {meta.stage === "SupervisorChecked" &&
-                              rec.managerStatus === "More Info Requested" && (
-                                <button
-                                  type="button"
-                                  onClick={() => openInspectModal(rec, false)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-purple-700 hover:bg-purple-800 text-white whitespace-nowrap"
-                                >
-                                  <MessageSquare size={12} />
-                                  <span>ตอบข้อมูลเพิ่ม</span>
-                                </button>
-                              )}
-
-                            {activeTab === "manager" &&
-                              meta.stage === "SupervisorChecked" &&
-                              rec.managerStatus !== "More Info Requested" &&
-                              rec.managerStatus !== "Rejected" && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleManagerApprove(rec.id)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
-                                  >
-                                    <Check size={12} />
-                                    <span>อนุมัติ</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setFeedbackRecord(rec);
-                                      setIsFeedbackModalOpen(true);
-                                    }}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800 whitespace-nowrap"
-                                  >
-                                    <HelpCircle size={12} />
-                                    <span>ขอข้อมูลเพิ่ม</span>
-                                  </button>
-                                </>
-                              )}
-
-                            {activeTab !== "manager" && meta.stage === "ManagerApproved" && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkInRepair(rec.id)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-orange-600 hover:bg-orange-700 text-white whitespace-nowrap"
-                                >
-                                  <Wrench size={12} />
-                                  <span>อัปเดต: กำลังซ่อม</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleMarkRepairCompleted(rec.id)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
-                                >
-                                  <CheckCircle2 size={12} />
-                                  <span>อัปเดต: ซ่อมเสร็จ</span>
-                                </button>
-                              </>
-                            )}
-
-                            {activeTab !== "manager" && meta.stage === "InRepair" && (
-                              <button
-                                type="button"
-                                onClick={() => handleMarkRepairCompleted(rec.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
-                              >
-                                <CheckCircle2 size={12} />
-                                <span>อัปเดต: ซ่อมเสร็จ</span>
-                              </button>
-                            )}
-
+                      {activeTab === "manager" &&
+                        meta.stage === "SupervisorChecked" &&
+                        rec.managerStatus !== "More Info Requested" &&
+                        rec.managerStatus !== "Rejected" && (
+                          <>
                             <button
                               type="button"
-                              onClick={() => openInspectModal(rec, false)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap"
+                              onClick={() => handleManagerApprove(rec.id)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
                             >
-                              <FileText size={12} />
-                              <span>รายละเอียด</span>
+                              <Check size={12} />
+                              <span>อนุมัติ</span>
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFeedbackRecord(rec);
+                                setIsFeedbackModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800 whitespace-nowrap"
+                            >
+                              <HelpCircle size={12} />
+                              <span>ขอข้อมูลเพิ่ม</span>
+                            </button>
+                          </>
+                        )}
+
+                      {activeTab !== "manager" && meta.stage === "ManagerApproved" && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkInRepair(rec.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-orange-600 hover:bg-orange-700 text-white whitespace-nowrap"
+                          >
+                            <Wrench size={12} />
+                            <span>อัปเดต: กำลังซ่อม</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMarkRepairCompleted(rec.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                          >
+                            <CheckCircle2 size={12} />
+                            <span>อัปเดต: ซ่อมเสร็จ</span>
+                          </button>
+                        </>
+                      )}
+
+                      {activeTab !== "manager" && meta.stage === "InRepair" && (
+                        <button
+                          type="button"
+                          onClick={() => handleMarkRepairCompleted(rec.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white whitespace-nowrap"
+                        >
+                          <CheckCircle2 size={12} />
+                          <span>อัปเดต: ซ่อมเสร็จ</span>
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => openInspectModal(rec, false)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744] whitespace-nowrap"
+                      >
+                        <FileText size={12} />
+                        <span>รายละเอียด</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            };
+
+            return (
+              <div className="overflow-x-auto">
+                <table className="ts-stats-table w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                      <th className="ts-left font-bold whitespace-nowrap">เลขที่ขอซ่อม / ผู้แจ้ง</th>
+                      <th className="ts-left font-bold whitespace-nowrap">เบอร์รถ</th>
+                      <th className="ts-left font-bold whitespace-nowrap">ประเภท & อาการที่แจ้ง</th>
+                      <th className="ts-right font-bold whitespace-nowrap">ค่าอะไหล่ / ค่าแรง / รวม</th>
+                      <th className="ts-left font-bold whitespace-nowrap">สถานะ 3 ช่วง</th>
+                      <th className="ts-right font-bold whitespace-nowrap">จัดการ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                    {filteredRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="ts-center py-12 px-4">
+                          <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+                            ไม่พบรายการแจ้งซ่อมตามเงื่อนไขที่เลือก
                           </div>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                            {activeTab === "supervisor"
+                              ? "ไม่มีงานค้างรอหัวหน้างานตรวจสอบในขณะนี้"
+                              : activeTab === "manager"
+                              ? "ไม่มีงานค้างรอผู้จัดการอนุมัติในขณะนี้"
+                              : "เริ่มต้นแจ้งซ่อมรถโฟล์คลิฟท์หรือเปลี่ยนตัวกรองเพื่อดูรายการอื่น"}
+                          </p>
+                          {activeTab === "requester" && (
+                            <button
+                              type="button"
+                              onClick={() => setIsRequestModalOpen(true)}
+                              className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white"
+                            >
+                              <Plus size={14} />
+                              <span>+ แจ้งซ่อมใบแรก</span>
+                            </button>
+                          )}
                         </td>
                       </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                    ) : activeTab === "requester" ? (
+                      groupedStatusSections.map((group) => {
+                        const isExpanded = Boolean(expandedStageGroups[group.key]);
+                        return (
+                          <React.Fragment key={group.key}>
+                            <tr
+                              onClick={() => toggleStageGroup(group.key)}
+                              className={`${group.headerBgClass} cursor-pointer transition-colors select-none`}
+                            >
+                              <td colSpan={6} className="ts-left !py-2.5 !px-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-white/80 dark:bg-[#0d1b33] border border-slate-300/80 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                                      {isExpanded ? (
+                                        <ChevronDown size={13} />
+                                      ) : (
+                                        <ChevronRight size={13} />
+                                      )}
+                                    </span>
+                                    <span
+                                      className={`w-2 h-2 rounded-full shrink-0 ${group.dotClass}`}
+                                    />
+                                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                      {group.stageLabel}
+                                    </span>
+                                    <span
+                                      className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-bold ${group.badgeClass}`}
+                                    >
+                                      {group.title}
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded bg-white dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-[11px] font-extrabold text-slate-800 dark:text-slate-100 tabular-nums">
+                                      {group.items.length.toLocaleString("th-TH")} รายการ
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 text-[11px] tabular-nums">
+                                    {group.totalCost > 0 && (
+                                      <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                        ยอดรวม {group.totalCost.toLocaleString("th-TH")} บาท
+                                      </span>
+                                    )}
+                                    <span className="text-slate-500 dark:text-slate-400 font-medium">
+                                      {isExpanded ? "คลิกเพื่อย่อ" : "คลิกเพื่อขยายดูรายการ"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && group.items.map((rec) => renderWorkOrderRow(rec))}
+                          </React.Fragment>
+                        );
+                      })
+                    ) : (
+                      filteredRecords.map((rec) => renderWorkOrderRow(rec))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
 
           <div className="px-5 py-2.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex flex-wrap justify-between items-center text-[11px] text-slate-500 dark:text-slate-400">
             <span className="tabular-nums">

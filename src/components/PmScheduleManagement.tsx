@@ -14,6 +14,7 @@ import {
   Clock,
   Edit2,
   Filter,
+  Hash,
   History,
   Layers,
   Plus,
@@ -29,10 +30,13 @@ import {
   AlertTriangle,
   Sparkles,
   Gauge,
+  Box,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
 import {
   MH_PM_CATEGORIES,
+  MhPm3dModelType,
+  MhPm3dSummary,
   MhPmHistoryEntry,
   MhPmScheduleRecord,
   MhPreStartInspectionRecord,
@@ -40,6 +44,7 @@ import {
   deleteMhPmScheduleFromCloud,
   fetchMhPmSchedulesOnce,
   fetchMhPreStartInspectionsOnce,
+  generateNextPmNo,
   getForkliftCloudRealtimeEnabled,
   saveMhPmScheduleToCloud,
   saveMhPmSchedulesBatchToCloud,
@@ -53,13 +58,14 @@ import {
   getActiveRecorderDisplay,
 } from "../services/authWorkforceService";
 import { useAuth } from "../contexts/AuthContext";
+import { Pm3dInteractiveWorkspace } from "./pm3d/Pm3dInteractiveWorkspace";
 
 interface PmScheduleManagementProps {
   vehicles: Vehicle[];
   employees?: Employee[];
 }
 
-type PmTabMode = "table" | "calendar" | "history";
+type PmTabMode = "table" | "calendar" | "history" | "pm3d";
 type PmHealthStatus = "overdue" | "due-today" | "due-soon" | "normal" | "paused";
 
 interface CalendarEventItem {
@@ -374,6 +380,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
   // Navigation & Filters
   const [activeTab, setActiveTab] = useState<PmTabMode>("table");
+  const [pm3dScheduleId, setPm3dScheduleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("All");
   const [healthFilter, setHealthFilter] = useState<string>("All");
@@ -586,12 +593,31 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
     };
   }, [enrichedSchedules, schedules.length, todayYmd]);
 
+  // Legacy schedules missing a PM running number
+  const schedulesWithoutPmNo = useMemo(
+    () => schedules.filter((s) => !s.pmNo || !s.pmNo.trim()),
+    [schedules]
+  );
+
+  // Preview auto-running PM number (PM-YYYY-MM-NNN) for Add / Edit modal
+  const previewFormPmNo = useMemo(() => {
+    if (editingScheduleId) {
+      const existing = schedules.find((s) => s.id === editingScheduleId);
+      if (existing?.pmNo && existing.pmNo.trim()) {
+        return existing.pmNo.trim().toUpperCase();
+      }
+    }
+    const parsedDate = parseYmdToLocalDate(formLastPmDate || todayYmd) || new Date();
+    return generateNextPmNo(schedules, parsedDate);
+  }, [editingScheduleId, schedules, formLastPmDate, todayYmd]);
+
   // Filtered list for Schedule Table
   const filteredSchedules = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return enrichedSchedules.filter(({ schedule, health }) => {
       if (q) {
         const hay = [
+          schedule.pmNo,
           schedule.vehicleId,
           schedule.vehicleType,
           schedule.vehicleDescription,
@@ -652,6 +678,8 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       }
       if (!q) return true;
       const hay = [
+        entry.pmNo,
+        schedule.pmNo,
         schedule.vehicleId,
         schedule.vehicleType,
         schedule.pmCategory,
@@ -953,9 +981,15 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         currentKm >= parsedTargetMileageKm;
 
       const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const pmRefDate = parseYmdToLocalDate(formLastPmDate || todayYmd) || new Date();
+      const assignedPmNo =
+        existing?.pmNo && existing.pmNo.trim()
+          ? existing.pmNo.trim().toUpperCase()
+          : generateNextPmNo(schedules, pmRefDate);
 
       const record: MhPmScheduleRecord = {
         id: existing?.id || `PM_${cleanVehicleId.replace(/[^a-zA-Z0-9_\-]/g, "_")}_${Date.now().toString().slice(-4)}`,
+        pmNo: assignedPmNo,
         vehicleId: matchedVehicle?.vehicleId || cleanVehicleId,
         vehicleNumber: matchedVehicle?.number || matchedVehicle?.vehicleId || cleanVehicleId,
         vehicleType: matchedVehicle?.vehicleType || existing?.vehicleType || "Forklift",
@@ -999,14 +1033,14 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
       setStatusFeedback({
         type: "success",
-        text: `${existing ? "อัปเดต" : "เพิ่ม"}กำหนดการ PM รถ ${record.vehicleId} (${summaryParts.join(" · ") || "บันทึกสำเร็จ"}) เรียบร้อยแล้ว`,
+        text: `${existing ? "อัปเดต" : "เพิ่ม"}กำหนดการ PM เลขที่ ${assignedPmNo} · รถ ${record.vehicleId} (${summaryParts.join(" · ") || "บันทึกสำเร็จ"}) เรียบร้อยแล้ว`,
       });
 
       void appendWmsActivityLog({
         module: "PM Schedule",
         sectionId: "fleet_ops",
-        reference: record.vehicleId,
-        activity: `${existing ? "แก้ไข" : "กำหนด"}รอบ PM ${record.vehicleId} (${record.pmCategory}${record.targetMileageKm ? `, ไมล์ครบกำหนด ${record.targetMileageKm} กม.` : ""}${record.nextPmDate ? `, วันครบกำหนด ${record.nextPmDate}` : ""})`,
+        reference: assignedPmNo,
+        activity: `${existing ? "แก้ไข" : "กำหนด"}รอบ PM (${assignedPmNo}) รถ ${record.vehicleId} (${record.pmCategory}${record.targetMileageKm ? `, ไมล์ครบกำหนด ${record.targetMileageKm} กม.` : ""}${record.nextPmDate ? `, วันครบกำหนด ${record.nextPmDate}` : ""})`,
         status: "Completed",
       });
     } finally {
@@ -1049,8 +1083,15 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         ? newStartKm + completingSchedule.cycleMileageKm
         : completingSchedule.targetMileageKm;
 
+      const doneRefDate = parseYmdToLocalDate(doneDate) || new Date();
+      const effectivePmNo =
+        completingSchedule.pmNo && completingSchedule.pmNo.trim()
+          ? completingSchedule.pmNo.trim().toUpperCase()
+          : generateNextPmNo(schedules, doneRefDate);
+
       const newHistoryEntry: MhPmHistoryEntry = {
         id: `PMH-${Date.now()}`,
+        pmNo: effectivePmNo,
         completedDate: doneDate,
         previousDueDate: completingSchedule.nextPmDate,
         nextDueDate: newNextDate,
@@ -1064,6 +1105,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
       const updatedRecord: MhPmScheduleRecord = {
         ...completingSchedule,
+        pmNo: effectivePmNo,
         lastPmDate: doneDate,
         nextPmDate: newNextDate,
         startMileageKm: completingSchedule.cycleMileageKm ? newStartKm : completingSchedule.startMileageKm,
@@ -1083,7 +1125,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
       setStatusFeedback({
         type: "success",
-        text: `บันทึกการทำ PM รถ ${updatedRecord.vehicleId} สำเร็จ${
+        text: `บันทึกการทำ PM (${effectivePmNo}) รถ ${updatedRecord.vehicleId} สำเร็จ${
           newTargetKm ? ` · รอบไมล์ถัดไป: ${newTargetKm.toLocaleString()} กม.` : ""
         }${newNextDate ? ` · วันครบกำหนดถัดไป: ${formatThaiShortDate(newNextDate)}` : ""}`,
       });
@@ -1091,13 +1133,197 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       void appendWmsActivityLog({
         module: "PM Schedule",
         sectionId: "fleet_ops",
-        reference: updatedRecord.vehicleId,
-        activity: `บันทึกทำ PM รถ ${updatedRecord.vehicleId} วันที่ ${doneDate}${parsedMileage !== undefined ? ` (เลขไมล์ ${parsedMileage} กม.)` : ""}`,
+        reference: effectivePmNo,
+        activity: `บันทึกทำ PM (${effectivePmNo}) รถ ${updatedRecord.vehicleId} วันที่ ${doneDate}${parsedMileage !== undefined ? ` (เลขไมล์ ${parsedMileage} กม.)` : ""}`,
         status: "Completed",
       });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openPm3dForSchedule = (sch: MhPmScheduleRecord) => {
+    setPm3dScheduleId(sch.id);
+    setActiveTab("pm3d");
+  };
+
+  const handleCompletePm3d = async (payload: {
+    schedule: MhPmScheduleRecord | null;
+    vehicle: Vehicle | null;
+    fallbackVehicleId: string;
+    completedDate: string;
+    performedBy: string;
+    mileageKm?: number;
+    operatingHours?: number;
+    totalCost?: number;
+    notes?: string;
+    modelType: MhPm3dModelType;
+    coupledTrailer: boolean;
+    summary: MhPm3dSummary;
+    linkedRepairNos: string[];
+  }): Promise<MhPmScheduleRecord> => {
+    const doneDate = payload.completedDate || todayYmd;
+    const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const doneRefDate = parseYmdToLocalDate(doneDate) || new Date();
+
+    if (payload.schedule) {
+      const targetSchedule = payload.schedule;
+      const newNextDate = targetSchedule.cycleDays
+        ? computeNextPmDate(doneDate, targetSchedule.cycleDays)
+        : undefined;
+      const effectiveMileage =
+        payload.mileageKm !== undefined ? payload.mileageKm : targetSchedule.currentMileageKm;
+      const newStartKm =
+        effectiveMileage ?? targetSchedule.targetMileageKm ?? targetSchedule.startMileageKm ?? 0;
+      const newTargetKm = targetSchedule.cycleMileageKm
+        ? newStartKm + targetSchedule.cycleMileageKm
+        : targetSchedule.targetMileageKm;
+
+      const effectivePmNo =
+        targetSchedule.pmNo && targetSchedule.pmNo.trim()
+          ? targetSchedule.pmNo.trim().toUpperCase()
+          : generateNextPmNo(schedules, doneRefDate);
+
+      const newHistoryEntry: MhPmHistoryEntry = {
+        id: `PMH3D-${Date.now()}`,
+        pmNo: effectivePmNo,
+        completedDate: doneDate,
+        previousDueDate: targetSchedule.nextPmDate,
+        nextDueDate: newNextDate,
+        performedBy: payload.performedBy.trim() || "ทีมช่างซ่อมบำรุง",
+        operatingHours: payload.operatingHours,
+        mileageKm: effectiveMileage,
+        cost: payload.totalCost,
+        notes: payload.notes,
+        recordedAt: nowIso,
+        pm3dModelType: payload.modelType,
+        pm3dCoupledTrailer: payload.coupledTrailer,
+        pm3dSummary: payload.summary,
+        linkedRepairNos:
+          payload.linkedRepairNos.length > 0 ? payload.linkedRepairNos : undefined,
+      };
+
+      const updatedRecord: MhPmScheduleRecord = {
+        ...targetSchedule,
+        pmNo: effectivePmNo,
+        lastPmDate: doneDate,
+        nextPmDate: newNextDate,
+        startMileageKm: targetSchedule.cycleMileageKm
+          ? newStartKm
+          : targetSchedule.startMileageKm,
+        targetMileageKm: newTargetKm,
+        currentMileageKm: effectiveMileage,
+        mileageDueDate: undefined,
+        currentHours:
+          payload.operatingHours !== undefined
+            ? payload.operatingHours
+            : targetSchedule.currentHours,
+        history: [newHistoryEntry, ...(targetSchedule.history || [])].slice(0, 40),
+        updatedAt: nowIso,
+      };
+
+      setSchedules((prev) =>
+        prev.map((item) => (item.id === updatedRecord.id ? updatedRecord : item))
+      );
+      await saveMhPmScheduleToCloud(updatedRecord);
+
+      setStatusFeedback({
+        type: "success",
+        text: `บันทึกผลตรวจ PM 3D (${effectivePmNo}) รถ ${updatedRecord.vehicleId} สำเร็จ (ตรวจ ${payload.summary.checkedZones}/${payload.summary.totalZones} จุด${
+          payload.linkedRepairNos.length > 0
+            ? ` · เปิดใบแจ้งซ่อม ${payload.linkedRepairNos.join(", ")}`
+            : ""
+        })`,
+      });
+
+      void appendWmsActivityLog({
+        module: "PM Schedule",
+        sectionId: "fleet_ops",
+        reference: effectivePmNo,
+        activity: `บันทึกตรวจ PM 3D (${effectivePmNo}) รถ ${updatedRecord.vehicleId} · ตรวจ ${payload.summary.checkedZones}/${payload.summary.totalZones} จุด${
+          payload.summary.issueCount > 0 ? ` · พบปัญหา ${payload.summary.issueCount} รายการ` : ""
+        }${
+          payload.linkedRepairNos.length > 0
+            ? ` · ใบแจ้งซ่อม ${payload.linkedRepairNos.join(", ")}`
+            : ""
+        }`,
+        status: "Completed",
+      });
+
+      return updatedRecord;
+    }
+
+    // Standalone vehicle inspected via 3D PM without an existing schedule — auto-create a new PM schedule record
+    const cleanVehicleId = (
+      payload.vehicle?.vehicleId ||
+      payload.fallbackVehicleId ||
+      "MH-3D"
+    ).trim();
+    const newPmNo = generateNextPmNo(schedules, doneRefDate);
+    const defaultCycleDays = 90;
+    const nextPmDate = computeNextPmDate(doneDate, defaultCycleDays);
+
+    const newHistoryEntry: MhPmHistoryEntry = {
+      id: `PMH3D-${Date.now()}`,
+      pmNo: newPmNo,
+      completedDate: doneDate,
+      nextDueDate: nextPmDate,
+      performedBy: payload.performedBy.trim() || "ทีมช่างซ่อมบำรุง",
+      operatingHours: payload.operatingHours,
+      mileageKm: payload.mileageKm,
+      cost: payload.totalCost,
+      notes: payload.notes,
+      recordedAt: nowIso,
+      pm3dModelType: payload.modelType,
+      pm3dCoupledTrailer: payload.coupledTrailer,
+      pm3dSummary: payload.summary,
+      linkedRepairNos:
+        payload.linkedRepairNos.length > 0 ? payload.linkedRepairNos : undefined,
+    };
+
+    const newRecord: MhPmScheduleRecord = {
+      id: `PM_${cleanVehicleId.replace(/[^a-zA-Z0-9_\-]/g, "_")}_${Date.now().toString().slice(-4)}`,
+      pmNo: newPmNo,
+      vehicleId: cleanVehicleId,
+      vehicleNumber: payload.vehicle?.number || cleanVehicleId,
+      vehicleType: payload.vehicle?.vehicleType || "Material Handling",
+      vehicleDescription: payload.vehicle?.description || "",
+      pmTitle: "PM 3D Interactive Inspection",
+      pmCategory: MH_PM_CATEGORIES[0],
+      cycleDays: defaultCycleDays,
+      currentHours: payload.operatingHours,
+      currentMileageKm: payload.mileageKm,
+      lastPmDate: doneDate,
+      nextPmDate,
+      warningDaysBefore: 7,
+      responsibleTech: payload.performedBy.trim() || "ทีมช่างซ่อมบำรุง",
+      checklistSummary: `ตรวจ PM 3D (${payload.summary.checkedZones}/${payload.summary.totalZones} จุด)`,
+      estimatedCost: payload.totalCost,
+      scheduleStatus: "Active",
+      notes: payload.notes,
+      history: [newHistoryEntry],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    setSchedules((prev) => [newRecord, ...prev]);
+    setPm3dScheduleId(newRecord.id);
+    await saveMhPmScheduleToCloud(newRecord);
+
+    setStatusFeedback({
+      type: "success",
+      text: `สร้างกำหนดการและบันทึกตรวจ PM 3D (${newPmNo}) รถ ${newRecord.vehicleId} สำเร็จ`,
+    });
+
+    void appendWmsActivityLog({
+      module: "PM Schedule",
+      sectionId: "fleet_ops",
+      reference: newPmNo,
+      activity: `บันทึกตรวจ PM 3D (${newPmNo}) รถ ${newRecord.vehicleId} · ตรวจ ${payload.summary.checkedZones}/${payload.summary.totalZones} จุด`,
+      status: "Completed",
+    });
+
+    return newRecord;
   };
 
   const handleBatchSetupMissingVehicles = async (e: React.FormEvent) => {
@@ -1111,27 +1337,34 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
       const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
       const safeDays = Math.max(1, Math.min(3650, Math.round(Number(batchCycleDays) || 90)));
       const nextDate = computeNextPmDate(batchLastPmDate || todayYmd, safeDays);
+      const batchRefDate = parseYmdToLocalDate(batchLastPmDate || todayYmd) || new Date();
+      const reservedNos = new Set<string>();
 
-      const batchRecords: MhPmScheduleRecord[] = unscheduledVehicles.map((v, idx) => ({
-        id: `PM_${String(v.vehicleId).replace(/[^a-zA-Z0-9_\-]/g, "_")}_${Date.now().toString().slice(-4)}_${idx}`,
-        vehicleId: v.vehicleId,
-        vehicleNumber: v.number || v.vehicleId,
-        vehicleType: v.vehicleType || "Forklift",
-        vehicleDescription: v.description || "",
-        pmTitle: batchCategory,
-        pmCategory: batchCategory,
-        cycleDays: safeDays,
-        lastPmDate: batchLastPmDate || todayYmd,
-        nextPmDate: nextDate,
-        warningDaysBefore: 7,
-        responsibleTech: batchTech.trim() || "ทีมช่างซ่อมบำรุง",
-        checklistSummary:
-          "ตรวจระดับน้ำมันเครื่อง/ไฮดรอลิค, ระบบเบรค, ยางและล้อ, แบตเตอรี่/ระบบไฟ, อัดจาระบีจุดหมุน",
-        scheduleStatus: "Active",
-        history: [],
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      }));
+      const batchRecords: MhPmScheduleRecord[] = unscheduledVehicles.map((v, idx) => {
+        const nextPmNo = generateNextPmNo(schedules, batchRefDate, reservedNos);
+        reservedNos.add(nextPmNo);
+        return {
+          id: `PM_${String(v.vehicleId).replace(/[^a-zA-Z0-9_\-]/g, "_")}_${Date.now().toString().slice(-4)}_${idx}`,
+          pmNo: nextPmNo,
+          vehicleId: v.vehicleId,
+          vehicleNumber: v.number || v.vehicleId,
+          vehicleType: v.vehicleType || "Forklift",
+          vehicleDescription: v.description || "",
+          pmTitle: batchCategory,
+          pmCategory: batchCategory,
+          cycleDays: safeDays,
+          lastPmDate: batchLastPmDate || todayYmd,
+          nextPmDate: nextDate,
+          warningDaysBefore: 7,
+          responsibleTech: batchTech.trim() || "ทีมช่างซ่อมบำรุง",
+          checklistSummary:
+            "ตรวจระดับน้ำมันเครื่อง/ไฮดรอลิค, ระบบเบรค, ยางและล้อ, แบตเตอรี่/ระบบไฟ, อัดจาระบีจุดหมุน",
+          scheduleStatus: "Active",
+          history: [],
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+      });
 
       setSchedules((prev) => [...batchRecords, ...prev]);
       setIsBatchModalOpen(false);
@@ -1139,14 +1372,59 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
       setStatusFeedback({
         type: "success",
-        text: `สร้างกำหนดการ PM ให้รถ ${batchRecords.length} คันเรียบร้อยแล้ว`,
+        text: `สร้างกำหนดการ PM ให้รถ ${batchRecords.length} คันเรียบร้อยแล้ว (${batchRecords[0]?.pmNo} - ${batchRecords[batchRecords.length - 1]?.pmNo})`,
       });
 
       void appendWmsActivityLog({
         module: "PM Schedule",
         sectionId: "fleet_ops",
-        reference: `BATCH-${batchRecords.length}`,
+        reference: batchRecords[0]?.pmNo || `BATCH-${batchRecords.length}`,
         activity: `ตั้งค่ารอบ PM อัตโนมัติสำหรับรถ ${batchRecords.length} คัน (ทุก ${safeDays} วัน)`,
+        status: "Completed",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBackfillMissingPmNos = async () => {
+    if (schedulesWithoutPmNo.length === 0 || isSaving) return;
+    setIsSaving(true);
+    try {
+      const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
+      const reservedNos = new Set<string>();
+      const sortedLegacy = [...schedulesWithoutPmNo].sort((a, b) =>
+        (a.createdAt || a.lastPmDate || "").localeCompare(b.createdAt || b.lastPmDate || "")
+      );
+
+      const updatedLegacy: MhPmScheduleRecord[] = sortedLegacy.map((sch) => {
+        const refDate =
+          parseYmdToLocalDate(sch.lastPmDate || "") ||
+          parseYmdToLocalDate(String(sch.createdAt || "").slice(0, 10)) ||
+          new Date();
+        const assignedNo = generateNextPmNo(schedules, refDate, reservedNos);
+        reservedNos.add(assignedNo);
+        return {
+          ...sch,
+          pmNo: assignedNo,
+          updatedAt: nowIso,
+        };
+      });
+
+      const updatedMap = new Map(updatedLegacy.map((item) => [item.id, item]));
+      setSchedules((prev) => prev.map((item) => updatedMap.get(item.id) || item));
+      await saveMhPmSchedulesBatchToCloud(updatedLegacy);
+
+      setStatusFeedback({
+        type: "success",
+        text: `รันเลขที่ PM ให้รายการเดิมครบทั้ง ${updatedLegacy.length} รายการเรียบร้อยแล้ว`,
+      });
+
+      void appendWmsActivityLog({
+        module: "PM Schedule",
+        sectionId: "fleet_ops",
+        reference: updatedLegacy[0]?.pmNo || "PM-BACKFILL",
+        activity: `รันเลขที่ PM อัตโนมัติให้รายการเดิมจำนวน ${updatedLegacy.length} รายการ`,
         status: "Completed",
       });
     } finally {
@@ -1302,7 +1580,8 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         </div>
       )}
 
-      {/* KPI Summary Cards */}
+      {/* KPI Summary Cards (Hidden in 3D PM tab to maximize full-screen 3D workspace) */}
+      {activeTab !== "pm3d" && (
       <div className="kpi-grid">
         <div className="kpi" style={{ borderTopColor: "#087eaf" }}>
           <div className="kpi-label">รถที่กำหนดรอบ PM แล้ว</div>
@@ -1360,12 +1639,24 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
           <div className="kpi-note">รอบบำรุงรักษาอยู่ในเกณฑ์พร้อมใช้งาน</div>
         </div>
       </div>
+      )}
 
       {/* Main Panel */}
-      <section className="panel">
+      <section
+        className={
+          activeTab === "pm3d"
+            ? "panel flex flex-col lg:h-[calc(100dvh-134px)] lg:min-h-[540px] lg:overflow-hidden"
+            : "panel"
+        }
+      >
         <div
-          className="panel-header"
-          style={{ padding: "14px 20px", gap: 12, flexWrap: "wrap", alignItems: "center" }}
+          className="panel-header shrink-0"
+          style={{
+            padding: activeTab === "pm3d" ? "9px 14px" : "14px 20px",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
         >
           <div className="flex items-center gap-2 flex-wrap">
             {/* View Tabs */}
@@ -1406,11 +1697,35 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                 <History size={14} />
                 ประวัติการทำ PM ({allHistoryRows.length})
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("pm3d")}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === "pm3d"
+                    ? "bg-[#087eaf] text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <Box size={14} />
+                ตรวจ PM 3D
+              </button>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             {!headingPortalTarget && cloudSyncControls}
+            {schedulesWithoutPmNo.length > 0 && (
+              <button
+                type="button"
+                onClick={handleBackfillMissingPmNos}
+                disabled={isSaving}
+                className="button secondary whitespace-nowrap shrink-0"
+                title="สร้างและกำหนดเลขที่ PM (PM-YYYY-MM-NNN) ให้กับรายการเดิมที่ยังไม่มีเลขที่"
+              >
+                <Hash size={13} />
+                รันเลขที่ PM รายการเดิม ({schedulesWithoutPmNo.length})
+              </button>
+            )}
             <button
               type="button"
               onClick={() => openCreateModal()}
@@ -1423,7 +1738,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         </div>
 
         {/* Standard Filterbar (35px / 12px / borderRadius 6px / px-3 py-2.5 sm:px-[18px] sm:py-3) */}
-        {activeTab !== "calendar" && (
+        {activeTab !== "calendar" && activeTab !== "pm3d" && (
           <div className="filterbar px-3 py-2.5 sm:px-[18px] sm:py-3 flex gap-3 flex-wrap items-center">
             <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
               <Search
@@ -1433,7 +1748,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
               />
               <input
                 type="text"
-                placeholder="ค้นหารหัสรถ, ประเภท PM, ช่างผู้รับผิดชอบ หรือหมายเหตุ..."
+                placeholder="ค้นหาเลขที่ PM, รหัสรถ, ประเภท PM, ช่างผู้รับผิดชอบ หรือหมายเหตุ..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="field"
@@ -1516,6 +1831,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
               <table>
                 <thead>
                   <tr>
+                    <th>เลขที่ PM</th>
                     <th>รหัสรถ / ประเภท</th>
                     <th>รอบ &amp; ประเภท PM</th>
                     <th>การ PM ด้วยเลขไมล์ (ตรวจเช็ครถประจำวัน)</th>
@@ -1529,7 +1845,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                 <tbody>
                   {filteredSchedules.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                      <td colSpan={9} className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
                         {schedules.length === 0 ? (
                           <div className="flex flex-col items-center gap-3">
                             <CalendarClock size={28} className="text-slate-400" />
@@ -1553,6 +1869,16 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                   ) : (
                     filteredSchedules.map(({ schedule, health, mileageInfo, latestReading }) => (
                       <tr key={schedule.id}>
+                        <td>
+                          {schedule.pmNo ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono tabular-nums text-[11px] font-bold bg-sky-50 text-[#087eaf] border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 whitespace-nowrap">
+                              {schedule.pmNo}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 font-mono">-</span>
+                          )}
+                        </td>
+
                         <td>
                           <div className="flex items-center gap-2">
                             <span className="code font-bold text-[#087eaf] dark:text-sky-300">
@@ -1722,6 +2048,15 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
 
                         <td style={{ textAlign: "right" }}>
                           <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => openPm3dForSchedule(schedule)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-semibold bg-sky-50 text-[#087eaf] border border-sky-200 hover:bg-sky-100 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800 whitespace-nowrap"
+                              title="เปิดหน้าต่างตรวจเช็ค PM แบบ 3D โต้ตอบได้ 360° สำหรับรถคันนี้"
+                            >
+                              <Box size={12} />
+                              PM 3D
+                            </button>
                             <button
                               type="button"
                               onClick={() => openCompletePmModal(schedule)}
@@ -2013,9 +2348,16 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                           }`}
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <span className="code font-bold text-xs text-[#087eaf] dark:text-sky-300">
-                              {ev.schedule.vehicleId} · {ev.schedule.vehicleType}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                              {ev.schedule.pmNo && (
+                                <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-sky-100/90 text-[#087eaf] border border-sky-200 dark:bg-sky-950/70 dark:text-sky-300 dark:border-sky-800 whitespace-nowrap">
+                                  {ev.schedule.pmNo}
+                                </span>
+                              )}
+                              <span className="code font-bold text-xs text-[#087eaf] dark:text-sky-300">
+                                {ev.schedule.vehicleId} · {ev.schedule.vehicleType}
+                              </span>
+                            </div>
                             <span
                               className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                                 ev.kind === "mileage-due"
@@ -2073,7 +2415,15 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                           </div>
 
                           {ev.kind !== "completed" && (
-                            <div className="flex items-center gap-2 pt-1">
+                            <div className="flex items-center gap-2 pt-1 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => openPm3dForSchedule(ev.schedule)}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold bg-[#087eaf] text-white hover:bg-[#066992]"
+                              >
+                                <Box size={11} />
+                                ตรวจ PM 3D
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => openCompletePmModal(ev.schedule)}
@@ -2144,6 +2494,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
             <table>
               <thead>
                 <tr>
+                  <th>เลขที่ PM</th>
                   <th>วันที่ทำ PM</th>
                   <th>รหัสรถ / ประเภท</th>
                   <th>ประเภท PM</th>
@@ -2157,13 +2508,24 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
               <tbody>
                 {allHistoryRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                    <td colSpan={9} className="py-10 text-center text-xs text-slate-500 dark:text-slate-400">
                       ยังไม่มีประวัติการบันทึกทำ PM ในระบบ
                     </td>
                   </tr>
                 ) : (
-                  allHistoryRows.map(({ entry, schedule }) => (
+                  allHistoryRows.map(({ entry, schedule }) => {
+                    const displayPmNo = entry.pmNo || schedule.pmNo;
+                    return (
                     <tr key={`${schedule.id}-${entry.id}`}>
+                      <td>
+                        {displayPmNo ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded font-mono tabular-nums text-[11px] font-bold bg-sky-50 text-[#087eaf] border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 whitespace-nowrap">
+                            {displayPmNo}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 font-mono">-</span>
+                        )}
+                      </td>
                       <td>
                         <div className="table-item-name font-mono tabular-nums text-xs font-semibold">
                           {formatThaiShortDate(entry.completedDate)}
@@ -2201,14 +2563,51 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                         {entry.cost !== undefined ? `฿${entry.cost.toLocaleString()}` : "-"}
                       </td>
                       <td className="text-xs font-medium">{entry.performedBy}</td>
-                      <td className="text-xs text-slate-500 dark:text-slate-400 max-w-[220px] whitespace-normal">
-                        {entry.notes || "-"}
+                      <td className="text-xs text-slate-500 dark:text-slate-400 max-w-[260px] whitespace-normal">
+                        {entry.pm3dSummary && (
+                          <div className="flex flex-wrap items-center gap-1 mb-1">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-50 text-[#087eaf] border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800">
+                              <Box size={10} />
+                              PM 3D · ตรวจ {entry.pm3dSummary.checkedZones}/{entry.pm3dSummary.totalZones} จุด
+                            </span>
+                            {entry.pm3dSummary.issueCount > 0 && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800">
+                                พบปัญหา {entry.pm3dSummary.issueCount}
+                              </span>
+                            )}
+                            {entry.linkedRepairNos &&
+                              entry.linkedRepairNos.map((repNo) => (
+                                <span
+                                  key={repNo}
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded font-mono text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800"
+                                >
+                                  {repNo}
+                                </span>
+                              ))}
+                          </div>
+                        )}
+                        <div>{entry.notes || "-"}</div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* TAB 4: INTERACTIVE 360° 3D PREVENTIVE MAINTENANCE */}
+        {activeTab === "pm3d" && (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <Pm3dInteractiveWorkspace
+              schedules={schedules}
+              vehicles={vehicles}
+              selectedScheduleId={pm3dScheduleId}
+              onSelectScheduleId={setPm3dScheduleId}
+              latestMileageByVehicle={latestMileageByVehicle}
+              onCompletePm3d={handleCompletePm3d}
+            />
           </div>
         )}
       </section>
@@ -2253,6 +2652,27 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pb-1">
+                  {/* AUTO-RUNNING PM NUMBER DISPLAY */}
+                  <div className="sm:col-span-2 flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg border border-sky-200 dark:border-sky-800/80 bg-sky-50/70 dark:bg-[#0d203d]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Hash size={15} className="text-[#087eaf] dark:text-sky-300 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          เลขที่กำหนดการ PM (รันเลขที่อัตโนมัติ)
+                        </div>
+                        <div className="font-mono tabular-nums text-sm font-bold text-[#087eaf] dark:text-sky-300">
+                          {previewFormPmNo}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-white dark:bg-[#091528] text-[#087eaf] dark:text-sky-300 border border-sky-200 dark:border-sky-800 whitespace-nowrap shrink-0">
+                      {editingScheduleId &&
+                      schedules.find((s) => s.id === editingScheduleId)?.pmNo
+                        ? "เลขที่อ้างอิงเดิม"
+                        : "รันอัตโนมัติ"}
+                    </span>
+                  </div>
+
                   <div className="min-w-0">
                     <label className="modal-label-text block text-xs mb-1.5">
                       เลือกรถ (Vehicle) *
@@ -2619,9 +3039,14 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
           <div className="modal-container" style={{ maxWidth: 520 }}>
             <div className="modal-header-box" style={{ padding: "16px 22px" }}>
               <div>
-                <div className="modal-title-text flex items-center gap-2">
+                <div className="modal-title-text flex items-center gap-2 flex-wrap">
                   <CheckCircle2 size={16} className="text-emerald-600" />
-                  บันทึกการทำ PM แล้ว · {completingSchedule.vehicleId}
+                  <span>บันทึกการทำ PM แล้ว · {completingSchedule.vehicleId}</span>
+                  {completingSchedule.pmNo && (
+                    <span className="px-2 py-0.5 rounded font-mono text-[11px] font-bold bg-sky-50 text-[#087eaf] border border-sky-200 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800">
+                      {completingSchedule.pmNo}
+                    </span>
+                  )}
                 </div>
                 <div className="modal-sub-text mt-0.5">
                   {completingSchedule.pmCategory}
@@ -2906,7 +3331,13 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
             </div>
             <div className="p-5 text-xs text-slate-700 dark:text-slate-200 space-y-2">
               <p>
-                ต้องการลบกำหนดการ PM ของรถ{" "}
+                ต้องการลบกำหนดการ PM{" "}
+                {deleteTarget.pmNo ? (
+                  <strong className="font-mono text-[#087eaf] dark:text-sky-300">
+                    {deleteTarget.pmNo}{" "}
+                  </strong>
+                ) : null}
+                ของรถ{" "}
                 <strong className="text-slate-900 dark:text-white">
                   {deleteTarget.vehicleId}
                 </strong>{" "}

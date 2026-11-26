@@ -406,8 +406,31 @@ export const MH_PM_CATEGORIES = [
 
 export type MhPmCategory = (typeof MH_PM_CATEGORIES)[number] | string;
 
+export type MhPm3dModelType = "diesel_tractor" | "ev_tractor" | "forklift" | "trailer";
+
+export interface MhPm3dZoneSnapshot {
+  zoneId: string;
+  zoneLabel: string;
+  status: "pending" | "ok" | "issue" | "replaced";
+  cost?: number;
+  notes?: string;
+  photoCount?: number;
+  itemsSummary?: string;
+  linkedRepairNo?: string;
+}
+
+export interface MhPm3dSummary {
+  totalZones: number;
+  checkedZones: number;
+  okCount: number;
+  issueCount: number;
+  replacedCount: number;
+  zoneSnapshots: MhPm3dZoneSnapshot[];
+}
+
 export interface MhPmHistoryEntry {
   id: string;
+  pmNo?: string;
   completedDate: string; // YYYY-MM-DD
   previousDueDate?: string; // YYYY-MM-DD
   nextDueDate?: string; // YYYY-MM-DD
@@ -417,10 +440,15 @@ export interface MhPmHistoryEntry {
   cost?: number;
   notes?: string;
   recordedAt: string;
+  pm3dModelType?: MhPm3dModelType;
+  pm3dCoupledTrailer?: boolean;
+  pm3dSummary?: MhPm3dSummary;
+  linkedRepairNos?: string[];
 }
 
 export interface MhPmScheduleRecord {
   id: string;
+  pmNo?: string;
   vehicleId: string;
   vehicleNumber?: string;
   vehicleType: string;
@@ -2161,6 +2189,56 @@ export async function deleteMhDeliveryPointFromCloud(id: string): Promise<boolea
 // ============================================================================
 const MH_PM_SCHEDULES_CACHE_KEY = "tmt_mh_pm_schedules_cache_v1";
 
+export function generateNextPmNo(
+  existingRecords: MhPmScheduleRecord[],
+  targetDate: Date = new Date(),
+  reservedNos?: Iterable<string>
+): string {
+  const safeDate = isNaN(targetDate.getTime()) ? new Date() : targetDate;
+  const year = safeDate.getFullYear();
+  const month = String(safeDate.getMonth() + 1).padStart(2, "0");
+  const prefix = `PM-${year}-${month}-`;
+
+  const existingSet = new Set<string>();
+  let maxSeq = 0;
+
+  const inspectCode = (raw?: string) => {
+    const code = String(raw || "").trim().toUpperCase();
+    if (!code) return;
+    existingSet.add(code);
+    if (code.startsWith(prefix)) {
+      const tail = code.slice(prefix.length);
+      const parsed = parseInt(tail, 10);
+      if (!isNaN(parsed) && parsed > maxSeq) {
+        maxSeq = parsed;
+      }
+    }
+  };
+
+  for (const rec of existingRecords) {
+    inspectCode(rec.pmNo);
+    if (Array.isArray(rec.history)) {
+      for (const h of rec.history) {
+        inspectCode(h.pmNo);
+      }
+    }
+  }
+
+  if (reservedNos) {
+    for (const rNo of reservedNos) {
+      inspectCode(rNo);
+    }
+  }
+
+  let nextSeq = maxSeq + 1;
+  let candidate = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+  while (existingSet.has(candidate)) {
+    nextSeq += 1;
+    candidate = `${prefix}${String(nextSeq).padStart(3, "0")}`;
+  }
+  return candidate;
+}
+
 export function computeNextPmDate(baseDateYmd: string, cycleDays: number): string {
   const safeDays = Math.max(1, Math.min(3650, Math.round(Number(cycleDays) || 30)));
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(baseDateYmd || "").trim());
@@ -2216,10 +2294,75 @@ function sanitizeMhPmSchedulePayload(
       ? String(r.mileageDueDate).trim().slice(0, 32)
       : undefined;
 
+  const cleanPmNo =
+    r.pmNo && String(r.pmNo).trim()
+      ? String(r.pmNo).trim().toUpperCase().slice(0, 64)
+      : undefined;
+
   const safeHistory: MhPmHistoryEntry[] = Array.isArray(r.history)
-    ? r.history.slice(0, 40).map((h, idx) =>
-        stripUndefinedDeep({
+    ? r.history.slice(0, 40).map((h, idx) => {
+        const safeZoneSnapshots: MhPm3dZoneSnapshot[] | undefined = Array.isArray(
+          h.pm3dSummary?.zoneSnapshots
+        )
+          ? h.pm3dSummary.zoneSnapshots.slice(0, 20).map((zs) =>
+              stripUndefinedDeep({
+                zoneId: String(zs.zoneId || "").slice(0, 64),
+                zoneLabel: String(zs.zoneLabel || "").slice(0, 128),
+                status:
+                  zs.status === "ok" ||
+                  zs.status === "issue" ||
+                  zs.status === "replaced" ||
+                  zs.status === "pending"
+                    ? zs.status
+                    : "pending",
+                cost:
+                  typeof zs.cost === "number" && !isNaN(zs.cost) && zs.cost >= 0
+                    ? zs.cost
+                    : undefined,
+                notes: zs.notes ? String(zs.notes).trim().slice(0, 300) : undefined,
+                photoCount:
+                  typeof zs.photoCount === "number" && !isNaN(zs.photoCount) && zs.photoCount > 0
+                    ? Math.min(20, Math.round(zs.photoCount))
+                    : undefined,
+                itemsSummary: zs.itemsSummary
+                  ? String(zs.itemsSummary).trim().slice(0, 240)
+                  : undefined,
+                linkedRepairNo: zs.linkedRepairNo
+                  ? String(zs.linkedRepairNo).trim().slice(0, 64)
+                  : undefined,
+              })
+            )
+          : undefined;
+
+        const safePm3dSummary: MhPm3dSummary | undefined = h.pm3dSummary
+          ? {
+              totalZones: Math.max(0, Math.round(Number(h.pm3dSummary.totalZones) || 0)),
+              checkedZones: Math.max(0, Math.round(Number(h.pm3dSummary.checkedZones) || 0)),
+              okCount: Math.max(0, Math.round(Number(h.pm3dSummary.okCount) || 0)),
+              issueCount: Math.max(0, Math.round(Number(h.pm3dSummary.issueCount) || 0)),
+              replacedCount: Math.max(0, Math.round(Number(h.pm3dSummary.replacedCount) || 0)),
+              zoneSnapshots: safeZoneSnapshots || [],
+            }
+          : undefined;
+
+        const safeLinkedRepairNos = Array.isArray(h.linkedRepairNos)
+          ? h.linkedRepairNos
+              .map((rn) => String(rn || "").trim().slice(0, 64))
+              .filter(Boolean)
+              .slice(0, 10)
+          : undefined;
+
+        const safeModelType: MhPm3dModelType | undefined =
+          h.pm3dModelType === "diesel_tractor" ||
+          h.pm3dModelType === "ev_tractor" ||
+          h.pm3dModelType === "forklift" ||
+          h.pm3dModelType === "trailer"
+            ? h.pm3dModelType
+            : undefined;
+
+        return stripUndefinedDeep({
           id: String(h.id || `PMH-${idx + 1}`).slice(0, 64),
+          pmNo: h.pmNo ? String(h.pmNo).trim().toUpperCase().slice(0, 64) : undefined,
           completedDate: String(h.completedDate || dateYmd).trim().slice(0, 32),
           previousDueDate: h.previousDueDate ? String(h.previousDueDate).trim().slice(0, 32) : undefined,
           nextDueDate: h.nextDueDate ? String(h.nextDueDate).trim().slice(0, 32) : undefined,
@@ -2236,12 +2379,21 @@ function sanitizeMhPmSchedulePayload(
             typeof h.cost === "number" && !isNaN(h.cost) ? Math.max(0, h.cost) : undefined,
           notes: h.notes ? String(h.notes).trim().slice(0, 500) : undefined,
           recordedAt: String(h.recordedAt || timestamp).slice(0, 64),
-        })
-      )
+          pm3dModelType: safeModelType,
+          pm3dCoupledTrailer:
+            typeof h.pm3dCoupledTrailer === "boolean" ? h.pm3dCoupledTrailer : undefined,
+          pm3dSummary: safePm3dSummary,
+          linkedRepairNos:
+            safeLinkedRepairNos && safeLinkedRepairNos.length > 0
+              ? safeLinkedRepairNos
+              : undefined,
+        });
+      })
     : [];
 
   return stripUndefinedDeep({
     id: docId,
+    pmNo: cleanPmNo,
     vehicleId: cleanVehicleId,
     vehicleNumber: cleanVehicleNumber,
     vehicleType: String(r.vehicleType || "Forklift").trim().slice(0, 64),
