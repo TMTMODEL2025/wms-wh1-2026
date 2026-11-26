@@ -86,8 +86,87 @@ export function isTractorVehicle(v: VehicleTypeCandidate): boolean {
   return isElectricTractorVehicle(v) || isStandardTractorVehicle(v);
 }
 
+export function isClampTruckVehicle(v: VehicleTypeCandidate): boolean {
+  const primaryUpper = getPrimaryVehicleCodeUpper(v);
+  if (
+    primaryUpper.startsWith("หแ") ||
+    primaryUpper.startsWith("SC-") ||
+    primaryUpper === "SC01" ||
+    primaryUpper.startsWith("CLAMP")
+  ) {
+    return true;
+  }
+
+  const combined = [
+    v.vehicleId,
+    v.number,
+    v.id,
+    v.registrationNumber,
+    v.description,
+    v.vehicleDescription,
+    v.vehicleType,
+    v.type,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim()
+    .toLowerCase();
+
+  return (
+    combined.includes("หแ-01") ||
+    combined.includes("หแ-") ||
+    combined.includes("รถคีบ") ||
+    combined.includes("xinyuan") ||
+    combined.includes("clamp")
+  );
+}
+
+export type PreStartVehicleCategoryKey =
+  | "diesel_tractor"
+  | "ev_tractor"
+  | "trailer"
+  | "forklift"
+  | "clamp_truck";
+
+/**
+ * Classifies any fleet vehicle into the 5 Daily Pre-Start Inspection tabs:
+ * - diesel_tractor: รถหัวลากดีเซล (TT- / Tractor / Tugger)
+ * - ev_tractor: หัวลากไฟฟ้า EV (TTEV- / ElectricTractor)
+ * - trailer: หางลาก (TTL- / Trailer)
+ * - forklift: โฟล์คลิฟท์ (FL- / Forklift)
+ * - clamp_truck: หแ-01 (รถคีบ)
+ */
+export function classifyPreStartVehicleCategory(
+  v: VehicleTypeCandidate
+): PreStartVehicleCategoryKey {
+  if (isClampTruckVehicle(v)) return "clamp_truck";
+  if (isElectricTractorVehicle(v)) return "ev_tractor";
+  if (isTrailerVehicle(v)) return "trailer";
+  if (isForkliftVehicle(v)) return "forklift";
+  if (isStandardTractorVehicle(v)) return "diesel_tractor";
+
+  const combined = [
+    v.vehicleId,
+    v.number,
+    v.description,
+    v.vehicleDescription,
+    v.vehicleType,
+    v.type,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (combined.includes("หางลาก") || combined.includes("trailer")) return "trailer";
+  if (combined.includes("โฟล์คลิฟท์") || combined.includes("forklift")) return "forklift";
+  if (combined.includes("ไฟฟ้า") || combined.includes("ttev") || combined.includes("byd")) {
+    return "ev_tractor";
+  }
+  return "diesel_tractor";
+}
+
 export function isForkliftVehicle(v: VehicleTypeCandidate): boolean {
-  if (isTrailerVehicle(v) || isElectricTractorVehicle(v)) return false;
+  if (isTrailerVehicle(v) || isElectricTractorVehicle(v) || isClampTruckVehicle(v)) return false;
   const id = getPrimaryVehicleCodeUpper(v);
   return v.vehicleType === "Forklift" || id.startsWith("FL-");
 }
@@ -128,6 +207,10 @@ export function getVehicleTypeDisplayLabel(
     vehicleType: vehicle?.vehicleType ?? vehicleType,
   };
 
+  if (isClampTruckVehicle(candidate)) {
+    return "รถคีบ (หแ-01)";
+  }
+
   if (isElectricTractorVehicle(candidate)) {
     return "หัวลากไฟฟ้า";
   }
@@ -160,16 +243,17 @@ export function getVehicleSearchableText(v: VehicleTypeCandidate): string {
   const resolved = resolveVehicleType(v);
   const displayLabel = getVehicleTypeDisplayLabel(v.vehicleType, v);
 
-  const extraKeywords =
-    resolved === "ElectricTractor"
-      ? "หัวลากไฟฟ้า electric tractor ttev หัวลาก"
-      : resolved === "Trailer"
-      ? "หางลาก trailer ttl"
-      : resolved === "Forklift"
-      ? "รถโฟล์คลิฟท์ โฟล์คลิฟท์ forklift fl"
-      : resolved === "Tractor" || resolved === "Tugger"
-      ? "รถหัวลาก หัวลาก รถลากจูง tractor tugger tt"
-      : "";
+  const extraKeywords = isClampTruckVehicle(v)
+    ? "รถคีบ คีบ หแ-01 หแ clamp sc-01 xinyuan"
+    : resolved === "ElectricTractor"
+    ? "หัวลากไฟฟ้า electric tractor ttev หัวลาก"
+    : resolved === "Trailer"
+    ? "หางลาก trailer ttl"
+    : resolved === "Forklift"
+    ? "รถโฟล์คลิฟท์ โฟล์คลิฟท์ forklift fl"
+    : resolved === "Tractor" || resolved === "Tugger"
+    ? "รถหัวลาก หัวลาก รถลากจูง tractor tugger tt ดีเซล"
+    : "";
 
   return [
     v.vehicleId,
