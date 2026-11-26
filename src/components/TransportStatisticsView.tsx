@@ -21,6 +21,8 @@ import {
   AlertTriangle,
   XCircle,
   Filter,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
 import {
@@ -44,6 +46,7 @@ type TransferScopeFilter = "all" | "FG" | "RM";
 type StatsTab = "overview" | "vehicles" | "drivers" | "products" | "trips";
 
 const SLA_LIMIT_SECONDS = 20 * 60;
+const TRIPS_PAGE_SIZE = 20;
 
 function getLocalDateYmd(date = new Date()): string {
   const y = date.getFullYear();
@@ -170,6 +173,7 @@ export function TransportStatisticsView({
   const [selectedShift, setSelectedShift] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeTab, setActiveTab] = useState<StatsTab>("overview");
+  const [tripsPage, setTripsPage] = useState<number>(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -392,6 +396,46 @@ export function TransportStatisticsView({
     }
     return dateFilteredTransfers;
   }, [dateFilteredTransfers, statusScope]);
+
+  // Reset Trips table pagination back to page 1 when filters change
+  useEffect(() => {
+    setTripsPage(1);
+  }, [
+    datePreset,
+    startDate,
+    endDate,
+    statusScope,
+    transferScopeFilter,
+    selectedTeam,
+    selectedShift,
+    searchQuery,
+  ]);
+
+  const tripsTotalPages = Math.max(1, Math.ceil(scopedTransfers.length / TRIPS_PAGE_SIZE));
+  const safeTripsPage = Math.min(Math.max(1, tripsPage), tripsTotalPages);
+  const tripsStartIdx = (safeTripsPage - 1) * TRIPS_PAGE_SIZE;
+  const paginatedScopedTransfers = useMemo(
+    () => scopedTransfers.slice(tripsStartIdx, tripsStartIdx + TRIPS_PAGE_SIZE),
+    [scopedTransfers, tripsStartIdx]
+  );
+  const tripsRangeStart = scopedTransfers.length === 0 ? 0 : tripsStartIdx + 1;
+  const tripsRangeEnd = Math.min(tripsStartIdx + TRIPS_PAGE_SIZE, scopedTransfers.length);
+
+  const visibleTripsPageNumbers = useMemo(() => {
+    const pages: (number | "ellipsis")[] = [];
+    if (tripsTotalPages <= 7) {
+      for (let i = 1; i <= tripsTotalPages; i++) pages.push(i);
+      return pages;
+    }
+    pages.push(1);
+    const start = Math.max(2, safeTripsPage - 1);
+    const end = Math.min(tripsTotalPages - 1, safeTripsPage + 1);
+    if (start > 2) pages.push("ellipsis");
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < tripsTotalPages - 1) pages.push("ellipsis");
+    pages.push(tripsTotalPages);
+    return pages;
+  }, [tripsTotalPages, safeTripsPage]);
 
   // 3. Aggregated Statistics
   const stats = useMemo(() => {
@@ -1664,15 +1708,20 @@ export function TransportStatisticsView({
           {/* Raw Filtered Trips Table */}
           {activeTab === "trips" && (
             <section className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-              <div className="border-b border-slate-200 dark:border-slate-800 px-5 py-4 flex items-center justify-between">
+              <div className="border-b border-slate-200 dark:border-slate-800 px-5 py-4 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                    รายการใบงานย้ายสินค้าทั้งหมดตามตัวกรอง ({scopedTransfers.length} รายการ)
+                    รายการใบงานย้ายสินค้าทั้งหมดตามตัวกรอง ({scopedTransfers.length.toLocaleString("th-TH")} รายการ)
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    แสดงรายละเอียดรายเที่ยวเพื่อการตรวจสอบย้อนหลัง
+                    แสดงรายละเอียดรายเที่ยวเพื่อการตรวจสอบย้อนหลัง · แบ่งหน้าละ {TRIPS_PAGE_SIZE} รายการ
                   </p>
                 </div>
+                {scopedTransfers.length > 0 && (
+                  <div className="text-xs font-medium text-slate-600 dark:text-slate-300 tabular-nums">
+                    แสดง {tripsRangeStart.toLocaleString("th-TH")}–{tripsRangeEnd.toLocaleString("th-TH")} จาก {scopedTransfers.length.toLocaleString("th-TH")} รายการ · หน้า {safeTripsPage}/{tripsTotalPages}
+                  </div>
+                )}
               </div>
               <div className="overflow-x-auto">
                 <table className="ts-stats-table w-full text-left text-xs">
@@ -1690,7 +1739,7 @@ export function TransportStatisticsView({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                    {scopedTransfers.map((r) => {
+                    {paginatedScopedTransfers.map((r) => {
                       const weightKg = getRecordWeightKg(r);
                       const bundles = getRecordBundles(r);
                       const ymd = normalizeDateYmd(r);
@@ -1782,6 +1831,70 @@ export function TransportStatisticsView({
                   </tbody>
                 </table>
               </div>
+
+              {scopedTransfers.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 px-5 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="text-slate-600 dark:text-slate-300 tabular-nums">
+                    แสดงรายการที่{" "}
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                      {tripsRangeStart.toLocaleString("th-TH")}–{tripsRangeEnd.toLocaleString("th-TH")}
+                    </span>{" "}
+                    จากทั้งหมด{" "}
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                      {scopedTransfers.length.toLocaleString("th-TH")}
+                    </span>{" "}
+                    รายการ (หน้าละ {TRIPS_PAGE_SIZE} รายการ)
+                  </div>
+
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setTripsPage((p) => Math.max(1, p - 1))}
+                      disabled={safeTripsPage <= 1}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                      <span>ก่อนหน้า</span>
+                    </button>
+
+                    <div className="inline-flex items-center gap-1 mx-0.5">
+                      {visibleTripsPageNumbers.map((item, idx) =>
+                        item === "ellipsis" ? (
+                          <span
+                            key={`ellipsis-${idx}`}
+                            className="px-2 py-1 text-slate-400 dark:text-slate-500 select-none"
+                          >
+                            …
+                          </span>
+                        ) : (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => setTripsPage(item)}
+                            className={`min-w-[30px] px-2 py-1.5 rounded-md border text-xs font-semibold tabular-nums transition-colors ${
+                              item === safeTripsPage
+                                ? "bg-[#087eaf] border-[#087eaf] text-white"
+                                : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            {item}
+                          </button>
+                        )
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setTripsPage((p) => Math.min(tripsTotalPages, p + 1))}
+                      disabled={safeTripsPage >= tripsTotalPages}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <span>ถัดไป</span>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           )}
         </div>

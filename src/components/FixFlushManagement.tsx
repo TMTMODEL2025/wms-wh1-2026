@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import Swal from "sweetalert2";
 import {
   Wrench,
   Clock,
@@ -35,6 +36,11 @@ import {
   RotateCcw,
   Calculator,
   User,
+  History,
+  BarChart3,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { Employee, Vehicle } from "../types/officer";
 import {
@@ -259,6 +265,50 @@ function getStageMeta(rec: FixFlushRecord): {
   }
 }
 
+function getMaintenanceRecordTotalCost(rec: FixFlushRecord): number {
+  const est = Number(rec.estimatedCost) || 0;
+  if (est > 0) return est;
+  return (Number(rec.partsCost) || 0) + (Number(rec.laborCost) || 0);
+}
+
+function parseYmdToMs(dateStr?: string): number | null {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(dateStr.trim())) return null;
+  const [y, m, d] = dateStr.trim().slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d).getTime();
+}
+
+function compareRecordsNewestFirst(a: FixFlushRecord, b: FixFlushRecord): number {
+  const dCmp = (b.workingDate || "").localeCompare(a.workingDate || "");
+  if (dCmp !== 0) return dCmp;
+  return (b.createdAt || "").localeCompare(a.createdAt || "");
+}
+
+function showRepairSwal(opts: {
+  icon: "success" | "info" | "warning" | "error";
+  title: string;
+  text: string;
+}) {
+  const isDark =
+    typeof document !== "undefined" &&
+    (document.documentElement.classList.contains("dark") ||
+      Boolean(document.querySelector(".shell.theme-dark")));
+  void Swal.fire({
+    icon: opts.icon,
+    title: opts.title,
+    text: opts.text,
+    confirmButtonText: "ตกลง",
+    confirmButtonColor: "#087eaf",
+    background: isDark ? "#111e38" : "#ffffff",
+    color: isDark ? "#f1f5f9" : "#0f172a",
+    timer: opts.icon === "error" ? undefined : 3200,
+    timerProgressBar: opts.icon !== "error",
+    customClass: {
+      container: "!z-[2000]",
+    },
+  });
+}
+
 export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagementProps) {
   const { currentUser } = useAuth();
   const [records, setRecords] = useState<FixFlushRecord[]>([]);
@@ -287,6 +337,146 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<FixFlushRecord | null>(null);
   const [isEditingSupervisorCost, setIsEditingSupervisorCost] = useState(false);
+  const [showAllSameVehicleHistory, setShowAllSameVehicleHistory] = useState(false);
+  const [showAllOtherVehicleHistory, setShowAllOtherVehicleHistory] = useState(false);
+
+  useEffect(() => {
+    setShowAllSameVehicleHistory(false);
+    setShowAllOtherVehicleHistory(false);
+  }, [selectedRecord?.id]);
+
+  // Decision-support history & peer comparison for Manager Approval detail view
+  const approvalComparisonData = useMemo(() => {
+    if (!selectedRecord) return null;
+    const currentTypeKey = (selectedRecord.repairType || "").trim().toLowerCase();
+    const currentVehicleKey = (selectedRecord.vehicleId || "").trim().toUpperCase();
+    const currentCost = getMaintenanceRecordTotalCost(selectedRecord);
+    const currentDateMs = parseYmdToMs(selectedRecord.workingDate);
+
+    const sameVehicleList = records
+      .filter(
+        (r) =>
+          r.id !== selectedRecord.id &&
+          (r.vehicleId || "").trim().toUpperCase() === currentVehicleKey &&
+          (r.repairType || "").trim().toLowerCase() === currentTypeKey
+      )
+      .sort(compareRecordsNewestFirst);
+
+    const otherVehiclesList = records
+      .filter(
+        (r) =>
+          r.id !== selectedRecord.id &&
+          (r.vehicleId || "").trim().toUpperCase() !== currentVehicleKey &&
+          (r.repairType || "").trim().toLowerCase() === currentTypeKey
+      )
+      .sort(compareRecordsNewestFirst);
+
+    const validSame = sameVehicleList.filter((r) => inferMhWorkflowStage(r) !== "Rejected");
+    const sameCosts = validSame.map(getMaintenanceRecordTotalCost).filter((c) => c > 0);
+    const sameTotalCost = validSame.reduce(
+      (sum, r) => sum + getMaintenanceRecordTotalCost(r),
+      0
+    );
+    const sameAvgCost =
+      sameCosts.length > 0
+        ? Math.round(sameCosts.reduce((sum, c) => sum + c, 0) / sameCosts.length)
+        : 0;
+
+    const latestSame = validSame[0] || sameVehicleList[0] || null;
+    const latestSameDateMs = latestSame ? parseYmdToMs(latestSame.workingDate) : null;
+    const daysSinceLastRepair =
+      currentDateMs !== null && latestSameDateMs !== null && currentDateMs >= latestSameDateMs
+        ? Math.round((currentDateMs - latestSameDateMs) / 86400000)
+        : null;
+    const hoursSinceLastRepair =
+      latestSame &&
+      (selectedRecord.operatingHours || 0) > 0 &&
+      (latestSame.operatingHours || 0) > 0 &&
+      selectedRecord.operatingHours >= latestSame.operatingHours
+        ? selectedRecord.operatingHours - latestSame.operatingHours
+        : null;
+
+    const validOther = otherVehiclesList.filter((r) => inferMhWorkflowStage(r) !== "Rejected");
+    const otherCosts = validOther.map(getMaintenanceRecordTotalCost).filter((c) => c > 0);
+    const otherAvgCost =
+      otherCosts.length > 0
+        ? Math.round(otherCosts.reduce((sum, c) => sum + c, 0) / otherCosts.length)
+        : 0;
+    const otherMinCost = otherCosts.length > 0 ? Math.min(...otherCosts) : 0;
+    const otherMaxCost = otherCosts.length > 0 ? Math.max(...otherCosts) : 0;
+
+    const diffFromOtherAvg =
+      otherAvgCost > 0 && currentCost > 0 ? currentCost - otherAvgCost : null;
+    const diffFromOtherAvgPct =
+      otherAvgCost > 0 && diffFromOtherAvg !== null
+        ? Math.round((diffFromOtherAvg / otherAvgCost) * 100)
+        : null;
+
+    // Grouped summary per other vehicle
+    const otherVehicleMap = new Map<
+      string,
+      {
+        vehicleId: string;
+        vehicleType: string;
+        count: number;
+        costCount: number;
+        totalCost: number;
+        latestDate: string;
+      }
+    >();
+    otherVehiclesList.forEach((r) => {
+      const vid = (r.vehicleId || "-").trim().toUpperCase();
+      const isRejected = inferMhWorkflowStage(r) === "Rejected";
+      const cost = getMaintenanceRecordTotalCost(r);
+      const entry = otherVehicleMap.get(vid) || {
+        vehicleId: r.vehicleId || "-",
+        vehicleType: r.vehicleType || "Forklift",
+        count: 0,
+        costCount: 0,
+        totalCost: 0,
+        latestDate: r.workingDate || "",
+      };
+      entry.count += 1;
+      if (!isRejected && cost > 0) {
+        entry.costCount += 1;
+        entry.totalCost += cost;
+      }
+      if ((r.workingDate || "") > entry.latestDate) {
+        entry.latestDate = r.workingDate || "";
+      }
+      otherVehicleMap.set(vid, entry);
+    });
+
+    const otherByVehicle = Array.from(otherVehicleMap.values())
+      .map((item) => ({
+        ...item,
+        avgCost: item.costCount > 0 ? Math.round(item.totalCost / item.costCount) : 0,
+      }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return b.latestDate.localeCompare(a.latestDate);
+      });
+
+    return {
+      currentCost,
+      sameVehicleList,
+      sameValidCount: validSame.length,
+      sameTotalCost,
+      sameAvgCost,
+      latestSame,
+      daysSinceLastRepair,
+      hoursSinceLastRepair,
+      otherVehiclesList,
+      otherValidCount: validOther.length,
+      otherUniqueVehicleCount: otherByVehicle.length,
+      otherAvgCost,
+      otherMinCost,
+      otherMaxCost,
+      diffFromOtherAvg,
+      diffFromOtherAvgPct,
+      otherByVehicle,
+    };
+  }, [selectedRecord, records]);
 
   // Lightbox State for viewing attached photos
   const [lightboxPhotos, setLightboxPhotos] = useState<MhRepairPhotoItem[]>([]);
@@ -332,6 +522,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
   const [supTechnicianName, setSupTechnicianName] = useState<string>("");
   const [supVendorName, setSupVendorName] = useState<string>("");
   const [supOperatingHours, setSupOperatingHours] = useState<number>(0);
+  const [supRepairDescription, setSupRepairDescription] = useState<string>("");
   const [supNotes, setSupNotes] = useState<string>("");
   const [supReplyText, setSupReplyText] = useState<string>("");
   const [supLogTireOutbound, setSupLogTireOutbound] = useState<boolean>(false);
@@ -410,6 +601,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     setSupVendorName(rec.vendorName && rec.vendorName !== "-" ? rec.vendorName : "");
     setSupReplyText("");
     setSupOperatingHours(Number(rec.operatingHours) || 0);
+    setSupRepairDescription(rec.repairDescription || "");
     setSupNotes(rec.supervisorNotes || "");
     setSupLogTireOutbound(false);
     setSupTireSize(TIRE_SIZE_OPTIONS[1]);
@@ -508,7 +700,14 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     const cleanVehicleId = reqVehicleId.trim();
     const cleanDesc = reqRepairDescription.trim();
 
-    if (!cleanVehicleId || !cleanDesc) return;
+    if (!cleanVehicleId || !cleanDesc) {
+      showRepairSwal({
+        icon: "warning",
+        title: "กรุณากรอกข้อมูลให้ครบถ้วน",
+        text: "กรุณาเลือกรถที่แจ้งซ่อมและระบุอาการ / รายละเอียดที่ต้องการซ่อมก่อนกดยืนยัน",
+      });
+      return;
+    }
 
     setIsSubmittingRequest(true);
     try {
@@ -567,6 +766,18 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         reference: requestNo,
         activity: `แจ้งซ่อม ${requestNo} รถ ${cleanVehicleId} · ${reqRepairType} (ผู้แจ้ง: ${cleanRequester})`,
         status: "Pending",
+      });
+
+      showRepairSwal({
+        icon: "success",
+        title: "ส่งใบแจ้งซ่อมเรียบร้อยแล้ว",
+        text: `เลขที่ใบแจ้งซ่อม ${requestNo} · รถ ${cleanVehicleId} (${reqRepairType}) ส่งให้หัวหน้างานตรวจสอบแล้ว`,
+      });
+    } catch {
+      showRepairSwal({
+        icon: "error",
+        title: "บันทึกใบแจ้งซ่อมไม่สำเร็จ",
+        text: "เกิดข้อผิดพลาดขณะบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง",
       });
     } finally {
       setIsSubmittingRequest(false);
@@ -658,8 +869,12 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
           ]
         : selectedRecord.feedbackThread;
 
+      const finalRepairDescription =
+        supRepairDescription.trim() || selectedRecord.repairDescription;
+
       const updated: FixFlushRecord = {
         ...selectedRecord,
+        repairDescription: finalRepairDescription,
         spareParts: cleanParts,
         partsCost: finalPartsCost,
         laborCost: finalLaborCost,
@@ -735,6 +950,22 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
           : `หัวหน้างานตรวจสอบใบซ่อม ${updated.workOrderNo} (${updated.vehicleId}) ยอดประเมิน ${finalTotal.toLocaleString()} บาท → ส่งผู้จัดการอนุมัติ`,
         status: isPostApprovalEdit ? "Approved" : "Pending",
       });
+
+      showRepairSwal({
+        icon: "success",
+        title: isPostApprovalEdit
+          ? "บันทึกเพิ่มรายการอะไหล่เรียบร้อยแล้ว"
+          : "ยืนยันการตรวจสอบเรียบร้อยแล้ว",
+        text: isPostApprovalEdit
+          ? `อัปเดตใบขอซ่อม ${updated.workOrderNo} (${updated.vehicleId}) ยอดรวม ${finalTotal.toLocaleString()} บาท เรียบร้อยแล้ว`
+          : `ใบขอซ่อม ${updated.workOrderNo} (${updated.vehicleId}) ยอดประเมิน ${finalTotal.toLocaleString()} บาท ส่งให้ผู้จัดการพิจารณาอนุมัติแล้ว`,
+      });
+    } catch {
+      showRepairSwal({
+        icon: "error",
+        title: "บันทึกการตรวจสอบไม่สำเร็จ",
+        text: "เกิดข้อผิดพลาดขณะบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง",
+      });
     } finally {
       setIsSavingSupervisor(false);
     }
@@ -781,6 +1012,12 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       activity: `หัวหน้างานส่งกลับใบซ่อม ${updated.workOrderNo}: ${msg.message}`,
       status: "Attention",
     });
+
+    showRepairSwal({
+      icon: "info",
+      title: "ส่งกลับให้ผู้แจ้งแก้ไขแล้ว",
+      text: `ส่งใบขอซ่อม ${updated.workOrderNo} (${updated.vehicleId}) กลับให้ผู้แจ้งแก้ไขรายละเอียดเรียบร้อยแล้ว`,
+    });
   };
 
   // Stage 3 Actions: Manager Approve / Reject / Query / Complete
@@ -812,6 +1049,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       reference: target.workOrderNo,
       activity: `ผู้จัดการอนุมัติซ่อม ${target.workOrderNo} (${target.vehicleId}) ยอด ${target.estimatedCost.toLocaleString()} บาท → ตารางแจ้งซ่อม (รอคิวซ่อม)`,
       status: "Approved",
+    });
+    showRepairSwal({
+      icon: "success",
+      title: "อนุมัติการซ่อมเรียบร้อยแล้ว",
+      text: `อนุมัติใบขอซ่อม ${target.workOrderNo} (${target.vehicleId}) ยอด ${target.estimatedCost.toLocaleString()} บาท → ส่งเข้าคิวรอซ่อมแล้ว`,
     });
   };
 
@@ -861,6 +1103,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       activity: `ไม่อนุมัติใบแจ้งซ่อม ${target.workOrderNo} (${target.vehicleId})${cleanReason ? ` · ${cleanReason}` : ""}`,
       status: "Attention",
     });
+    showRepairSwal({
+      icon: "warning",
+      title: "บันทึกไม่อนุมัติเรียบร้อยแล้ว",
+      text: `อัปเดตสถานะใบขอซ่อม ${target.workOrderNo} (${target.vehicleId}) เป็น "ไม่อนุมัติ" แล้ว`,
+    });
   };
 
   const handleMarkInRepair = async (recordId: string) => {
@@ -890,6 +1137,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       reference: target.workOrderNo,
       activity: `หัวหน้างานอัปเดตสถานะ ${target.workOrderNo} (${target.vehicleId}) → กำลังซ่อม`,
       status: "Pending",
+    });
+    showRepairSwal({
+      icon: "success",
+      title: "อัปเดตสถานะกำลังซ่อมแล้ว",
+      text: `ใบขอซ่อม ${target.workOrderNo} (${target.vehicleId}) เปลี่ยนสถานะเป็น "กำลังซ่อม" เรียบร้อยแล้ว`,
     });
   };
 
@@ -922,6 +1174,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       activity: `หัวหน้างานอัปเดตสถานะ ${target.workOrderNo} (${target.vehicleId}) → ซ่อมเสร็จ`,
       status: "Completed",
     });
+    showRepairSwal({
+      icon: "success",
+      title: "อัปเดตสถานะซ่อมเสร็จเรียบร้อยแล้ว",
+      text: `ปิดงานใบขอซ่อม ${target.workOrderNo} (${target.vehicleId}) เป็น "ซ่อมเสร็จ" แล้ว`,
+    });
   };
 
   const handleDeleteMaintenanceOrder = async (recordId: string) => {
@@ -941,6 +1198,13 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         status: "Attention",
       });
     }
+    showRepairSwal({
+      icon: "success",
+      title: "ลบใบแจ้งซ่อมเรียบร้อยแล้ว",
+      text: target
+        ? `ลบใบขอซ่อม ${target.workOrderNo} (${target.vehicleId}) ออกจากระบบแล้ว`
+        : "ลบใบแจ้งซ่อมออกจากระบบแล้ว",
+    });
   };
 
   const handleSendManagerQuery = async (e: React.FormEvent) => {
@@ -982,6 +1246,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       reference: updatedRecord.workOrderNo,
       activity: `ผู้จัดการขอรายละเอียดเพิ่มเติม ${updatedRecord.workOrderNo} → ส่งกลับหัวหน้างานตรวจสอบ`,
       status: "Pending",
+    });
+    showRepairSwal({
+      icon: "info",
+      title: "ส่งคำขอข้อมูลเพิ่มเติมแล้ว",
+      text: `ส่งคำถามใบขอซ่อม ${updatedRecord.workOrderNo} กลับไปยังหัวหน้างานเรียบร้อยแล้ว`,
     });
   };
 
@@ -1046,6 +1315,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       reference: updatedRecord.workOrderNo,
       activity: `หัวหน้างานตอบข้อมูลเพิ่มเติม ${updatedRecord.workOrderNo} (${combinedMessage}) → ส่งผู้จัดการอนุมัติ`,
       status: "Pending",
+    });
+    showRepairSwal({
+      icon: "success",
+      title: "ส่งข้อมูลตอบกลับเรียบร้อยแล้ว",
+      text: `ส่งคำชี้แจงใบขอซ่อม ${updatedRecord.workOrderNo} กลับให้ผู้จัดการพิจารณาอนุมัติแล้ว`,
     });
   };
 
@@ -2094,8 +2368,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
             isEditingSupervisorCost);
 
         return (
-          <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+          <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
               {/* Modal Header */}
               <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between gap-4">
                 <div>
@@ -2312,12 +2586,49 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   </div>
 
                   <div>
-                    <div className="text-slate-500 dark:text-slate-400 mb-1">
-                      อาการ / รายละเอียดที่ต้องการซ่อม
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500 dark:text-slate-400">
+                          อาการ / รายละเอียดที่ต้องการซ่อม
+                        </span>
+                        {canSupervisorEdit && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 text-[10px] font-bold">
+                            หัวหน้างานแก้ไขได้
+                          </span>
+                        )}
+                      </div>
+                      {canSupervisorEdit &&
+                        supRepairDescription.trim() !==
+                          (selectedRecord.repairDescription || "").trim() && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSupRepairDescription(selectedRecord.repairDescription || "")
+                            }
+                            className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+                          >
+                            คืนค่าข้อความเดิม
+                          </button>
+                        )}
                     </div>
-                    <div className="p-3 rounded-md bg-slate-50 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
-                      {selectedRecord.repairDescription}
-                    </div>
+                    {canSupervisorEdit ? (
+                      <div className="space-y-1">
+                        <textarea
+                          value={supRepairDescription}
+                          onChange={(e) => setSupRepairDescription(e.target.value)}
+                          rows={3}
+                          placeholder="ระบุอาการชำรุดหรือรายละเอียดที่ต้องการซ่อม..."
+                          className="w-full p-3 rounded-md bg-white dark:bg-[#0c1930] border border-amber-300 dark:border-amber-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                        />
+                        <div className="text-[10.5px] text-amber-700 dark:text-amber-300">
+                          * หัวหน้างานสามารถแก้ไขหรือเพิ่มเติมรายละเอียดอาการได้โดยตรง ข้อมูลจะบันทึกเมื่อกดปุ่มยืนยันด้านล่าง
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-md bg-slate-50 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                        {selectedRecord.repairDescription}
+                      </div>
+                    )}
                   </div>
 
                   {selectedRecord.notes && (
@@ -2387,7 +2698,10 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       {(meta.stage === "SupervisorChecked" || canEditPostApproval) && (
                         <button
                           type="button"
-                          onClick={() => setIsEditingSupervisorCost(false)}
+                          onClick={() => {
+                            setSupRepairDescription(selectedRecord.repairDescription || "");
+                            setIsEditingSupervisorCost(false);
+                          }}
                           className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400"
                         >
                           ยกเลิกการแก้ไข
@@ -2831,6 +3145,426 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     )}
                   </div>
                 )}
+
+                {/* Section B2: Manager Decision Support — Same Vehicle History & Peer Vehicle Comparison */}
+                {(activeTab === "manager" || meta.stage === "SupervisorChecked") &&
+                  approvalComparisonData && (
+                    <div className="p-4 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50/40 dark:bg-[#0c1a33] space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-sky-200/80 dark:border-[#1e3a5f]">
+                        <div>
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                            <BarChart3 size={15} className="text-[#087eaf] dark:text-sky-400" />
+                            <span>ข้อมูลประวัติย้อนหลังและเปรียบเทียบเพื่อประกอบการตัดสินใจอนุมัติ</span>
+                          </h4>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            เปรียบเทียบเฉพาะประเภทการซ่อมเดียวกัน:{" "}
+                            <span className="font-bold text-[#087eaf] dark:text-sky-400">
+                              {selectedRecord.repairType}
+                            </span>
+                          </p>
+                        </div>
+                        <span className="px-2.5 py-1 rounded border border-sky-200 dark:border-sky-800 bg-white dark:bg-[#111e38] text-[11px] font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+                          ยอดประเมินใบนี้: {totalCostDisplay.toLocaleString()} บาท
+                        </span>
+                      </div>
+
+                      {/* 1. Same Vehicle + Same Repair Type History */}
+                      <div className="rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] overflow-hidden">
+                        <div className="px-3.5 py-2.5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                            <History size={14} className="text-amber-600 dark:text-amber-400" />
+                            <span>
+                              1. ประวัติการซ่อมย้อนหลังของรถ{" "}
+                              <span className="text-[#087eaf] dark:text-sky-400">
+                                {selectedRecord.vehicleId}
+                              </span>{" "}
+                              (ประเภทเดียวกัน · {approvalComparisonData.sameVehicleList.length} รายการ)
+                            </span>
+                          </div>
+                          {approvalComparisonData.daysSinceLastRepair !== null &&
+                            approvalComparisonData.daysSinceLastRepair <= 30 && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 text-[10px] font-bold">
+                                <AlertTriangle size={11} />
+                                แจ้งซ่อมซ้ำใน {approvalComparisonData.daysSinceLastRepair} วัน
+                              </span>
+                            )}
+                        </div>
+
+                        {approvalComparisonData.sameVehicleList.length === 0 ? (
+                          <div className="p-3.5 text-[11px] text-emerald-700 dark:text-emerald-300 bg-emerald-50/40 dark:bg-emerald-950/15 flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="shrink-0" />
+                            <span>
+                              รถ <strong>{selectedRecord.vehicleId}</strong> ยังไม่เคยมีประวัติการแจ้งซ่อมประเภท{" "}
+                              <strong>&ldquo;{selectedRecord.repairType}&rdquo;</strong> มาก่อน (แจ้งซ่อมประเภทนี้ครั้งแรก)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="p-3.5 space-y-3">
+                            {/* KPI Summary Strip for Same Vehicle */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]">
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                  เคยซ่อมประเภทนี้มาแล้ว
+                                </div>
+                                <div className="text-sm font-extrabold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
+                                  {approvalComparisonData.sameVehicleList.length} ครั้ง
+                                  {approvalComparisonData.sameValidCount !==
+                                    approvalComparisonData.sameVehicleList.length && (
+                                    <span className="text-[10.5px] font-normal text-slate-500 ml-1">
+                                      (อนุมัติ/ดำเนินการ {approvalComparisonData.sameValidCount})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]">
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                  ครั้งล่าสุดเมื่อ / ระยะห่าง
+                                </div>
+                                <div className="text-sm font-extrabold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
+                                  {approvalComparisonData.latestSame?.workingDate || "-"}
+                                </div>
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                  {approvalComparisonData.daysSinceLastRepair !== null
+                                    ? `ห่างจากครั้งก่อน ${approvalComparisonData.daysSinceLastRepair} วัน`
+                                    : ""}
+                                  {approvalComparisonData.hoursSinceLastRepair !== null
+                                    ? ` · +${approvalComparisonData.hoursSinceLastRepair.toLocaleString()} ชม.รถ`
+                                    : ""}
+                                </div>
+                              </div>
+
+                              <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]">
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                  ค่าใช้จ่ายสะสม / เฉลี่ยต่อครั้ง
+                                </div>
+                                <div className="text-sm font-extrabold text-[#087eaf] dark:text-sky-400 tabular-nums mt-0.5">
+                                  {approvalComparisonData.sameTotalCost.toLocaleString()} บาท
+                                </div>
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                  เฉลี่ย {approvalComparisonData.sameAvgCost.toLocaleString()} บาท/ครั้ง
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Table of Same Vehicle History */}
+                            <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-md overflow-x-auto">
+                              <table className="ts-stats-table w-full text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                                    <th className="ts-left font-bold whitespace-nowrap">วันที่ / เลขที่ใบงาน</th>
+                                    <th className="ts-left font-bold whitespace-nowrap">อาการ / รายละเอียด & ร้านซ่อม</th>
+                                    <th className="ts-right font-bold whitespace-nowrap">ชม.รถ</th>
+                                    <th className="ts-right font-bold whitespace-nowrap">ค่าใช้จ่าย</th>
+                                    <th className="ts-center font-bold whitespace-nowrap">สถานะ</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                                  {(showAllSameVehicleHistory
+                                    ? approvalComparisonData.sameVehicleList
+                                    : approvalComparisonData.sameVehicleList.slice(0, 5)
+                                  ).map((hist) => {
+                                    const hMeta = getStageMeta(hist);
+                                    const hCost = getMaintenanceRecordTotalCost(hist);
+                                    return (
+                                      <tr
+                                        key={hist.id}
+                                        className="hover:bg-slate-50 dark:hover:bg-[#162744]/50"
+                                      >
+                                        <td className="ts-left whitespace-nowrap tabular-nums">
+                                          <div className="font-bold text-slate-800 dark:text-slate-200">
+                                            {hist.workingDate}
+                                          </div>
+                                          <div className="text-[10px] text-[#087eaf] dark:text-sky-400">
+                                            {hist.workOrderNo}
+                                          </div>
+                                        </td>
+                                        <td className="ts-left ts-wrap min-w-[200px]">
+                                          <div className="text-slate-800 dark:text-slate-200 line-clamp-2">
+                                            {hist.repairDescription || "-"}
+                                          </div>
+                                          {(hist.vendorName || hist.spareParts.length > 0) && (
+                                            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                              {hist.vendorName ? `Vendor: ${hist.vendorName}` : ""}
+                                              {hist.vendorName && hist.spareParts.length > 0 ? " · " : ""}
+                                              {hist.spareParts.length > 0
+                                                ? `อะไหล่ ${hist.spareParts.length} รายการ`
+                                                : ""}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="ts-right whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-300">
+                                          {hist.operatingHours > 0
+                                            ? `${hist.operatingHours.toLocaleString()} ชม.`
+                                            : "-"}
+                                        </td>
+                                        <td className="ts-right whitespace-nowrap tabular-nums">
+                                          <div className="font-bold text-slate-900 dark:text-slate-100">
+                                            {hCost.toLocaleString()} บาท
+                                          </div>
+                                          {((Number(hist.partsCost) || 0) > 0 ||
+                                            (Number(hist.laborCost) || 0) > 0) && (
+                                            <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                              อะไหล่ {(Number(hist.partsCost) || 0).toLocaleString()} · แรง{" "}
+                                              {(Number(hist.laborCost) || 0).toLocaleString()}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="ts-center whitespace-nowrap">
+                                          <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-semibold ${hMeta.badgeClass}`}
+                                          >
+                                            {hMeta.shortLabel}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {approvalComparisonData.sameVehicleList.length > 5 && (
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAllSameVehicleHistory((prev) => !prev)}
+                                  className="text-[11px] font-semibold text-[#087eaf] dark:text-sky-400 hover:underline"
+                                >
+                                  {showAllSameVehicleHistory
+                                    ? "ย่อรายการเหลือ 5 รายการล่าสุด"
+                                    : `ดูประวัติทั้งหมดของรถคันนี้ (${approvalComparisonData.sameVehicleList.length} รายการ)`}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 2. Other Vehicles + Same Repair Type Benchmark Comparison */}
+                      <div className="rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] overflow-hidden">
+                        <div className="px-3.5 py-2.5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                            <BarChart3 size={14} className="text-indigo-600 dark:text-indigo-400" />
+                            <span>
+                              2. เปรียบเทียบประวัติการซ่อมของรถคันอื่นในประเภทเดียวกัน (
+                              {approvalComparisonData.otherUniqueVehicleCount} คัน ·{" "}
+                              {approvalComparisonData.otherVehiclesList.length} รายการ)
+                            </span>
+                          </div>
+                        </div>
+
+                        {approvalComparisonData.otherVehiclesList.length === 0 ? (
+                          <div className="p-3.5 text-[11px] text-slate-500 dark:text-slate-400 italic">
+                            ยังไม่มีประวัติการซ่อมประเภท &ldquo;{selectedRecord.repairType}&rdquo; ของรถคันอื่นสำหรับเปรียบเทียบในระบบ
+                          </div>
+                        ) : (
+                          <div className="p-3.5 space-y-3">
+                            {/* Benchmark KPI Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                              <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]">
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                  รถคันอื่นที่เคยซ่อมประเภทนี้
+                                </div>
+                                <div className="text-sm font-extrabold text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
+                                  {approvalComparisonData.otherUniqueVehicleCount} คัน ({approvalComparisonData.otherVehiclesList.length} ครั้ง)
+                                </div>
+                              </div>
+
+                              <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]">
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                  ค่าเฉลี่ยรถคันอื่น (ต่ำสุด – สูงสุด)
+                                </div>
+                                <div className="text-sm font-extrabold text-indigo-700 dark:text-indigo-300 tabular-nums mt-0.5">
+                                  {approvalComparisonData.otherAvgCost > 0
+                                    ? `${approvalComparisonData.otherAvgCost.toLocaleString()} บาท/ครั้ง`
+                                    : "-"}
+                                </div>
+                                {approvalComparisonData.otherMaxCost > 0 && (
+                                  <div className="text-[10.5px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                    ช่วง {approvalComparisonData.otherMinCost.toLocaleString()} –{" "}
+                                    {approvalComparisonData.otherMaxCost.toLocaleString()} บาท
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]">
+                                <div className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                                  เทียบราคาใบนี้กับค่าเฉลี่ยรถคันอื่น
+                                </div>
+                                {approvalComparisonData.diffFromOtherAvg !== null &&
+                                approvalComparisonData.diffFromOtherAvgPct !== null ? (
+                                  <>
+                                    <div
+                                      className={`text-sm font-extrabold tabular-nums mt-0.5 flex items-center gap-1 ${
+                                        approvalComparisonData.diffFromOtherAvgPct > 15
+                                          ? "text-rose-600 dark:text-rose-400"
+                                          : approvalComparisonData.diffFromOtherAvgPct < -10
+                                          ? "text-emerald-600 dark:text-emerald-400"
+                                          : "text-sky-700 dark:text-sky-300"
+                                      }`}
+                                    >
+                                      {approvalComparisonData.diffFromOtherAvg > 0 ? (
+                                        <TrendingUp size={14} />
+                                      ) : approvalComparisonData.diffFromOtherAvg < 0 ? (
+                                        <TrendingDown size={14} />
+                                      ) : null}
+                                      <span>
+                                        {approvalComparisonData.diffFromOtherAvg > 0
+                                          ? `สูงกว่า +${approvalComparisonData.diffFromOtherAvg.toLocaleString()} บ.`
+                                          : approvalComparisonData.diffFromOtherAvg < 0
+                                          ? `ต่ำกว่า ${Math.abs(approvalComparisonData.diffFromOtherAvg).toLocaleString()} บ.`
+                                          : "เท่ากับค่าเฉลี่ย"}
+                                      </span>
+                                    </div>
+                                    <div className="text-[10.5px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                      ({approvalComparisonData.diffFromOtherAvgPct > 0 ? "+" : ""}
+                                      {approvalComparisonData.diffFromOtherAvgPct}% จากค่าเฉลี่ยรถคันอื่น)
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                    รอข้อมูลราคาเปรียบเทียบ
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Per-Vehicle Quick Summary Chips */}
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10.5px] font-semibold text-slate-500 dark:text-slate-400">
+                                สรุปรายคัน:
+                              </span>
+                              {approvalComparisonData.otherByVehicle.map((vItem) => (
+                                <span
+                                  key={vItem.vehicleId}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-200 text-[10.5px] font-semibold tabular-nums"
+                                >
+                                  <span className="font-bold">{vItem.vehicleId}</span>
+                                  <span className="text-indigo-600/80 dark:text-indigo-300/80 font-normal">
+                                    {vItem.count} ครั้ง
+                                    {vItem.avgCost > 0
+                                      ? ` · เฉลี่ย ${vItem.avgCost.toLocaleString()} บ.`
+                                      : ""}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+
+                            {/* Detailed Peer Vehicles Repair Table */}
+                            <div className="border border-slate-200 dark:border-[#1e3a5f] rounded-md overflow-x-auto">
+                              <table className="ts-stats-table w-full text-[11px] border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                                    <th className="ts-left font-bold whitespace-nowrap">เบอร์รถ</th>
+                                    <th className="ts-left font-bold whitespace-nowrap">วันที่ / เลขที่ใบงาน</th>
+                                    <th className="ts-left font-bold whitespace-nowrap">อาการ / ร้านซ่อม</th>
+                                    <th className="ts-right font-bold whitespace-nowrap">ชม.รถ</th>
+                                    <th className="ts-right font-bold whitespace-nowrap">ค่าใช้จ่าย (เทียบใบนี้)</th>
+                                    <th className="ts-center font-bold whitespace-nowrap">สถานะ</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                                  {(showAllOtherVehicleHistory
+                                    ? approvalComparisonData.otherVehiclesList
+                                    : approvalComparisonData.otherVehiclesList.slice(0, 5)
+                                  ).map((other) => {
+                                    const oMeta = getStageMeta(other);
+                                    const oCost = getMaintenanceRecordTotalCost(other);
+                                    const diffVsThis =
+                                      totalCostDisplay > 0 && oCost > 0
+                                        ? totalCostDisplay - oCost
+                                        : null;
+                                    return (
+                                      <tr
+                                        key={other.id}
+                                        className="hover:bg-slate-50 dark:hover:bg-[#162744]/50"
+                                      >
+                                        <td className="ts-left whitespace-nowrap">
+                                          <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                                            {other.vehicleId}
+                                          </div>
+                                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                            {other.vehicleType || "Forklift"}
+                                          </div>
+                                        </td>
+                                        <td className="ts-left whitespace-nowrap tabular-nums">
+                                          <div className="font-semibold text-slate-800 dark:text-slate-200">
+                                            {other.workingDate}
+                                          </div>
+                                          <div className="text-[10px] text-[#087eaf] dark:text-sky-400">
+                                            {other.workOrderNo}
+                                          </div>
+                                        </td>
+                                        <td className="ts-left ts-wrap min-w-[180px]">
+                                          <div className="text-slate-800 dark:text-slate-200 line-clamp-2">
+                                            {other.repairDescription || "-"}
+                                          </div>
+                                          {other.vendorName && (
+                                            <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                              Vendor: {other.vendorName}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="ts-right whitespace-nowrap tabular-nums text-slate-700 dark:text-slate-300">
+                                          {other.operatingHours > 0
+                                            ? `${other.operatingHours.toLocaleString()} ชม.`
+                                            : "-"}
+                                        </td>
+                                        <td className="ts-right whitespace-nowrap tabular-nums">
+                                          <div className="font-bold text-slate-900 dark:text-slate-100">
+                                            {oCost.toLocaleString()} บาท
+                                          </div>
+                                          {diffVsThis !== null && (
+                                            <div
+                                              className={`text-[10px] font-semibold ${
+                                                diffVsThis > 0
+                                                  ? "text-rose-600 dark:text-rose-400"
+                                                  : diffVsThis < 0
+                                                  ? "text-emerald-600 dark:text-emerald-400"
+                                                  : "text-slate-400"
+                                              }`}
+                                            >
+                                              {diffVsThis > 0
+                                                ? `ใบนี้แพงกว่า +${diffVsThis.toLocaleString()}`
+                                                : diffVsThis < 0
+                                                ? `ใบนี้ถูกกว่า ${Math.abs(diffVsThis).toLocaleString()}`
+                                                : "ราคาเท่ากัน"}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="ts-center whitespace-nowrap">
+                                          <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-semibold ${oMeta.badgeClass}`}
+                                          >
+                                            {oMeta.shortLabel}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {approvalComparisonData.otherVehiclesList.length > 5 && (
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAllOtherVehicleHistory((prev) => !prev)}
+                                  className="text-[11px] font-semibold text-[#087eaf] dark:text-sky-400 hover:underline"
+                                >
+                                  {showAllOtherVehicleHistory
+                                    ? "ย่อรายการเหลือ 5 รายการล่าสุด"
+                                    : `ดูรายการเปรียบเทียบรถคันอื่นทั้งหมด (${approvalComparisonData.otherVehiclesList.length} รายการ)`}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                 {/* Section C: Feedback / Query Loop */}
                 <div className="p-4 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50/40 dark:bg-purple-950/15 space-y-3">
