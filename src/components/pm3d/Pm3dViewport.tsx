@@ -42,6 +42,7 @@ export interface Pm3dRenderZone {
 }
 
 interface Pm3dViewportProps {
+  vehicleCode: string;
   modelType: MhPm3dModelType;
   onModelTypeChange: (modelType: MhPm3dModelType) => void;
   attachTrailer: boolean;
@@ -80,7 +81,13 @@ function detectSoftwareWebGL(): boolean {
   }
 }
 
+function deriveCoupledTrailerCode(primaryCode: string): string {
+  const numMatch = primaryCode.match(/(\d{1,3})$/);
+  return numMatch ? `TR-${numMatch[1]}` : "TR-01";
+}
+
 export function Pm3dViewport({
+  vehicleCode,
   modelType,
   onModelTypeChange,
   attachTrailer,
@@ -116,11 +123,12 @@ export function Pm3dViewport({
 
   // Exposed imperative bridge into Three.js scene
   const sceneBridgeRef = useRef<{
-    rebuildModels: (mType: MhPm3dModelType, coupled: boolean) => void;
+    rebuildModels: (mType: MhPm3dModelType, coupled: boolean, vCode: string) => void;
     requestRender: () => void;
     setCameraGoal: (pos: [number, number, number], target: [number, number, number]) => void;
     applyHoverHighlight: (zoneId: string | null) => void;
   } | null>(null);
+  const prevModelShapeKeyRef = useRef<string>(`${modelType}|${attachTrailer ? 1 : 0}`);
 
   const modelMeta = PM3D_MODELS[modelType];
 
@@ -186,11 +194,11 @@ export function Pm3dViewport({
     container.appendChild(renderer.domElement);
 
     const isDarkTheme = document.documentElement.classList.contains("dark");
-    const bgHex = isDarkTheme ? 0x0b1628 : 0xeef3f8;
+    const bgHex = isDarkTheme ? 0x0f1b2d : 0x243447;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(bgHex);
-    scene.fog = new THREE.FogExp2(bgHex, 0.036);
+    scene.fog = new THREE.FogExp2(bgHex, 0.030);
 
     // Mandatory studio environment map via PMREMGenerator + RoomEnvironment
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -212,9 +220,9 @@ export function Pm3dViewport({
 
     // Balanced 3-point Studio Lighting (Warm key + Cool Hemisphere + Crisp Rim + Studio Softboxes)
     const hemiLight = new THREE.HemisphereLight(
-      isDarkTheme ? 0xa5ccff : 0xe0f2fe,
-      isDarkTheme ? 0x1e293b : 0x8a99ad,
-      0.88
+      isDarkTheme ? 0xb6d4fe : 0xdbeafe,
+      isDarkTheme ? 0x1e293b : 0x334155,
+      0.95
     );
     scene.add(hemiLight);
 
@@ -236,7 +244,7 @@ export function Pm3dViewport({
     }
     scene.add(keyLight);
 
-    const rimLight = new THREE.DirectionalLight(0x93c5fd, 0.82);
+    const rimLight = new THREE.DirectionalLight(0xbae6fd, 1.05);
     rimLight.position.set(-6.2, 5.2, -5.8);
     scene.add(rimLight);
 
@@ -258,7 +266,7 @@ export function Pm3dViewport({
     const textures = createPm3dTexturePack(renderer.capabilities.getMaxAnisotropy());
     const floorGeo = new THREE.CircleGeometry(24, 56);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: isDarkTheme ? 0x16243a : 0xeef3f8,
+      color: isDarkTheme ? 0x263447 : 0x4b5c70,
       map: textures.studioFloor,
       roughnessMap: textures.studioFloorRoughness,
       roughness: 0.78,
@@ -273,9 +281,9 @@ export function Pm3dViewport({
     // Subtle circular inspection bay ring on floor
     const ringGeo = new THREE.RingGeometry(2.85, 2.93, 64);
     const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x087eaf,
+      color: 0x38bdf8,
       transparent: true,
-      opacity: isDarkTheme ? 0.34 : 0.26,
+      opacity: isDarkTheme ? 0.45 : 0.42,
       side: THREE.DoubleSide,
       polygonOffset: true,
       polygonOffsetFactor: -1,
@@ -342,7 +350,7 @@ export function Pm3dViewport({
       requestRender();
     };
 
-    const rebuildModels = (mType: MhPm3dModelType, coupled: boolean) => {
+    const rebuildModels = (mType: MhPm3dModelType, coupled: boolean, vCode: string) => {
       if (primaryModel) {
         vehicleStage.remove(primaryModel.root);
         primaryModel.dispose();
@@ -354,12 +362,12 @@ export function Pm3dViewport({
         coupledTrailerModel = null;
       }
 
-      primaryModel = buildVehicleByModelType(mType, textures, isSoftwareGl);
+      primaryModel = buildVehicleByModelType(mType, textures, isSoftwareGl, vCode);
       vehicleStage.add(primaryModel.root);
 
       const shouldCouple = coupled && (mType === "diesel_tractor" || mType === "ev_tractor");
       if (shouldCouple) {
-        coupledTrailerModel = buildFlatbedTrailer(textures);
+        coupledTrailerModel = buildFlatbedTrailer(textures, deriveCoupledTrailerCode(vCode));
         coupledTrailerModel.root.position.set(0, 0, COUPLED_TRAILER_OFFSET_Z);
         vehicleStage.add(coupledTrailerModel.root);
       }
@@ -807,11 +815,13 @@ export function Pm3dViewport({
     // Watch Dark/Light mode class toggles on <html>
     const themeObserver = new MutationObserver(() => {
       const darkNow = document.documentElement.classList.contains("dark");
-      const nextBg = darkNow ? 0x0b1628 : 0xeef3f8;
+      const nextBg = darkNow ? 0x0f1b2d : 0x243447;
       scene.background = new THREE.Color(nextBg);
-      scene.fog = new THREE.FogExp2(nextBg, 0.036);
-      floorMat.color.setHex(darkNow ? 0x16243a : 0xf1f5f9);
-      ringMat.opacity = darkNow ? 0.32 : 0.22;
+      scene.fog = new THREE.FogExp2(nextBg, 0.030);
+      floorMat.color.setHex(darkNow ? 0x263447 : 0x4b5c70);
+      ringMat.opacity = darkNow ? 0.45 : 0.42;
+      hemiLight.color.setHex(darkNow ? 0xb6d4fe : 0xdbeafe);
+      hemiLight.groundColor.setHex(darkNow ? 0x1e293b : 0x334155);
       requestRender();
     });
     themeObserver.observe(document.documentElement, {
@@ -827,7 +837,7 @@ export function Pm3dViewport({
     };
 
     // Initial model build + camera framing
-    rebuildModels(modelType, attachTrailer);
+    rebuildModels(modelType, attachTrailer, vehicleCode);
     const initCoords = computePresetCoords("iso", modelType, attachTrailer);
     camera.position.set(...initCoords.pos);
     controls.target.set(...initCoords.target);
@@ -861,15 +871,19 @@ export function Pm3dViewport({
     };
   }, []);
 
-  // Rebuild 3D vehicle meshes when modelType or attachTrailer changes
+  // Rebuild 3D vehicle meshes when modelType, attachTrailer, or vehicleCode changes
   useEffect(() => {
     const bridge = sceneBridgeRef.current;
     if (!bridge) return;
-    bridge.rebuildModels(modelType, attachTrailer);
-    const coords = computePresetCoords("iso", modelType, attachTrailer);
-    setActivePreset("iso");
-    bridge.setCameraGoal(coords.pos, coords.target);
-  }, [modelType, attachTrailer]);
+    bridge.rebuildModels(modelType, attachTrailer, vehicleCode);
+    const nextShapeKey = `${modelType}|${attachTrailer ? 1 : 0}`;
+    if (prevModelShapeKeyRef.current !== nextShapeKey) {
+      prevModelShapeKeyRef.current = nextShapeKey;
+      const coords = computePresetCoords("iso", modelType, attachTrailer);
+      setActivePreset("iso");
+      bridge.setCameraGoal(coords.pos, coords.target);
+    }
+  }, [modelType, attachTrailer, vehicleCode]);
 
   // Trigger smooth hood animation render when isHoodOpen toggles
   useEffect(() => {
@@ -899,7 +913,7 @@ export function Pm3dViewport({
   };
 
   return (
-    <div className="relative w-full h-[460px] lg:h-full lg:min-h-[380px] flex-1 rounded-xl overflow-hidden border border-slate-200 dark:border-[#1e3a5f] bg-[#eef3f8] dark:bg-[#0b1628] select-none">
+    <div className="relative w-full h-[460px] lg:h-full lg:min-h-[380px] flex-1 rounded-xl overflow-hidden border border-slate-300 dark:border-[#1e3a5f] bg-[#243447] dark:bg-[#0f1b2d] select-none">
       {/* Isolated WebGL Canvas Mount */}
       <div ref={mountRef} className="absolute inset-0 w-full h-full" />
 
@@ -916,6 +930,10 @@ export function Pm3dViewport({
 
       {/* Minimal Top-Left Viewport Hint (Unobstructive) */}
       <div className="pointer-events-none absolute top-3 left-3 z-10 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/90 dark:bg-[#0d1d35]/90 border border-slate-200/90 dark:border-[#1e3a5f] text-[11px] text-slate-700 dark:text-slate-200 shadow-xs">
+        <span className="font-mono font-bold text-slate-900 dark:text-white tracking-wide">
+          {vehicleCode}
+        </span>
+        <span className="text-slate-300 dark:text-slate-600">·</span>
         <span className="font-semibold text-[#087eaf] dark:text-sky-300">
           {modelMeta.shortLabel}
           {attachTrailer && modelMeta.supportsTrailerCoupling ? " + พ่วงหางเทลเลอร์" : ""}
@@ -938,14 +956,14 @@ export function Pm3dViewport({
 
           const strokeColor =
             status === "issue"
-              ? "#e11d48"
+              ? "#fb7185"
               : status === "replaced"
-              ? "#d97706"
+              ? "#fbbf24"
               : status === "ok"
-              ? "#059669"
+              ? "#34d399"
               : active
-              ? "#0284c7"
-              : "#087eaf";
+              ? "#7dd3fc"
+              : "#38bdf8";
 
           return (
             <g key={`leader-${zone.id}`}>
@@ -956,8 +974,8 @@ export function Pm3dViewport({
                 }}
                 fill="none"
                 stroke={strokeColor}
-                strokeWidth={active ? 2.2 : 1.4}
-                strokeOpacity={active ? 0.98 : 0.72}
+                strokeWidth={active ? 2.4 : 1.6}
+                strokeOpacity={active ? 1 : 0.85}
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 style={{ opacity: 0 }}

@@ -116,6 +116,24 @@ function createEmptyZoneSession(): Pm3dZoneSessionData {
   };
 }
 
+function formatShortVehicleCode(rawId: string | undefined, modelType: MhPm3dModelType): string {
+  const defaultByModel: Record<MhPm3dModelType, string> = {
+    diesel_tractor: "TT-01",
+    ev_tractor: "EV-01",
+    forklift: "FL-01",
+    trailer: "TR-01",
+  };
+  const trimmed = String(rawId || "").trim();
+  if (!trimmed || trimmed.toUpperCase() === "DEMO-MH-01") {
+    return defaultByModel[modelType];
+  }
+  // Extract first compact registration token (e.g., "TT-01 (รถลากจูง)" -> "TT-01")
+  const firstToken = trimmed.split(/[\s(·|/]+/)[0] || trimmed;
+  const cleaned = firstToken.replace(/^[-:]+|[-:]+$/g, "").toUpperCase();
+  if (!cleaned) return defaultByModel[modelType];
+  return cleaned.slice(0, 10);
+}
+
 export function Pm3dInteractiveWorkspace({
   schedules,
   vehicles,
@@ -159,6 +177,19 @@ export function Pm3dInteractiveWorkspace({
   const [attachTrailer, setAttachTrailer] = useState<boolean>(false);
   const [isHoodOpen, setIsHoodOpen] = useState<boolean>(false);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+
+  const shortVehicleCode = useMemo(
+    () =>
+      formatShortVehicleCode(
+        activeSchedule?.vehicleId ||
+          activeSchedule?.vehicleNumber ||
+          activeVehicle?.vehicleId ||
+          activeVehicle?.number ||
+          standaloneVehicleId,
+        modelType
+      ),
+    [activeSchedule, activeVehicle, standaloneVehicleId, modelType]
+  );
 
   // Customizable checklists (persisted in localStorage)
   const [customChecklists, setCustomChecklists] = useState<CustomChecklistMap>(() =>
@@ -872,6 +903,7 @@ export function Pm3dInteractiveWorkspace({
       {/* 360-DEGREE INTERACTIVE THREE.JS VIEWPORT (Auto-fills remaining viewport height) */}
       <div className="flex-1 min-h-[380px] flex flex-col">
         <Pm3dViewport
+          vehicleCode={shortVehicleCode}
           modelType={modelType}
           onModelTypeChange={handleModelTypeChange}
           attachTrailer={attachTrailer}

@@ -24,6 +24,7 @@ export interface Pm3dTexturePack {
   contactShadow: THREE.CanvasTexture;
   studioFloor: THREE.CanvasTexture;
   studioFloorRoughness: THREE.CanvasTexture;
+  maxAnisotropy: number;
   dispose: () => void;
 }
 
@@ -479,7 +480,7 @@ export function createPm3dTexturePack(maxAnisotropy: number): Pm3dTexturePack {
   flCanvas.width = 512;
   flCanvas.height = 512;
   const flCtx = flCanvas.getContext("2d")!;
-  flCtx.fillStyle = "#dde4ec";
+  flCtx.fillStyle = "#9aa8b8";
   flCtx.fillRect(0, 0, 512, 512);
 
   // Subtle concrete aggregate speckle
@@ -487,11 +488,11 @@ export function createPm3dTexturePack(maxAnisotropy: number): Pm3dTexturePack {
     const px = (i * 197) % 512;
     const py = (i * 313) % 512;
     const dark = i % 3 === 0;
-    flCtx.fillStyle = dark ? "rgba(71, 85, 105, 0.08)" : "rgba(255, 255, 255, 0.14)";
+    flCtx.fillStyle = dark ? "rgba(30, 41, 59, 0.15)" : "rgba(226, 232, 240, 0.13)";
     flCtx.fillRect(px, py, 2, 2);
   }
   // Expansion joint grid lines
-  flCtx.strokeStyle = "rgba(71, 85, 105, 0.22)";
+  flCtx.strokeStyle = "rgba(30, 41, 59, 0.28)";
   flCtx.lineWidth = 2;
   for (let i = 0; i <= 512; i += 128) {
     flCtx.beginPath();
@@ -537,6 +538,7 @@ export function createPm3dTexturePack(maxAnisotropy: number): Pm3dTexturePack {
     contactShadow,
     studioFloor,
     studioFloorRoughness,
+    maxAnisotropy,
     dispose: () => {
       diamondPlate.dispose();
       diamondPlateBump.dispose();
@@ -557,6 +559,108 @@ export function createPm3dTexturePack(maxAnisotropy: number): Pm3dTexturePack {
       studioFloorRoughness.dispose();
     },
   };
+}
+
+type VehicleDecalStyle =
+  | "white_body"
+  | "ev_body"
+  | "yellow_body"
+  | "forklift_roof"
+  | "trailer_side"
+  | "trailer_deck";
+
+function createVehicleNumberDecalTexture(
+  rawCode: string,
+  style: VehicleDecalStyle,
+  maxAnisotropy: number
+): THREE.CanvasTexture {
+  const text = (rawCode || "TT-01").trim().slice(0, 12) || "TT-01";
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 220;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (style === "forklift_roof") {
+    // High-contrast industrial yellow steel overhead ID plate with dark border & bolts
+    ctx.fillStyle = "#f4b400";
+    ctx.fillRect(0, 0, 512, 220);
+    ctx.strokeStyle = "#111827";
+    ctx.lineWidth = 14;
+    ctx.strokeRect(10, 10, 492, 200);
+    ctx.fillStyle = "#334155";
+    for (const [bx, by] of [
+      [30, 30],
+      [482, 30],
+      [30, 190],
+      [482, 190],
+    ]) {
+      ctx.beginPath();
+      ctx.arc(bx, by, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (style === "trailer_side") {
+    // Crisp white industrial plate over hazard-striped side beam
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillRect(0, 0, 512, 220);
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 14;
+    ctx.strokeRect(8, 8, 496, 204);
+    ctx.fillStyle = "#087eaf";
+    ctx.fillRect(20, 182, 472, 12);
+  }
+
+  // Auto-fit bold industrial typography
+  let fontSize = style === "trailer_side" ? 132 : 140;
+  const maxWidth = style === "trailer_side" || style === "forklift_roof" ? 430 : 464;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  while (fontSize > 52) {
+    ctx.font = `900 ${fontSize}px "Segoe UI", "Roboto", "Noto Sans Thai", Arial, sans-serif`;
+    if (ctx.measureText(text).width <= maxWidth) break;
+    fontSize -= 6;
+  }
+
+  const textY = style === "trailer_side" ? 102 : 104;
+
+  if (style === "trailer_deck") {
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.72)";
+    ctx.strokeText(text, 256, textY);
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillText(text, 256, textY);
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(96, 178, 320, 10);
+  } else if (style === "white_body") {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillText(text, 256, textY);
+    ctx.fillStyle = "#087eaf";
+    ctx.fillRect(84, 182, 344, 12);
+  } else if (style === "ev_body") {
+    ctx.fillStyle = "#0c4a6e";
+    ctx.fillText(text, 256, textY);
+    ctx.fillStyle = "#10b981";
+    ctx.fillRect(84, 182, 344, 12);
+  } else if (style === "yellow_body" || style === "forklift_roof") {
+    ctx.fillStyle = "#111827";
+    ctx.fillText(text, 256, textY);
+    if (style === "yellow_body") {
+      ctx.fillStyle = "#1f2937";
+      ctx.fillRect(92, 182, 328, 10);
+    }
+  } else {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillText(text, 256, textY);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = Math.min(16, Math.max(1, maxAnisotropy));
+  tex.needsUpdate = true;
+  return tex;
 }
 
 function registerZoneMesh(
@@ -886,13 +990,15 @@ function createAmberBeacon(
 export function buildTowTractor(
   variant: "diesel" | "ev",
   textures: Pm3dTexturePack,
-  isSoftwareGl: boolean
+  isSoftwareGl: boolean,
+  vehicleCode?: string
 ): BuiltVehicleModel {
   const root = new THREE.Group();
   const clickableMeshes: THREE.Mesh[] = [];
   const zoneMeshes = new Map<string, THREE.Mesh[]>();
   const geometries: THREE.BufferGeometry[] = [];
   const materials: THREE.Material[] = [];
+  const dynamicTextures: THREE.Texture[] = [];
   const explodedParts: BuiltVehicleModel["explodedParts"] = [];
 
   const trackGeo = <T extends THREE.BufferGeometry>(g: T): T => {
@@ -902,6 +1008,10 @@ export function buildTowTractor(
   const trackMat = <T extends THREE.Material>(m: T): T => {
     materials.push(m);
     return m;
+  };
+  const trackTex = <T extends THREE.Texture>(t: T): T => {
+    dynamicTextures.push(t);
+    return t;
   };
 
   const isEv = variant === "ev";
@@ -1267,6 +1377,34 @@ export function buildTowTractor(
       greenAccent.position.set(side * 0.69, 0.35, 0.06);
       root.add(greenAccent);
     }
+  }
+
+  // Dynamic Fleet Registration Decals on Left & Right Front Side Body Panels
+  const tractorPlateCode = (vehicleCode || (isEv ? "EV-01" : "TT-01")).trim();
+  const tractorDecalTex = trackTex(
+    createVehicleNumberDecalTexture(
+      tractorPlateCode,
+      isEv ? "ev_body" : "white_body",
+      textures.maxAnisotropy
+    )
+  );
+  const tractorDecalMat = trackMat(
+    new THREE.MeshStandardMaterial({
+      map: tractorDecalTex,
+      transparent: true,
+      roughness: 0.34,
+      metalness: 0.05,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+  );
+  const sideDecalGeo = trackGeo(new THREE.PlaneGeometry(0.56, 0.24));
+  for (const side of [-1, 1]) {
+    const sideDecal = new THREE.Mesh(sideDecalGeo, tractorDecalMat);
+    sideDecal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    sideDecal.position.set(side * 0.694, 0.81, 0.76);
+    root.add(sideDecal);
   }
 
   // Cabin floor pan with ribbed rubber mat
@@ -1789,6 +1927,12 @@ export function buildTowTractor(
   registerZoneMesh(roofPanel, zCabin, clickableMeshes, zoneMeshes);
   root.add(roofPanel);
 
+  // Dynamic Fleet Registration Decal on Canopy Roof (Clear of Beacon & Drip Trim)
+  const roofDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.92, 0.39)), tractorDecalMat);
+  roofDecal.rotation.x = -Math.PI / 2;
+  roofDecal.position.set(0, 2.002, -0.56);
+  root.add(roofDecal);
+
   // Black roof brow trim
   const roofBrow = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(1.18, 0.022, 0.08)), rubberTrimMat);
   roofBrow.position.set(0, 1.995, 0.19);
@@ -1954,6 +2098,7 @@ export function buildTowTractor(
     dispose: () => {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
+      dynamicTextures.forEach((t) => t.dispose());
     },
   };
 }
@@ -1965,12 +2110,16 @@ export function buildTowTractor(
  * forged tapered L-forks, contoured 4-pillar ROPS overhead guard with LED work lights & strobe,
  * ergonomic cabin with spinner-knob wheel, color-coded levers & openable under-seat powertrain bay.
  */
-export function buildForklift(textures: Pm3dTexturePack): BuiltVehicleModel {
+export function buildForklift(
+  textures: Pm3dTexturePack,
+  vehicleCode?: string
+): BuiltVehicleModel {
   const root = new THREE.Group();
   const clickableMeshes: THREE.Mesh[] = [];
   const zoneMeshes = new Map<string, THREE.Mesh[]>();
   const geometries: THREE.BufferGeometry[] = [];
   const materials: THREE.Material[] = [];
+  const dynamicTextures: THREE.Texture[] = [];
   const explodedParts: BuiltVehicleModel["explodedParts"] = [];
 
   const trackGeo = <T extends THREE.BufferGeometry>(g: T): T => {
@@ -1980,6 +2129,10 @@ export function buildForklift(textures: Pm3dTexturePack): BuiltVehicleModel {
   const trackMat = <T extends THREE.Material>(m: T): T => {
     materials.push(m);
     return m;
+  };
+  const trackTex = <T extends THREE.Texture>(t: T): T => {
+    dynamicTextures.push(t);
+    return t;
   };
 
   // === HIGH-FIDELITY INDUSTRIAL FORKLIFT PBR MATERIALS ===
@@ -2119,11 +2272,35 @@ export function buildForklift(textures: Pm3dTexturePack): BuiltVehicleModel {
     rubRail.position.set(side * 0.635, 0.68, -0.22);
     root.add(rubRail);
 
-    // Capacity spec nameplate decal
-    const decal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.26, 0.13)), specPlateMat);
+    // Capacity spec nameplate decal (rear side position)
+    const decal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.24, 0.115)), specPlateMat);
     decal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
-    decal.position.set(side * 0.642, 0.84, -0.32);
+    decal.position.set(side * 0.642, 0.84, -0.62);
     root.add(decal);
+  }
+
+  // Dynamic Fleet Registration Decals on Forklift Left & Right Side Panels
+  const flPlateCode = (vehicleCode || "FL-01").trim();
+  const flSideTex = trackTex(
+    createVehicleNumberDecalTexture(flPlateCode, "yellow_body", textures.maxAnisotropy)
+  );
+  const flSideMat = trackMat(
+    new THREE.MeshStandardMaterial({
+      map: flSideTex,
+      transparent: true,
+      roughness: 0.36,
+      metalness: 0.05,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+  );
+  const flSideDecalGeo = trackGeo(new THREE.PlaneGeometry(0.56, 0.21));
+  for (const side of [-1, 1]) {
+    const sideIdMesh = new THREE.Mesh(flSideDecalGeo, flSideMat);
+    sideIdMesh.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    sideIdMesh.position.set(side * 0.644, 0.845, 0.04);
+    root.add(sideIdMesh);
   }
 
   // === 2. SCULPTED CURVED CAST-IRON REAR COUNTERWEIGHT (ExtrudeGeometry) ===
@@ -2353,6 +2530,34 @@ export function buildForklift(textures: Pm3dTexturePack): BuiltVehicleModel {
     registerZoneMesh(bar, "fl_rops_lights", clickableMeshes, zoneMeshes);
     root.add(bar);
   }
+
+  // Overhead ROPS Mounted Fleet Registration ID Plate (Visible from Iso & Top Views)
+  const flRoofPlateBack = new THREE.Mesh(
+    trackGeo(new THREE.BoxGeometry(0.84, 0.018, 0.38)),
+    darkMetalMat
+  );
+  flRoofPlateBack.position.set(0, 2.164, -0.26);
+  flRoofPlateBack.castShadow = true;
+  registerZoneMesh(flRoofPlateBack, "fl_rops_lights", clickableMeshes, zoneMeshes);
+  root.add(flRoofPlateBack);
+
+  const flRoofTex = trackTex(
+    createVehicleNumberDecalTexture(flPlateCode, "forklift_roof", textures.maxAnisotropy)
+  );
+  const flRoofMat = trackMat(
+    new THREE.MeshStandardMaterial({
+      map: flRoofTex,
+      roughness: 0.34,
+      metalness: 0.12,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+  );
+  const flRoofDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.80, 0.34)), flRoofMat);
+  flRoofDecal.rotation.x = -Math.PI / 2;
+  flRoofDecal.position.set(0, 2.176, -0.26);
+  root.add(flRoofDecal);
 
   // Panoramic Convex Rearview Mirror
   const rearMirror = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.24, 0.08, 0.03)), rubberMat);
@@ -2592,6 +2797,7 @@ export function buildForklift(textures: Pm3dTexturePack): BuiltVehicleModel {
     dispose: () => {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
+      dynamicTextures.forEach((t) => t.dispose());
     },
   };
 }
@@ -2606,12 +2812,16 @@ export function buildForklift(textures: Pm3dTexturePack): BuiltVehicleModel {
  * heavy rectangular A-frame steel drawbar with bolted tow head, forged lunette eye, multi-link draped safety chains,
  * genuine 3D helical red & yellow coiled air/electric hoses, and 4 large ribbed commercial tires on deep-dish silver rims.
  */
-export function buildFlatbedTrailer(textures: Pm3dTexturePack): BuiltVehicleModel {
+export function buildFlatbedTrailer(
+  textures: Pm3dTexturePack,
+  vehicleCode?: string
+): BuiltVehicleModel {
   const root = new THREE.Group();
   const clickableMeshes: THREE.Mesh[] = [];
   const zoneMeshes = new Map<string, THREE.Mesh[]>();
   const geometries: THREE.BufferGeometry[] = [];
   const materials: THREE.Material[] = [];
+  const dynamicTextures: THREE.Texture[] = [];
   const explodedParts: BuiltVehicleModel["explodedParts"] = [];
 
   const trackGeo = <T extends THREE.BufferGeometry>(g: T): T => {
@@ -2621,6 +2831,10 @@ export function buildFlatbedTrailer(textures: Pm3dTexturePack): BuiltVehicleMode
   const trackMat = <T extends THREE.Material>(m: T): T => {
     materials.push(m);
     return m;
+  };
+  const trackTex = <T extends THREE.Texture>(t: T): T => {
+    dynamicTextures.push(t);
+    return t;
   };
 
   // === HIGH-FIDELITY INDUSTRIAL TRAILER PBR MATERIALS ===
@@ -2783,6 +2997,48 @@ export function buildFlatbedTrailer(textures: Pm3dTexturePack): BuiltVehicleMode
     plate.position.set(side * (deckW / 2 + 0.022), deckY, -0.45);
     root.add(plate);
   }
+
+  // Dynamic Fleet Registration Plates on Trailer Top Deck & Both Side Beams
+  const trailerPlateCode = (vehicleCode || "TR-01").trim();
+  const trSideTex = trackTex(
+    createVehicleNumberDecalTexture(trailerPlateCode, "trailer_side", textures.maxAnisotropy)
+  );
+  const trSideMat = trackMat(
+    new THREE.MeshStandardMaterial({
+      map: trSideTex,
+      roughness: 0.34,
+      metalness: 0.14,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+  );
+  const trSideGeo = trackGeo(new THREE.PlaneGeometry(0.50, 0.145));
+  for (const side of [-1, 1]) {
+    const trSidePlate = new THREE.Mesh(trSideGeo, trSideMat);
+    trSidePlate.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+    trSidePlate.position.set(side * (deckW / 2 + 0.024), deckY, 0.72);
+    root.add(trSidePlate);
+  }
+
+  const trDeckTex = trackTex(
+    createVehicleNumberDecalTexture(trailerPlateCode, "trailer_deck", textures.maxAnisotropy)
+  );
+  const trDeckMat = trackMat(
+    new THREE.MeshStandardMaterial({
+      map: trDeckTex,
+      transparent: true,
+      roughness: 0.52,
+      metalness: 0.08,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    })
+  );
+  const trDeckDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(1.30, 0.56)), trDeckMat);
+  trDeckDecal.rotation.x = -Math.PI / 2;
+  trDeckDecal.position.set(0, deckY + 0.10, 0.02);
+  root.add(trDeckDecal);
 
   for (const zEnd of [deckL / 2 - 0.02, -(deckL / 2 - 0.02)]) {
     const endBeam = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(deckW, 0.185, 0.075)), hazardEndMat);
@@ -3052,6 +3308,7 @@ export function buildFlatbedTrailer(textures: Pm3dTexturePack): BuiltVehicleMode
     dispose: () => {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
+      dynamicTextures.forEach((t) => t.dispose());
     },
   };
 }
@@ -3059,10 +3316,13 @@ export function buildFlatbedTrailer(textures: Pm3dTexturePack): BuiltVehicleMode
 export function buildVehicleByModelType(
   modelType: MhPm3dModelType,
   textures: Pm3dTexturePack,
-  isSoftwareGl: boolean
+  isSoftwareGl: boolean,
+  vehicleCode?: string
 ): BuiltVehicleModel {
-  if (modelType === "diesel_tractor") return buildTowTractor("diesel", textures, isSoftwareGl);
-  if (modelType === "ev_tractor") return buildTowTractor("ev", textures, isSoftwareGl);
-  if (modelType === "forklift") return buildForklift(textures);
-  return buildFlatbedTrailer(textures);
+  if (modelType === "diesel_tractor")
+    return buildTowTractor("diesel", textures, isSoftwareGl, vehicleCode);
+  if (modelType === "ev_tractor")
+    return buildTowTractor("ev", textures, isSoftwareGl, vehicleCode);
+  if (modelType === "forklift") return buildForklift(textures, vehicleCode);
+  return buildFlatbedTrailer(textures, vehicleCode);
 }
