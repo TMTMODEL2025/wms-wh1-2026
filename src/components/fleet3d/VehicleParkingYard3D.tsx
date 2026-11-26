@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import {
   AlertTriangle,
   Camera,
@@ -40,10 +41,11 @@ import {
   isTrailerVehicle,
 } from "../../utils/vehicleHelpers";
 import {
-  BuiltVehicleModel,
   Pm3dTexturePack,
+  VehicleDecalStyle,
   buildVehicleByModelType,
   createPm3dTexturePack,
+  createVehicleNumberDecalTexture,
 } from "../pm3d/pm3dVehicleBuilders";
 
 export type ParkingZoneId = "diesel_tractor" | "ev_tractor" | "forklift" | "trailer";
@@ -243,6 +245,138 @@ function formatShortBayCode(v: Vehicle): string {
   return token.slice(0, 12) || "VEH";
 }
 
+interface MergedTemplatePart {
+  geometry: THREE.BufferGeometry;
+  material: THREE.Material;
+  castShadow: boolean;
+}
+
+interface DecalAttachmentSpec {
+  matrix: THREE.Matrix4;
+  style: VehicleDecalStyle;
+  size: [number, number];
+}
+
+interface MergedYardVehicleTemplate {
+  parts: MergedTemplatePart[];
+  decals: DecalAttachmentSpec[];
+  dispose: () => void;
+}
+
+const _tmpBox = new THREE.Box3();
+const _tmpSize = new THREE.Vector3();
+
+function buildMergedYardVehicleTemplate(
+  modelType: MhPm3dModelType,
+  textures: Pm3dTexturePack,
+  isSoftwareGl: boolean
+): MergedYardVehicleTemplate {
+  const built = buildVehicleByModelType(modelType, textures, isSoftwareGl, "__TPL__");
+  built.root.updateMatrixWorld(true);
+
+  const buckets = new Map<
+    string,
+    { material: THREE.Material; geos: THREE.BufferGeometry[]; castShadow: boolean }
+  >();
+  const decals: DecalAttachmentSpec[] = [];
+  const rawGeosToDispose = new Set<THREE.BufferGeometry>();
+  const unusedMaterialsToDispose = new Set<THREE.Material>();
+  const keptMaterials = new Set<THREE.Material>();
+
+  built.root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+
+    if (mesh.geometry) rawGeosToDispose.add(mesh.geometry);
+
+    if (mesh.userData.decalStyle && Array.isArray(mesh.userData.decalSize)) {
+      decals.push({
+        matrix: mesh.matrixWorld.clone(),
+        style: mesh.userData.decalStyle as VehicleDecalStyle,
+        size: mesh.userData.decalSize as [number, number],
+      });
+      if (!Array.isArray(mesh.material) && mesh.material) {
+        unusedMaterialsToDispose.add(mesh.material);
+      }
+      return;
+    }
+
+    const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+    if (!mat || !mesh.geometry) return;
+
+    const cloned = mesh.geometry.index
+      ? mesh.geometry.toNonIndexed()
+      : mesh.geometry.clone();
+    cloned.applyMatrix4(mesh.matrixWorld);
+
+    // Normalize attributes so all meshes sharing this material merge cleanly
+    for (const attrName of Object.keys(cloned.attributes)) {
+      if (attrName !== "position" && attrName !== "normal" && attrName !== "uv") {
+        cloned.deleteAttribute(attrName);
+      }
+    }
+    if (!cloned.attributes.normal) {
+      cloned.computeVertexNormals();
+    }
+    if (!cloned.attributes.uv && cloned.attributes.position) {
+      const count = cloned.attributes.position.count;
+      cloned.setAttribute(
+        "uv",
+        new THREE.BufferAttribute(new Float32Array(count * 2), 2)
+      );
+    }
+
+    let isMajorShadow = false;
+    if (mesh.castShadow && cloned.attributes.position) {
+      _tmpBox.setFromBufferAttribute(cloned.attributes.position as THREE.BufferAttribute);
+      _tmpBox.getSize(_tmpSize);
+      isMajorShadow = _tmpSize.x > 0.24 || _tmpSize.y > 0.24 || _tmpSize.z > 0.24;
+    }
+
+    const key = mat.uuid;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { material: mat, geos: [], castShadow: false };
+      buckets.set(key, bucket);
+    }
+    bucket.geos.push(cloned);
+    if (isMajorShadow) bucket.castShadow = true;
+    keptMaterials.add(mat);
+  });
+
+  const parts: MergedTemplatePart[] = [];
+  buckets.forEach((bucket) => {
+    const merged = mergeGeometries(bucket.geos, false);
+    bucket.geos.forEach((g) => g.dispose());
+    if (merged) {
+      merged.computeBoundingSphere();
+      parts.push({
+        geometry: merged,
+        material: bucket.material,
+        castShadow: bucket.castShadow,
+      });
+    }
+  });
+
+  // Dispose only raw intermediate geometries & unused decal template materials
+  rawGeosToDispose.forEach((g) => g.dispose());
+  unusedMaterialsToDispose.forEach((m) => {
+    if (keptMaterials.has(m)) return;
+    const std = m as THREE.MeshStandardMaterial;
+    if (std.map) std.map.dispose();
+    m.dispose();
+  });
+
+  return {
+    parts,
+    decals,
+    dispose: () => {
+      parts.forEach((p) => p.geometry.dispose());
+      keptMaterials.forEach((m) => m.dispose());
+    },
+  };
+}
+
 function createBayFloorTexture(
   code: string,
   regNo: string,
@@ -252,23 +386,15 @@ function createBayFloorTexture(
   maxAnisotropy: number
 ): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 768;
+  canvas.width = 256;
+  canvas.height = 384;
   const ctx = canvas.getContext("2d")!;
 
   const isRepair = statusMode === "repair" || statusMode === "registry_maint";
 
   // Concrete / tarmac stall surface
   ctx.fillStyle = isRepair ? "#3b171b" : "#1e293b";
-  ctx.fillRect(0, 0, 512, 768);
-
-  // Subtle surface asphalt speckle
-  for (let i = 0; i < 650; i++) {
-    const x = (i * 97) % 512;
-    const y = (i * 193) % 768;
-    ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.12)";
-    ctx.fillRect(x, y, 2, 2);
-  }
+  ctx.fillRect(0, 0, 256, 384);
 
   // Outer bay border lines
   const borderColor = isRepair
@@ -280,54 +406,55 @@ function createBayFloorTexture(
     : zoneAccentCss;
 
   ctx.strokeStyle = borderColor;
-  ctx.lineWidth = isRepair ? 18 : 12;
-  ctx.strokeRect(12, 12, 488, 744);
+  ctx.lineWidth = isRepair ? 10 : 6;
+  ctx.strokeRect(6, 6, 244, 372);
 
   // Hazard diagonal warning stripes along front & rear aprons for vehicles under repair
   if (isRepair) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(20, 20, 472, 64);
-    ctx.rect(20, 684, 472, 64);
+    ctx.rect(10, 10, 236, 30);
+    ctx.rect(10, 344, 236, 30);
     ctx.clip();
     ctx.fillStyle = "#f97316";
-    ctx.fillRect(20, 20, 472, 728);
+    ctx.fillRect(10, 10, 236, 364);
     ctx.fillStyle = "#18181b";
-    for (let x = -760; x < 900; x += 44) {
+    for (let x = -380; x < 460; x += 24) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x + 22, 0);
-      ctx.lineTo(x - 100, 768);
-      ctx.lineTo(x - 122, 768);
+      ctx.lineTo(x + 12, 0);
+      ctx.lineTo(x - 52, 384);
+      ctx.lineTo(x - 64, 384);
       ctx.closePath();
       ctx.fill();
     }
     ctx.restore();
   }
 
-  // Front bay number plate strip at bottom of texture (facing drive aisle)
+  // Compact front bay number plate strip at bottom of texture (facing drive aisle)
   ctx.fillStyle = isRepair ? "#b91c1c" : "#0f172a";
-  ctx.fillRect(36, 610, 440, 126);
+  ctx.fillRect(28, 316, 200, 56);
   ctx.strokeStyle = borderColor;
-  ctx.lineWidth = 6;
-  ctx.strokeRect(36, 610, 440, 126);
+  ctx.lineWidth = 3;
+  ctx.strokeRect(28, 316, 200, 56);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#ffffff";
-  ctx.font = "900 66px 'JetBrains Mono', monospace";
-  ctx.fillText(code.slice(0, 10), 256, 656);
+  ctx.font = "900 28px 'JetBrains Mono', monospace";
+  ctx.fillText(code.slice(0, 10), 128, 336);
 
   ctx.fillStyle = isRepair ? "#fecaca" : "#cbd5e1";
-  ctx.font = "700 26px 'Noto Sans Thai', sans-serif";
-  const subText = isRepair && repairShortLabel
-    ? `⚠ แจ้งซ่อม: ${repairShortLabel}`
-    : regNo || (statusMode === "inuse" ? "กำลังใช้งาน" : "พร้อมใช้งาน");
-  ctx.fillText(subText.slice(0, 24), 256, 708);
+  ctx.font = "700 13px 'Noto Sans Thai', sans-serif";
+  const subText =
+    isRepair && repairShortLabel
+      ? `⚠ ${repairShortLabel}`
+      : regNo || (statusMode === "inuse" ? "กำลังใช้งาน" : "พร้อมใช้งาน");
+  ctx.fillText(subText.slice(0, 22), 128, 359);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(16, Math.max(1, maxAnisotropy));
+  tex.anisotropy = Math.min(4, Math.max(1, maxAnisotropy));
   tex.needsUpdate = true;
   return tex;
 }
@@ -340,13 +467,13 @@ function createSignboardTexture(
   maxAnisotropy: number
 ): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 256;
+  canvas.width = 256;
+  canvas.height = 128;
   const ctx = canvas.getContext("2d")!;
 
   const isRepair = statusMode === "repair" || statusMode === "registry_maint";
   ctx.fillStyle = isRepair ? "#7f1d1d" : "#0f172a";
-  ctx.fillRect(0, 0, 512, 256);
+  ctx.fillRect(0, 0, 256, 128);
 
   // Top color status bar
   ctx.fillStyle = isRepair
@@ -356,36 +483,36 @@ function createSignboardTexture(
     : statusMode === "inactive"
     ? "#475569"
     : "#16a34a";
-  ctx.fillRect(0, 0, 512, 48);
+  ctx.fillRect(0, 0, 256, 26);
 
   ctx.strokeStyle = isRepair ? "#fca5a5" : "#38bdf8";
-  ctx.lineWidth = 8;
-  ctx.strokeRect(4, 4, 504, 248);
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, 252, 124);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = "#ffffff";
-  ctx.font = "800 24px 'Noto Sans Thai', sans-serif";
+  ctx.font = "800 14px 'Noto Sans Thai', sans-serif";
   const headerText = isRepair
-    ? `แจ้งซ่อม · ${repairShortLabel || "ซ่อมบำรุง"}`
+    ? `ซ่อม · ${repairShortLabel || "ซ่อมบำรุง"}`
     : statusMode === "inuse"
     ? "กำลังปฏิบัติงาน"
     : statusMode === "inactive"
-    ? "งดใช้งาน (INACTIVE)"
+    ? "งดใช้งาน"
     : "พร้อมใช้งาน";
-  ctx.fillText(headerText, 256, 25);
+  ctx.fillText(headerText, 128, 14);
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "900 76px 'JetBrains Mono', monospace";
-  ctx.fillText(code.slice(0, 10), 256, 126);
+  ctx.font = "900 38px 'JetBrains Mono', monospace";
+  ctx.fillText(code.slice(0, 10), 128, 65);
 
   ctx.fillStyle = isRepair ? "#fecaca" : "#94a3b8";
-  ctx.font = "600 28px 'Noto Sans Thai', sans-serif";
-  ctx.fillText((regNo || "-").slice(0, 22), 256, 206);
+  ctx.font = "600 15px 'Noto Sans Thai', sans-serif";
+  ctx.fillText((regNo || "-").slice(0, 22), 128, 104);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(16, Math.max(1, maxAnisotropy));
+  tex.anisotropy = Math.min(4, Math.max(1, maxAnisotropy));
   tex.needsUpdate = true;
   return tex;
 }
@@ -583,13 +710,13 @@ export function VehicleParkingYard3D({
 }: VehicleParkingYard3DProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const repairPinRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const hoverBannerRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
-  const [hoveredVehicleId, setHoveredVehicleId] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<YardCameraPreset>("overview");
   const [showRepairOnly, setShowRepairOnly] = useState<boolean>(false);
   const [showFloatingBadges, setShowFloatingBadges] = useState<boolean>(true);
-  const [dockCollapsed, setDockCollapsed] = useState<boolean>(false);
+  const [dockCollapsed, setDockCollapsed] = useState<boolean>(true);
   const [webglError, setWebglError] = useState<string | null>(null);
   const [lightboxPhoto, setLightboxPhoto] = useState<MhRepairPhotoItem | null>(null);
 
@@ -675,7 +802,7 @@ export function VehicleParkingYard3D({
   const sceneBridgeRef = useRef<{
     rebuildYard: (layouts: ZoneLayoutRect[]) => void;
     setCameraGoal: (pos: [number, number, number], target: [number, number, number]) => void;
-    highlightSelection: (vid: string | null, hoveredId: string | null) => void;
+    highlightSelection: (vid: string | null) => void;
   } | null>(null);
 
   const computeYardOverviewCamera = (
@@ -767,12 +894,12 @@ export function VehicleParkingYard3D({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.06;
-    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(isSoftwareGl ? 1 : Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = !isSoftwareGl;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const width = Math.max(320, container.clientWidth);
-    const height = Math.max(320, container.clientHeight);
+    const height = Math.max(300, container.clientHeight);
     renderer.setSize(width, height, false);
     renderer.domElement.style.width = "100%";
     renderer.domElement.style.height = "100%";
@@ -785,7 +912,7 @@ export function VehicleParkingYard3D({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(bgHex);
-    scene.fog = new THREE.FogExp2(bgHex, 0.0085);
+    scene.fog = new THREE.FogExp2(bgHex, 0.008);
 
     // Procedural Studio Environment Map
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -799,7 +926,7 @@ export function VehicleParkingYard3D({
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = !isSoftwareGl;
-    controls.dampingFactor = 0.08;
+    controls.dampingFactor = 0.09;
     controls.maxPolarAngle = Math.PI / 2 - 0.05;
     controls.minPolarAngle = 0.1;
     controls.minDistance = 4;
@@ -819,10 +946,10 @@ export function VehicleParkingYard3D({
     sunLight.position.set(24, 38, 22);
     if (!isSoftwareGl) {
       sunLight.castShadow = true;
-      sunLight.shadow.mapSize.set(2048, 2048);
+      sunLight.shadow.mapSize.set(1024, 1024);
       sunLight.shadow.camera.near = 2;
       sunLight.shadow.camera.far = 110;
-      const d = 38;
+      const d = 32;
       sunLight.shadow.camera.left = -d;
       sunLight.shadow.camera.right = d;
       sunLight.shadow.camera.top = d;
@@ -854,21 +981,31 @@ export function VehicleParkingYard3D({
     grid.position.y = -0.005;
     scene.add(grid);
 
-    // Shared Vehicle Textures
+    // Shared Vehicle Textures + Persistent Merged Vehicle Template Cache
     const texturePack: Pm3dTexturePack = createPm3dTexturePack(
-      renderer.capabilities.getMaxAnisotropy()
+      Math.min(4, renderer.capabilities.getMaxAnisotropy())
     );
+    const templateCache = new Map<MhPm3dModelType, MergedYardVehicleTemplate>();
+    const getOrBuildTemplate = (mType: MhPm3dModelType): MergedYardVehicleTemplate => {
+      let tpl = templateCache.get(mType);
+      if (!tpl) {
+        tpl = buildMergedYardVehicleTemplate(mType, texturePack, isSoftwareGl);
+        templateCache.set(mType, tpl);
+      }
+      return tpl;
+    };
 
     const yardRoot = new THREE.Group();
     scene.add(yardRoot);
 
-    // Track disposable resources for rebuilds
-    let activeModels: BuiltVehicleModel[] = [];
+    // Track disposable per-rebuild resources (templates stay cached until unmount)
     let dynamicGeos: THREE.BufferGeometry[] = [];
     let dynamicMats: THREE.Material[] = [];
     let dynamicTexs: THREE.Texture[] = [];
     let hitboxMeshes: THREE.Mesh[] = [];
     const stallBorderMeshes = new Map<string, THREE.Mesh>();
+    let lastHoveredId: string | null = null;
+    const prevPinState = new Map<string, { x: number; y: number; visible: boolean }>();
 
     const trackGeo = <T extends THREE.BufferGeometry>(g: T): T => {
       dynamicGeos.push(g);
@@ -887,8 +1024,6 @@ export function VehicleParkingYard3D({
       while (yardRoot.children.length > 0) {
         yardRoot.remove(yardRoot.children[0]);
       }
-      activeModels.forEach((m) => m.dispose());
-      activeModels = [];
       dynamicGeos.forEach((g) => g.dispose());
       dynamicGeos = [];
       dynamicMats.forEach((m) => m.dispose());
@@ -897,13 +1032,14 @@ export function VehicleParkingYard3D({
       dynamicTexs = [];
       hitboxMeshes = [];
       stallBorderMeshes.clear();
+      prevPinState.clear();
     };
 
     // Reusable Shared Geometries/Materials per yard rebuild
     const rebuildYard = (layouts: ZoneLayoutRect[]) => {
       cleanupYard();
 
-      const maxAniso = renderer.capabilities.getMaxAnisotropy();
+      const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
       const postMat = trackMat(
         new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.45, metalness: 0.72 })
       );
@@ -934,8 +1070,63 @@ export function VehicleParkingYard3D({
       const roadLineMat = trackMat(
         new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
       );
+      const hitHiddenMat = trackMat(new THREE.MeshBasicMaterial({ visible: false }));
+      const padMat = trackMat(
+        new THREE.MeshStandardMaterial({
+          color: isDarkTheme ? 0x162235 : 0x324155,
+          roughness: 0.86,
+          metalness: 0.08,
+        })
+      );
+      const bannerSideMat = trackMat(
+        new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5, metalness: 0.6 })
+      );
 
-      // Compute full yard perimeter for central aisle road markings
+      // Shared primitive geometries across all stalls (major draw-call / memory reduction)
+      const signPostGeo = trackGeo(new THREE.CylinderGeometry(0.022, 0.026, 0.98, 8));
+      const signBoardGeo = trackGeo(new THREE.BoxGeometry(0.62, 0.30, 0.04));
+      const beaconGeo = trackGeo(new THREE.SphereGeometry(0.09, 10, 8));
+      const haloGeo = trackGeo(new THREE.TorusGeometry(0.36, 0.03, 8, 22));
+      const coneBaseGeo = trackGeo(new THREE.BoxGeometry(0.32, 0.035, 0.32));
+      const coneBodyGeo = trackGeo(new THREE.ConeGeometry(0.115, 0.44, 10));
+      const coneStripeGeo = trackGeo(new THREE.CylinderGeometry(0.068, 0.092, 0.10, 10));
+      const chargerPedGeo = trackGeo(new THREE.BoxGeometry(0.28, 1.24, 0.22));
+      const chargerScreenGeo = trackGeo(new THREE.PlaneGeometry(0.20, 0.16));
+
+      // Cache per-code decal textures/materials and plane geometries
+      const decalMatCache = new Map<string, THREE.MeshStandardMaterial>();
+      const decalGeoCache = new Map<string, THREE.PlaneGeometry>();
+      const getDecalGeo = (w: number, h: number) => {
+        const key = `${w}x${h}`;
+        let geo = decalGeoCache.get(key);
+        if (!geo) {
+          geo = trackGeo(new THREE.PlaneGeometry(w, h));
+          decalGeoCache.set(key, geo);
+        }
+        return geo;
+      };
+      const getDecalMat = (code: string, style: VehicleDecalStyle) => {
+        const key = `${code}|${style}`;
+        let mat = decalMatCache.get(key);
+        if (!mat) {
+          const tex = trackTex(createVehicleNumberDecalTexture(code, style, maxAniso));
+          mat = trackMat(
+            new THREE.MeshStandardMaterial({
+              map: tex,
+              transparent: style !== "forklift_roof" && style !== "trailer_side",
+              roughness: 0.38,
+              metalness: 0.06,
+              polygonOffset: true,
+              polygonOffsetFactor: -2,
+              polygonOffsetUnits: -2,
+            })
+          );
+          decalMatCache.set(key, mat);
+        }
+        return mat;
+      };
+
+      // Compute full yard perimeter for road markings & tight shadow bounds
       let yardMinX = -14;
       let yardMaxX = 14;
       let yardMinZ = -14;
@@ -947,19 +1138,61 @@ export function VehicleParkingYard3D({
         yardMaxZ = Math.max(yardMaxZ, zl.maxZ);
       });
 
-      // Central Cross Aisle Dashed Centerlines (X=0 and Z=0)
-      const dashGeoX = trackGeo(new THREE.BoxGeometry(1.6, 0.014, 0.14));
+      if (!isSoftwareGl) {
+        const halfExtent = Math.max(
+          Math.abs(yardMinX),
+          Math.abs(yardMaxX),
+          Math.abs(yardMinZ),
+          Math.abs(yardMaxZ),
+          22
+        ) + 4;
+        sunLight.shadow.camera.left = -halfExtent;
+        sunLight.shadow.camera.right = halfExtent;
+        sunLight.shadow.camera.top = halfExtent;
+        sunLight.shadow.camera.bottom = -halfExtent;
+        sunLight.shadow.camera.updateProjectionMatrix();
+      }
+
+      // Central Cross Aisle Dashed Centerlines using 2 InstancedMeshes (instead of 50+ separate meshes)
+      const dashPositionsX: number[] = [];
       for (let x = Math.floor(yardMinX); x <= Math.ceil(yardMaxX); x += 3.2) {
-        const dash = new THREE.Mesh(dashGeoX, roadLineMat);
-        dash.position.set(x, 0.008, 0);
-        yardRoot.add(dash);
+        dashPositionsX.push(x);
       }
-      const dashGeoZ = trackGeo(new THREE.BoxGeometry(0.14, 0.014, 1.6));
+      if (dashPositionsX.length > 0) {
+        const dashGeoX = trackGeo(new THREE.BoxGeometry(1.6, 0.014, 0.14));
+        const instX = new THREE.InstancedMesh(dashGeoX, roadLineMat, dashPositionsX.length);
+        const m4 = new THREE.Matrix4();
+        dashPositionsX.forEach((x, idx) => {
+          m4.makeTranslation(x, 0.008, 0);
+          instX.setMatrixAt(idx, m4);
+        });
+        instX.instanceMatrix.needsUpdate = true;
+        instX.computeBoundingSphere();
+        yardRoot.add(instX);
+      }
+
+      const dashPositionsZ: number[] = [];
       for (let z = Math.floor(yardMinZ); z <= Math.ceil(yardMaxZ); z += 3.2) {
-        const dash = new THREE.Mesh(dashGeoZ, roadLineMat);
-        dash.position.set(0, 0.008, z);
-        yardRoot.add(dash);
+        dashPositionsZ.push(z);
       }
+      if (dashPositionsZ.length > 0) {
+        const dashGeoZ = trackGeo(new THREE.BoxGeometry(0.14, 0.014, 1.6));
+        const instZ = new THREE.InstancedMesh(dashGeoZ, roadLineMat, dashPositionsZ.length);
+        const m4 = new THREE.Matrix4();
+        dashPositionsZ.forEach((z, idx) => {
+          m4.makeTranslation(0, 0.008, z);
+          instZ.setMatrixAt(idx, m4);
+        });
+        instZ.instanceMatrix.needsUpdate = true;
+        instZ.computeBoundingSphere();
+        yardRoot.add(instZ);
+      }
+
+      // Shared Stall Floor / WheelStop / Hitbox Geometries keyed by bay size
+      const floorGeoCache = new Map<string, THREE.PlaneGeometry>();
+      const rimGeoCache = new Map<string, THREE.RingGeometry>();
+      const wheelStopGeoCache = new Map<number, THREE.BoxGeometry>();
+      const hitGeoCache = new Map<string, THREE.BoxGeometry>();
 
       // Build each of the 4 Zones
       layouts.forEach((zl) => {
@@ -968,13 +1201,6 @@ export function VehicleParkingYard3D({
 
         // Zone concrete pad
         const padGeo = trackGeo(new THREE.BoxGeometry(zw, 0.02, zd));
-        const padMat = trackMat(
-          new THREE.MeshStandardMaterial({
-            color: isDarkTheme ? 0x162235 : 0x324155,
-            roughness: 0.86,
-            metalness: 0.08,
-          })
-        );
         const pad = new THREE.Mesh(padGeo, padMat);
         pad.position.set(zl.centerX, 0.002, zl.centerZ);
         pad.receiveShadow = true;
@@ -1014,18 +1240,13 @@ export function VehicleParkingYard3D({
 
         // Overhead Zone Signboard facing central aisle (Z=0)
         const bannerZ = zl.centerZ < 0 ? zl.maxZ - 0.55 : zl.minZ + 0.55;
-        const bannerW = Math.min(zw - 1.2, 8.6);
-        const bannerH = 1.9;
-        const poleLeft = new THREE.Mesh(
-          trackGeo(new THREE.CylinderGeometry(0.08, 0.1, 3.8, 12)),
-          postMat
-        );
-        poleLeft.position.set(zl.centerX - bannerW * 0.42, 1.9, bannerZ);
-        const poleRight = new THREE.Mesh(
-          trackGeo(new THREE.CylinderGeometry(0.08, 0.1, 3.8, 12)),
-          postMat
-        );
-        poleRight.position.set(zl.centerX + bannerW * 0.42, 1.9, bannerZ);
+        const bannerW = Math.min(zw - 1.2, 8.2);
+        const bannerH = 1.7;
+        const poleGeo = trackGeo(new THREE.CylinderGeometry(0.075, 0.095, 3.6, 10));
+        const poleLeft = new THREE.Mesh(poleGeo, postMat);
+        poleLeft.position.set(zl.centerX - bannerW * 0.42, 1.8, bannerZ);
+        const poleRight = new THREE.Mesh(poleGeo, postMat);
+        poleRight.position.set(zl.centerX + bannerW * 0.42, 1.8, bannerZ);
         yardRoot.add(poleLeft, poleRight);
 
         const bannerTex = trackTex(
@@ -1038,9 +1259,6 @@ export function VehicleParkingYard3D({
             metalness: 0.15,
           })
         );
-        const bannerSideMat = trackMat(
-          new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5, metalness: 0.6 })
-        );
         const bannerMesh = new THREE.Mesh(
           trackGeo(new THREE.BoxGeometry(bannerW, bannerH, 0.14)),
           [
@@ -1052,8 +1270,7 @@ export function VehicleParkingYard3D({
             bannerBoardMat,
           ]
         );
-        bannerMesh.position.set(zl.centerX, 3.85, bannerZ);
-        bannerMesh.castShadow = !isSoftwareGl;
+        bannerMesh.position.set(zl.centerX, 3.65, bannerZ);
         yardRoot.add(bannerMesh);
 
         // Build each Stall & Real Vehicle in Zone
@@ -1076,6 +1293,13 @@ export function VehicleParkingYard3D({
           stallGroup.rotation.y = stall.rotY;
           yardRoot.add(stallGroup);
 
+          const bayKey = `${stall.bayW}x${stall.bayD}`;
+          let floorGeo = floorGeoCache.get(bayKey);
+          if (!floorGeo) {
+            floorGeo = trackGeo(new THREE.PlaneGeometry(stall.bayW, stall.bayD));
+            floorGeoCache.set(bayKey, floorGeo);
+          }
+
           // 1. Stall Painted Floor Plate
           const floorTex = trackTex(
             createBayFloorTexture(
@@ -1097,16 +1321,24 @@ export function VehicleParkingYard3D({
               polygonOffsetUnits: -1,
             })
           );
-          const floorMesh = new THREE.Mesh(
-            trackGeo(new THREE.PlaneGeometry(stall.bayW, stall.bayD)),
-            floorMat
-          );
+          const floorMesh = new THREE.Mesh(floorGeo, floorMat);
           floorMesh.rotation.x = -Math.PI / 2;
           floorMesh.position.y = 0.018;
           floorMesh.receiveShadow = true;
           stallGroup.add(floorMesh);
 
           // Selection / Highlight Rim Plane
+          let rimGeo = rimGeoCache.get(bayKey);
+          if (!rimGeo) {
+            rimGeo = trackGeo(
+              new THREE.RingGeometry(
+                Math.max(stall.bayW, stall.bayD) * 0.48,
+                Math.max(stall.bayW, stall.bayD) * 0.54,
+                4
+              )
+            );
+            rimGeoCache.set(bayKey, rimGeo);
+          }
           const rimMat = trackMat(
             new THREE.MeshBasicMaterial({
               color: isRepair ? 0xef4444 : 0x38bdf8,
@@ -1115,14 +1347,7 @@ export function VehicleParkingYard3D({
               depthWrite: false,
             })
           );
-          const rimMesh = new THREE.Mesh(
-            trackGeo(new THREE.RingGeometry(
-              Math.max(stall.bayW, stall.bayD) * 0.48,
-              Math.max(stall.bayW, stall.bayD) * 0.54,
-              4
-            )),
-            rimMat
-          );
+          const rimMesh = new THREE.Mesh(rimGeo, rimMat);
           rimMesh.rotation.x = -Math.PI / 2;
           rimMesh.rotation.z = Math.PI / 4;
           rimMesh.position.y = 0.025;
@@ -1130,22 +1355,20 @@ export function VehicleParkingYard3D({
           stallBorderMeshes.set(stall.vehicle.vehicleId.toUpperCase(), rimMesh);
 
           // 2. Safety Wheel Stop at Back of Stall
-          const wheelStop = new THREE.Mesh(
-            trackGeo(new THREE.BoxGeometry(stall.bayW * 0.64, 0.14, 0.22)),
-            curbMat
-          );
+          let wsGeo = wheelStopGeoCache.get(stall.bayW);
+          if (!wsGeo) {
+            wsGeo = trackGeo(new THREE.BoxGeometry(stall.bayW * 0.64, 0.14, 0.22));
+            wheelStopGeoCache.set(stall.bayW, wsGeo);
+          }
+          const wheelStop = new THREE.Mesh(wsGeo, curbMat);
           wheelStop.position.set(0, 0.07, -stall.bayD * 0.42);
-          wheelStop.castShadow = !isSoftwareGl;
           stallGroup.add(wheelStop);
 
-          // 3. Standing Registration Signboard at Front-Right Corner of Bay
-          const signX = stall.bayW * 0.36;
-          const signZ = stall.bayD * 0.42;
-          const signPost = new THREE.Mesh(
-            trackGeo(new THREE.CylinderGeometry(0.032, 0.038, 1.42, 10)),
-            postMat
-          );
-          signPost.position.set(signX, 0.71, signZ);
+          // 3. Compact Standing Registration Signboard at Front-Right Corner of Bay
+          const signX = stall.bayW * 0.37;
+          const signZ = stall.bayD * 0.43;
+          const signPost = new THREE.Mesh(signPostGeo, postMat);
+          signPost.position.set(signX, 0.49, signZ);
           stallGroup.add(signPost);
 
           const signTex = trackTex(
@@ -1160,99 +1383,79 @@ export function VehicleParkingYard3D({
           const signFaceMat = trackMat(
             new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.38, metalness: 0.12 })
           );
-          const signBoard = new THREE.Mesh(
-            trackGeo(new THREE.BoxGeometry(0.95, 0.48, 0.05)),
-            [
-              postMat,
-              postMat,
-              postMat,
-              postMat,
-              signFaceMat,
-              signFaceMat,
-            ]
-          );
-          signBoard.position.set(signX, 1.54, signZ);
-          signBoard.castShadow = !isSoftwareGl;
+          const signBoard = new THREE.Mesh(signBoardGeo, [
+            postMat,
+            postMat,
+            postMat,
+            postMat,
+            signFaceMat,
+            signFaceMat,
+          ]);
+          signBoard.position.set(signX, 1.12, signZ);
           stallGroup.add(signBoard);
 
           // 4. EV Charger Pedestal in Zone 2 (TTEV-)
           if (zl.zone.id === "ev_tractor") {
             const chargerX = -stall.bayW * 0.36;
             const chargerZ = -stall.bayD * 0.42;
-            const pedestal = new THREE.Mesh(
-              trackGeo(new THREE.BoxGeometry(0.32, 1.35, 0.24)),
-              chargerBodyMat
-            );
-            pedestal.position.set(chargerX, 0.675, chargerZ);
-            pedestal.castShadow = !isSoftwareGl;
-            const chargerScreen = new THREE.Mesh(
-              trackGeo(new THREE.PlaneGeometry(0.22, 0.18)),
-              chargerScreenMat
-            );
-            chargerScreen.position.set(chargerX, 1.05, chargerZ + 0.125);
+            const pedestal = new THREE.Mesh(chargerPedGeo, chargerBodyMat);
+            pedestal.position.set(chargerX, 0.62, chargerZ);
+            const chargerScreen = new THREE.Mesh(chargerScreenGeo, chargerScreenMat);
+            chargerScreen.position.set(chargerX, 0.96, chargerZ + 0.115);
             stallGroup.add(pedestal, chargerScreen);
           }
 
-          // 5. Realistic 3D Vehicle Model (reused from pm3dVehicleBuilders)
-          const built = buildVehicleByModelType(
-            stall.modelType,
-            texturePack,
-            isSoftwareGl,
-            shortCode
-          );
-          // Slight scale-down on trailers so they sit comfortably inside the bay
-          if (stall.modelType === "trailer") {
-            built.root.scale.set(0.88, 0.88, 0.88);
-          } else {
-            built.root.scale.set(0.92, 0.92, 0.92);
-          }
-          built.root.position.set(0, 0, -0.15);
-          stallGroup.add(built.root);
-          activeModels.push(built);
+          // 5. Realistic 3D Vehicle Model (Instantiated from Shared Merged Template!)
+          const template = getOrBuildTemplate(stall.modelType);
+          const vehicleGroup = new THREE.Group();
+          const scaleFactor = stall.modelType === "trailer" ? 0.88 : 0.92;
+          vehicleGroup.scale.set(scaleFactor, scaleFactor, scaleFactor);
+          vehicleGroup.position.set(0, 0, -0.15);
+
+          template.parts.forEach((part) => {
+            const m = new THREE.Mesh(part.geometry, part.material);
+            m.castShadow = !isSoftwareGl && part.castShadow;
+            vehicleGroup.add(m);
+          });
+
+          // Per-vehicle crisp roof & side registration decals
+          template.decals.forEach((dSpec) => {
+            const dGeo = getDecalGeo(dSpec.size[0], dSpec.size[1]);
+            const dMat = getDecalMat(shortCode, dSpec.style);
+            const dMesh = new THREE.Mesh(dGeo, dMat);
+            dMesh.applyMatrix4(dSpec.matrix);
+            vehicleGroup.add(dMesh);
+          });
+
+          stallGroup.add(vehicleGroup);
 
           // 6. Repair Warning Beacon + Safety Cone when Vehicle has Open Repairs
           if (isRepair) {
-            // Glowing red/amber warning beacon on signboard post
-            const beacon = new THREE.Mesh(
-              trackGeo(new THREE.SphereGeometry(0.14, 14, 12)),
-              repairBeaconMat
-            );
-            beacon.position.set(signX, 1.94, signZ);
+            const beacon = new THREE.Mesh(beaconGeo, repairBeaconMat);
+            beacon.position.set(signX, 1.38, signZ);
             stallGroup.add(beacon);
 
-            // Overhead attention ring hovering cleanly above vehicle roof
-            const alertHalo = new THREE.Mesh(
-              trackGeo(new THREE.TorusGeometry(0.55, 0.045, 10, 28)),
-              repairBeaconMat
-            );
+            const alertHalo = new THREE.Mesh(haloGeo, repairBeaconMat);
             alertHalo.rotation.x = Math.PI / 2;
-            alertHalo.position.set(0, 2.72, 0);
+            alertHalo.position.set(0, 2.30, 0);
             stallGroup.add(alertHalo);
 
-            // Safety Traffic Cone at Front-Left Corner of Stall
-            const coneBase = new THREE.Mesh(
-              trackGeo(new THREE.BoxGeometry(0.38, 0.04, 0.38)),
-              coneOrangeMat
-            );
-            coneBase.position.set(-stall.bayW * 0.35, 0.02, stall.bayD * 0.4);
-            const coneBody = new THREE.Mesh(
-              trackGeo(new THREE.ConeGeometry(0.14, 0.52, 14)),
-              coneOrangeMat
-            );
-            coneBody.position.set(-stall.bayW * 0.35, 0.28, stall.bayD * 0.4);
-            const coneStripe = new THREE.Mesh(
-              trackGeo(new THREE.CylinderGeometry(0.08, 0.11, 0.12, 14)),
-              coneWhiteMat
-            );
-            coneStripe.position.set(-stall.bayW * 0.35, 0.30, stall.bayD * 0.4);
+            const coneBase = new THREE.Mesh(coneBaseGeo, coneOrangeMat);
+            coneBase.position.set(-stall.bayW * 0.35, 0.018, stall.bayD * 0.4);
+            const coneBody = new THREE.Mesh(coneBodyGeo, coneOrangeMat);
+            coneBody.position.set(-stall.bayW * 0.35, 0.24, stall.bayD * 0.4);
+            const coneStripe = new THREE.Mesh(coneStripeGeo, coneWhiteMat);
+            coneStripe.position.set(-stall.bayW * 0.35, 0.26, stall.bayD * 0.4);
             stallGroup.add(coneBase, coneBody, coneStripe);
           }
 
           // 7. Invisible Layer-1 Raycast Hitbox for instant pointer pick
-          const hitMesh = new THREE.Mesh(
-            trackGeo(new THREE.BoxGeometry(stall.bayW, 2.8, stall.bayD)),
-            trackMat(new THREE.MeshBasicMaterial({ visible: false }))
-          );
+          let hitGeo = hitGeoCache.get(bayKey);
+          if (!hitGeo) {
+            hitGeo = trackGeo(new THREE.BoxGeometry(stall.bayW, 2.8, stall.bayD));
+            hitGeoCache.set(bayKey, hitGeo);
+          }
+          const hitMesh = new THREE.Mesh(hitGeo, hitHiddenMat);
           hitMesh.position.set(0, 1.4, 0);
           hitMesh.layers.set(1);
           hitMesh.userData.vehicleId = stall.vehicle.vehicleId;
@@ -1267,8 +1470,10 @@ export function VehicleParkingYard3D({
         const mat = mesh.material as THREE.MeshBasicMaterial;
         const isSel = vid && key === vid.toUpperCase();
         const isHov = hoveredId && key === hoveredId.toUpperCase();
-        mat.opacity = isSel ? 0.72 : isHov ? 0.45 : 0;
-        mat.needsUpdate = true;
+        const nextOpacity = isSel ? 0.72 : isHov ? 0.45 : 0;
+        if (mat.opacity !== nextOpacity) {
+          mat.opacity = nextOpacity;
+        }
       });
     };
 
@@ -1291,30 +1496,54 @@ export function VehicleParkingYard3D({
       const showPins = showFloatingBadgesRef.current;
 
       stallsRef.current.forEach((stall) => {
-        const el = repairPinRefs.current.get(stall.vehicle.vehicleId.toUpperCase());
+        const keyUpper = stall.vehicle.vehicleId.toUpperCase();
+        const el = repairPinRefs.current.get(keyUpper);
         if (!el) return;
+        const prev = prevPinState.get(keyUpper);
+
         if (!showPins) {
-          el.style.opacity = "0";
-          el.style.pointerEvents = "none";
+          if (!prev || prev.visible) {
+            el.style.opacity = "0";
+            el.style.pointerEvents = "none";
+            prevPinState.set(keyUpper, { x: 0, y: 0, visible: false });
+          }
           return;
         }
-        _projVec.set(stall.x, 3.05, stall.z);
+
+        _projVec.set(stall.x, 2.55, stall.z);
         _projVec.project(camera);
         if (_projVec.z < -1 || _projVec.z > 1) {
-          el.style.opacity = "0";
-          el.style.pointerEvents = "none";
+          if (!prev || prev.visible) {
+            el.style.opacity = "0";
+            el.style.pointerEvents = "none";
+            prevPinState.set(keyUpper, { x: 0, y: 0, visible: false });
+          }
           return;
         }
         const px = (_projVec.x * 0.5 + 0.5) * w;
         const py = (-_projVec.y * 0.5 + 0.5) * h;
         if (px < -60 || px > w + 60 || py < -40 || py > h + 40) {
-          el.style.opacity = "0";
-          el.style.pointerEvents = "none";
+          if (!prev || prev.visible) {
+            el.style.opacity = "0";
+            el.style.pointerEvents = "none";
+            prevPinState.set(keyUpper, { x: 0, y: 0, visible: false });
+          }
           return;
         }
-        el.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) translate(-50%, -100%)`;
-        el.style.opacity = "1";
-        el.style.pointerEvents = "auto";
+
+        if (
+          !prev ||
+          !prev.visible ||
+          Math.abs(px - prev.x) >= 0.4 ||
+          Math.abs(py - prev.y) >= 0.4
+        ) {
+          el.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) translate(-50%, -100%)`;
+          if (!prev || !prev.visible) {
+            el.style.opacity = "1";
+            el.style.pointerEvents = "auto";
+          }
+          prevPinState.set(keyUpper, { x: px, y: py, visible: true });
+        }
       });
     };
 
@@ -1381,7 +1610,7 @@ export function VehicleParkingYard3D({
     sceneBridgeRef.current = {
       rebuildYard: (layouts) => {
         rebuildYard(layouts);
-        highlightSelection(selectedVehicleIdRef.current, null);
+        highlightSelection(selectedVehicleIdRef.current, lastHoveredId);
         requestRender();
       },
       setCameraGoal: (pos, target) => {
@@ -1390,8 +1619,8 @@ export function VehicleParkingYard3D({
         hasCamGoal = true;
         requestRender();
       },
-      highlightSelection: (vid, hovId) => {
-        highlightSelection(vid, hovId);
+      highlightSelection: (vid) => {
+        highlightSelection(vid, lastHoveredId);
         requestRender();
       },
     };
@@ -1426,17 +1655,41 @@ export function VehicleParkingYard3D({
       return null;
     };
 
+    const updateHoverDom = (hitId: string | null) => {
+      const banner = hoverBannerRef.current;
+      if (!banner) return;
+      if (!hitId) {
+        banner.style.display = "none";
+        return;
+      }
+      const stall = stallsRef.current.find(
+        (s) => s.vehicle.vehicleId.toUpperCase() === hitId.toUpperCase()
+      );
+      if (!stall) {
+        banner.style.display = "none";
+        return;
+      }
+      const typeLabel = getVehicleTypeDisplayLabel(stall.vehicle.vehicleType, stall.vehicle);
+      const repairText = stall.primaryRepairMeta ? ` · ⚠ ${stall.primaryRepairMeta.shortLabel}` : "";
+      banner.textContent = `${stall.vehicle.vehicleId} · ${typeLabel}${repairText}`;
+      banner.style.display = "flex";
+    };
+
     const onPointerDown = (e: PointerEvent) => {
       pointerDownPos = { x: e.clientX, y: e.clientY };
     };
 
     const onPointerMove = (e: PointerEvent) => {
+      // Never raycast while dragging/orbiting camera!
+      if (e.buttons !== 0) return;
       const now = performance.now();
-      if (now - lastHoverTime < 45) return;
+      if (now - lastHoverTime < 65) return;
       lastHoverTime = now;
       const hitId = getHitVehicleId(e.clientX, e.clientY);
+      if (hitId === lastHoveredId) return;
+      lastHoveredId = hitId;
       renderer.domElement.style.cursor = hitId ? "pointer" : "grab";
-      setHoveredVehicleId((prev) => (prev === hitId ? prev : hitId));
+      updateHoverDom(hitId);
       highlightSelection(selectedVehicleIdRef.current, hitId);
       requestRender();
     };
@@ -1465,10 +1718,11 @@ export function VehicleParkingYard3D({
     const resizeObs = new ResizeObserver(() => {
       if (!container) return;
       const w = Math.max(300, container.clientWidth);
-      const h = Math.max(300, container.clientHeight);
+      const h = Math.max(280, container.clientHeight);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
+      prevPinState.clear();
       requestRender();
     });
     resizeObs.observe(container);
@@ -1494,6 +1748,8 @@ export function VehicleParkingYard3D({
       renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
       cleanupYard();
+      templateCache.forEach((tpl) => tpl.dispose());
+      templateCache.clear();
       texturePack.dispose();
       baseGroundGeo.dispose();
       baseGroundMat.dispose();
@@ -1508,25 +1764,15 @@ export function VehicleParkingYard3D({
     sceneBridgeRef.current?.rebuildYard(zoneLayouts);
   }, [zoneLayouts]);
 
-  // Update highlight ring on selection/hover changes
+  // Update highlight ring when selection changes (or floating badge visibility toggles)
   useEffect(() => {
-    sceneBridgeRef.current?.highlightSelection(selectedVehicleId, hoveredVehicleId);
-  }, [selectedVehicleId, hoveredVehicleId]);
-
-  const hoveredStall = useMemo(
-    () =>
-      hoveredVehicleId
-        ? allStalls.find(
-            (s) => s.vehicle.vehicleId.toUpperCase() === hoveredVehicleId.toUpperCase()
-          ) || null
-        : null,
-    [allStalls, hoveredVehicleId]
-  );
+    sceneBridgeRef.current?.highlightSelection(selectedVehicleId);
+  }, [selectedVehicleId, showFloatingBadges]);
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Compact Top Zone Legend & Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+    <div className="flex-1 min-h-0 flex flex-col gap-2">
+      {/* Compact Single-Row Zone Legend & Camera Switcher Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
         {zoneLayouts.map((zl) => {
           const isActive = activePreset === zl.zone.id;
           return (
@@ -1534,48 +1780,39 @@ export function VehicleParkingYard3D({
               key={zl.zone.id}
               type="button"
               onClick={() => focusPreset(zl.zone.id)}
-              className={`text-left px-3.5 py-2.5 rounded-lg border transition-colors cursor-pointer ${
+              className={`text-left px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
                 isActive
                   ? "bg-slate-900 text-white border-slate-900 dark:bg-sky-900/60 dark:border-sky-500"
                   : "bg-white text-slate-800 border-slate-200 hover:border-slate-300 dark:bg-[#0d1b33] dark:text-slate-100 dark:border-[#1e3a5f] dark:hover:border-sky-600"
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span
                     className="w-2.5 h-2.5 rounded-sm shrink-0"
                     style={{ backgroundColor: zl.zone.accentCss }}
                   />
-                  <span className="text-xs font-bold truncate">{zl.zone.shortTitle}</span>
+                  <span className="text-[11px] font-bold truncate">{zl.zone.shortTitle}</span>
                 </div>
-                <span className="font-mono tabular-nums text-xs font-bold shrink-0">
-                  {zl.count} คัน
-                </span>
-              </div>
-              <div
-                className={`mt-1 text-[11px] flex items-center justify-between gap-2 ${
-                  isActive ? "text-slate-300" : "text-slate-500 dark:text-slate-400"
-                }`}
-              >
-                <span className="truncate">{zl.zone.subtitle}</span>
-                {zl.repairCount > 0 ? (
-                  <span className="inline-flex items-center gap-1 font-semibold text-rose-500 dark:text-rose-400 whitespace-nowrap shrink-0">
-                    <Wrench size={11} />
-                    แจ้งซ่อม {zl.repairCount}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {zl.repairCount > 0 && (
+                    <span className="inline-flex items-center gap-0.5 font-semibold text-[10px] text-rose-500 dark:text-rose-400 whitespace-nowrap">
+                      <Wrench size={10} />
+                      ซ่อม {zl.repairCount}
+                    </span>
+                  )}
+                  <span className="font-mono tabular-nums text-[11px] font-bold">
+                    {zl.count} คัน
                   </span>
-                ) : (
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium whitespace-nowrap shrink-0">
-                    ปกติ
-                  </span>
-                )}
+                </div>
               </div>
             </button>
           );
         })}
       </div>
 
-      {/* Main 3D Viewport Container */}
-      <div className="relative w-full h-[640px] min-h-[540px] rounded-xl overflow-hidden border border-slate-200 dark:border-[#1e3a5f] bg-[#1e293b] dark:bg-[#0b1526]">
+      {/* Main 3D Viewport Container — fills remaining screen height cleanly without page scroll */}
+      <div className="relative w-full h-[calc(100dvh-290px)] min-h-[380px] lg:h-auto lg:flex-1 lg:min-h-0 rounded-xl overflow-hidden border border-slate-200 dark:border-[#1e3a5f] bg-[#1e293b] dark:bg-[#0b1526]">
         {/* Isolated WebGL Canvas Mount */}
         <div ref={mountRef} className="w-full h-full" />
 
@@ -1591,12 +1828,12 @@ export function VehicleParkingYard3D({
         )}
 
         {/* Top-Left Minimal Yard Telemetry Spec Header (Unobtrusive) */}
-        <div className="absolute top-3 left-3 z-10 pointer-events-none flex flex-wrap items-center gap-2 max-w-[calc(100%-24px)]">
+        <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none flex flex-wrap items-center gap-2 max-w-[calc(100%-20px)]">
           <div
-            className="pointer-events-auto px-3 py-1.5 rounded-lg border border-white/15 text-white flex items-center gap-2.5 text-xs"
+            className="pointer-events-auto px-2.5 py-1 rounded-lg border border-white/15 text-white flex items-center gap-2 text-[11px]"
             style={{ backgroundColor: "rgba(15, 23, 42, 0.86)" }}
           >
-            <Truck size={14} className="text-sky-400 shrink-0" />
+            <Truck size={13} className="text-sky-400 shrink-0" />
             <span className="font-bold whitespace-nowrap">ลานจอดรถ 3D (4 โซน)</span>
             <span aria-hidden="true" className="text-slate-500">·</span>
             <span className="font-mono tabular-nums text-slate-200 whitespace-nowrap">
@@ -1606,49 +1843,39 @@ export function VehicleParkingYard3D({
               <>
                 <span aria-hidden="true" className="text-slate-500">·</span>
                 <span className="inline-flex items-center gap-1 font-semibold text-rose-300 whitespace-nowrap">
-                  <Wrench size={12} />
-                  กำลังแจ้งซ่อม {yardSummary.repairing} คัน ({yardSummary.openWorkOrders} ใบงาน)
+                  <Wrench size={11} />
+                  แจ้งซ่อม {yardSummary.repairing} คัน ({yardSummary.openWorkOrders} ใบงาน)
                 </span>
               </>
             )}
           </div>
 
-          {hoveredStall && (
-            <div
-              className="px-2.5 py-1.5 rounded-lg border border-sky-400/40 text-white text-[11px] flex items-center gap-2"
-              style={{ backgroundColor: "rgba(15, 23, 42, 0.90)" }}
-            >
-              <span className="font-mono font-bold text-sky-300">{hoveredStall.vehicle.vehicleId}</span>
-              <span>·</span>
-              <span>{getVehicleTypeDisplayLabel(hoveredStall.vehicle.vehicleType, hoveredStall.vehicle)}</span>
-              {hoveredStall.primaryRepairMeta && (
-                <span className="text-rose-300 font-semibold">
-                  · ⚠ {hoveredStall.primaryRepairMeta.shortLabel}
-                </span>
-              )}
-            </div>
-          )}
+          <div
+            ref={hoverBannerRef}
+            className="px-2 py-1 rounded-lg border border-sky-400/40 text-sky-200 font-mono text-[10px] font-semibold items-center gap-1.5"
+            style={{ display: "none", backgroundColor: "rgba(15, 23, 42, 0.90)" }}
+          />
         </div>
 
         {/* Top-Right Compact Quick-Select Active Repair Strip (if any open repairs exist and no drawer open) */}
         {repairStalls.length > 0 && !selectedStall && (
           <div
-            className="absolute top-3 right-3 z-10 max-w-[300px] rounded-lg border border-rose-500/40 p-2.5 text-white"
-            style={{ backgroundColor: "rgba(28, 13, 18, 0.90)" }}
+            className="absolute top-2.5 right-2.5 z-10 max-w-[250px] rounded-lg border border-rose-500/40 p-2 text-white"
+            style={{ backgroundColor: "rgba(28, 13, 18, 0.88)" }}
           >
-            <div className="flex items-center justify-between gap-2 text-[11px] font-bold text-rose-200 mb-1.5">
-              <span className="inline-flex items-center gap-1.5">
-                <Wrench size={12} className="text-rose-400" />
-                รถที่ยังแจ้งซ่อมค้าง ({repairStalls.length} คัน)
+            <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-rose-200 mb-1">
+              <span className="inline-flex items-center gap-1">
+                <Wrench size={11} className="text-rose-400" />
+                รถที่แจ้งซ่อมค้าง ({repairStalls.length} คัน)
               </span>
             </div>
-            <div className="flex flex-wrap gap-1.5 max-h-[110px] overflow-y-auto">
+            <div className="flex flex-wrap gap-1 max-h-[84px] overflow-y-auto">
               {repairStalls.map((st) => (
                 <button
                   key={st.vehicle.vehicleId}
                   type="button"
                   onClick={() => focusVehicleIn3D(st)}
-                  className="px-2 py-1 rounded text-[11px] font-mono font-bold bg-rose-600/80 hover:bg-rose-500 text-white border border-rose-400/50 transition-colors cursor-pointer whitespace-nowrap"
+                  className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-600/80 hover:bg-rose-500 text-white border border-rose-400/50 transition-colors cursor-pointer whitespace-nowrap"
                 >
                   {st.vehicle.vehicleId}
                   {st.primaryRepairMeta ? ` · ${st.primaryRepairMeta.shortLabel}` : ""}
@@ -1658,7 +1885,7 @@ export function VehicleParkingYard3D({
           </div>
         )}
 
-        {/* Projected Interactive Floating Repair Alert Badges over 3D Vehicles */}
+        {/* Projected Interactive Floating Repair Alert Badges over 3D Vehicles (Compact Size) */}
         <div className="absolute inset-0 pointer-events-none overflow-hidden z-[5]">
           {repairStalls.map((stall) => {
             const keyUpper = stall.vehicle.vehicleId.toUpperCase();
@@ -1676,23 +1903,23 @@ export function VehicleParkingYard3D({
                   e.stopPropagation();
                   focusVehicleIn3D(stall);
                 }}
-                className={`absolute top-0 left-0 px-2 py-1 rounded-md border text-[10px] font-bold text-white shadow-md transition-opacity flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+                className={`absolute top-0 left-0 px-1.5 py-0.5 rounded border text-[9px] leading-tight font-semibold text-white shadow transition-opacity flex items-center gap-1 whitespace-nowrap cursor-pointer ${
                   isSelected
-                    ? "border-white ring-2 ring-amber-300"
-                    : "border-rose-300/80 hover:border-white"
+                    ? "border-white ring-1 ring-amber-300"
+                    : "border-rose-200/80 hover:border-white"
                 }`}
                 style={{
                   opacity: 0,
                   backgroundColor:
                     meta?.severity === "parts"
-                      ? "rgba(217, 119, 6, 0.94)"
+                      ? "rgba(217, 119, 6, 0.92)"
                       : meta?.severity === "repair"
-                      ? "rgba(220, 38, 38, 0.95)"
-                      : "rgba(234, 88, 12, 0.94)",
+                      ? "rgba(220, 38, 38, 0.92)"
+                      : "rgba(234, 88, 12, 0.92)",
                 }}
                 title={`คลิกเพื่อดูอาการเสียของ ${stall.vehicle.vehicleId}`}
               >
-                <Wrench size={10} className="shrink-0" />
+                <Wrench size={9} className="shrink-0" />
                 <span className="font-mono">{stall.vehicle.vehicleId}</span>
                 <span>·</span>
                 <span>{meta?.shortLabel || "ซ่อมบำรุง"}</span>
@@ -1934,12 +2161,14 @@ export function VehicleParkingYard3D({
           </div>
         )}
 
-        {/* Unified Collapsible Bottom Control Dock */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center max-w-[96%]">
+        {/* Unified Collapsible Bottom Control Dock (Collapsed by default) */}
+        <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center max-w-[96%]">
           <button
             type="button"
             onClick={() => setDockCollapsed((v) => !v)}
-            className="px-3 py-1 rounded-t-lg border border-b-0 border-white/15 text-[11px] font-semibold text-slate-200 flex items-center gap-1 cursor-pointer"
+            className={`px-3 py-1 text-[11px] font-semibold text-slate-200 flex items-center gap-1 cursor-pointer border-white/15 ${
+              dockCollapsed ? "rounded-lg border shadow-lg" : "rounded-t-lg border border-b-0"
+            }`}
             style={{ backgroundColor: "rgba(15, 23, 42, 0.90)" }}
           >
             {dockCollapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
@@ -2020,28 +2249,28 @@ export function VehicleParkingYard3D({
         </div>
       </div>
 
-      {/* Bottom Legend Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] text-[11px] text-slate-600 dark:text-slate-300">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
-            ช่องจอดปกติ / พร้อมใช้งาน
+      {/* Compact Single-Line Bottom Legend Bar */}
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] text-[10px] text-slate-600 dark:text-slate-300">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2 h-2 rounded-sm bg-emerald-500" />
+            พร้อมใช้งาน
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-sky-500" />
+          <span className="inline-flex items-center gap-1">
+            <span className="w-2 h-2 rounded-sm bg-sky-500" />
             กำลังใช้งานวันนี้
           </span>
-          <span className="inline-flex items-center gap-1.5 font-semibold text-rose-600 dark:text-rose-400">
-            <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" />
-            มีรายการแจ้งซ่อมค้าง (คลิกที่รถหรือป้ายซ่อมเพื่อดูอาการเสีย)
+          <span className="inline-flex items-center gap-1 font-semibold text-rose-600 dark:text-rose-400">
+            <span className="w-2 h-2 rounded-sm bg-rose-500" />
+            แจ้งซ่อมค้าง (คลิกที่รถเพื่อดูอาการเสีย)
           </span>
-          <span className="inline-flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
-            <Zap size={12} />
-            โซนหัวลากไฟฟ้า EV (TTEV-) พร้อมเสาชาร์จประจำช่อง
+          <span className="inline-flex items-center gap-1 text-sky-600 dark:text-sky-400">
+            <Zap size={11} />
+            TTEV- พร้อมเสาชาร์จ
           </span>
         </div>
-        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-          ลากเพื่อหมุน 360° · เลื่อนลูกกลิ้งเพื่อซูม · คลิกขวาเพื่อแพน · คลิกที่ตัวรถเพื่อดูสถานะซ่อม
+        <div className="text-[10px] text-slate-500 dark:text-slate-400 hidden sm:block">
+          ลากเพื่อหมุน 360° · เลื่อนลูกกลิ้งเพื่อซูม · คลิกขวาเพื่อแพน · คลิกที่รถเพื่อดูรายละเอียด
         </div>
       </div>
 

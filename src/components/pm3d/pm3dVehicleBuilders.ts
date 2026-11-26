@@ -561,7 +561,7 @@ export function createPm3dTexturePack(maxAnisotropy: number): Pm3dTexturePack {
   };
 }
 
-type VehicleDecalStyle =
+export type VehicleDecalStyle =
   | "white_body"
   | "ev_body"
   | "yellow_body"
@@ -569,7 +569,7 @@ type VehicleDecalStyle =
   | "trailer_side"
   | "trailer_deck";
 
-function createVehicleNumberDecalTexture(
+export function createVehicleNumberDecalTexture(
   rawCode: string,
   style: VehicleDecalStyle,
   maxAnisotropy: number
@@ -1404,6 +1404,8 @@ export function buildTowTractor(
     const sideDecal = new THREE.Mesh(sideDecalGeo, tractorDecalMat);
     sideDecal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     sideDecal.position.set(side * 0.694, 0.81, 0.76);
+    sideDecal.userData.decalStyle = isEv ? "ev_body" : "white_body";
+    sideDecal.userData.decalSize = [0.56, 0.24];
     root.add(sideDecal);
   }
 
@@ -1931,6 +1933,8 @@ export function buildTowTractor(
   const roofDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.92, 0.39)), tractorDecalMat);
   roofDecal.rotation.x = -Math.PI / 2;
   roofDecal.position.set(0, 2.002, -0.56);
+  roofDecal.userData.decalStyle = isEv ? "ev_body" : "white_body";
+  roofDecal.userData.decalSize = [0.92, 0.39];
   root.add(roofDecal);
 
   // Black roof brow trim
@@ -2300,6 +2304,8 @@ export function buildForklift(
     const sideIdMesh = new THREE.Mesh(flSideDecalGeo, flSideMat);
     sideIdMesh.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     sideIdMesh.position.set(side * 0.644, 0.845, 0.04);
+    sideIdMesh.userData.decalStyle = "yellow_body";
+    sideIdMesh.userData.decalSize = [0.56, 0.21];
     root.add(sideIdMesh);
   }
 
@@ -2557,6 +2563,8 @@ export function buildForklift(
   const flRoofDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.80, 0.34)), flRoofMat);
   flRoofDecal.rotation.x = -Math.PI / 2;
   flRoofDecal.position.set(0, 2.176, -0.26);
+  flRoofDecal.userData.decalStyle = "forklift_roof";
+  flRoofDecal.userData.decalSize = [0.80, 0.34];
   root.add(flRoofDecal);
 
   // Panoramic Convex Rearview Mirror
@@ -3018,6 +3026,8 @@ export function buildFlatbedTrailer(
     const trSidePlate = new THREE.Mesh(trSideGeo, trSideMat);
     trSidePlate.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     trSidePlate.position.set(side * (deckW / 2 + 0.024), deckY, 0.72);
+    trSidePlate.userData.decalStyle = "trailer_side";
+    trSidePlate.userData.decalSize = [0.50, 0.145];
     root.add(trSidePlate);
   }
 
@@ -3038,6 +3048,8 @@ export function buildFlatbedTrailer(
   const trDeckDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(1.30, 0.56)), trDeckMat);
   trDeckDecal.rotation.x = -Math.PI / 2;
   trDeckDecal.position.set(0, deckY + 0.10, 0.02);
+  trDeckDecal.userData.decalStyle = "trailer_deck";
+  trDeckDecal.userData.decalSize = [1.30, 0.56];
   root.add(trDeckDecal);
 
   for (const zEnd of [deckL / 2 - 0.02, -(deckL / 2 - 0.02)]) {

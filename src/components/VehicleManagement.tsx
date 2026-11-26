@@ -460,7 +460,8 @@ export function VehicleManagement({
         </div>
       )}
 
-      {/* KPI Summary Cards */}
+      {/* KPI Summary Cards (Hidden in 3D Parking Yard mode so the 3D scene fits 100% on screen without scrolling) */}
+      {viewMode !== "yard3d" && (
       <div className="kpi-grid">
         <div className="kpi">
           <div className="kpi-label">Total Fleet Size</div>
@@ -491,10 +492,24 @@ export function VehicleManagement({
           </div>
         </div>
       </div>
+      )}
 
       {/* Main Panel */}
-      <section className="panel">
-        <div className="panel-header" style={{ flexWrap: "wrap", gap: 10 }}>
+      <section
+        className={
+          viewMode === "yard3d"
+            ? "panel flex flex-col lg:h-[calc(100dvh-134px)] lg:min-h-[520px] lg:overflow-hidden"
+            : "panel"
+        }
+      >
+        <div
+          className="panel-header shrink-0"
+          style={{
+            flexWrap: "wrap",
+            gap: 10,
+            padding: viewMode === "yard3d" ? "9px 14px" : undefined,
+          }}
+        >
           <div>
             <div className="panel-title">Fleet & Vehicle Management Registry</div>
           </div>
@@ -562,6 +577,9 @@ export function VehicleManagement({
           </div>
         </div>
 
+        {/* Category Tabs & Filter bar (Table View only; 3D Yard has built-in 4-zone switcher) */}
+        {viewMode !== "yard3d" && (
+          <>
         {/* Category Tabs: All | รถหัวลาก (TT-) | หัวลากไฟฟ้า (TTEV-) | รถโฟล์คลิฟท์ (FL-) | หางลาก (TTL-) */}
         <div className="px-4 pt-3 pb-1 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
           {[
@@ -662,12 +680,14 @@ export function VehicleManagement({
             Reset
           </button>
         </div>
+          </>
+        )}
 
         {/* Conditional View: Table vs 3D Parking Yard */}
         {viewMode === "yard3d" ? (
-          <div className="p-3 sm:p-4">
+          <div className="flex-1 min-h-0 flex flex-col p-2 sm:p-2.5">
             <VehicleParkingYard3D
-              vehicles={filteredVehicles}
+              vehicles={vehicles}
               maintenanceRecords={maintenanceRecords}
               vehicleAssignmentMap={vehicleAssignmentMap}
               onEditVehicle={(v) => setEditingVehicle(v)}
