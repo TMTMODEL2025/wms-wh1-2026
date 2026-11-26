@@ -35,6 +35,7 @@ import {
 } from "../../services/forkliftDataService";
 import {
   getVehicleTypeDisplayLabel,
+  isClampTruckVehicle,
   isElectricTractorVehicle,
   isForkliftVehicle,
   isStandardTractorVehicle,
@@ -48,7 +49,14 @@ import {
   createVehicleNumberDecalTexture,
 } from "../pm3d/pm3dVehicleBuilders";
 
-export type ParkingZoneId = "diesel_tractor" | "ev_tractor" | "forklift" | "trailer";
+export type ParkingZoneId =
+  | "diesel_tractor"
+  | "ev_tractor"
+  | "forklift"
+  | "trailer"
+  | "clamp_truck";
+
+type YardModelType = MhPm3dModelType | "clamp_truck";
 
 interface ZoneDefinition {
   id: ParkingZoneId;
@@ -97,7 +105,33 @@ const ZONE_DEFINITIONS: ZoneDefinition[] = [
     accentCss: "#8b5cf6",
     badgeTextCss: "#ede9fe",
   },
+  {
+    id: "clamp_truck",
+    title: "โซน 5: ลานจอดรถคีบ (SC-01)",
+    shortTitle: "รถคีบ SC-01",
+    subtitle: "Steel Grapple / Clamp Truck Bay",
+    accentHex: 0x10b981,
+    accentCss: "#10b981",
+    badgeTextCss: "#d1fae5",
+  },
 ];
+
+const BUILTIN_SC01_CLAMP_VEHICLE: Vehicle = {
+  id: "BUILTIN-SC-01",
+  vehicleId: "SC-01",
+  number: "SC-01",
+  vehicleType: "Other",
+  type: "รถคีบ",
+  description: "Xinyuan 500 Kg · รถคีบเหล็ก (Clamp Truck)",
+  registrationNumber: "หแ-01",
+  activeStatus: "Active",
+  operationalStatus: "Available",
+  department: "Material Handling - Fleet",
+  capacityTon: 0.5,
+  status: "Available",
+  createdAt: "",
+  updatedAt: "",
+};
 
 export interface OpenRepairBadgeInfo {
   label: string;
@@ -164,7 +198,7 @@ export function isMaintenanceRecordOpen(rec: MhMaintenanceRecord): boolean {
 interface StallPlacement {
   vehicle: Vehicle;
   zoneId: ParkingZoneId;
-  modelType: MhPm3dModelType;
+  modelType: YardModelType;
   x: number;
   z: number;
   rotY: number;
@@ -199,7 +233,14 @@ interface VehicleParkingYard3DProps {
   onNavigateToFixFlush?: () => void;
 }
 
-type YardCameraPreset = "overview" | "diesel_tractor" | "ev_tractor" | "forklift" | "trailer" | "top";
+type YardCameraPreset =
+  | "overview"
+  | "diesel_tractor"
+  | "ev_tractor"
+  | "forklift"
+  | "trailer"
+  | "clamp_truck"
+  | "top";
 
 // Module-level reusable math helpers (zero GC inside render loop)
 const _projVec = new THREE.Vector3();
@@ -222,8 +263,11 @@ function detectSoftwareWebGL(): boolean {
 
 function classifyVehicleParkingZone(v: Vehicle): {
   zoneId: ParkingZoneId;
-  modelType: MhPm3dModelType;
+  modelType: YardModelType;
 } {
+  if (isClampTruckVehicle(v)) {
+    return { zoneId: "clamp_truck", modelType: "clamp_truck" };
+  }
   if (isElectricTractorVehicle(v)) {
     return { zoneId: "ev_tractor", modelType: "ev_tractor" };
   }
@@ -266,13 +310,281 @@ interface MergedYardVehicleTemplate {
 const _tmpBox = new THREE.Box3();
 const _tmpSize = new THREE.Vector3();
 
+/**
+ * Composite procedural 3D Steel/Scrap Clamp Truck (รถคีบ Xinyuan SC-01)
+ * Built with distinct primary silhouette, secondary mechanical read, and accent details.
+ * Grounded flush at y = 0 facing +Z.
+ */
+function buildClampTruckRoot(textures: Pm3dTexturePack): THREE.Group {
+  const root = new THREE.Group();
+
+  const yellowPaintMat = new THREE.MeshStandardMaterial({
+    color: 0xeab308,
+    roughness: 0.34,
+    metalness: 0.26,
+  });
+  const darkSteelMat = new THREE.MeshStandardMaterial({
+    color: 0x1e293b,
+    roughness: 0.44,
+    metalness: 0.68,
+  });
+  const boomSteelMat = new THREE.MeshStandardMaterial({
+    color: 0x334155,
+    roughness: 0.38,
+    metalness: 0.72,
+  });
+  const chromeMat = new THREE.MeshStandardMaterial({
+    color: 0xe2e8f0,
+    roughness: 0.14,
+    metalness: 0.92,
+  });
+  const rubberMat = new THREE.MeshStandardMaterial({
+    color: 0x18181b,
+    roughness: 0.88,
+    metalness: 0.05,
+    map: textures.tireTreadLug,
+    bumpMap: textures.tireTreadLugBump,
+    bumpScale: 0.03,
+  });
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: 0xd97706,
+    roughness: 0.36,
+    metalness: 0.74,
+  });
+  const glassMat = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    roughness: 0.12,
+    metalness: 0.25,
+  });
+  const lampMat = new THREE.MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xfacc15,
+    emissiveIntensity: 0.85,
+    roughness: 0.22,
+    metalness: 0.1,
+  });
+  const beaconMat = new THREE.MeshStandardMaterial({
+    color: 0xf97316,
+    emissive: 0xea580c,
+    emissiveIntensity: 0.9,
+    roughness: 0.2,
+    metalness: 0.1,
+  });
+  const decalPlaceholderMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+  // 1. Lower Undercarriage Frame & Outriggers (grounded at y = 0)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.34, 2.55), darkSteelMat);
+  chassis.position.set(0, 0.56, -0.15);
+  chassis.castShadow = true;
+  root.add(chassis);
+
+  // Rear Outrigger Stabilizer Beam + Grounded Pads
+  const outriggerBeam = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.22, 0.28), darkSteelMat);
+  outriggerBeam.position.set(0, 0.42, -1.35);
+  outriggerBeam.castShadow = true;
+  root.add(outriggerBeam);
+
+  [-0.92, 0.92].forEach((ox) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.38, 0.18), darkSteelMat);
+    leg.position.set(ox, 0.24, -1.35);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.32), boomSteelMat);
+    pad.position.set(ox, 0.03, -1.35);
+    root.add(leg, pad);
+  });
+
+  // 4 Heavy Pneumatic Wheels seated flush at y = 0 (radius = 0.42)
+  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.28, 18);
+  const rimGeo = new THREE.CylinderGeometry(0.22, 0.22, 0.30, 14);
+  const wheelPositions: [number, number][] = [
+    [-0.86, 0.68],
+    [0.86, 0.68],
+    [-0.86, -0.82],
+    [0.86, -0.82],
+  ];
+  wheelPositions.forEach(([wx, wz]) => {
+    const tire = new THREE.Mesh(wheelGeo, rubberMat);
+    tire.rotation.z = Math.PI / 2;
+    tire.position.set(wx, 0.42, wz);
+    tire.castShadow = true;
+    const rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.rotation.z = Math.PI / 2;
+    rim.position.set(wx, 0.42, wz);
+    root.add(tire, rim);
+  });
+
+  // Slewing Ring Turntable
+  const slewRing = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.72, 0.18, 20), boomSteelMat);
+  slewRing.position.set(0, 0.82, -0.18);
+  root.add(slewRing);
+
+  // 2. Upper Rotating House & Counterweight Hood (Industrial Yellow)
+  const upperDeck = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.24, 2.25), darkSteelMat);
+  upperDeck.position.set(0, 0.98, -0.28);
+  upperDeck.castShadow = true;
+  root.add(upperDeck);
+
+  const engineHood = new THREE.Mesh(new THREE.BoxGeometry(1.74, 0.72, 1.38), yellowPaintMat);
+  engineHood.position.set(0, 1.44, -0.68);
+  engineHood.castShadow = true;
+  root.add(engineHood);
+
+  // Rounded Rear Counterweight
+  const counterweight = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.86, 0.86, 0.68, 18, 1, false, Math.PI * 0.5, Math.PI),
+    yellowPaintMat
+  );
+  counterweight.rotation.y = Math.PI * 0.5;
+  counterweight.position.set(0, 1.42, -1.28);
+  counterweight.castShadow = true;
+  root.add(counterweight);
+
+  // Exhaust Stack & Air Intake
+  const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.58, 10), darkSteelMat);
+  exhaust.position.set(0.55, 2.02, -0.95);
+  root.add(exhaust);
+
+  // 3. Left-Side Panoramic Operator Cabin with ROPS Frame
+  const cabBase = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.34, 1.18), yellowPaintMat);
+  cabBase.position.set(-0.44, 1.26, 0.24);
+  cabBase.castShadow = true;
+  root.add(cabBase);
+
+  const cabGlass = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.86, 1.06), glassMat);
+  cabGlass.position.set(-0.44, 1.84, 0.24);
+  root.add(cabGlass);
+
+  // ROPS Corner Pillars + Protective Roof Canopy
+  [
+    [-0.81, 0.76],
+    [-0.07, 0.76],
+    [-0.81, -0.28],
+    [-0.07, -0.28],
+  ].forEach(([px, pz]) => {
+    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.94, 0.06), darkSteelMat);
+    pillar.position.set(px, 1.84, pz);
+    root.add(pillar);
+  });
+
+  const cabRoof = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.09, 1.22), yellowPaintMat);
+  cabRoof.position.set(-0.44, 2.32, 0.24);
+  cabRoof.castShadow = true;
+  root.add(cabRoof);
+
+  // Roof Beacon & Front Work Lights
+  const roofBeacon = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.13, 12), beaconMat);
+  roofBeacon.position.set(-0.44, 2.43, -0.15);
+  root.add(roofBeacon);
+
+  [-0.68, -0.20].forEach((lx) => {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.06), lampMat);
+    lamp.position.set(lx, 2.28, 0.86);
+    root.add(lamp);
+  });
+
+  // 4. Articulated Hydraulic Main Boom + Stick Arm + Dual Chrome Cylinders
+  const boomMount = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.48, 0.56), darkSteelMat);
+  boomMount.position.set(0.32, 1.32, 0.26);
+  root.add(boomMount);
+
+  const mainBoom = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.30, 2.25), yellowPaintMat);
+  mainBoom.position.set(0.32, 2.02, 1.05);
+  mainBoom.rotation.x = -0.58;
+  mainBoom.castShadow = true;
+  root.add(mainBoom);
+
+  // Main Boom Lift Hydraulic Cylinder (Barrel + Chrome Rod)
+  const liftBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.88, 12), darkSteelMat);
+  liftBarrel.position.set(0.32, 1.54, 0.88);
+  liftBarrel.rotation.x = 0.72;
+  const liftRod = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.042, 0.64, 12), chromeMat);
+  liftRod.position.set(0.32, 1.94, 1.24);
+  liftRod.rotation.x = 0.72;
+  root.add(liftBarrel, liftRod);
+
+  // Stick / Dipper Arm extending down-forward toward Grapple Head
+  const stickArm = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.24, 1.62), boomSteelMat);
+  stickArm.position.set(0.32, 2.06, 2.26);
+  stickArm.rotation.x = 0.92;
+  stickArm.castShadow = true;
+  root.add(stickArm);
+
+  // Stick Crowd Cylinder above Main Boom
+  const stickBarrel = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.76, 10), darkSteelMat);
+  stickBarrel.position.set(0.32, 2.48, 1.28);
+  stickBarrel.rotation.x = -0.52;
+  const stickRod = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.54, 10), chromeMat);
+  stickRod.position.set(0.32, 2.74, 1.72);
+  stickRod.rotation.x = -0.52;
+  root.add(stickBarrel, stickRod);
+
+  // 5. 360° Hydraulic Steel Grapple / Clamp Head (หัวคีบเหล็ก 4 ขา)
+  const grappleGroup = new THREE.Group();
+  grappleGroup.position.set(0.32, 1.38, 2.66);
+
+  const rotator = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.24, 14), boomSteelMat);
+  rotator.position.set(0, 0, 0);
+  const yoke = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.20, 0.12, 14), darkSteelMat);
+  yoke.position.set(0, -0.16, 0);
+  grappleGroup.add(rotator, yoke);
+
+  // 4 Articulated Steel Clamp Claws (upper shoulder + inward-curved lower steel tip)
+  const clawAngles = [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5];
+  clawAngles.forEach((angle) => {
+    const clawPivot = new THREE.Group();
+    clawPivot.rotation.y = angle;
+    clawPivot.position.set(0, -0.20, 0);
+
+    const upperJaw = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.44, 0.12), yellowPaintMat);
+    upperJaw.position.set(0.24, -0.16, 0);
+    upperJaw.rotation.z = 0.58;
+    upperJaw.castShadow = true;
+
+    const lowerTip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.44, 0.11), darkSteelMat);
+    lowerTip.position.set(0.28, -0.52, 0);
+    lowerTip.rotation.z = -0.42;
+    lowerTip.castShadow = true;
+
+    clawPivot.add(upperJaw, lowerTip);
+    grappleGroup.add(clawPivot);
+  });
+
+  root.add(grappleGroup);
+
+  // 6. Registration Decals (Cab Roof + Both Sides of Engine Hood)
+  const roofDecal = new THREE.Mesh(new THREE.PlaneGeometry(0.68, 0.34), decalPlaceholderMat);
+  roofDecal.rotation.x = -Math.PI / 2;
+  roofDecal.position.set(-0.44, 2.375, 0.34);
+  roofDecal.userData.decalStyle = "forklift_roof";
+  roofDecal.userData.decalSize = [0.68, 0.34];
+  root.add(roofDecal);
+
+  const leftSideDecal = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.36), decalPlaceholderMat);
+  leftSideDecal.rotation.y = -Math.PI / 2;
+  leftSideDecal.position.set(-0.88, 1.46, -0.72);
+  leftSideDecal.userData.decalStyle = "tractor_side";
+  leftSideDecal.userData.decalSize = [0.92, 0.36];
+  root.add(leftSideDecal);
+
+  const rightSideDecal = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.36), decalPlaceholderMat);
+  rightSideDecal.rotation.y = Math.PI / 2;
+  rightSideDecal.position.set(0.88, 1.46, -0.72);
+  rightSideDecal.userData.decalStyle = "tractor_side";
+  rightSideDecal.userData.decalSize = [0.92, 0.36];
+  root.add(rightSideDecal);
+
+  return root;
+}
+
 function buildMergedYardVehicleTemplate(
-  modelType: MhPm3dModelType,
+  modelType: YardModelType,
   textures: Pm3dTexturePack,
   isSoftwareGl: boolean
 ): MergedYardVehicleTemplate {
-  const built = buildVehicleByModelType(modelType, textures, isSoftwareGl, "__TPL__");
-  built.root.updateMatrixWorld(true);
+  const rootObj =
+    modelType === "clamp_truck"
+      ? buildClampTruckRoot(textures)
+      : buildVehicleByModelType(modelType, textures, isSoftwareGl, "__TPL__").root;
+  rootObj.updateMatrixWorld(true);
 
   const buckets = new Map<
     string,
@@ -283,7 +595,7 @@ function buildMergedYardVehicleTemplate(
   const unusedMaterialsToDispose = new Set<THREE.Material>();
   const keptMaterials = new Set<THREE.Material>();
 
-  built.root.traverse((obj) => {
+  rootObj.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (!mesh.isMesh) return;
 
@@ -564,13 +876,15 @@ function createZoneBannerTexture(
 function buildZoneLayout(
   vehicles: Vehicle[],
   openRepairsByVehicle: Map<string, MhMaintenanceRecord[]>,
-  vehicleAssignmentMap: Map<string, VehicleAssignment>
+  vehicleAssignmentMap: Map<string, VehicleAssignment>,
+  showRepairOnly: boolean
 ): ZoneLayoutRect[] {
   const grouped: Record<ParkingZoneId, Vehicle[]> = {
     diesel_tractor: [],
     ev_tractor: [],
     forklift: [],
     trailer: [],
+    clamp_truck: [],
   };
 
   vehicles.forEach((v) => {
@@ -578,7 +892,16 @@ function buildZoneLayout(
     grouped[zoneId].push(v);
   });
 
-  // Sort vehicles naturally inside each zone (e.g., TT-01, TT-02, TTEV-19..TTEV-27)
+  // Always show dedicated SC-01 Clamp Truck bay in Zone 5 even if SC-01 is not yet added in registry
+  if (grouped.clamp_truck.length === 0) {
+    const sc01Repairs =
+      openRepairsByVehicle.get("SC-01") || openRepairsByVehicle.get("หแ-01") || [];
+    if (!showRepairOnly || sc01Repairs.length > 0) {
+      grouped.clamp_truck.push(BUILTIN_SC01_CLAMP_VEHICLE);
+    }
+  }
+
+  // Sort vehicles naturally inside each zone (e.g., TT-01, TT-02, TTEV-19..TTEV-27, SC-01)
   (Object.keys(grouped) as ParkingZoneId[]).forEach((zKey) => {
     grouped[zKey].sort((a, b) =>
       String(a.vehicleId || "").localeCompare(String(b.vehicleId || ""), undefined, {
@@ -588,7 +911,21 @@ function buildZoneLayout(
     );
   });
 
-  // Quadrant offsets separated by central cross-roadways (gap 5.8m)
+  const resolveRepairsForVehicle = (v: Vehicle, zoneId: ParkingZoneId): MhMaintenanceRecord[] => {
+    const vidUpper = String(v.vehicleId || v.number || "").trim().toUpperCase();
+    const direct = openRepairsByVehicle.get(vidUpper) || [];
+    if (direct.length > 0) return direct;
+    if (zoneId === "clamp_truck") {
+      return (
+        openRepairsByVehicle.get("SC-01") ||
+        openRepairsByVehicle.get("หแ-01") ||
+        []
+      );
+    }
+    return [];
+  };
+
+  // Quadrant offsets separated by central cross-roadways
   const aisleHalf = 3.2;
 
   const buildQuadrant = (zone: ZoneDefinition): ZoneLayoutRect => {
@@ -641,8 +978,7 @@ function buildZoneLayout(
           ? maxZ - padZ - pitchZ * (row + 0.5)
           : minZ + padZ + pitchZ * (row + 0.5);
 
-      const vidUpper = String(v.vehicleId || v.number || "").trim().toUpperCase();
-      const openRepairs = openRepairsByVehicle.get(vidUpper) || [];
+      const openRepairs = resolveRepairsForVehicle(v, zone.id);
       const primaryRepairMeta = openRepairs.length > 0 ? resolveOpenRepairMeta(openRepairs[0]) : null;
       const isRegistryMaintenance = v.operationalStatus === "Maintenance";
       if (openRepairs.length > 0 || isRegistryMaintenance) {
@@ -654,7 +990,7 @@ function buildZoneLayout(
       const isInUseToday =
         Boolean(assignedToday) || v.operationalStatus === "In Use";
 
-      const modelType: MhPm3dModelType =
+      const modelType: YardModelType =
         zone.id === "ev_tractor"
           ? "ev_tractor"
           : zone.id === "forklift"
@@ -697,7 +1033,92 @@ function buildZoneLayout(
     };
   };
 
-  return ZONE_DEFINITIONS.map(buildQuadrant);
+  // Build Zones 1-4 in the 4 core quadrants
+  const primaryZones = ZONE_DEFINITIONS.filter((z) => z.id !== "clamp_truck").map(buildQuadrant);
+
+  // Build Zone 5 (รถคีบ SC-01) cleanly alongside Zone 3 (Forklift) facing the central roadway (Z = 0)
+  const clampZoneDef = ZONE_DEFINITIONS.find((z) => z.id === "clamp_truck")!;
+  const forkliftZone = primaryZones.find((zl) => zl.zone.id === "forklift");
+  const clampList = grouped.clamp_truck;
+
+  const clampBayW = 3.8;
+  const clampBayD = 6.2;
+  const clampPitchX = clampBayW + 0.8;
+  const clampPitchZ = clampBayD + 2.2;
+  const clampCols = Math.max(1, Math.min(3, clampList.length));
+  const clampRows = Math.max(1, Math.ceil(Math.max(1, clampList.length) / clampCols));
+  const clampSpanX = Math.max(clampCols * clampPitchX, 5.4);
+  const clampSpanZ = clampRows * clampPitchZ;
+  const clampPadX = 1.9;
+  const clampPadZ = 2.0;
+
+  const laneGap = 2.6;
+  const maxX = (forkliftZone ? forkliftZone.minX : -15) - laneGap;
+  const minX = maxX - (clampSpanX + clampPadX * 2);
+  const minZ = aisleHalf;
+  const maxZ = aisleHalf + clampSpanZ + clampPadZ * 2;
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+
+  const clampStalls: StallPlacement[] = [];
+  let clampRepairCount = 0;
+
+  clampList.forEach((v, idx) => {
+    const col = idx % clampCols;
+    const row = Math.floor(idx / clampCols);
+    const localX =
+      clampList.length === 1
+        ? centerX
+        : maxX - clampPadX - clampPitchX * (col + 0.5);
+    const localZ = minZ + clampPadZ + clampPitchZ * (row + 0.5);
+
+    const openRepairs = resolveRepairsForVehicle(v, "clamp_truck");
+    const primaryRepairMeta =
+      openRepairs.length > 0 ? resolveOpenRepairMeta(openRepairs[0]) : null;
+    const isRegistryMaintenance = v.operationalStatus === "Maintenance";
+    if (openRepairs.length > 0 || isRegistryMaintenance) {
+      clampRepairCount += 1;
+    }
+
+    const assignedToday =
+      vehicleAssignmentMap.get(v.vehicleId) ||
+      vehicleAssignmentMap.get(v.id) ||
+      vehicleAssignmentMap.get("SC-01") ||
+      vehicleAssignmentMap.get("หแ-01");
+    const isInUseToday =
+      Boolean(assignedToday) || v.operationalStatus === "In Use";
+
+    clampStalls.push({
+      vehicle: v,
+      zoneId: "clamp_truck",
+      modelType: "clamp_truck",
+      x: localX,
+      z: localZ,
+      rotY: Math.PI, // Facing central roadway (Z = 0)
+      bayW: clampBayW,
+      bayD: clampBayD,
+      openRepairs,
+      primaryRepairMeta,
+      isRegistryMaintenance,
+      isInUseToday,
+      assignedToday,
+    });
+  });
+
+  const clampZoneRect: ZoneLayoutRect = {
+    zone: clampZoneDef,
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    centerX,
+    centerZ,
+    count: clampList.length,
+    repairCount: clampRepairCount,
+    stalls: clampStalls,
+  };
+
+  return [...primaryZones, clampZoneRect];
 }
 
 export function VehicleParkingYard3D({
@@ -754,8 +1175,8 @@ export function VehicleParkingYard3D({
   }, [vehicles, showRepairOnly, openRepairsByVehicle]);
 
   const zoneLayouts = useMemo(
-    () => buildZoneLayout(displayVehicles, openRepairsByVehicle, vehicleAssignmentMap),
-    [displayVehicles, openRepairsByVehicle, vehicleAssignmentMap]
+    () => buildZoneLayout(displayVehicles, openRepairsByVehicle, vehicleAssignmentMap, showRepairOnly),
+    [displayVehicles, openRepairsByVehicle, vehicleAssignmentMap, showRepairOnly]
   );
 
   const allStalls = useMemo(
@@ -985,8 +1406,8 @@ export function VehicleParkingYard3D({
     const texturePack: Pm3dTexturePack = createPm3dTexturePack(
       Math.min(4, renderer.capabilities.getMaxAnisotropy())
     );
-    const templateCache = new Map<MhPm3dModelType, MergedYardVehicleTemplate>();
-    const getOrBuildTemplate = (mType: MhPm3dModelType): MergedYardVehicleTemplate => {
+    const templateCache = new Map<YardModelType, MergedYardVehicleTemplate>();
+    const getOrBuildTemplate = (mType: YardModelType): MergedYardVehicleTemplate => {
       let tpl = templateCache.get(mType);
       if (!tpl) {
         tpl = buildMergedYardVehicleTemplate(mType, texturePack, isSoftwareGl);
@@ -1405,12 +1826,27 @@ export function VehicleParkingYard3D({
             stallGroup.add(pedestal, chargerScreen);
           }
 
+          // 4B. Safety Bollards for Zone 5 Clamp Truck Bay (SC-01)
+          if (zl.zone.id === "clamp_truck") {
+            const bollardGeo = trackGeo(new THREE.CylinderGeometry(0.065, 0.075, 0.82, 10));
+            [-stall.bayW * 0.44, stall.bayW * 0.44].forEach((bx) => {
+              const bollard = new THREE.Mesh(bollardGeo, curbMat);
+              bollard.position.set(bx, 0.41, -stall.bayD * 0.44);
+              stallGroup.add(bollard);
+            });
+          }
+
           // 5. Realistic 3D Vehicle Model (Instantiated from Shared Merged Template!)
           const template = getOrBuildTemplate(stall.modelType);
           const vehicleGroup = new THREE.Group();
-          const scaleFactor = stall.modelType === "trailer" ? 0.88 : 0.92;
+          const scaleFactor =
+            stall.modelType === "trailer"
+              ? 0.88
+              : stall.modelType === "clamp_truck"
+              ? 0.90
+              : 0.92;
           vehicleGroup.scale.set(scaleFactor, scaleFactor, scaleFactor);
-          vehicleGroup.position.set(0, 0, -0.15);
+          vehicleGroup.position.set(0, 0, stall.modelType === "clamp_truck" ? -0.45 : -0.15);
 
           template.parts.forEach((part) => {
             const m = new THREE.Mesh(part.geometry, part.material);
@@ -1771,8 +2207,8 @@ export function VehicleParkingYard3D({
 
   return (
     <div className="flex-1 min-h-0 flex flex-col gap-2">
-      {/* Compact Single-Row Zone Legend & Camera Switcher Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 shrink-0">
+      {/* Compact Single-Row 5-Zone Legend & Camera Switcher Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 shrink-0">
         {zoneLayouts.map((zl) => {
           const isActive = activePreset === zl.zone.id;
           return (
@@ -1834,7 +2270,7 @@ export function VehicleParkingYard3D({
             style={{ backgroundColor: "rgba(15, 23, 42, 0.86)" }}
           >
             <Truck size={13} className="text-sky-400 shrink-0" />
-            <span className="font-bold whitespace-nowrap">ลานจอดรถ 3D (4 โซน)</span>
+            <span className="font-bold whitespace-nowrap">ลานจอดรถ 3D (5 โซน)</span>
             <span aria-hidden="true" className="text-slate-500">·</span>
             <span className="font-mono tabular-nums text-slate-200 whitespace-nowrap">
               {yardSummary.total} คัน
@@ -2135,7 +2571,7 @@ export function VehicleParkingYard3D({
                     รายละเอียดรถ
                   </button>
                 )}
-                {onEditVehicle && (
+                {onEditVehicle && selectedStall.vehicle.id !== BUILTIN_SC01_CLAMP_VEHICLE.id && (
                   <button
                     type="button"
                     onClick={() => onEditVehicle(selectedStall.vehicle)}
@@ -2188,6 +2624,7 @@ export function VehicleParkingYard3D({
                   { id: "ev_tractor" as const, label: "โซน TTEV-" },
                   { id: "forklift" as const, label: "โซน FL-" },
                   { id: "trailer" as const, label: "โซน TTL-" },
+                  { id: "clamp_truck" as const, label: "โซนรถคีบ SC-01" },
                   { id: "top" as const, label: "มุมสูง 90°" },
                 ] as const
               ).map((preset) => (

@@ -31,6 +31,7 @@ import { MASTER_DEPARTMENTS } from "../data/officerData";
 import {
   getVehicleSearchableText,
   getVehicleTypeDisplayLabel,
+  isClampTruckVehicle,
   isElectricTractorVehicle,
   isForkliftVehicle,
   isStandardTractorVehicle,
@@ -95,7 +96,9 @@ export function VehicleManagement({
   }, [cloudRealtimeTick]);
 
   // Category Tab & Search & Filter state
-  const [activeTab, setActiveTab] = useState<"all" | "tractor" | "ev_tractor" | "forklift" | "trailer">("all");
+  const [activeTab, setActiveTab] = useState<
+    "all" | "tractor" | "ev_tractor" | "forklift" | "trailer" | "clamp_truck"
+  >("all");
   const [searchKeyword, setSearchKeyword] = useState<string>("");
   const [filterType, setFilterType] = useState<string>("All");
   const [filterActiveStatus, setFilterActiveStatus] = useState<string>("All");
@@ -206,9 +209,11 @@ export function VehicleManagement({
     let evTractorCount = 0;
     let forkliftCount = 0;
     let trailerCount = 0;
+    let clampTruckCount = 0;
 
     vehicles.forEach((v) => {
-      if (isElectricTractorVehicle(v)) evTractorCount++;
+      if (isClampTruckVehicle(v)) clampTruckCount++;
+      else if (isElectricTractorVehicle(v)) evTractorCount++;
       else if (isTrailerVehicle(v)) trailerCount++;
       else if (isForkliftVehicle(v)) forkliftCount++;
       else if (isStandardTractorVehicle(v)) tractorCount++;
@@ -232,6 +237,7 @@ export function VehicleManagement({
       evTractorCount,
       forkliftCount,
       trailerCount,
+      clampTruckCount,
     };
   }, [vehicles, vehicleAssignmentMap]);
 
@@ -242,6 +248,7 @@ export function VehicleManagement({
       if (activeTab === "ev_tractor" && !isElectricTractorVehicle(vehicle)) return false;
       if (activeTab === "forklift" && !isForkliftVehicle(vehicle)) return false;
       if (activeTab === "trailer" && !isTrailerVehicle(vehicle)) return false;
+      if (activeTab === "clamp_truck" && !isClampTruckVehicle(vehicle)) return false;
 
       if (searchKeyword.trim()) {
         const query = searchKeyword.trim().toLowerCase();
@@ -467,7 +474,9 @@ export function VehicleManagement({
           <div className="kpi-label">Total Fleet Size</div>
           <div className="kpi-value">{metrics.total}</div>
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-            หัวลาก {metrics.tractorCount} · หัวลากไฟฟ้า {metrics.evTractorCount} · โฟล์คลิฟท์ {metrics.forkliftCount} · หางลาก {metrics.trailerCount}
+            หัวลาก {metrics.tractorCount} · หัวลากไฟฟ้า {metrics.evTractorCount} · โฟล์คลิฟท์{" "}
+            {metrics.forkliftCount} · หางลาก {metrics.trailerCount} · รถคีบ{" "}
+            {metrics.clampTruckCount}
           </div>
         </div>
 
@@ -572,15 +581,17 @@ export function VehicleManagement({
                 ? "+ เพิ่มรถหัวลาก (TT-)"
                 : activeTab === "forklift"
                 ? "+ เพิ่มรถโฟล์คลิฟท์ (FL-)"
+                : activeTab === "clamp_truck"
+                ? "+ เพิ่มรถคีบ (SC-)"
                 : "+ Add Vehicle"}
             </button>
           </div>
         </div>
 
-        {/* Category Tabs & Filter bar (Table View only; 3D Yard has built-in 4-zone switcher) */}
+        {/* Category Tabs & Filter bar (Table View only; 3D Yard has built-in 5-zone switcher) */}
         {viewMode !== "yard3d" && (
           <>
-        {/* Category Tabs: All | รถหัวลาก (TT-) | หัวลากไฟฟ้า (TTEV-) | รถโฟล์คลิฟท์ (FL-) | หางลาก (TTL-) */}
+        {/* Category Tabs: All | รถหัวลาก (TT-) | หัวลากไฟฟ้า (TTEV-) | รถโฟล์คลิฟท์ (FL-) | หางลาก (TTL-) | รถคีบ (SC-01) */}
         <div className="px-4 pt-3 pb-1 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
           {[
             { id: "all" as const, label: `ทั้งหมด (${metrics.total})` },
@@ -588,6 +599,7 @@ export function VehicleManagement({
             { id: "ev_tractor" as const, label: `หัวลากไฟฟ้า TTEV- (${metrics.evTractorCount})` },
             { id: "forklift" as const, label: `รถโฟล์คลิฟท์ FL- (${metrics.forkliftCount})` },
             { id: "trailer" as const, label: `หางลาก TTL- (${metrics.trailerCount})` },
+            { id: "clamp_truck" as const, label: `รถคีบ SC-01 (${metrics.clampTruckCount})` },
           ].map((tab) => {
             const isTabActive = activeTab === tab.id;
             return (
@@ -616,7 +628,7 @@ export function VehicleManagement({
               style={{ paddingLeft: 30 }}
               value={searchKeyword}
               onChange={(e) => setSearchKeyword(e.target.value)}
-              placeholder="ค้นหา Vehicle ID (TT-01, TTEV-19, FL-01, TTL-01), หัวลากไฟฟ้า, ทะเบียน, รายละเอียด..."
+              placeholder="ค้นหา Vehicle ID (TT-01, TTEV-19, FL-01, TTL-01, SC-01), รถคีบ, หัวลากไฟฟ้า, ทะเบียน..."
               aria-label="Search vehicles"
             />
           </div>
@@ -966,6 +978,8 @@ export function VehicleManagement({
               ? "Tractor"
               : activeTab === "forklift"
               ? "Forklift"
+              : activeTab === "clamp_truck"
+              ? "Other"
               : "Tugger"
           }
           onClose={() => setShowAddModal(false)}
@@ -1090,6 +1104,8 @@ function AddVehicleModal({
       ? "TT-"
       : defaultVehicleType === "Forklift"
       ? "FL-"
+      : defaultVehicleType === "Other"
+      ? "SC-"
       : "";
   const [vehicleId, setVehicleId] = useState<string>(initialPrefix);
   const [vehicleType, setVehicleType] = useState<VehicleType>(defaultVehicleType);
@@ -1104,11 +1120,19 @@ function AddVehicleModal({
   const handleVehicleTypeChange = (nextType: VehicleType) => {
     setVehicleType(nextType);
     const trimmed = vehicleId.trim().toUpperCase();
-    if (!trimmed || trimmed === "TT-" || trimmed === "TTEV-" || trimmed === "FL-" || trimmed === "TTL-") {
+    if (
+      !trimmed ||
+      trimmed === "TT-" ||
+      trimmed === "TTEV-" ||
+      trimmed === "FL-" ||
+      trimmed === "TTL-" ||
+      trimmed === "SC-"
+    ) {
       if (nextType === "Trailer") setVehicleId("TTL-");
       else if (nextType === "ElectricTractor") setVehicleId("TTEV-");
       else if (nextType === "Tractor" || nextType === "Tugger") setVehicleId("TT-");
       else if (nextType === "Forklift") setVehicleId("FL-");
+      else if (nextType === "Other") setVehicleId("SC-");
       else setVehicleId("");
     }
   };
@@ -1122,6 +1146,8 @@ function AddVehicleModal({
       setVehicleType("Trailer");
     } else if (upper.startsWith("FL-")) {
       setVehicleType("Forklift");
+    } else if (upper.startsWith("SC-") || upper.startsWith("หแ")) {
+      setVehicleType("Other");
     } else if (upper.startsWith("TT-") && vehicleType === "ElectricTractor") {
       setVehicleType("Tractor");
     }
