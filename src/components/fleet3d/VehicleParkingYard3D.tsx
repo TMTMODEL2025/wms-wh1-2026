@@ -583,7 +583,13 @@ function buildMergedYardVehicleTemplate(
   const rootObj =
     modelType === "clamp_truck"
       ? buildClampTruckRoot(textures)
-      : buildVehicleByModelType(modelType, textures, isSoftwareGl, "__TPL__").root;
+      : buildVehicleByModelType(
+          modelType,
+          textures,
+          isSoftwareGl,
+          "__TPL__",
+          modelType === "ev_tractor" ? { evColorScheme: "byd_blue" } : undefined
+        ).root;
   rootObj.updateMatrixWorld(true);
 
   const buckets = new Map<

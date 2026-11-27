@@ -564,10 +564,15 @@ export function createPm3dTexturePack(maxAnisotropy: number): Pm3dTexturePack {
 export type VehicleDecalStyle =
   | "white_body"
   | "ev_body"
+  | "ev_blue_body"
   | "yellow_body"
   | "forklift_roof"
   | "trailer_side"
   | "trailer_deck";
+
+export interface VehicleBuildOptions {
+  evColorScheme?: "default" | "byd_blue";
+}
 
 export function createVehicleNumberDecalTexture(
   rawCode: string,
@@ -642,6 +647,15 @@ export function createVehicleNumberDecalTexture(
     ctx.fillText(text, 256, textY);
     ctx.fillStyle = "#10b981";
     ctx.fillRect(84, 182, 344, 12);
+  } else if (style === "ev_blue_body") {
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = "rgba(12, 34, 58, 0.65)";
+    ctx.strokeText(text, 256, textY);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(text, 256, textY);
+    ctx.fillStyle = "#e0f2fe";
+    ctx.fillRect(84, 182, 344, 11);
   } else if (style === "yellow_body" || style === "forklift_roof") {
     ctx.fillStyle = "#111827";
     ctx.fillText(text, 256, textY);
@@ -991,7 +1005,8 @@ export function buildTowTractor(
   variant: "diesel" | "ev",
   textures: Pm3dTexturePack,
   isSoftwareGl: boolean,
-  vehicleCode?: string
+  vehicleCode?: string,
+  options?: VehicleBuildOptions
 ): BuiltVehicleModel {
   const root = new THREE.Group();
   const clickableMeshes: THREE.Mesh[] = [];
@@ -1015,21 +1030,42 @@ export function buildTowTractor(
   };
 
   const isEv = variant === "ev";
+  const isBydBlue = isEv && options?.evColorScheme === "byd_blue";
   const zCabin = isEv ? "ev_cabin" : "tractor_cabin";
   const zWheels = isEv ? "ev_wheels" : "tractor_wheels";
   const zHitch = isEv ? "ev_hitch" : "tractor_hitch";
 
   // === HIGH-FIDELITY AUTOMOTIVE PBR MATERIALS ===
   const whiteBodyMat = trackMat(
-    new THREE.MeshPhysicalMaterial({
-      color: 0xf4f6f9,
-      roughness: 0.24,
-      metalness: 0.08,
-      clearcoat: 0.72,
-      clearcoatRoughness: 0.14,
-      reflectivity: 0.85,
-    })
+    new THREE.MeshPhysicalMaterial(
+      isBydBlue
+        ? {
+            color: 0x1898e0,
+            roughness: 0.28,
+            metalness: 0.14,
+            clearcoat: 0.72,
+            clearcoatRoughness: 0.16,
+            reflectivity: 0.85,
+          }
+        : {
+            color: 0xf4f6f9,
+            roughness: 0.24,
+            metalness: 0.08,
+            clearcoat: 0.72,
+            clearcoatRoughness: 0.14,
+            reflectivity: 0.85,
+          }
+    )
   );
+  const lowerBumperMat: THREE.Material = isBydBlue
+    ? trackMat(
+        new THREE.MeshStandardMaterial({
+          color: 0x4b5563,
+          roughness: 0.72,
+          metalness: 0.24,
+        })
+      )
+    : whiteBodyMat;
   const darkChassisMat = trackMat(
     new THREE.MeshStandardMaterial({ color: 0x19202a, roughness: 0.68, metalness: 0.42 })
   );
@@ -1203,7 +1239,7 @@ export function buildTowTractor(
     })
   );
   bumperGeo.rotateX(Math.PI / 2);
-  const frontBumper = new THREE.Mesh(bumperGeo, whiteBodyMat);
+  const frontBumper = new THREE.Mesh(bumperGeo, lowerBumperMat);
   frontBumper.position.set(0, 0.62, 1.36);
   frontBumper.castShadow = true;
   frontBumper.receiveShadow = true;
@@ -1223,6 +1259,22 @@ export function buildTowTractor(
   const frontPin = new THREE.Mesh(trackGeo(new THREE.CylinderGeometry(0.018, 0.018, 0.11, 10)), chromeMat);
   frontPin.position.set(0, 0.34, 1.56);
   root.add(frontPin);
+
+  if (isBydBlue) {
+    // BYD-style protruding matte slate-grey front tow hitch clevis block
+    const frontClevisBase = new THREE.Mesh(
+      trackGeo(new THREE.BoxGeometry(0.20, 0.13, 0.09)),
+      lowerBumperMat
+    );
+    frontClevisBase.position.set(0, 0.32, 1.61);
+    root.add(frontClevisBase);
+    const frontClevisPin = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.015, 0.015, 0.18, 10)),
+      chromeMat
+    );
+    frontClevisPin.position.set(0, 0.34, 1.63);
+    root.add(frontClevisPin);
+  }
 
   // Upper Front Nose Cowl (Beveled Box via ExtrudeGeometry)
   const cowlShape = new THREE.Shape();
@@ -1264,7 +1316,10 @@ export function buildTowTractor(
       bevelSegments: 2,
     })
   );
-  const grilleBezel = new THREE.Mesh(grilleBezelGeo, darkChassisMat);
+  const grilleBezel = new THREE.Mesh(
+    grilleBezelGeo,
+    isBydBlue ? whiteBodyMat : darkChassisMat
+  );
   grilleBezel.position.set(0, 0.81, 1.415);
   root.add(grilleBezel);
 
@@ -1273,10 +1328,22 @@ export function buildTowTractor(
   registerZoneMesh(grilleFace, isEv ? "ev_inverter" : "diesel_cooling", clickableMeshes, zoneMeshes);
   root.add(grilleFace);
 
-  // Center dark rectangular hood-release latch pocket inside mesh grille (visible in Photo 1!)
-  const grilleLatch = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.11, 0.06, 0.02)), darkChassisMat);
-  grilleLatch.position.set(0, 0.84, 1.468);
-  root.add(grilleLatch);
+  if (isBydBlue) {
+    // Center chrome oval badge on front cerulean grille (matching BYD T250)
+    const frontEmblem = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.055, 0.055, 0.022, 18)),
+      chromeMat
+    );
+    frontEmblem.rotation.x = Math.PI / 2;
+    frontEmblem.scale.set(1.45, 1, 0.88);
+    frontEmblem.position.set(0, 0.81, 1.472);
+    root.add(frontEmblem);
+  } else {
+    // Center dark rectangular hood-release latch pocket inside mesh grille (visible in Photo 1!)
+    const grilleLatch = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.11, 0.06, 0.02)), darkChassisMat);
+    grilleLatch.position.set(0, 0.84, 1.468);
+    root.add(grilleLatch);
+  }
 
   // Recessed Multi-Reflector Headlights + Fender-Top Amber Turn Signals
   for (const side of [-1, 1]) {
@@ -1352,6 +1419,41 @@ export function buildTowTractor(
   // Rotate so shape X maps to +Z, shape Y maps to +Y, depth along X
   sidePanelGeo.rotateY(-Math.PI / 2);
 
+  // Optional BYD-style lower dark slate-grey wrap-around wheel-arch & rocker cladding
+  let lowerSkirtGeo: THREE.ExtrudeGeometry | null = null;
+  if (isBydBlue) {
+    const skirtShape = new THREE.Shape();
+    skirtShape.moveTo(1.16, 0.62);
+    skirtShape.lineTo(1.16, 0.65);
+    skirtShape.lineTo(0.82, 0.665);
+    skirtShape.lineTo(0.45, 0.60);
+    skirtShape.lineTo(0.36, 0.45);
+    skirtShape.lineTo(-0.24, 0.45);
+    skirtShape.lineTo(-0.38, 0.72);
+    skirtShape.lineTo(-0.52, 0.85);
+    skirtShape.lineTo(-1.04, 0.85);
+    skirtShape.lineTo(-1.28, 0.68);
+    skirtShape.lineTo(-1.34, 0.60);
+    skirtShape.lineTo(-1.34, 0.34);
+    skirtShape.lineTo(-1.18, 0.34);
+    skirtShape.absarc(-0.78, 0.38, 0.435, Math.PI, 0, true);
+    skirtShape.lineTo(-0.30, 0.28);
+    skirtShape.lineTo(0.42, 0.28);
+    skirtShape.absarc(0.82, 0.28, 0.345, Math.PI, 0, true);
+    skirtShape.closePath();
+
+    lowerSkirtGeo = trackGeo(
+      new THREE.ExtrudeGeometry(skirtShape, {
+        depth: 0.016,
+        bevelEnabled: true,
+        bevelThickness: 0.005,
+        bevelSize: 0.005,
+        bevelSegments: 2,
+      })
+    );
+    lowerSkirtGeo.rotateY(-Math.PI / 2);
+  }
+
   for (const side of [-1, 1]) {
     const panel = new THREE.Mesh(sidePanelGeo, whiteBodyMat);
     panel.position.set(side > 0 ? 0.67 : -0.55, 0, 0);
@@ -1360,31 +1462,45 @@ export function buildTowTractor(
     registerZoneMesh(panel, zHitch, clickableMeshes, zoneMeshes);
     root.add(panel);
 
+    if (lowerSkirtGeo) {
+      const skirt = new THREE.Mesh(lowerSkirtGeo, lowerBumperMat);
+      skirt.position.set(side > 0 ? 0.692 : -0.676, 0, 0);
+      skirt.receiveShadow = true;
+      root.add(skirt);
+    }
+
     // Anti-slip black rubber entry step mat in cabin footwell
     const stepMat = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.18, 0.025, 0.56)), rubberTrimMat);
     stepMat.position.set(side * 0.55, 0.475, 0.04);
     root.add(stepMat);
 
     // Side body livery & Diesel/EV identification accent stripe
-    const liveryStripe = new THREE.Mesh(
-      trackGeo(new THREE.BoxGeometry(0.016, 0.05, 0.62)),
-      isEv ? evBlueMat : darkChassisMat
-    );
-    liveryStripe.position.set(side * 0.688, 0.40, 0.06);
-    root.add(liveryStripe);
-    if (isEv) {
-      const greenAccent = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.018, 0.026, 0.44)), evGreenMat);
-      greenAccent.position.set(side * 0.69, 0.35, 0.06);
-      root.add(greenAccent);
+    if (!isBydBlue) {
+      const liveryStripe = new THREE.Mesh(
+        trackGeo(new THREE.BoxGeometry(0.016, 0.05, 0.62)),
+        isEv ? evBlueMat : darkChassisMat
+      );
+      liveryStripe.position.set(side * 0.688, 0.40, 0.06);
+      root.add(liveryStripe);
+      if (isEv) {
+        const greenAccent = new THREE.Mesh(trackGeo(new THREE.BoxGeometry(0.018, 0.026, 0.44)), evGreenMat);
+        greenAccent.position.set(side * 0.69, 0.35, 0.06);
+        root.add(greenAccent);
+      }
     }
   }
 
   // Dynamic Fleet Registration Decals on Left & Right Front Side Body Panels
   const tractorPlateCode = (vehicleCode || (isEv ? "EV-01" : "TT-01")).trim();
+  const tractorDecalStyle: VehicleDecalStyle = isBydBlue
+    ? "ev_blue_body"
+    : isEv
+      ? "ev_body"
+      : "white_body";
   const tractorDecalTex = trackTex(
     createVehicleNumberDecalTexture(
       tractorPlateCode,
-      isEv ? "ev_body" : "white_body",
+      tractorDecalStyle,
       textures.maxAnisotropy
     )
   );
@@ -1404,7 +1520,7 @@ export function buildTowTractor(
     const sideDecal = new THREE.Mesh(sideDecalGeo, tractorDecalMat);
     sideDecal.rotation.y = side > 0 ? Math.PI / 2 : -Math.PI / 2;
     sideDecal.position.set(side * 0.694, 0.81, 0.76);
-    sideDecal.userData.decalStyle = isEv ? "ev_body" : "white_body";
+    sideDecal.userData.decalStyle = tractorDecalStyle;
     sideDecal.userData.decalSize = [0.56, 0.24];
     root.add(sideDecal);
   }
@@ -1933,7 +2049,7 @@ export function buildTowTractor(
   const roofDecal = new THREE.Mesh(trackGeo(new THREE.PlaneGeometry(0.92, 0.39)), tractorDecalMat);
   roofDecal.rotation.x = -Math.PI / 2;
   roofDecal.position.set(0, 2.002, -0.56);
-  roofDecal.userData.decalStyle = isEv ? "ev_body" : "white_body";
+  roofDecal.userData.decalStyle = tractorDecalStyle;
   roofDecal.userData.decalSize = [0.92, 0.39];
   root.add(roofDecal);
 
@@ -3329,12 +3445,13 @@ export function buildVehicleByModelType(
   modelType: MhPm3dModelType,
   textures: Pm3dTexturePack,
   isSoftwareGl: boolean,
-  vehicleCode?: string
+  vehicleCode?: string,
+  options?: VehicleBuildOptions
 ): BuiltVehicleModel {
   if (modelType === "diesel_tractor")
-    return buildTowTractor("diesel", textures, isSoftwareGl, vehicleCode);
+    return buildTowTractor("diesel", textures, isSoftwareGl, vehicleCode, options);
   if (modelType === "ev_tractor")
-    return buildTowTractor("ev", textures, isSoftwareGl, vehicleCode);
+    return buildTowTractor("ev", textures, isSoftwareGl, vehicleCode, options);
   if (modelType === "forklift") return buildForklift(textures, vehicleCode);
   return buildFlatbedTrailer(textures, vehicleCode);
 }
