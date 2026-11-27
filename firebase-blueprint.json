@@ -424,7 +424,7 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "maxLength": 128 },
-        "vehicleCategory": { "type": "string", "enum": ["forklift", "ev_tractor", "diesel_tractor"], "maxLength": 32 },
+        "vehicleCategory": { "type": "string", "enum": ["forklift", "ev_tractor", "diesel_tractor", "sc_clamp"], "maxLength": 32 },
         "targetKey": { "type": "string", "maxLength": 64 },
         "vehicleId": { "type": "string", "maxLength": 64 },
         "checks": { "type": "object" },
@@ -828,7 +828,7 @@
     },
     "/mh_pm_matrix/{matrixId}": {
       "schema": "MhPmMatrixRecord",
-      "description": "Dedicated collection for Material Handling interactive PM checklist matrices (Forklift, Electric Tractor, Diesel Tractor)"
+      "description": "Dedicated collection for Material Handling interactive PM checklist matrices (Forklift, Electric Tractor, Diesel Tractor, SC Clamp Truck)"
     },
     "/mh_prestart_inspections/{inspectionId}": {
       "schema": "MhPreStartInspectionRecord",

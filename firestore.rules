@@ -163,7 +163,7 @@ service cloud.firestore {
 
     function isValidMhPmMatrix(data) {
       return data.id is string && data.id.size() > 0 && data.id.size() <= 128
-        && data.vehicleCategory in ['forklift', 'ev_tractor', 'diesel_tractor']
+        && data.vehicleCategory in ['forklift', 'ev_tractor', 'diesel_tractor', 'sc_clamp']
         && data.targetKey is string && data.targetKey.size() > 0 && data.targetKey.size() <= 64
         && data.checks is map && data.checks.size() <= 100
         && data.status in ['draft', 'submitted']

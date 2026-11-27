@@ -87,3 +87,217 @@ table.ts-stats-table tbody td.ts-wrap {
     break-after: page !important;
   }
 }
+
+/* Progressive Full-screen Diagonal Reveal Animation (Tire Stock Outbound Form) */
+@keyframes diagonalScrimFadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes diagonalScrimFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Constant-angle 5-vertex progressive diagonal wavefront: top-left (0,0) -> bottom-right (100,100) */
+@keyframes diagonalProgressiveExpand {
+  0% {
+    clip-path: polygon(0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%);
+    opacity: 0.85;
+  }
+  25% {
+    clip-path: polygon(0% 0%, 50% 0%, 50% 0%, 0% 50%, 0% 50%);
+    opacity: 1;
+  }
+  50% {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 0%, 0% 100%, 0% 100%);
+    opacity: 1;
+  }
+  75% {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 50%, 50% 100%, 0% 100%);
+    opacity: 1;
+  }
+  100% {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 100% 100%, 0% 100%);
+    opacity: 1;
+  }
+}
+
+@keyframes diagonalProgressiveCollapse {
+  0% {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 100% 100%, 0% 100%);
+    opacity: 1;
+  }
+  25% {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 50%, 50% 100%, 0% 100%);
+    opacity: 1;
+  }
+  50% {
+    clip-path: polygon(0% 0%, 100% 0%, 100% 0%, 0% 100%, 0% 100%);
+    opacity: 0.96;
+  }
+  75% {
+    clip-path: polygon(0% 0%, 50% 0%, 50% 0%, 0% 50%, 0% 50%);
+    opacity: 0.82;
+  }
+  100% {
+    clip-path: polygon(0% 0%, 0% 0%, 0% 0%, 0% 0%, 0% 0%);
+    opacity: 0;
+  }
+}
+
+@keyframes diagonalZoneReveal {
+  0% {
+    opacity: 0;
+    transform: translate3d(-22px, -16px, 0) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes diagonalFooterReveal {
+  0% {
+    opacity: 0;
+    transform: translate3d(-14px, 16px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes diagonalItemReveal {
+  0% {
+    opacity: 0;
+    transform: translate3d(-14px, -10px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes diagonalZoneExit {
+  0% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-16px, -12px, 0);
+  }
+}
+
+.animate-diagonal-scrim-in {
+  will-change: opacity;
+  animation: diagonalScrimFadeIn 380ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.animate-diagonal-scrim-out {
+  will-change: opacity;
+  animation: diagonalScrimFadeOut 420ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+/* Layer 1: Leading deep-brand diagonal curtain */
+.animate-diagonal-wave-lead {
+  will-change: clip-path, opacity;
+  animation: diagonalProgressiveExpand 760ms cubic-bezier(0.22, 0.61, 0.36, 1) 0ms both;
+}
+
+/* Layer 2: Trailing luminous sky bevel curtain */
+.animate-diagonal-wave-trail {
+  will-change: clip-path, opacity;
+  animation: diagonalProgressiveExpand 820ms cubic-bezier(0.22, 0.61, 0.36, 1) 75ms both;
+}
+
+/* Layer 3: Main full-screen workspace canvas */
+.animate-diagonal-wave-surface {
+  will-change: clip-path, opacity;
+  animation: diagonalProgressiveExpand 880ms cubic-bezier(0.22, 0.61, 0.36, 1) 145ms both;
+}
+
+/* Reverse progressive collapse layers */
+.animate-diagonal-collapse-surface {
+  will-change: clip-path, opacity;
+  animation: diagonalProgressiveCollapse 430ms cubic-bezier(0.4, 0, 0.2, 1) 0ms forwards;
+}
+
+.animate-diagonal-collapse-trail {
+  will-change: clip-path, opacity;
+  animation: diagonalProgressiveCollapse 460ms cubic-bezier(0.4, 0, 0.2, 1) 45ms forwards;
+}
+
+.animate-diagonal-collapse-lead {
+  will-change: clip-path, opacity;
+  animation: diagonalProgressiveCollapse 490ms cubic-bezier(0.4, 0, 0.2, 1) 85ms forwards;
+}
+
+/* Progressive Diagonal Content Choreography (top-left -> mid -> bottom-right) */
+.animate-diagonal-reveal-header {
+  will-change: transform, opacity;
+  animation: diagonalZoneReveal 420ms cubic-bezier(0.22, 0.61, 0.36, 1) 250ms both;
+}
+
+.animate-diagonal-reveal-left {
+  will-change: transform, opacity;
+  animation: diagonalZoneReveal 480ms cubic-bezier(0.22, 0.61, 0.36, 1) 350ms both;
+}
+
+.animate-diagonal-reveal-right-top {
+  will-change: transform, opacity;
+  animation: diagonalZoneReveal 480ms cubic-bezier(0.22, 0.61, 0.36, 1) 470ms both;
+}
+
+.animate-diagonal-reveal-right-bottom {
+  will-change: transform, opacity;
+  animation: diagonalZoneReveal 480ms cubic-bezier(0.22, 0.61, 0.36, 1) 580ms both;
+}
+
+.animate-diagonal-reveal-footer {
+  will-change: transform, opacity;
+  animation: diagonalFooterReveal 420ms cubic-bezier(0.22, 0.61, 0.36, 1) 640ms both;
+}
+
+.animate-diagonal-reveal-item {
+  will-change: transform, opacity;
+  animation: diagonalItemReveal 400ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+.animate-diagonal-zone-exit {
+  will-change: transform, opacity;
+  animation: diagonalZoneExit 200ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-diagonal-scrim-in,
+  .animate-diagonal-scrim-out,
+  .animate-diagonal-wave-lead,
+  .animate-diagonal-wave-trail,
+  .animate-diagonal-wave-surface,
+  .animate-diagonal-collapse-surface,
+  .animate-diagonal-collapse-trail,
+  .animate-diagonal-collapse-lead,
+  .animate-diagonal-reveal-header,
+  .animate-diagonal-reveal-left,
+  .animate-diagonal-reveal-right-top,
+  .animate-diagonal-reveal-right-bottom,
+  .animate-diagonal-reveal-footer,
+  .animate-diagonal-reveal-item,
+  .animate-diagonal-zone-exit {
+    animation: none !important;
+    clip-path: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+

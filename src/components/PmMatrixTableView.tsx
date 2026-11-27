@@ -23,6 +23,8 @@ import {
   Fuel,
   Gauge,
   Link2,
+  Lock,
+  ParkingCircle,
   Plus,
   RotateCcw,
   Save,
@@ -34,6 +36,7 @@ import {
   Sparkles,
   Thermometer,
   Truck,
+  Volume2,
   Wind,
   Wrench,
   X,
@@ -67,6 +70,7 @@ interface PmMatrixColumn {
 interface PmMatrixRowDef {
   id: string;
   label: string;
+  section?: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   defaultChecks: string[];
 }
@@ -181,9 +185,52 @@ const PM_MATRIX_CONFIGS: Record<MhPmMatrixCategory, PmMatrixCategoryConfig> = {
       { id: "ds_18", label: "ตรวจสอบหัวฉีด / เครื่องยนต์โดยรวม", icon: Settings, defaultChecks: ["2000H"] },
     ],
   },
+  sc_clamp: {
+    id: "sc_clamp",
+    shortLabel: "รถคีบ (SC)",
+    headerTitle: "ตารางบำรุงรักษาเชิงป้องกัน (PM Schedule) รถคีบ (SC)",
+    subtitle: "SC Clamp Truck · ตรวจเช็คก่อนใช้งาน / หลังติดเครื่อง / หลังการใช้งาน",
+    columns: [
+      { key: "D", titleLine1: "ทุกวัน", titleLine2: "(D)" },
+      { key: "W", titleLine1: "ทุกสัปดาห์", titleLine2: "(W)" },
+      { key: "250H", titleLine1: "ทุก 250 ชม.", titleLine2: "(250H)" },
+      { key: "500H", titleLine1: "ทุก 500 ชม.", titleLine2: "(500H)" },
+      { key: "1000H", titleLine1: "ทุก 1000 ชม.", titleLine2: "(1000H)" },
+      { key: "2000H", titleLine1: "ทุก 2000 ชม.", titleLine2: "(2000H)" },
+    ],
+    rows: [
+      // ก่อนการใช้งาน
+      { id: "sc_01", section: "ก่อนการใช้งาน", label: "1. ตรวจสอบความสะอาดภายนอก", icon: Sparkles, defaultChecks: ["D"] },
+      { id: "sc_02", section: "ก่อนการใช้งาน", label: "2. ตรวจสอบระดับน้ำหม้อน้ำ-หม้อพักน้ำ", icon: Thermometer, defaultChecks: ["D"] },
+      { id: "sc_03", section: "ก่อนการใช้งาน", label: "3. ตรวจสอบระดับน้ำมันเครื่อง", icon: Droplets, defaultChecks: ["D"] },
+      { id: "sc_04", section: "ก่อนการใช้งาน", label: "4. ตรวจสอบระดับน้ำมันเชื้อเพลิง", icon: Fuel, defaultChecks: ["D"] },
+      { id: "sc_05", section: "ก่อนการใช้งาน", label: "5. ตรวจสอบระดับน้ำมันเกียร์", icon: Cog, defaultChecks: ["D"] },
+      { id: "sc_06", section: "ก่อนการใช้งาน", label: "6. ตรวจสอบระดับน้ำมันไฮดรอลิค(พาวเวอร์)", icon: Droplet, defaultChecks: ["D"] },
+      { id: "sc_07", section: "ก่อนการใช้งาน", label: "7. ตรวจสอบระดับน้ำมันเบรก", icon: Gauge, defaultChecks: ["D"] },
+      { id: "sc_08", section: "ก่อนการใช้งาน", label: "8. ตรวจสอบน้ำกลั่นแบตเตอรี่", icon: BatteryCharging, defaultChecks: ["D"] },
+      { id: "sc_09", section: "ก่อนการใช้งาน", label: "9. ตรวจสอบความตึงสายพาน", icon: Settings, defaultChecks: ["D"] },
+      { id: "sc_10", section: "ก่อนการใช้งาน", label: "10. ตรวจสอบการทำงานของเบรกมือ", icon: Disc, defaultChecks: ["D"] },
+      { id: "sc_11", section: "ก่อนการใช้งาน", label: "11. ตรวจสอบระบบสัญญาณไฟ", icon: Zap, defaultChecks: ["D"] },
+      { id: "sc_12", section: "ก่อนการใช้งาน", label: "12. ตรวจสอบระบบสัญญาณเสียง (แตร)", icon: Volume2, defaultChecks: ["D"] },
+      { id: "sc_13", section: "ก่อนการใช้งาน", label: "13. ตรวจสอบสภาพยาง", icon: Compass, defaultChecks: ["D"] },
+      { id: "sc_14", section: "ก่อนการใช้งาน", label: "14. ตรวจสอบลมยาง", icon: Wind, defaultChecks: ["D"] },
+      { id: "sc_15", section: "ก่อนการใช้งาน", label: "15. ตรวจสอบรอยรั่วจุดต่าง ๆ", icon: Activity, defaultChecks: ["D"] },
+      // หลังติดเครื่อง
+      { id: "sc_16", section: "หลังติดเครื่อง", label: "16. ตรวจสอบเสียงดังผิดปกติจากเครื่องยนต์", icon: Volume2, defaultChecks: ["D"] },
+      { id: "sc_17", section: "หลังติดเครื่อง", label: "17. ตรวจสอบดูไฟที่หน้าปัด", icon: Gauge, defaultChecks: ["D"] },
+      { id: "sc_18", section: "หลังติดเครื่อง", label: "18. ตรวจสอบระยะฟรีของพวงมาลัย", icon: Compass, defaultChecks: ["D"] },
+      { id: "sc_19", section: "หลังติดเครื่อง", label: "19. ตรวจสอบการทำงานของชุดควบคุม", icon: Sliders, defaultChecks: ["D"] },
+      // หลังการใช้งาน ขณะเครื่องยนต์ยังติดอยู่
+      { id: "sc_20", section: "หลังการใช้งาน ขณะเครื่องยนต์ยังติดอยู่", label: "20. จอดรถในสถานที่จอดรถกำหนดไว้", icon: ParkingCircle, defaultChecks: ["D"] },
+      { id: "sc_21", section: "หลังการใช้งาน ขณะเครื่องยนต์ยังติดอยู่", label: "21. ล็อคเบรกมือ", icon: Lock, defaultChecks: ["D"] },
+      { id: "sc_22", section: "หลังการใช้งาน ขณะเครื่องยนต์ยังติดอยู่", label: "22. ตรวจสอบการหล่อลื่นตามจุดต่าง ๆ", icon: Wrench, defaultChecks: ["D"] },
+      { id: "sc_23", section: "หลังการใช้งาน ขณะเครื่องยนต์ยังติดอยู่", label: "23. ตรวจสอบการรั่วซึมจากการใช้งาน", icon: Activity, defaultChecks: ["D"] },
+      { id: "sc_24", section: "หลังการใช้งาน ขณะเครื่องยนต์ยังติดอยู่", label: "24. ตรวจสอบสภาพยาง", icon: ShieldCheck, defaultChecks: ["D"] },
+    ],
+  },
 };
 
-const CATEGORY_ORDER: MhPmMatrixCategory[] = ["forklift", "ev_tractor", "diesel_tractor"];
+const CATEGORY_ORDER: MhPmMatrixCategory[] = ["forklift", "ev_tractor", "diesel_tractor", "sc_clamp"];
 
 function buildDefaultChecks(category: MhPmMatrixCategory): Record<string, string[]> {
   const map: Record<string, string[]> = {};
@@ -221,7 +268,10 @@ function classifyVehicleForMatrix(v: Vehicle): MhPmMatrixCategory | "other" {
   const id = String(v.vehicleId || v.number || "").trim().toUpperCase();
   const typeStr = `${v.vehicleType || ""} ${v.type || ""} ${v.description || ""} ${v.engineType || ""}`.toLowerCase();
 
-  if (id.startsWith("FL") || id.startsWith("SC") || typeStr.includes("forklift") || typeStr.includes("โฟล์คลิฟ") || typeStr.includes("รถยก")) {
+  if (id.startsWith("SC") || typeStr.includes("รถคีบ") || typeStr.includes("clamp")) {
+    return "sc_clamp";
+  }
+  if (id.startsWith("FL") || typeStr.includes("forklift") || typeStr.includes("โฟล์คลิฟ") || typeStr.includes("รถยก")) {
     return "forklift";
   }
   if (id.startsWith("TTL") || typeStr.includes("trailer") || typeStr.includes("หางลาก")) {
@@ -342,7 +392,11 @@ export function PmMatrixTableView({ vehicles, cloudRealtime = true }: PmMatrixTa
   const filteredRows = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return currentConfig.rows;
-    return currentConfig.rows.filter((r) => r.label.toLowerCase().includes(q));
+    return currentConfig.rows.filter(
+      (r) =>
+        r.label.toLowerCase().includes(q) ||
+        (r.section && r.section.toLowerCase().includes(q))
+    );
   }, [currentConfig.rows, searchQuery]);
 
   const handleSwitchCategory = (cat: MhPmMatrixCategory) => {
@@ -687,6 +741,8 @@ export function PmMatrixTableView({ vehicles, cloudRealtime = true }: PmMatrixTa
                   filteredRows.map((row, rowIdx) => {
                     const IconComp = row.icon;
                     const rowChecks = draftChecks[row.id] || [];
+                    const prevSection = rowIdx > 0 ? filteredRows[rowIdx - 1].section : undefined;
+                    const showSectionHeader = Boolean(row.section && row.section !== prevSection);
                     const isEven = rowIdx % 2 === 1;
                     const rowBgClass = isEven
                       ? "bg-[#e7f0fa]/85 dark:bg-[#0e1f3a]/90"
@@ -696,71 +752,82 @@ export function PmMatrixTableView({ vehicles, cloudRealtime = true }: PmMatrixTa
                       : "bg-[#eaf2fb]/90 dark:bg-[#0d1d36]";
 
                     return (
-                      <tr
-                        key={row.id}
-                        className={`${rowBgClass} transition-colors hover:bg-sky-50/80 dark:hover:bg-[#13294b]/70`}
-                      >
-                        {/* Item Name & Icon Cell */}
-                        <td
-                          className={`${labelColBgClass} py-2 px-3 sm:px-3.5 border-b border-r border-[#b7cce4] dark:border-[#1e3a5f]`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-white/80 dark:bg-[#0a1628]/80 text-[#0a3668] dark:text-sky-300 border border-[#b7cce4]/70 dark:border-[#1e3a5f] shrink-0">
-                              <IconComp size={14} />
-                            </span>
-                            <span className="text-xs sm:text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-snug">
-                              {row.label}
-                            </span>
-                          </div>
-                        </td>
-
-                        {/* Interactive Interval Check Cells */}
-                        {currentConfig.columns.map((col, colIdx) => {
-                          const isChecked = rowChecks.includes(col.key);
-                          const wasCheckedInBaseline = (baselineChecks[row.id] || []).includes(col.key);
-                          const cellChanged = isChecked !== wasCheckedInBaseline;
-
-                          return (
+                      <React.Fragment key={row.id}>
+                        {showSectionHeader && (
+                          <tr className="bg-[#0a3668]/10 dark:bg-[#143059]">
                             <td
-                              key={`${row.id}_${col.key}`}
-                              className={`p-0 text-center align-middle border-b border-[#b7cce4] dark:border-[#1e3a5f] ${
-                                colIdx < currentConfig.columns.length - 1
-                                  ? "border-r border-[#b7cce4] dark:border-[#1e3a5f]"
-                                  : ""
-                              }`}
+                              colSpan={currentConfig.columns.length + 1}
+                              className="py-2 px-3.5 text-xs sm:text-[13px] font-bold text-[#0a3668] dark:text-sky-200 border-b border-[#a9c2de] dark:border-[#1e3a5f] tracking-tight"
                             >
-                              <button
-                                type="button"
-                                onClick={() => handleToggleCell(row.id, col.key)}
-                                aria-pressed={isChecked}
-                                aria-label={`${row.label} - ${col.titleLine1} ${col.titleLine2}: ${
-                                  isChecked ? "เลือกแล้ว (คลิกเพื่อนำออก)" : "ยังไม่เลือก (คลิกเพื่อเพิ่มเครื่องหมายถูก)"
-                                }`}
-                                title={`${row.label} · ${col.titleLine1} ${col.titleLine2} — คลิกเพื่อ${
-                                  isChecked ? "นำเครื่องหมายถูกออก" : "เพิ่มเครื่องหมายถูก"
-                                }`}
-                                className="group relative w-full h-10 sm:h-[42px] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087eaf] transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30"
-                              >
-                                {isChecked ? (
-                                  <span className="inline-flex items-center justify-center w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-full bg-[#166534] dark:bg-emerald-600 text-white shadow-xs transition-transform duration-100 group-hover:scale-110 group-active:scale-95">
-                                    <Check size={15} strokeWidth={3} />
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center justify-center w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-full border border-dashed border-emerald-500/70 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
-                                    <Plus size={13} strokeWidth={2.5} />
-                                  </span>
-                                )}
-                                {cellChanged && (
-                                  <span
-                                    className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"
-                                    title="แก้ไขแล้วยังไม่บันทึก"
-                                  />
-                                )}
-                              </button>
+                              {row.section}
                             </td>
-                          );
-                        })}
-                      </tr>
+                          </tr>
+                        )}
+                        <tr
+                          className={`${rowBgClass} transition-colors hover:bg-sky-50/80 dark:hover:bg-[#13294b]/70`}
+                        >
+                          {/* Item Name & Icon Cell */}
+                          <td
+                            className={`${labelColBgClass} py-2 px-3 sm:px-3.5 border-b border-r border-[#b7cce4] dark:border-[#1e3a5f]`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-white/80 dark:bg-[#0a1628]/80 text-[#0a3668] dark:text-sky-300 border border-[#b7cce4]/70 dark:border-[#1e3a5f] shrink-0">
+                                <IconComp size={14} />
+                              </span>
+                              <span className="text-xs sm:text-[13px] font-semibold text-slate-900 dark:text-slate-100 leading-snug">
+                                {row.label}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Interactive Interval Check Cells */}
+                          {currentConfig.columns.map((col, colIdx) => {
+                            const isChecked = rowChecks.includes(col.key);
+                            const wasCheckedInBaseline = (baselineChecks[row.id] || []).includes(col.key);
+                            const cellChanged = isChecked !== wasCheckedInBaseline;
+
+                            return (
+                              <td
+                                key={`${row.id}_${col.key}`}
+                                className={`p-0 text-center align-middle border-b border-[#b7cce4] dark:border-[#1e3a5f] ${
+                                  colIdx < currentConfig.columns.length - 1
+                                    ? "border-r border-[#b7cce4] dark:border-[#1e3a5f]"
+                                    : ""
+                                }`}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCell(row.id, col.key)}
+                                  aria-pressed={isChecked}
+                                  aria-label={`${row.label} - ${col.titleLine1} ${col.titleLine2}: ${
+                                    isChecked ? "เลือกแล้ว (คลิกเพื่อนำออก)" : "ยังไม่เลือก (คลิกเพื่อเพิ่มเครื่องหมายถูก)"
+                                  }`}
+                                  title={`${row.label} · ${col.titleLine1} ${col.titleLine2} — คลิกเพื่อ${
+                                    isChecked ? "นำเครื่องหมายถูกออก" : "เพิ่มเครื่องหมายถูก"
+                                  }`}
+                                  className="group relative w-full h-10 sm:h-[42px] flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#087eaf] transition-colors hover:bg-emerald-50/70 dark:hover:bg-emerald-950/30"
+                                >
+                                  {isChecked ? (
+                                    <span className="inline-flex items-center justify-center w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-full bg-[#166534] dark:bg-emerald-600 text-white shadow-xs transition-transform duration-100 group-hover:scale-110 group-active:scale-95">
+                                      <Check size={15} strokeWidth={3} />
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center justify-center w-6 h-6 sm:w-[26px] sm:h-[26px] rounded-full border border-dashed border-emerald-500/70 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 opacity-0 group-hover:opacity-100 transition-opacity duration-100">
+                                      <Plus size={13} strokeWidth={2.5} />
+                                    </span>
+                                  )}
+                                  {cellChanged && (
+                                    <span
+                                      className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500"
+                                      title="แก้ไขแล้วยังไม่บันทึก"
+                                    />
+                                  )}
+                                </button>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </React.Fragment>
                     );
                   })
                 )}

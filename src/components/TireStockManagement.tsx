@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import {
   Disc,
   ArrowDownLeft,
+  ArrowLeft,
   ArrowUpRight,
   Search,
   Trash2,
@@ -132,6 +133,9 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const [showAllStockInOutbound, setShowAllStockInOutbound] = useState<boolean>(false);
   const [outboundSelectionError, setOutboundSelectionError] = useState<string>("");
   const [tireWheelPosition, setTireWheelPosition] = useState<string>("");
+  const [isOutboundExpanded, setIsOutboundExpanded] = useState<boolean>(false);
+  const [isOutboundCollapsing, setIsOutboundCollapsing] = useState<boolean>(false);
+  const [outboundVehiclePromptError, setOutboundVehiclePromptError] = useState<boolean>(false);
   const [tireOperatingHours, setTireOperatingHours] = useState<string>("");
   const [tireTechnicianName, setTireTechnicianName] = useState<string>(() =>
     getDefaultTechnicianName()
@@ -154,6 +158,8 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const sizeComboRef = useRef<HTMLDivElement | null>(null);
   const brandComboRef = useRef<HTMLDivElement | null>(null);
   const notesComboRef = useRef<HTMLDivElement | null>(null);
+  const outboundVehicleSelectRef = useRef<HTMLSelectElement | null>(null);
+  const collapseTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     setHeadingPortalTarget(document.getElementById("page-heading-actions"));
@@ -209,6 +215,13 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
     setShowAllStockInOutbound(false);
     setOutboundSelectionError("");
     setTireWheelPosition("");
+    setIsOutboundExpanded(false);
+    setIsOutboundCollapsing(false);
+    setOutboundVehiclePromptError(false);
+    if (collapseTimerRef.current) {
+      window.clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
     setTireOperatingHours("");
     setTireTechnicianName(getDefaultTechnicianName());
     setTireNotes("");
@@ -216,6 +229,39 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
     setShowBrandDropdown(false);
     setShowNotesDropdown(false);
   };
+
+  useEffect(() => {
+    return () => {
+      if (collapseTimerRef.current) {
+        window.clearTimeout(collapseTimerRef.current);
+      }
+    };
+  }, []);
+
+  const collapseOutboundExpanded = () => {
+    if (!isOutboundExpanded || isOutboundCollapsing) return;
+    setIsOutboundCollapsing(true);
+    collapseTimerRef.current = window.setTimeout(() => {
+      setIsOutboundExpanded(false);
+      setIsOutboundCollapsing(false);
+      collapseTimerRef.current = null;
+    }, 560);
+  };
+
+  useEffect(() => {
+    if (!isTireModalOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (tireTxType === "Outbound" && isOutboundExpanded) {
+          collapseOutboundExpanded();
+        } else {
+          setIsTireModalOpen(false);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isTireModalOpen, tireTxType, isOutboundExpanded, isOutboundCollapsing]);
 
   const toggleTireType = (type: MhTireComponentType) => {
     const field = TIRE_TYPE_QTY_FIELDS.find((f) => f.type === type);
@@ -560,9 +606,28 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const handleOutboundVehicleChange = (nextVehicleId: string) => {
     setTireVehicleId(nextVehicleId);
     setTireWheelPosition("");
+    setIsOutboundExpanded(false);
+    setIsOutboundCollapsing(false);
+    setOutboundVehiclePromptError(false);
     setOutboundSelections({});
     setShowAllStockInOutbound(false);
     setOutboundSelectionError("");
+  };
+
+  const handleDiagramWheelPositionSelect = (position: string) => {
+    if (!tireVehicleId) {
+      setOutboundVehiclePromptError(true);
+      outboundVehicleSelectRef.current?.focus();
+      return;
+    }
+    setOutboundVehiclePromptError(false);
+    setTireWheelPosition(position);
+    if (collapseTimerRef.current) {
+      window.clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
+    setIsOutboundCollapsing(false);
+    setIsOutboundExpanded(true);
   };
 
   const selectedOutboundVehicle = useMemo(
@@ -1600,7 +1665,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   {tireTxType === "Inbound"
                     ? "บันทึกลงฐานข้อมูลแยกอิสระ (mh_tire_stock) · ขนาดยางและยี่ห้อที่บันทึกจะเก็บเป็นตัวเลือกบนคลาวด์อัตโนมัติ"
-                    : "เลือกเบอร์รถเป็นหลัก ระบบจะแสดงรายการยางที่ผูกไว้ให้ติ๊กเลือกเบิกและระบุจำนวน"}
+                    : "เลือกเบอร์รถและคลิกตำแหน่งล้อบนผังด้านบน เพื่อขยายหน้าจอกรอกรายละเอียดการเบิกเปลี่ยนยาง"}
                 </div>
               </div>
               <button
@@ -2159,18 +2224,27 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                 </>
               ) : (
                 <>
-                  {/* Step 1: Vehicle-first primary selector */}
+                  {/* Stage 1 (Outbound): Show ONLY Vehicle Selector + Top-Down Wheel Diagram */}
                   <div className="sm:col-span-2">
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      1. เลือกเบอร์รถโฟล์คลิฟท์ / หางลากที่เปลี่ยนยาง *
+                    <label
+                      htmlFor="outbound-vehicle-select"
+                      className="block font-semibold text-slate-700 dark:text-slate-300 mb-1"
+                    >
+                      เลือกเบอร์รถโฟล์คลิฟท์ / หางลากที่เปลี่ยนยาง *
                     </label>
                     <select
+                      id="outbound-vehicle-select"
+                      ref={outboundVehicleSelectRef}
                       value={tireVehicleId}
                       onChange={(e) => handleOutboundVehicleChange(e.target.value)}
                       required
-                      className="w-full px-3 py-2.5 rounded-md border border-[#087eaf]/50 dark:border-sky-600/60 bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-[#087eaf]"
+                      className={`w-full px-3 py-2.5 rounded-md border bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 font-semibold focus:outline-none transition-colors ${
+                        outboundVehiclePromptError
+                          ? "border-amber-500 ring-2 ring-amber-400/30 dark:border-amber-400"
+                          : "border-[#087eaf]/50 dark:border-sky-600/60 focus:border-[#087eaf]"
+                      }`}
                     >
-                      <option value="">— เลือกเบอร์รถ / หางลากเพื่อแสดงรายการยางที่ผูกไว้ —</option>
+                      <option value="">— เลือกเบอร์รถโฟล์คลิฟท์ / หางลาก —</option>
                       {drivableVehicles.length > 0 && (
                         <optgroup label="รถใช้งาน / โฟล์คลิฟท์ / หัวลาก">
                           {drivableVehicles.map((v) => {
@@ -2200,60 +2274,258 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                         </optgroup>
                       )}
                     </select>
+                    {outboundVehiclePromptError && (
+                      <p className="mt-1.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                        กรุณาเลือกเบอร์รถโฟล์คลิฟท์ / หางลากด้านบนก่อน แล้วคลิกเลือกตำแหน่งล้อบนภาพ
+                      </p>
+                    )}
                   </div>
 
-                  {/* Step 2: Bound tires list with tick-to-select + per-type quantity */}
                   <div className="sm:col-span-2 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className="block font-semibold text-slate-700 dark:text-slate-300">
-                        2. รายการยางที่ผูกไว้กับรถ{" "}
-                        {tireVehicleId ? (
-                          <span className="text-[#087eaf] dark:text-sky-400 font-bold">
-                            {tireVehicleId}
-                          </span>
-                        ) : (
-                          "(เลือกเบอร์รถด้านบนก่อน)"
-                        )}{" "}
-                        *
-                      </label>
-                      {outboundSummary.selectedItemCount > 0 && (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold tabular-nums border bg-sky-50 text-[#087eaf] border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800">
-                          เลือกเบิก {outboundSummary.selectedItemCount} รายการ · รวม{" "}
-                          {outboundSummary.totalQty.toLocaleString()} เส้น
-                          {outboundSummary.totalCost > 0
-                            ? ` (${outboundSummary.totalCost.toLocaleString()} บ.)`
-                            : ""}
-                        </span>
+                    <ForkliftWheelPositionDiagram
+                      vehicleId={tireVehicleId}
+                      vehicle={selectedOutboundVehicle}
+                      selectedPosition={tireWheelPosition}
+                      onSelectPosition={handleDiagramWheelPositionSelect}
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                      <span>
+                        {tireVehicleId
+                          ? `คลิกเลือกตำแหน่งล้อของรถ ${tireVehicleId} บนภาพด้านบน เพื่อเปิดหน้ากรอกข้อมูลเบิกเปลี่ยนยางแบบเต็มหน้าจอ`
+                          : "เลือกเบอร์รถด้านบนก่อน จากนั้นคลิกเลือกตำแหน่งล้อบนภาพเพื่อเปิดฟอร์มกรอกข้อมูล"}
+                      </span>
+                      {tireVehicleId && tireWheelPosition && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsOutboundCollapsing(false);
+                            setIsOutboundExpanded(true);
+                          }}
+                          className="px-3 py-1.5 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white text-[11px] font-bold transition-colors whitespace-nowrap"
+                        >
+                          เปิดหน้ากรอกข้อมูล ({tireWheelPosition}) →
+                        </button>
                       )}
                     </div>
+                  </div>
+                </>
+              )}
 
-                    {!tireVehicleId ? (
-                      <div className="p-4 rounded-lg border border-dashed border-slate-300 dark:border-[#1e3a5f] bg-slate-50/70 dark:bg-[#0d1b33]/50 text-center text-xs text-slate-500 dark:text-slate-400">
-                        กรุณาเลือกเบอร์รถด้านบนก่อน ระบบจะแสดงรายการยางที่ผูกไว้กับรถคันนี้ให้ติ๊กเลือกและระบุจำนวน
+              {tireTxType === "Inbound" && (
+                <>
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      ผู้บันทึก / ช่างผู้เบิก *
+                    </label>
+                    <input
+                      type="text"
+                      value={tireTechnicianName}
+                      onChange={(e) => setTireTechnicianName(e.target.value)}
+                      placeholder="ระบุชื่อช่างหรือเจ้าหน้าที่"
+                      required
+                      className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      หมายเหตุ
+                    </label>
+                    <input
+                      type="text"
+                      value={tireNotes}
+                      onChange={(e) => setTireNotes(e.target.value)}
+                      placeholder="รายละเอียดเพิ่มเติม..."
+                      className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                    />
+                  </div>
+                </>
+              )}
+
+              </div>
+
+              <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50/90 dark:bg-[#0d1b33] flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTireModalOpen(false)}
+                  className="px-4 py-2 rounded-md border border-slate-300 dark:border-[#1e3a5f] font-semibold bg-white dark:bg-[#111e38]"
+                >
+                  {tireTxType === "Outbound" ? "ปิด" : "ยกเลิก"}
+                </button>
+                {tireTxType === "Inbound" && (
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white font-bold"
+                  >
+                    บันทึกรายการสต๊อกยาง
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Stage 2 (Outbound): Progressive Full-Screen Diagonal Reveal Form Overlay */}
+      {isTireModalOpen &&
+        tireTxType === "Outbound" &&
+        isOutboundExpanded &&
+        createPortal(
+          <div className="fixed inset-0 z-[1100] pointer-events-auto">
+            {/* Ambient backdrop scrim */}
+            <div
+              aria-hidden="true"
+              className={`fixed inset-0 bg-slate-950/35 dark:bg-slate-950/55 backdrop-blur-[2px] pointer-events-none ${
+                isOutboundCollapsing ? "animate-diagonal-scrim-out" : "animate-diagonal-scrim-in"
+              }`}
+            />
+
+            {/* Layer 1: Leading deep-brand diagonal curtain */}
+            <div
+              aria-hidden="true"
+              className={`fixed inset-0 bg-gradient-to-br from-[#075985] via-[#087eaf] to-[#0284c7] dark:from-[#0c2d4d] dark:via-[#087eaf] dark:to-sky-600 pointer-events-none ${
+                isOutboundCollapsing
+                  ? "animate-diagonal-collapse-lead"
+                  : "animate-diagonal-wave-lead"
+              }`}
+            />
+
+            {/* Layer 2: Trailing soft-sky bevel curtain for progressive depth */}
+            <div
+              aria-hidden="true"
+              className={`fixed inset-0 bg-gradient-to-br from-sky-200/95 via-sky-100/95 to-white dark:from-sky-500/45 dark:via-[#122b4d] dark:to-[#0d1b33] pointer-events-none ${
+                isOutboundCollapsing
+                  ? "animate-diagonal-collapse-trail"
+                  : "animate-diagonal-wave-trail"
+              }`}
+            />
+
+            {/* Layer 3: Main full-screen progressive diagonal surface */}
+            <div
+              className={`fixed inset-0 bg-slate-50 dark:bg-[#091529] flex flex-col min-h-0 overflow-hidden ${
+                isOutboundCollapsing
+                  ? "animate-diagonal-collapse-surface"
+                  : "animate-diagonal-wave-surface"
+              }`}
+            >
+              {/* Top Bar (Step 1 of Progressive Diagonal Content Reveal) */}
+              <div
+                className={`shrink-0 px-4 sm:px-6 py-3.5 border-b border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] flex items-center justify-between gap-4 ${
+                  isOutboundCollapsing
+                    ? "animate-diagonal-zone-exit"
+                    : "animate-diagonal-reveal-header"
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <button
+                    type="button"
+                    onClick={collapseOutboundExpanded}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162744] transition-colors whitespace-nowrap shrink-0"
+                  >
+                    <ArrowLeft size={14} />
+                    กลับไปผังล้อ
+                  </button>
+                  <div className="min-w-0">
+                    <div className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
+                      เบิกเปลี่ยนยางรถโฟล์คลิฟท์ (Tire Stock Outbound)
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 truncate tabular-nums">
+                      <span className="font-bold text-[#087eaf] dark:text-sky-300">
+                        รถ {tireVehicleId}
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200 truncate">
+                        {tireWheelPosition}
+                      </span>
+                      {selectedOutboundVehicle?.description && (
+                        <>
+                          <span aria-hidden="true" className="hidden sm:inline">
+                            ·
+                          </span>
+                          <span className="hidden sm:inline truncate">
+                            {selectedOutboundVehicle.description}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOutboundExpanded(false);
+                    setIsOutboundCollapsing(false);
+                    setIsTireModalOpen(false);
+                  }}
+                  className="p-2 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-[#162744] transition-colors shrink-0"
+                  aria-label="ปิดหน้าต่าง"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Expanded Outbound Form Body */}
+              <form
+                onSubmit={handleCreateTireTransaction}
+                className="flex-1 min-h-0 flex flex-col overflow-hidden text-xs"
+              >
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 lg:px-10 py-5 sm:py-6">
+                  <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* Left Column (7 cols — Step 2 of Progressive Diagonal Reveal) */}
+                    <div
+                      className={`lg:col-span-7 space-y-3 ${
+                        isOutboundCollapsing
+                          ? "animate-diagonal-zone-exit"
+                          : "animate-diagonal-reveal-left"
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                          รายการยางที่ผูกไว้กับรถ{" "}
+                          <span className="text-[#087eaf] dark:text-sky-400">{tireVehicleId}</span> *
+                        </label>
+                        {outboundSummary.selectedItemCount > 0 && (
+                          <span className="text-xs font-bold text-[#087eaf] dark:text-sky-300 tabular-nums">
+                            เลือกเบิก {outboundSummary.selectedItemCount} รายการ · รวม{" "}
+                            {outboundSummary.totalQty.toLocaleString()} เส้น
+                            {outboundSummary.totalCost > 0
+                              ? ` · ${outboundSummary.totalCost.toLocaleString()} บาท`
+                              : ""}
+                          </span>
+                        )}
                       </div>
-                    ) : (
+
                       <div
-                        className={`rounded-lg border p-3 space-y-2.5 transition-colors ${
+                        className={`rounded-lg border p-3.5 sm:p-4 space-y-3 transition-colors ${
                           outboundSelectionError
                             ? "border-rose-400 bg-rose-50/40 dark:border-rose-700 dark:bg-rose-950/20"
-                            : "border-slate-200 bg-slate-50/70 dark:border-[#1e3a5f] dark:bg-[#0d1b33]/70"
+                            : "border-slate-200 bg-white dark:border-[#1e3a5f] dark:bg-[#0d1b33]"
                         }`}
                       >
                         {boundTiresForSelectedVehicle.length > 0 ? (
-                          <div className="space-y-2">
-                            {boundTiresForSelectedVehicle.map((item) => {
+                          <div className="space-y-2.5">
+                            {boundTiresForSelectedVehicle.map((item, itemIdx) => {
                               const sel = outboundSelections[item.key];
                               const isChecked = Boolean(sel);
+                              const staggerDelayMs = 400 + Math.min(itemIdx, 5) * 45;
                               return (
                                 <div
                                   key={item.key}
+                                  style={
+                                    isOutboundCollapsing
+                                      ? undefined
+                                      : { animationDelay: `${staggerDelayMs}ms` }
+                                  }
                                   className={`rounded-md border transition-colors ${
+                                    isOutboundCollapsing ? "" : "animate-diagonal-reveal-item"
+                                  } ${
                                     isChecked
-                                      ? "border-[#087eaf] bg-sky-50/60 dark:border-sky-500 dark:bg-sky-950/35"
-                                      : "border-slate-200 bg-white hover:border-sky-300 dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:hover:border-sky-700"
+                                      ? "border-[#087eaf] bg-sky-50/50 dark:border-sky-500 dark:bg-sky-950/35"
+                                      : "border-slate-200 bg-slate-50/40 hover:border-sky-300 dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:hover:border-sky-700"
                                   }`}
                                 >
-                                  <label className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 cursor-pointer select-none">
+                                  <label className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 cursor-pointer select-none">
                                     <div className="flex items-center gap-2.5 min-w-0">
                                       <input
                                         type="checkbox"
@@ -2272,31 +2544,31 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                         {isChecked && <Check size={12} strokeWidth={3} />}
                                       </span>
                                       <div className="min-w-0">
-                                        <div className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                                        <div className="text-xs sm:text-[13px] font-bold text-slate-900 dark:text-slate-100 truncate">
                                           {item.tireSize}{" "}
                                           <span className="font-semibold text-slate-600 dark:text-slate-300">
                                             ({item.brand})
                                           </span>
                                         </div>
                                         {item.hasTypeBreakdown && (
-                                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
-                                            {TIRE_TYPE_QTY_FIELDS.map((f) => (
-                                              <span
-                                                key={f.key}
-                                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f]"
-                                              >
-                                                {f.type}: {item.byType[f.key]}
-                                              </span>
+                                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                            {TIRE_TYPE_QTY_FIELDS.map((f, fIdx) => (
+                                              <React.Fragment key={f.key}>
+                                                {fIdx > 0 && <span aria-hidden="true">·</span>}
+                                                <span>
+                                                  {f.type} {item.byType[f.key]}
+                                                </span>
+                                              </React.Fragment>
                                             ))}
                                           </div>
                                         )}
                                       </div>
                                     </div>
                                     <span
-                                      className={`px-2 py-0.5 rounded text-[11px] font-bold tabular-nums border shrink-0 ${
+                                      className={`text-[11px] font-bold tabular-nums shrink-0 ${
                                         item.balance > 0
-                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
-                                          : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-[#111e38] dark:text-slate-400 dark:border-[#1e3a5f]"
+                                          ? "text-emerald-700 dark:text-emerald-400"
+                                          : "text-slate-500 dark:text-slate-400"
                                       }`}
                                     >
                                       คงเหลือ {item.balance.toLocaleString()} เส้น
@@ -2304,11 +2576,11 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                   </label>
 
                                   {isChecked && sel && (
-                                    <div className="px-3 pb-3 pt-2 border-t border-sky-200/80 dark:border-sky-800/60 space-y-2">
+                                    <div className="px-3.5 pb-3.5 pt-2.5 border-t border-sky-200/80 dark:border-sky-800/60 space-y-2">
                                       <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                                         ติ๊กเลือกประเภทยางและระบุจำนวนที่เบิก (เส้น):
                                       </div>
-                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                                         {TIRE_TYPE_QTY_FIELDS.map((field) => {
                                           const typeChecked = sel.selectedTypes.includes(field.type);
                                           const rawQty = sel.qtyByType[field.key];
@@ -2323,7 +2595,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                           return (
                                             <div
                                               key={field.key}
-                                              className={`p-2 rounded border transition-colors space-y-1.5 ${
+                                              className={`p-2.5 rounded border transition-colors space-y-1.5 ${
                                                 typeChecked
                                                   ? "bg-white border-[#087eaf] dark:bg-[#0c1930] dark:border-sky-500"
                                                   : "bg-slate-50/80 border-slate-200 dark:bg-[#0d1b33]/80 dark:border-[#1e3a5f]"
@@ -2403,7 +2675,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                             })}
                           </div>
                         ) : (
-                          <div className="p-3 rounded-md border border-amber-200 dark:border-amber-800/70 bg-amber-50/70 dark:bg-amber-950/30 space-y-2">
+                          <div className="p-3.5 rounded-md border border-amber-200 dark:border-amber-800/70 bg-amber-50/70 dark:bg-amber-950/30 space-y-2.5">
                             <div className="text-xs font-semibold text-amber-900 dark:text-amber-200">
                               รถ {tireVehicleId} ยังไม่มีรายการยางที่ผูกไว้จากประวัติรับเข้า (Inbound)
                             </div>
@@ -2412,7 +2684,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                 <button
                                   type="button"
                                   onClick={() => setShowAllStockInOutbound((prev) => !prev)}
-                                  className="px-2.5 py-1.5 rounded text-[11px] font-bold bg-[#087eaf] hover:bg-[#075985] text-white"
+                                  className="px-3 py-1.5 rounded text-[11px] font-bold bg-[#087eaf] hover:bg-[#075985] text-white"
                                 >
                                   {showAllStockInOutbound
                                     ? "ซ่อนสต๊อกยางทั้งหมดในคลัง"
@@ -2423,11 +2695,13 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                 type="button"
                                 onClick={() => {
                                   const targetVeh = tireVehicleId;
+                                  setIsOutboundExpanded(false);
+                                  setIsOutboundCollapsing(false);
                                   setTireTxType("Inbound");
                                   setSelectedCompatibleVehicles([targetVeh]);
                                   setOutboundSelectionError("");
                                 }}
-                                className="px-2.5 py-1.5 rounded text-[11px] font-semibold bg-white dark:bg-[#0d1b33] border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-[#162744]"
+                                className="px-3 py-1.5 rounded text-[11px] font-semibold bg-white dark:bg-[#0d1b33] border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-[#162744]"
                               >
                                 + ไปรับเข้ายางและผูกกับรถ {tireVehicleId}
                               </button>
@@ -2451,7 +2725,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                           )}
 
                         {showAllStockInOutbound && otherStockTiresForOutbound.length > 0 && (
-                          <div className="pt-2 border-t border-slate-200 dark:border-[#1e3a5f] space-y-2">
+                          <div className="pt-3 border-t border-slate-200 dark:border-[#1e3a5f] space-y-2.5">
                             <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
                               รายการยางอื่นในคลังสต๊อก (ยังไม่ได้ผูกกับรถ {tireVehicleId})
                             </div>
@@ -2463,11 +2737,11 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                   key={item.key}
                                   className={`rounded-md border transition-colors ${
                                     isChecked
-                                      ? "border-[#087eaf] bg-sky-50/60 dark:border-sky-500 dark:bg-sky-950/35"
-                                      : "border-slate-200 bg-white hover:border-sky-300 dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:hover:border-sky-700"
+                                      ? "border-[#087eaf] bg-sky-50/50 dark:border-sky-500 dark:bg-sky-950/35"
+                                      : "border-slate-200 bg-slate-50/40 hover:border-sky-300 dark:border-[#1e3a5f] dark:bg-[#0c1930] dark:hover:border-sky-700"
                                   }`}
                                 >
-                                  <label className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 cursor-pointer select-none">
+                                  <label className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 cursor-pointer select-none">
                                     <div className="flex items-center gap-2.5 min-w-0">
                                       <input
                                         type="checkbox"
@@ -2493,24 +2767,24 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                           </span>
                                         </div>
                                         {item.hasTypeBreakdown && (
-                                          <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
-                                            {TIRE_TYPE_QTY_FIELDS.map((f) => (
-                                              <span
-                                                key={f.key}
-                                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f]"
-                                              >
-                                                {f.type}: {item.byType[f.key]}
-                                              </span>
+                                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                            {TIRE_TYPE_QTY_FIELDS.map((f, fIdx) => (
+                                              <React.Fragment key={f.key}>
+                                                {fIdx > 0 && <span aria-hidden="true">·</span>}
+                                                <span>
+                                                  {f.type} {item.byType[f.key]}
+                                                </span>
+                                              </React.Fragment>
                                             ))}
                                           </div>
                                         )}
                                       </div>
                                     </div>
                                     <span
-                                      className={`px-2 py-0.5 rounded text-[11px] font-bold tabular-nums border shrink-0 ${
+                                      className={`text-[11px] font-bold tabular-nums shrink-0 ${
                                         item.balance > 0
-                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
-                                          : "bg-slate-100 text-slate-500 border-slate-200 dark:bg-[#111e38] dark:text-slate-400 dark:border-[#1e3a5f]"
+                                          ? "text-emerald-700 dark:text-emerald-400"
+                                          : "text-slate-500 dark:text-slate-400"
                                       }`}
                                     >
                                       คงเหลือ {item.balance.toLocaleString()} เส้น
@@ -2518,11 +2792,11 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                   </label>
 
                                   {isChecked && sel && (
-                                    <div className="px-3 pb-3 pt-2 border-t border-sky-200/80 dark:border-sky-800/60 space-y-2">
+                                    <div className="px-3.5 pb-3.5 pt-2.5 border-t border-sky-200/80 dark:border-sky-800/60 space-y-2">
                                       <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">
                                         ติ๊กเลือกประเภทยางและระบุจำนวนที่เบิก (เส้น):
                                       </div>
-                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                                         {TIRE_TYPE_QTY_FIELDS.map((field) => {
                                           const typeChecked = sel.selectedTypes.includes(field.type);
                                           const rawQty = sel.qtyByType[field.key];
@@ -2537,7 +2811,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                                           return (
                                             <div
                                               key={field.key}
-                                              className={`p-2 rounded border transition-colors space-y-1.5 ${
+                                              className={`p-2.5 rounded border transition-colors space-y-1.5 ${
                                                 typeChecked
                                                   ? "bg-white border-[#087eaf] dark:bg-[#0c1930] dark:border-sky-500"
                                                   : "bg-slate-50/80 border-slate-200 dark:bg-[#0d1b33]/80 dark:border-[#1e3a5f]"
@@ -2618,223 +2892,269 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                           </div>
                         )}
                       </div>
+
+                      {outboundSelectionError && (
+                        <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                          {outboundSelectionError}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Right Column (5 cols — Steps 3 & 4 of Progressive Diagonal Reveal) */}
+                    <div className="lg:col-span-5 space-y-4">
+                      <div
+                        className={`rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] p-4 space-y-3.5 ${
+                          isOutboundCollapsing
+                            ? "animate-diagonal-zone-exit"
+                            : "animate-diagonal-reveal-right-top"
+                        }`}
+                      >
+                        <div className="text-sm font-bold text-slate-900 dark:text-slate-100 pb-2 border-b border-slate-200 dark:border-[#1e3a5f] flex items-center justify-between gap-2">
+                          <span>รายละเอียดการเบิกเปลี่ยนยาง</span>
+                          <button
+                            type="button"
+                            onClick={collapseOutboundExpanded}
+                            className="text-[11px] font-semibold text-[#087eaf] dark:text-sky-400 hover:underline"
+                          >
+                            เปลี่ยนรถ / ผังล้อ
+                          </button>
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            ตำแหน่งล้อที่เปลี่ยน *
+                          </label>
+                          <select
+                            value={tireWheelPosition}
+                            onChange={(e) => setTireWheelPosition(e.target.value)}
+                            required
+                            className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 font-semibold"
+                          >
+                            <option value="">— เลือกตำแหน่งล้อ —</option>
+                            {activeWheelPositionOptions.map((pos) => (
+                              <option key={pos} value={pos}>
+                                {pos}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            ชั่วโมงรถขณะเปลี่ยนยาง (ชม.)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            value={tireOperatingHours}
+                            onChange={(e) => setTireOperatingHours(e.target.value)}
+                            placeholder="ระบุชั่วโมงรถ (ถ้ามี)"
+                            className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 tabular-nums"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            ผู้บันทึก / ช่างผู้เบิก *
+                          </label>
+                          <input
+                            type="text"
+                            value={tireTechnicianName}
+                            onChange={(e) => setTireTechnicianName(e.target.value)}
+                            placeholder="ระบุชื่อช่างหรือเจ้าหน้าที่"
+                            required
+                            className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+
+                        <div ref={notesComboRef} className="relative">
+                          <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            หมายเหตุ
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={tireNotes}
+                              onFocus={() => setShowNotesDropdown(true)}
+                              onChange={(e) => {
+                                setTireNotes(e.target.value);
+                                setShowNotesDropdown(true);
+                              }}
+                              placeholder={
+                                cloudOutboundNotesOptions.length > 0
+                                  ? "พิมพ์หมายเหตุ หรือเลือกจากประวัติที่เคยเบิก..."
+                                  : "รายละเอียดเพิ่มเติม..."
+                              }
+                              className={`w-full ${
+                                cloudOutboundNotesOptions.length > 0 ? "pl-3 pr-8" : "px-3"
+                              } py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100`}
+                            />
+                            {cloudOutboundNotesOptions.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setShowNotesDropdown((prev) => !prev)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                                title="เลือกจากประวัติหมายเหตุที่เคยเบิก"
+                              >
+                                <ChevronDown size={14} />
+                              </button>
+                            )}
+                          </div>
+
+                          {showNotesDropdown && filteredOutboundNotesOptions.length > 0 && (
+                            <div className="absolute z-30 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] shadow-lg">
+                              <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33]">
+                                ประวัติหมายเหตุที่เคยเบิกล่าสุด ({cloudOutboundNotesOptions.length})
+                              </div>
+                              {filteredOutboundNotesOptions.map((item) => (
+                                <button
+                                  key={`${item.note}-${item.vehicleId}`}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setTireNotes(item.note);
+                                    setShowNotesDropdown(false);
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-xs hover:bg-sky-50 dark:hover:bg-[#162744] border-b last:border-b-0 border-slate-100 dark:border-[#1e3a5f]/60"
+                                >
+                                  <div className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                                    {item.note}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
+                                    รถ {item.vehicleId}
+                                    {item.wheelPosition ? ` · ${item.wheelPosition}` : ""}
+                                    {item.date ? ` · ${item.date}` : ""}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Latest Outbound History Preview (Step 4 of Progressive Diagonal Reveal) */}
+                      <div
+                        className={`p-4 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] space-y-2 ${
+                          isOutboundCollapsing
+                            ? "animate-diagonal-zone-exit"
+                            : "animate-diagonal-reveal-right-bottom"
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-bold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                            <History size={14} className="text-[#087eaf] dark:text-sky-400" />
+                            <span>ประวัติการเบิกเปลี่ยนยางล่าสุด (รถ {tireVehicleId})</span>
+                          </div>
+                          {latestOutboundRecord?.notes && (
+                            <button
+                              type="button"
+                              onClick={() => setTireNotes(latestOutboundRecord.notes || "")}
+                              className="px-2.5 py-1 rounded text-[11px] font-semibold bg-slate-50 dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-[#087eaf] dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-[#162744] whitespace-nowrap"
+                            >
+                              ดึงหมายเหตุล่าสุดมาใส่
+                            </button>
+                          )}
+                        </div>
+
+                        {latestOutboundRecord ? (
+                          <div className="text-[11px] text-slate-600 dark:text-slate-300 space-y-1 leading-relaxed">
+                            <div className="tabular-nums">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                วันที่เบิก:
+                              </span>{" "}
+                              {latestOutboundRecord.date} {latestOutboundRecord.time} ·{" "}
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                ตำแหน่ง:
+                              </span>{" "}
+                              {latestOutboundRecord.wheelPosition || "-"}
+                            </div>
+                            <div className="tabular-nums">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                ขนาด/ยี่ห้อ:
+                              </span>{" "}
+                              {latestOutboundRecord.tireSize} ({latestOutboundRecord.brand}) ·{" "}
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                จำนวน:
+                              </span>{" "}
+                              {latestOutboundRecord.qty} เส้น
+                              {latestOutboundRecord.operatingHours
+                                ? ` · ชม.รถ ${latestOutboundRecord.operatingHours.toLocaleString()} ชม.`
+                                : ""}
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                ช่างผู้เบิก:
+                              </span>{" "}
+                              {latestOutboundRecord.technicianOrReceiver} ·{" "}
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                หมายเหตุ:
+                              </span>{" "}
+                              <span className="text-slate-900 dark:text-slate-100 font-medium">
+                                {latestOutboundRecord.notes || "-"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            ยังไม่มีประวัติการเบิกเปลี่ยนยางสำหรับรถ {tireVehicleId} ในฐานข้อมูล
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bottom Action Bar (Step 5 of Progressive Diagonal Reveal) */}
+                <div
+                  className={`shrink-0 px-4 sm:px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] flex flex-wrap items-center justify-between gap-3 ${
+                    isOutboundCollapsing
+                      ? "animate-diagonal-zone-exit"
+                      : "animate-diagonal-reveal-footer"
+                  }`}
+                >
+                  <div className="text-xs text-slate-600 dark:text-slate-300 tabular-nums">
+                    {outboundSummary.selectedItemCount > 0 ? (
+                      <span>
+                        เลือกเบิก{" "}
+                        <strong className="text-slate-900 dark:text-white">
+                          {outboundSummary.selectedItemCount} รายการ
+                        </strong>{" "}
+                        · รวม{" "}
+                        <strong className="text-[#087eaf] dark:text-sky-300">
+                          {outboundSummary.totalQty.toLocaleString()} เส้น
+                        </strong>
+                        {outboundSummary.totalCost > 0
+                          ? ` · มูลค่ารวม ${outboundSummary.totalCost.toLocaleString()} บาท`
+                          : ""}
+                      </span>
+                    ) : (
+                      <span>กรุณาติ๊กเลือกรายการยางที่ต้องการเบิกและระบุจำนวน</span>
                     )}
-
-                    {outboundSelectionError && (
-                      <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
-                        {outboundSelectionError}
-                      </p>
-                    )}
                   </div>
 
-                  {/* Step 3: 3D Top-Down Dynamic Wheel Diagram + Wheel Position & Operating Hours */}
-                  <div className="sm:col-span-2">
-                    <ForkliftWheelPositionDiagram
-                      vehicleId={tireVehicleId}
-                      vehicle={selectedOutboundVehicle}
-                      selectedPosition={tireWheelPosition}
-                      onSelectPosition={setTireWheelPosition}
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      ตำแหน่งล้อที่เปลี่ยน *
-                    </label>
-                    <select
-                      value={tireWheelPosition}
-                      onChange={(e) => setTireWheelPosition(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                    >
-                      <option value="">— เลือกตำแหน่งล้อ —</option>
-                      {activeWheelPositionOptions.map((pos) => (
-                        <option key={pos} value={pos}>
-                          {pos}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                      ชั่วโมงรถขณะเปลี่ยนยาง (ชม.)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={tireOperatingHours}
-                      onChange={(e) => setTireOperatingHours(e.target.value)}
-                      placeholder="ระบุชั่วโมงรถ (ถ้ามี)"
-                      className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100 tabular-nums"
-                    />
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  ผู้บันทึก / ช่างผู้เบิก *
-                </label>
-                <input
-                  type="text"
-                  value={tireTechnicianName}
-                  onChange={(e) => setTireTechnicianName(e.target.value)}
-                  placeholder="ระบุชื่อช่างหรือเจ้าหน้าที่"
-                  required
-                  className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              <div ref={notesComboRef} className="relative">
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  หมายเหตุ
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={tireNotes}
-                    onFocus={() => {
-                      if (tireTxType === "Outbound") setShowNotesDropdown(true);
-                    }}
-                    onChange={(e) => {
-                      setTireNotes(e.target.value);
-                      if (tireTxType === "Outbound") setShowNotesDropdown(true);
-                    }}
-                    placeholder={
-                      tireTxType === "Outbound" && cloudOutboundNotesOptions.length > 0
-                        ? "พิมพ์หมายเหตุ หรือเลือกจากประวัติที่เคยเบิก..."
-                        : "รายละเอียดเพิ่มเติม..."
-                    }
-                    className={`w-full ${
-                      tireTxType === "Outbound" && cloudOutboundNotesOptions.length > 0
-                        ? "pl-3 pr-8"
-                        : "px-3"
-                    } py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100`}
-                  />
-                  {tireTxType === "Outbound" && cloudOutboundNotesOptions.length > 0 && (
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowNotesDropdown((prev) => !prev)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                      title="เลือกจากประวัติหมายเหตุที่เคยเบิก"
+                      onClick={collapseOutboundExpanded}
+                      className="px-4 py-2 rounded-md border border-slate-300 dark:border-[#1e3a5f] font-semibold bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#162744]"
                     >
-                      <ChevronDown size={14} />
+                      ย้อนกลับ
                     </button>
-                  )}
-                </div>
-
-                {tireTxType === "Outbound" &&
-                  showNotesDropdown &&
-                  filteredOutboundNotesOptions.length > 0 && (
-                    <div className="absolute z-30 left-0 right-0 mt-1 max-h-48 overflow-y-auto rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] shadow-lg">
-                      <div className="px-2.5 py-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33]">
-                        ประวัติหมายเหตุที่เคยเบิกล่าสุด ({cloudOutboundNotesOptions.length})
-                      </div>
-                      {filteredOutboundNotesOptions.map((item) => (
-                        <button
-                          key={`${item.note}-${item.vehicleId}`}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setTireNotes(item.note);
-                            setShowNotesDropdown(false);
-                          }}
-                          className="w-full px-3 py-2 text-left text-xs hover:bg-sky-50 dark:hover:bg-[#162744] border-b last:border-b-0 border-slate-100 dark:border-[#1e3a5f]/60"
-                        >
-                          <div className="font-medium text-slate-800 dark:text-slate-200 truncate">
-                            {item.note}
-                          </div>
-                          <div className="text-[10px] text-slate-500 dark:text-slate-400 tabular-nums mt-0.5">
-                            รถ {item.vehicleId}
-                            {item.wheelPosition ? ` · ${item.wheelPosition}` : ""}
-                            {item.date ? ` · ${item.date}` : ""}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-              </div>
-
-              {tireTxType === "Outbound" && (
-                <div className="sm:col-span-2 p-3 rounded-lg border border-sky-200 dark:border-sky-900/70 bg-sky-50/60 dark:bg-sky-950/25 space-y-1.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="font-bold text-[11px] text-sky-900 dark:text-sky-200 flex items-center gap-1.5">
-                      <History size={13} className="text-[#087eaf] dark:text-sky-400" />
-                      <span>
-                        ประวัติการเบิกเปลี่ยนยางล่าสุด{" "}
-                        {tireVehicleId ? `(รถ ${tireVehicleId})` : "(รายการล่าสุดทั้งหมด)"}
-                      </span>
-                    </div>
-                    {latestOutboundRecord?.notes && (
-                      <button
-                        type="button"
-                        onClick={() => setTireNotes(latestOutboundRecord.notes || "")}
-                        className="px-2.5 py-1 rounded text-[11px] font-semibold bg-white dark:bg-[#0d1b33] border border-sky-300 dark:border-sky-700 text-[#087eaf] dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-[#162744] whitespace-nowrap"
-                      >
-                        ดึงหมายเหตุล่าสุดมาใส่
-                      </button>
-                    )}
+                    <button
+                      type="submit"
+                      className="px-5 py-2 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white font-bold shadow-xs"
+                    >
+                      {outboundSummary.totalQty > 0
+                        ? `บันทึกเบิกเปลี่ยนยาง (รวม ${outboundSummary.totalQty.toLocaleString()} เส้น)`
+                        : "บันทึกเบิกเปลี่ยนยาง"}
+                    </button>
                   </div>
-
-                  {latestOutboundRecord ? (
-                    <div className="text-[11px] text-slate-700 dark:text-slate-300 space-y-0.5 leading-relaxed">
-                      <div className="tabular-nums">
-                        <span className="font-semibold">วันที่เบิก:</span>{" "}
-                        {latestOutboundRecord.date} {latestOutboundRecord.time} ·{" "}
-                        <span className="font-semibold">รถ:</span>{" "}
-                        {latestOutboundRecord.vehicleId || "-"} ·{" "}
-                        <span className="font-semibold">ตำแหน่ง:</span>{" "}
-                        {latestOutboundRecord.wheelPosition || "-"}
-                      </div>
-                      <div className="tabular-nums">
-                        <span className="font-semibold">ขนาด/ยี่ห้อ:</span>{" "}
-                        {latestOutboundRecord.tireSize} ({latestOutboundRecord.brand}) ·{" "}
-                        <span className="font-semibold">จำนวน:</span>{" "}
-                        {latestOutboundRecord.qty} เส้น
-                        {latestOutboundRecord.operatingHours
-                          ? ` · ชม.รถ ${latestOutboundRecord.operatingHours.toLocaleString()} ชม.`
-                          : ""}
-                      </div>
-                      <div>
-                        <span className="font-semibold">ช่างผู้เบิก:</span>{" "}
-                        {latestOutboundRecord.technicianOrReceiver} ·{" "}
-                        <span className="font-semibold">หมายเหตุล่าสุด:</span>{" "}
-                        <span className="text-slate-900 dark:text-slate-100 font-medium">
-                          {latestOutboundRecord.notes || "-"}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                      ยังไม่มีประวัติการเบิกเปลี่ยนยาง
-                      {tireVehicleId ? `สำหรับรถ ${tireVehicleId}` : ""} ในฐานข้อมูล
-                    </div>
-                  )}
                 </div>
-              )}
-
-              </div>
-
-              <div className="shrink-0 px-5 sm:px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50/90 dark:bg-[#0d1b33] flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsTireModalOpen(false)}
-                  className="px-4 py-2 rounded-md border border-slate-300 dark:border-[#1e3a5f] font-semibold bg-white dark:bg-[#111e38]"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-md bg-[#087eaf] hover:bg-[#075985] text-white font-bold"
-                >
-                  {tireTxType === "Outbound" && outboundSummary.totalQty > 0
-                    ? `บันทึกเบิกเปลี่ยนยาง (รวม ${outboundSummary.totalQty.toLocaleString()} เส้น)`
-                    : "บันทึกรายการสต๊อกยาง"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

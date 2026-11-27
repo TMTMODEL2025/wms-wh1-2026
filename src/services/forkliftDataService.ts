@@ -496,7 +496,7 @@ export interface MhPmScheduleRecord {
   updatedAt: string;
 }
 
-export type MhPmMatrixCategory = "forklift" | "ev_tractor" | "diesel_tractor";
+export type MhPmMatrixCategory = "forklift" | "ev_tractor" | "diesel_tractor" | "sc_clamp";
 
 export interface MhPmMatrixRecord {
   id: string;
@@ -2949,7 +2949,9 @@ function sanitizeMhPmMatrixPayload(
   const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
   const cleanId = sanitizeDocId(r.id) || `PMM_${r.vehicleCategory}_${Date.now()}`;
   const cleanCategory: MhPmMatrixCategory =
-    r.vehicleCategory === "ev_tractor" || r.vehicleCategory === "diesel_tractor"
+    r.vehicleCategory === "ev_tractor" ||
+    r.vehicleCategory === "diesel_tractor" ||
+    r.vehicleCategory === "sc_clamp"
       ? r.vehicleCategory
       : "forklift";
 
