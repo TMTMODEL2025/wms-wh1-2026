@@ -24,7 +24,7 @@ import {
   Zap,
   Link2,
   Box,
-  LayoutGrid,
+  History,
 } from "lucide-react";
 import { Vehicle } from "../types/officer";
 import {
@@ -1246,7 +1246,9 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
       <div className="prestart-header-card mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-5 py-3 dark:border-[#1e3a5f] dark:bg-[#0d1d35]">
         <div>
           <div className="prestart-modal-title text-base font-bold text-[#1e3648] dark:text-slate-100">
-            {isEvPageTab
+            {activePageTab === "all"
+              ? "ประวัติตรวจเช็ครถประจำวัน"
+              : isEvPageTab
               ? "ตรวจเช็ครถประจำวัน — หัวลากไฟฟ้า EV (9 รายการมาตรฐาน)"
               : isTrailerPageTab
               ? "ตรวจเช็ครถประจำวัน — หางลาก (11 รายการมาตรฐาน)"
@@ -1306,8 +1308,8 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
               : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-[#1e3a5f] dark:bg-[#091529] dark:text-slate-200 dark:hover:bg-[#112645]"
           }`}
         >
-          <LayoutGrid size={14} />
-          <span>ทั้งหมด</span>
+          <History size={14} />
+          <span>ประวัติตรวจเช็ครถประจำวัน</span>
           <span className="font-mono text-[10px] opacity-80">({inspections.length})</span>
         </button>
 
@@ -1377,8 +1379,9 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
         </div>
       </div>
 
-      {/* Visual Daily Pre-Start Inspection Guide Grid (9 EV / 11 Trailer / 12 Forklift / 12 Standard) */}
-      <section className="panel mb-4 overflow-hidden">
+      {/* Visual Daily Pre-Start Inspection Guide Grid (Hidden on History tab; shown on vehicle category tabs) */}
+      {activePageTab !== "all" && (
+        <section className="panel mb-4 overflow-hidden">
         <div
           className={`flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-white ${
             isEvPageTab
@@ -1499,13 +1502,18 @@ export function PreStartInspection({ vehicles }: PreStartInspectionProps) {
             ))}
           </div>
         )}
-      </section>
+        </section>
+      )}
 
       {/* Main Table Section */}
       <section className="panel">
         <div className="panel-header">
           <div>
-            <div className="panel-title">Pre-Start Inspection Records Register</div>
+            <div className="panel-title">
+              {activePageTab === "all"
+                ? "ประวัติตรวจเช็ครถประจำวัน (Pre-Start Inspection Records)"
+                : "Pre-Start Inspection Records Register"}
+            </div>
           </div>
         </div>
 

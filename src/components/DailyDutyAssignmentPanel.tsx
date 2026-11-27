@@ -693,9 +693,9 @@ export function DailyDutyAssignmentPanel({
           >
             <div className="flex items-center gap-2.5">
               {feedback.type === "error" ? (
-                <AlertTriangle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
+                <AlertTriangle size={14} className="shrink-0 text-rose-600 dark:text-rose-400" />
               ) : (
-                <CheckCircle2 size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircle2 size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
               )}
               <span>{feedback.text}</span>
             </div>
@@ -824,7 +824,7 @@ export function DailyDutyAssignmentPanel({
                   type="date"
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
-                  className="h-9 rounded-lg border border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#041029] px-3 font-mono text-xs font-bold text-slate-900 dark:text-white tabular-nums shadow-xs focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none dark:[color-scheme:dark]"
+                  className="h-9 rounded-lg border border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#041029] px-3 font-mono !text-[14px] font-bold text-slate-900 dark:text-white tabular-nums shadow-xs focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none dark:[color-scheme:dark]"
                 />
                 {selectedDate !== getTodayYmd() && (
                   <button
@@ -844,7 +844,7 @@ export function DailyDutyAssignmentPanel({
                   onClick={() =>
                     setFilterShift((prev) => (prev === "กะเช้า" ? "All" : "กะเช้า"))
                   }
-                  className={filterShift === "กะเช้า" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                  className={`${filterShift === "กะเช้า" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                   title="คลิกเพื่อกรองตารางเฉพาะกะเช้า"
                 >
                   <Sun size={14} />
@@ -858,7 +858,7 @@ export function DailyDutyAssignmentPanel({
                   onClick={() =>
                     setFilterShift((prev) => (prev === "กะดึก" ? "All" : "กะดึก"))
                   }
-                  className={filterShift === "กะดึก" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                  className={`${filterShift === "กะดึก" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                   title="คลิกเพื่อกรองตารางเฉพาะกะดึก"
                 >
                   <Moon size={14} />
@@ -874,7 +874,7 @@ export function DailyDutyAssignmentPanel({
               <button
                 type="button"
                 onClick={() => setIsOperationReportOpen(true)}
-                className={FIORI_BTN_PRIMARY}
+                className={`${FIORI_BTN_PRIMARY} !text-[14px]`}
                 title="เปิดหน้ารายงานการปฏิบัติงานรถยกและรถลาก (Dashboard / Sheet พร้อมพิมพ์ PDF)"
               >
                 <FileText size={14} />
@@ -890,7 +890,7 @@ export function DailyDutyAssignmentPanel({
                     ? `คัดลอกข้อมูลจากวันที่ ${previousCopySource.date} (${previousCopySource.rows.length} คน)`
                     : "ยังไม่มีข้อมูลวันก่อนหน้าให้คัดลอก"
                 }
-                className={FIORI_BTN_SECONDARY}
+                className={`${FIORI_BTN_SECONDARY} !text-[14px]`}
               >
                 <Copy size={14} />
                 <span>คัดลอกวันก่อนหน้า</span>
@@ -905,7 +905,7 @@ export function DailyDutyAssignmentPanel({
                 type="button"
                 onClick={handleRefreshCloud}
                 disabled={isRefreshing}
-                className={FIORI_BTN_SECONDARY}
+                className={`${FIORI_BTN_SECONDARY} !text-[14px]`}
               >
                 <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
                 <span>รีเฟรช</span>
@@ -1154,21 +1154,21 @@ export function DailyDutyAssignmentPanel({
                 <button
                   type="button"
                   onClick={() => setFilterStatus("all")}
-                  className={filterStatus === "all" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                  className={`${filterStatus === "all" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                 >
                   ทั้งหมด ({totalEmployeeCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFilterStatus("assigned")}
-                  className={filterStatus === "assigned" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                  className={`${filterStatus === "assigned" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                 >
                   มอบหมายแล้ว ({assignedCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFilterStatus("unassigned")}
-                  className={filterStatus === "unassigned" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                  className={`${filterStatus === "unassigned" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                 >
                   ยังไม่จัดทีม ({unassignedCount})
                 </button>
@@ -1179,7 +1179,7 @@ export function DailyDutyAssignmentPanel({
                 <button
                   type="button"
                   onClick={() => setFilterTeam("All")}
-                  className={filterTeam === "All" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                  className={`${filterTeam === "All" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                 >
                   ทุกทีม
                 </button>
@@ -1188,7 +1188,7 @@ export function DailyDutyAssignmentPanel({
                     key={`flt-${tOpt}`}
                     type="button"
                     onClick={() => setFilterTeam(tOpt)}
-                    className={filterTeam === tOpt ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
+                    className={`${filterTeam === tOpt ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY} !text-[14px]`}
                   >
                     {tOpt}
                   </button>
@@ -1199,7 +1199,7 @@ export function DailyDutyAssignmentPanel({
                 value={filterShift}
                 onChange={(e) => setFilterShift(e.target.value)}
                 aria-label="กรองตามกะทำงาน"
-                className="h-[35px] rounded-lg border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] px-2.5 text-xs font-semibold text-slate-800 dark:text-white focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
+                className="h-[35px] rounded-lg border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] px-2.5 text-[14px] font-semibold text-slate-800 dark:text-white focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
               >
                 <option value="All">ทุกกะทำงาน</option>
                 {MH_SHIFTS.map((sOpt) => (
@@ -1219,7 +1219,7 @@ export function DailyDutyAssignmentPanel({
                   placeholder="ค้นหาชื่อพนักงาน, รถ, พื้นที่..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-[35px] w-48 rounded-lg border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] pr-7 pl-8 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
+                  className="h-[35px] w-48 rounded-lg border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] pr-7 pl-8 text-[14px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none"
                 />
                 {searchQuery && (
                   <button

@@ -74,6 +74,22 @@ import {
   clearLegacySlitLocalStorage,
 } from "../services/slitDataService";
 
+// SAP Fiori design tokens for Space Management view
+const FIORI_BTN_BASE =
+  "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[7px] !text-[14px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+const FIORI_BTN_SECONDARY = `${FIORI_BTN_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+const FIORI_BTN_DANGER_GHOST = `${FIORI_BTN_BASE} border-[#fca5a5] bg-white text-[#b91c1c] hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444]`;
+const FIORI_BTN_COMPACT_BASE =
+  "inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-[4px] border px-2.5 py-1 !text-[13px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+const FIORI_BTN_COMPACT_PRIMARY = `${FIORI_BTN_COMPACT_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985]`;
+const FIORI_BTN_COMPACT_SECONDARY = `${FIORI_BTN_COMPACT_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+const FIORI_BTN_COMPACT_DANGER = `${FIORI_BTN_COMPACT_BASE} border-[#fca5a5] bg-white text-[#b91c1c] hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444]`;
+const FIORI_CONTROL_INPUT =
+  "h-[36px] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[14px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none transition-colors";
+const FIORI_SEGMENTED_GROUP =
+  "inline-flex min-h-[36px] items-stretch rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0c1930] p-[2px] gap-[2px]";
+
 export interface SlitCoilItem {
   batch: string;
   spec: string;
@@ -1469,18 +1485,18 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
   return (
     <div className="w-full space-y-2.5 sm:space-y-6 pb-12 text-slate-800 dark:text-slate-100">
-      {/* High-level Space Sub-View Switcher */}
-      <div className="grid grid-cols-2 sm:flex sm:flex-nowrap items-center gap-1 sm:gap-2 p-1 sm:p-1.5 bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* High-level Space Sub-View Switcher (SAP Fiori Segmented Control) */}
+      <div className="grid grid-cols-2 sm:flex sm:flex-nowrap items-stretch gap-[2px] p-[2px] bg-[#f5f8fa] dark:bg-[#0c1930] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f]">
         <button
           type="button"
           onClick={() => setSpaceSubView("warehouse_baskets")}
-          className={`flex-1 py-1.5 px-2 sm:py-2.5 sm:px-4 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1 sm:gap-2 ${
+          className={`flex-1 min-h-[36px] py-[7px] px-3 sm:px-4 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
             spaceSubView === "warehouse_baskets"
-              ? "bg-slate-900 dark:bg-cyan-500 text-white shadow-md"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+              ? "bg-[#087eaf] text-white shadow-xs"
+              : "text-[#075985] dark:text-[#7dd3fc] hover:bg-white/80 dark:hover:bg-[#132645]"
           }`}
         >
-          <Boxes size={13} className="shrink-0 sm:w-4 sm:h-4" />
+          <Boxes size={15} className="shrink-0" />
           <span className="truncate sm:hidden">พื้นที่อาคาร</span>
           <span className="hidden sm:inline">คลังจัดเก็บตะกร้าเหล็กสลิต (อาคาร H, F, E9, E10, I)</span>
         </button>
@@ -1488,13 +1504,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         <button
           type="button"
           onClick={() => setSpaceSubView("machine_staging")}
-          className={`flex-1 py-1.5 px-2 sm:py-2.5 sm:px-4 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-black transition-all flex items-center justify-center gap-1 sm:gap-2 ${
+          className={`flex-1 min-h-[36px] py-[7px] px-3 sm:px-4 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer ${
             spaceSubView === "machine_staging"
-              ? "bg-slate-900 dark:bg-cyan-500 text-white shadow-md"
-              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
+              ? "bg-[#087eaf] text-white shadow-xs"
+              : "text-[#075985] dark:text-[#7dd3fc] hover:bg-white/80 dark:hover:bg-[#132645]"
           }`}
         >
-          <Cpu size={13} className="shrink-0 sm:w-4 sm:h-4" />
+          <Cpu size={15} className="shrink-0" />
           <span className="truncate sm:hidden">พื้นที่หน้าเครื่อง</span>
           <span className="hidden sm:inline">พื้นที่วางวัตถุดิบรอผลิตหน้าเครื่องจักร (TM 1-14 / CF 1, 2, 4, 5)</span>
         </button>
@@ -1505,7 +1521,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       ) : (
         <>
           {/* Top Header & All Storage Areas Combined Summary Card */}
-          <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-3 sm:p-6 md:p-8 text-white shadow-xl border border-cyan-500/30 dark:border-cyan-500/40">
+          <div className="relative overflow-hidden rounded-[6px] bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-3 sm:p-6 md:p-7 text-white shadow-md border border-[#087eaf]/40">
             <div className="absolute -right-12 -bottom-12 opacity-10 pointer-events-none hidden sm:block">
               <Boxes size={280} />
             </div>
@@ -1515,16 +1531,16 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                 <h1 className="text-sm sm:text-lg md:text-2xl font-extrabold tracking-tight text-white flex items-center gap-2 shrink-0">
                   <span>พื้นที่จัดเก็บเหล็กสลิต</span>
                 </h1>
-                <div className="hidden sm:flex items-center gap-2 text-xs sm:text-sm font-bold text-cyan-300 bg-cyan-950/80 px-3 py-1 rounded-lg border border-cyan-500/30">
+                <div className="hidden sm:flex items-center gap-2 text-xs sm:text-sm font-semibold text-cyan-200 bg-cyan-950/75 px-3 py-1 rounded-[4px] border border-cyan-500/35">
                   <Layers size={15} className="text-cyan-400 shrink-0" />
                   <span>สรุปปริมาณพื้นที่จัดเก็บเหล็กสลิตรวมทุกพื้นที่ (อาคาร H, F, E9, E10, I)</span>
                 </div>
               </div>
             </div>
 
-            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-3 mt-2.5 pt-2.5 sm:mt-6 sm:pt-6 border-t border-white/10">
+            <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-3 mt-2.5 pt-2.5 sm:mt-5 sm:pt-5 border-t border-white/15">
               {/* 1. พื้นที่จัดเก็บทั้งหมด (ตัน) */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+              <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-slate-300 text-[10px] sm:text-xs font-semibold truncate">
@@ -1554,7 +1570,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </div>
 
               {/* 2. พื้นที่ใช้ไป (ตัน) */}
-              <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
+              <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2.5 sm:p-4 border border-white/15 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-amber-300 text-[10px] sm:text-xs font-semibold truncate">
@@ -1588,7 +1604,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
               {/* 3. พื้นที่คงเหลือ (ตัน) */}
               <div
-                className={`backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border flex flex-col justify-between ${
+                className={`backdrop-blur-md rounded-[4px] p-2.5 sm:p-4 border flex flex-col justify-between ${
                   allStorageAreasSummary.totalRemainingSpaceTons < 0
                     ? "bg-rose-500/20 border-rose-400/40"
                     : "bg-white/10 border-white/15"
@@ -1670,7 +1686,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </div>
 
               {/* 4. สต๊อกปัจจุบันSAP */}
-              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-lg sm:rounded-xl p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
+              <div className="bg-white/10 dark:bg-slate-950/35 backdrop-blur-md rounded-[4px] p-2.5 sm:p-4 border border-violet-300/30 dark:border-violet-400/35 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-violet-200 dark:text-violet-300 text-[10px] sm:text-xs font-semibold truncate">
@@ -1711,13 +1727,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
           </div>
 
       {/* Building Tabs Switcher & Building Space Summary Cards */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-2 sm:p-4 shadow-md border border-slate-200 dark:border-slate-800">
-        <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 px-1 py-2 mb-3 border-b border-slate-100 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
-            <Building2 size={15} className="text-cyan-500" />
+      <div className="bg-white dark:bg-slate-900 rounded-[6px] p-2.5 sm:p-4 shadow-xs border border-[#d9e2e8] dark:border-[#1e3a5f]">
+        <div className="hidden sm:flex flex-wrap items-center justify-between gap-2 px-1 py-2 mb-3 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+            <Building2 size={15} className="text-[#087eaf] dark:text-[#38bdf8]" />
             <span>ปริมาณพื้นที่รวมทั้งหมดของแต่ละอาคาร & เลือกอาคารคลังสินค้า</span>
           </div>
-          <div className="text-xs font-medium text-slate-400">
+          <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
             คลิกการ์ดอาคารเพื่อดูเลย์เอาต์ หรือกดแก้ไขเพื่อกำหนดพื้นที่จัดเก็บสูงสุด (ตัน)
           </div>
         </div>
@@ -1745,21 +1761,21 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                     setSelectedRowId("all");
                   }
                 }}
-                className={`group flex flex-col justify-between p-2 sm:p-3.5 rounded-xl transition-all border text-left relative overflow-hidden cursor-pointer ${
+                className={`group flex flex-col justify-between p-2 sm:p-3.5 rounded-[4px] transition-colors border text-left relative overflow-hidden cursor-pointer ${
                   isLastOddItem ? "col-span-2 sm:col-span-1" : ""
                 } ${
                   isActive
-                    ? "bg-gradient-to-br from-cyan-500/15 via-blue-500/10 to-indigo-500/15 dark:from-cyan-950/80 dark:to-blue-900/60 border-cyan-500 dark:border-cyan-400 shadow-md ring-1 sm:ring-2 ring-cyan-500/20"
-                    : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/60 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600"
+                    ? "bg-[#edf7fb]/75 dark:bg-[#0d2240] border-[#087eaf] dark:border-[#38bdf8] shadow-xs ring-1 ring-[#087eaf]/25"
+                    : "bg-[#f8fafc] dark:bg-[#0c1930]/80 border-[#d9e2e8] dark:border-[#1e3a5f] hover:bg-[#edf7fb]/40 dark:hover:bg-[#132645] hover:border-[#087eaf]/60"
                 }`}
               >
                 {/* Card Header: Building Name & Basket Occupancy % */}
-                <div className="flex items-center justify-between w-full pb-1 mb-1 sm:pb-2 sm:mb-2 border-b border-slate-200/70 dark:border-slate-700/70">
-                  <span className={`text-xs sm:text-base font-black ${isActive ? "text-cyan-600 dark:text-cyan-300" : "text-slate-800 dark:text-slate-100"}`}>
+                <div className="flex items-center justify-between w-full pb-1 mb-1 sm:pb-2 sm:mb-2 border-b border-[#d9e2e8] dark:border-[#1e3a5f]">
+                  <span className={`text-xs sm:text-base font-black ${isActive ? "text-[#075985] dark:text-[#38bdf8]" : "text-slate-800 dark:text-slate-100"}`}>
                     {tab.buildingNameTh}
                   </span>
-                  <span className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-full ${
-                    isActive ? "bg-cyan-500 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                  <span className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 sm:px-2 rounded-[4px] ${
+                    isActive ? "bg-[#087eaf] text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                   }`}>
                     {tab.percent}%
                   </span>
@@ -1769,7 +1785,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                 <div className="w-full space-y-1 sm:space-y-1.5 text-[10px] sm:text-xs">
                   {/* ข้อ 1: พื้นที่จัดเก็บอาคาร = ตัน (แก้ไข/กำหนดเองได้) */}
                   <div
-                    className="px-1.5 py-1 sm:p-1.5 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-700/70"
+                    className="px-1.5 py-1 sm:p-1.5 rounded-[4px] bg-white/90 dark:bg-slate-900/70 border border-[#d9e2e8] dark:border-[#1e3a5f]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-center justify-between gap-1">
@@ -1791,7 +1807,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                               setEditingCapacityBuildingId(tab.buildingId);
                               setEditingCapacityValue(String(tab.maxCapacityTons));
                             }}
-                            className="sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto transition-opacity duration-200 text-[9px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.2 sm:py-0.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30 cursor-pointer"
+                            className="sm:opacity-0 sm:pointer-events-none sm:group-hover:opacity-100 sm:group-hover:pointer-events-auto transition-opacity duration-200 inline-flex min-h-[24px] items-center justify-center rounded-[4px] border border-[#b9c9d2] bg-white px-2 py-0.5 !text-[12px] font-semibold text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] cursor-pointer"
                             title="ตั้งค่าความจุสูงสุดของอาคาร (ตัน)"
                           >
                             แก้ไข
@@ -1818,7 +1834,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                             }
                           }}
                           autoFocus
-                          className="w-full px-1.5 py-0.5 sm:px-2 sm:py-1 text-[10.5px] sm:text-xs font-mono font-bold rounded bg-white dark:bg-slate-800 border border-cyan-500 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          className="h-[30px] w-full px-2 !text-[13px] font-mono font-bold rounded-[4px] bg-white dark:bg-[#041029] border border-[#087eaf] dark:border-[#38bdf8] text-slate-900 dark:text-white focus:outline-none"
                         />
                         <button
                           type="button"
@@ -1826,7 +1842,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                             e.stopPropagation();
                             handleSaveBuildingCapacity(tab.buildingId);
                           }}
-                          className="px-1.5 py-0.5 sm:px-2 sm:py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white text-[9.5px] sm:text-[10px] font-bold shrink-0 cursor-pointer"
+                          className={`${FIORI_BTN_COMPACT_PRIMARY} min-h-[30px] px-2.5 !text-[12px]`}
                         >
                           บันทึก
                         </button>
@@ -1836,7 +1852,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                             e.stopPropagation();
                             setEditingCapacityBuildingId(null);
                           }}
-                          className="px-1 py-0.5 sm:px-1.5 sm:py-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[9.5px] sm:text-[10px] font-bold shrink-0 cursor-pointer"
+                          className={`${FIORI_BTN_COMPACT_SECONDARY} min-h-[30px] px-2 !text-[12px]`}
                         >
                           ยกเลิก
                         </button>
@@ -1849,7 +1865,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                   </div>
 
                   {/* ข้อ 2: พื้นที่ใช้ไป */}
-                  <div className="flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-lg bg-white/50 dark:bg-slate-900/40">
+                  <div className="flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-[4px] bg-white/60 dark:bg-slate-900/40">
                     <span className="text-[10px] sm:text-[11px] font-semibold text-slate-600 dark:text-slate-400">
                       <span className="sm:hidden">2.ใช้ไป:</span>
                       <span className="hidden sm:inline">2. พื้นที่ใช้ไป:</span>
@@ -1861,7 +1877,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
 
                   {/* ข้อ 3: พื้นที่คงเหลือ */}
                   <div
-                    className={`flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-lg border ${
+                    className={`flex items-center justify-between px-1.5 py-0.5 sm:py-1 rounded-[4px] border ${
                       isNegativeRemaining
                         ? "bg-rose-500/10 dark:bg-rose-950/50 border-rose-500/40"
                         : "bg-emerald-500/10 dark:bg-emerald-950/30 border-emerald-500/20"
@@ -1926,20 +1942,20 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
         </div>
       </div>
 
-      {/* Filter Bar & Controls (Single Compact Inline Row) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl px-2 py-1.5 sm:px-3.5 sm:py-2.5 shadow-md border border-slate-200 dark:border-slate-800">
-        <div className="flex flex-nowrap items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto scrollbar-none">
-          {/* Status Filter Pills */}
-          <div className="flex flex-nowrap items-center gap-1 text-xs shrink-0">
-            <span className="font-bold text-slate-400 uppercase text-[11px] mr-0.5 shrink-0">สถานะ:</span>
+      {/* Filter Bar & Controls (SAP Fiori Single Compact Inline Row) */}
+      <div className="bg-white dark:bg-slate-900 rounded-[6px] px-2.5 py-2 sm:px-3.5 sm:py-2.5 shadow-xs border border-[#d9e2e8] dark:border-[#1e3a5f]">
+        <div className="flex flex-nowrap items-center justify-between gap-2 overflow-x-auto scrollbar-none">
+          {/* Status Filter Buttons */}
+          <div className="flex flex-nowrap items-center gap-1.5 shrink-0">
+            <span className="font-semibold text-slate-500 dark:text-slate-400 text-[13px] mr-0.5 shrink-0">สถานะ:</span>
 
             <button
               type="button"
               onClick={() => setSelectedStatus("all")}
-              className={`h-[35px] px-2.5 rounded-md font-semibold transition-all shrink-0 whitespace-nowrap cursor-pointer inline-flex items-center ${
+              className={`inline-flex min-h-[34px] items-center justify-center rounded-[4px] border px-3 py-1 !text-[13.5px] font-semibold transition-colors shrink-0 whitespace-nowrap cursor-pointer ${
                 selectedStatus === "all"
-                  ? "bg-slate-800 text-white"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  ? "border-[#087eaf] bg-[#087eaf] text-white"
+                  : "border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f]"
               }`}
             >
               ทั้งหมด
@@ -1948,80 +1964,80 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
             <button
               type="button"
               onClick={() => setSelectedStatus("available")}
-              className={`h-[35px] px-2.5 rounded-md font-semibold transition-all inline-flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+              className={`inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[4px] border px-3 py-1 !text-[13.5px] font-semibold transition-colors shrink-0 whitespace-nowrap cursor-pointer ${
                 selectedStatus === "available"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                  ? "border-[#107e3e] bg-[#107e3e] text-white"
+                  : "border-emerald-300 bg-emerald-50/70 text-[#107e3e] hover:bg-emerald-100/70 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70"
               }`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedStatus === "available" ? "bg-white" : "bg-[#107e3e] dark:bg-emerald-400"}`} />
               <span>ว่าง</span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedStatus("occupied")}
-              className={`h-[35px] px-2.5 rounded-md font-semibold transition-all inline-flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+              className={`inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[4px] border px-3 py-1 !text-[13.5px] font-semibold transition-colors shrink-0 whitespace-nowrap cursor-pointer ${
                 selectedStatus === "occupied"
-                  ? "bg-amber-600 text-white"
-                  : "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                  ? "border-[#b45309] bg-[#b45309] text-white"
+                  : "border-amber-300 bg-amber-50/70 text-[#b45309] hover:bg-amber-100/70 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70"
               }`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedStatus === "occupied" ? "bg-white" : "bg-[#b45309] dark:bg-amber-400"}`} />
               <span>ใช้งาน</span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedStatus("full")}
-              className={`h-[35px] px-2.5 rounded-md font-semibold transition-all inline-flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+              className={`inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[4px] border px-3 py-1 !text-[13.5px] font-semibold transition-colors shrink-0 whitespace-nowrap cursor-pointer ${
                 selectedStatus === "full"
-                  ? "bg-rose-600 text-white"
-                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+                  ? "border-[#b91c1c] bg-[#b91c1c] text-white"
+                  : "border-rose-300 bg-rose-50/70 text-[#b91c1c] hover:bg-rose-100/70 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70"
               }`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedStatus === "full" ? "bg-white" : "bg-[#b91c1c] dark:bg-rose-400"}`} />
               <span>เต็ม</span>
             </button>
 
             <button
               type="button"
               onClick={() => setSelectedStatus("maintenance")}
-              className={`h-[35px] px-2.5 rounded-md font-semibold transition-all inline-flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer ${
+              className={`inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-[4px] border px-3 py-1 !text-[13.5px] font-semibold transition-colors shrink-0 whitespace-nowrap cursor-pointer ${
                 selectedStatus === "maintenance"
-                  ? "bg-rose-600 text-white"
-                  : "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+                  ? "border-[#b91c1c] bg-[#b91c1c] text-white"
+                  : "border-rose-300 bg-rose-50/70 text-[#b91c1c] hover:bg-rose-100/70 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70"
               }`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+              <span className={`w-1.5 h-1.5 rounded-full ${selectedStatus === "maintenance" ? "bg-white" : "bg-[#b91c1c] dark:bg-rose-400"}`} />
               <span>ซ่อมบำรุง</span>
             </button>
           </div>
 
           {/* Same Row Right Controls: View Density Toggle & Search Box & Add Row */}
-          <div className="flex flex-nowrap items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
-            <div className="inline-flex h-[35px] items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-md border border-slate-200 dark:border-slate-700 text-xs font-bold shrink-0">
+          <div className="flex flex-nowrap items-center gap-2 shrink-0 ml-auto">
+            <div className={`${FIORI_SEGMENTED_GROUP} shrink-0`}>
               <button
                 type="button"
                 onClick={() => setIsCompactView(true)}
-                className={`h-[29px] px-2 rounded transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+                className={`min-h-[30px] px-2.5 rounded-[3px] !text-[13px] font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   isCompactView
-                    ? "bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                    ? "bg-[#087eaf] text-white shadow-xs"
+                    : "text-[#075985] dark:text-[#7dd3fc] hover:bg-white/80 dark:hover:bg-[#132645]"
                 }`}
                 title="มุมมองแบบบรรทัด (รองรับ 50+ ตะกร้าต่อแถว)"
               >
-                <Grid size={12} className="shrink-0" />
+                <Grid size={13} className="shrink-0" />
                 <span className="sm:hidden">แบบบรรทัด</span>
                 <span className="hidden sm:inline">มุมมองแบบบรรทัด</span>
               </button>
               <button
                 type="button"
                 onClick={() => setIsCompactView(false)}
-                className={`h-[29px] px-2 rounded transition-all flex items-center gap-1 whitespace-nowrap cursor-pointer ${
+                className={`min-h-[30px] px-2.5 rounded-[3px] !text-[13px] font-semibold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
                   !isCompactView
-                    ? "bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                    ? "bg-[#087eaf] text-white shadow-xs"
+                    : "text-[#075985] dark:text-[#7dd3fc] hover:bg-white/80 dark:hover:bg-[#132645]"
                 }`}
                 title="มุมมองปกติ"
               >
@@ -2030,23 +2046,22 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </button>
             </div>
 
-            <div className="relative w-32 sm:w-48 shrink-0">
-              <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="relative w-36 sm:w-52 shrink-0">
+              <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="ค้นหา..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="field w-full rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] font-normal focus:outline-none focus:border-cyan-500"
-                style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 28px 7px 32px", borderRadius: 6, fontSize: 12 }}
+                className={`${FIORI_CONTROL_INPUT} w-full pl-8 pr-8`}
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-[4px] text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 cursor-pointer"
                 >
-                  <X size={12} />
+                  <X size={13} />
                 </button>
               )}
             </div>
@@ -2054,10 +2069,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
             <button
               type="button"
               onClick={handleAddNewRow}
-              className="inline-flex h-[35px] items-center gap-1 px-2.5 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+              className={`${FIORI_BTN_PRIMARY} min-h-[36px]`}
               title={`เพิ่มแถวใหม่ใน ${currentBuilding.buildingNameTh}`}
             >
-              <Plus size={13} className="shrink-0" />
+              <Plus size={15} className="shrink-0" />
               <span className="sm:hidden">เพิ่มแถว</span>
               <span className="hidden sm:inline">เพิ่มแถวใหม่</span>
             </button>
@@ -2066,9 +2081,9 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       </div>
 
       {/* Main Storage Row & Basket Layout Matrix (Master Layout with live stock mapping) */}
-      <div className="space-y-3 sm:space-y-6">
+      <div className="space-y-3 sm:space-y-5">
         {filteredRows.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-6 sm:p-12 text-center border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5">
+          <div className="bg-white dark:bg-slate-900 rounded-[6px] p-6 sm:p-12 text-center border border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs space-y-2.5">
             <Boxes size={36} className="mx-auto text-slate-300 dark:text-slate-600 sm:w-12 sm:h-12" />
             <h3 className="text-sm sm:text-lg font-bold text-slate-700 dark:text-slate-200">ไม่พบข้อมูลตะกร้าจัดเก็บ</h3>
             <p className="hidden sm:block text-xs text-slate-500 max-w-md mx-auto">
@@ -2081,9 +2096,9 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                 setSelectedStatus("all");
                 setSearchQuery("");
               }}
-              className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold hover:bg-slate-200 text-slate-700 dark:text-slate-200"
+              className={`${FIORI_BTN_SECONDARY} mt-2`}
             >
-              <RotateCcw size={13} />
+              <RotateCcw size={14} />
               <span>ล้างตัวกรองทั้งหมด</span>
             </button>
           </div>
@@ -2095,12 +2110,12 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
             return (
               <div
                 key={row.rowId}
-                className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-2.5 sm:p-5 shadow-lg border border-slate-200 dark:border-slate-800 space-y-2.5 sm:space-y-4"
+                className="bg-white dark:bg-slate-900 rounded-[6px] p-2.5 sm:p-5 shadow-xs border border-[#d9e2e8] dark:border-[#1e3a5f] space-y-2.5 sm:space-y-4"
               >
                 {/* Row Header */}
-                <div className="flex flex-wrap items-center justify-between pb-2 sm:pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
+                <div className="flex flex-wrap items-center justify-between pb-2 sm:pb-3 border-b border-[#e5edf2] dark:border-[#1e3a5f] gap-2">
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-black text-[11px] sm:text-sm flex items-center justify-center shadow-md shrink-0">
+                    <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-[4px] bg-[#087eaf] text-white font-black text-xs sm:text-sm flex items-center justify-center shadow-xs shrink-0">
                       {row.rowId}
                     </div>
                     <div>
@@ -2115,8 +2130,8 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5 sm:gap-2 ml-auto">
-                    <div className="flex items-center gap-1.5 sm:gap-3 text-[10px] sm:text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/80 px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-lg sm:rounded-xl border border-slate-200 dark:border-slate-700 whitespace-nowrap">
-                      <span>ตะกร้า: <strong className="text-cyan-600 dark:text-cyan-400">{row.baskets.length}</strong></span>
+                    <div className="flex items-center gap-1.5 sm:gap-3 text-[11px] sm:text-xs font-semibold text-slate-600 dark:text-slate-300 bg-[#f5f8fa] dark:bg-[#0c1930] px-2.5 py-1.5 rounded-[4px] border border-[#d9e2e8] dark:border-[#1e3a5f] whitespace-nowrap">
+                      <span>ตะกร้า: <strong className="text-[#075985] dark:text-[#38bdf8]">{row.baskets.length}</strong></span>
                       <span>•</span>
                       <span><strong className="text-amber-600 dark:text-amber-400">{rowCoilCount} แถบ</strong> <span className="hidden xs:inline">({rowTotalKg.toLocaleString()} kg)</span></span>
                     </div>
@@ -2125,10 +2140,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleAddBasketToRow(row.rowId)}
-                      className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all shadow-xs whitespace-nowrap"
+                      className={`hidden sm:inline-flex ${FIORI_BTN_COMPACT_SECONDARY} min-h-[32px]`}
                       title={`เพิ่มตะกร้าใหม่ใน ${row.rowNameTh}`}
                     >
-                      <Plus size={12} />
+                      <Plus size={14} />
                       <span>เพิ่มตะกร้าในแถว</span>
                     </button>
 
@@ -2136,10 +2151,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                     <button
                       type="button"
                       onClick={() => handleDeleteRow(row.rowId, row.rowNameTh, rowCoilCount)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 text-xs font-bold transition-all shadow-xs whitespace-nowrap"
+                      className={`${FIORI_BTN_COMPACT_DANGER} min-h-[32px]`}
                       title={`ลบแถว ${row.rowNameTh}`}
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={14} />
                       <span className="hidden md:inline">ลบแถว</span>
                     </button>
                   </div>
@@ -2149,7 +2164,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                 <div className={`grid gap-1.5 sm:gap-2 ${
                   isCompactView
                     ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12"
-                    : "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4"
+                    : "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3.5"
                 }`}>
                   {row.baskets.map((basket) => {
                     const badge = getStatusBadge(basket.status, basket.coils);
@@ -2162,19 +2177,19 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                           setIsDetailModalOpen(true);
                         }}
                         title={`${basket.id} • ${badge.label} • ${basket.coils.length} แถบ`}
-                        className={`group relative rounded-xl ${
+                        className={`group relative rounded-[4px] ${
                           isCompactView
                             ? "px-1 pt-1.5 pb-2 sm:px-1.5 sm:pt-2 sm:pb-2.5 text-xs flex flex-col items-center justify-center min-h-[46px] sm:min-h-[54px]"
                             : "px-2.5 py-2 sm:px-3.5 sm:py-3 text-xs sm:text-sm flex items-center justify-between gap-1.5 sm:gap-2 min-h-[48px] sm:min-h-[58px]"
-                        } transition-all duration-150 cursor-pointer border overflow-hidden ${
+                        } transition-colors duration-150 cursor-pointer border overflow-hidden ${
                           badge.label === "ว่าง"
-                            ? "bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-50/90 border-emerald-200/90 dark:border-emerald-800/90 hover:border-emerald-400"
+                            ? "bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-50/90 border-emerald-200/90 dark:border-emerald-800/90 hover:border-emerald-500"
                             : badge.label === "เต็ม"
-                            ? "bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-50/90 border-rose-200/90 dark:border-rose-800/90 hover:border-rose-400"
+                            ? "bg-rose-50/50 dark:bg-rose-950/20 hover:bg-rose-50/90 border-rose-200/90 dark:border-rose-800/90 hover:border-rose-500"
                             : badge.label === "ใช้งาน"
-                            ? "bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50/90 border-amber-200/90 dark:border-amber-800/90 hover:border-amber-400"
+                            ? "bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-50/90 border-amber-200/90 dark:border-amber-800/90 hover:border-amber-500"
                             : "bg-rose-50/20 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/60 opacity-80"
-                        } shadow-xs hover:shadow-md transform hover:-translate-y-0.5`}
+                        } shadow-2xs hover:shadow-xs`}
                       >
                         {/* Distinct Bottom Charging Progress Bar */}
                         {(() => {
@@ -2186,7 +2201,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                             ? "bg-rose-600 animate-pulse"
                             : "bg-amber-500";
                           return (
-                            <div className="absolute left-0 right-0 bottom-0 h-1 sm:h-1.5 bg-slate-200/70 dark:bg-slate-700/70 overflow-hidden rounded-b-xl">
+                            <div className="absolute left-0 right-0 bottom-0 h-1 sm:h-1.5 bg-slate-200/70 dark:bg-slate-700/70 overflow-hidden rounded-b-[4px]">
                               <div
                                 className={`h-full transition-all duration-500 ${barColor}`}
                                 style={{ width: `${Math.max(fillPercent, basket.coils.length > 0 ? 10 : 0)}%` }}
@@ -2198,10 +2213,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                         {isCompactView ? (
                           /* Compact View (50+): Full Basket Name and Status vertically stacked without truncation */
                           <div className="relative z-10 flex flex-col items-center justify-center w-full gap-0.5 sm:gap-1 text-center select-none">
-                            <span className="text-[11px] sm:text-[13px] font-black text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors whitespace-nowrap leading-none tracking-tight">
+                            <span className="text-[11px] sm:text-[13px] font-black text-slate-800 dark:text-slate-100 group-hover:text-[#087eaf] dark:group-hover:text-[#38bdf8] transition-colors whitespace-nowrap leading-none tracking-tight">
                               {basket.id}
                             </span>
-                            <span className={`inline-flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 text-[8.5px] sm:text-[9px] rounded-full font-bold border ${badge.bg} whitespace-nowrap leading-none`}>
+                            <span className={`inline-flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 text-[8.5px] sm:text-[9px] rounded-[4px] font-bold border ${badge.bg} whitespace-nowrap leading-none`}>
                               <span className={`w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full ${badge.dot}`} />
                               <span>{badge.label}</span>
                             </span>
@@ -2210,7 +2225,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                           /* Normal View: Spacious horizontal flex */
                           <>
                             <div className="relative z-10 flex items-center gap-1.5 sm:gap-2 min-w-0">
-                              <span className="text-xs md:text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors whitespace-nowrap">
+                              <span className="text-xs md:text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-[#087eaf] dark:group-hover:text-[#38bdf8] transition-colors whitespace-nowrap">
                                 {basket.id}
                               </span>
                               {basket.coils.length > 0 && (
@@ -2220,7 +2235,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                               )}
                             </div>
                             <div className="relative z-10 flex items-center gap-1 shrink-0">
-                              <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs rounded-full font-bold border ${badge.bg}`}>
+                              <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-xs rounded-[4px] font-bold border ${badge.bg}`}>
                                 <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
                                 <span className="whitespace-nowrap">{badge.label}</span>
                               </span>
@@ -2242,9 +2257,9 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       {/* ========================================================================= */}
       {isDetailModalOpen && selectedBasket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-3xl w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white dark:bg-slate-900 rounded-[6px] max-w-3xl w-full shadow-2xl border border-[#b9c9d2] dark:border-[#1e3a5f] overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="px-6 py-4 bg-gradient-to-r from-slate-900 to-sky-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-cyan-500/20">
+            <div className="px-5 py-3.5 bg-gradient-to-r from-slate-900 to-sky-950 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#087eaf]/30">
               <div className="flex items-center gap-3 min-w-0 whitespace-nowrap overflow-x-auto scrollbar-none pl-1">
                 <div className="text-white font-black text-base shrink-0">
                   {formatShortBasketName(selectedBasket.id)}
@@ -2260,8 +2275,8 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </div>
 
               {/* Status Badge & Quick Maintenance Button in Header */}
-              <div className="flex items-center gap-3 shrink-0">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${getStatusBadge(selectedBasket.status).bg}`}>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[4px] text-xs font-bold border ${getStatusBadge(selectedBasket.status).bg}`}>
                   <span className={`w-2 h-2 rounded-full ${getStatusBadge(selectedBasket.status).dot}`} />
                   <span>{getStatusBadge(selectedBasket.status).label}</span>
                 </span>
@@ -2269,10 +2284,10 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleUpdateBasketStatus(selectedBasket.id, selectedBasket.status === "maintenance" ? (selectedBasket.coils.length === 0 ? "available" : "occupied") : "maintenance")}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
+                  className={`inline-flex min-h-[32px] items-center justify-center px-3 py-1 rounded-[4px] !text-[13px] font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
                     selectedBasket.status === "maintenance"
-                      ? "bg-rose-500 text-white border-rose-600"
-                      : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+                      ? "bg-[#b91c1c] hover:bg-[#991b1b] text-white border-[#b91c1c]"
+                      : "bg-white/10 text-white border-white/25 hover:bg-white/20"
                   }`}
                 >
                   ปิดซ่อมบำรุง
@@ -2281,34 +2296,34 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsDetailModalOpen(false)}
-                  className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-white/15 transition-colors shrink-0 ml-1"
+                  className="inline-flex h-[32px] w-[32px] items-center justify-center rounded-[4px] border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors shrink-0 cursor-pointer"
                 >
-                  <X size={20} />
+                  <X size={18} />
                 </button>
               </div>
             </div>
 
             {/* Modal Content Body */}
-            <div className="p-6 space-y-6 overflow-y-auto">
+            <div className="p-5 sm:p-6 space-y-5 overflow-y-auto">
 
               {/* Slit Coils List in this Basket */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                    <Layers size={16} className="text-cyan-500" />
+                    <Layers size={16} className="text-[#087eaf] dark:text-[#38bdf8]" />
                     <span>รายการแถบเหล็กสลิตที่จัดเก็บในตะกร้านี้ ({selectedBasket.coils.length} แถบ)</span>
                   </h4>
                 </div>
 
                 {selectedBasket.coils.length === 0 ? (
-                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-xs">
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-800/40 rounded-[4px] border border-dashed border-[#b9c9d2] dark:border-[#1e3a5f] text-slate-500 dark:text-slate-400 text-xs">
                     ตะกร้านี้ยังไม่มีรายการฟิล์มสลิตจัดเก็บ
                   </div>
                 ) : (
-                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+                  <div className="overflow-x-auto rounded-[4px] border border-[#d9e2e8] dark:border-[#1e3a5f]">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700">
+                        <tr className="bg-[#f5f8fa] dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 font-bold border-b border-[#d9e2e8] dark:border-[#1e3a5f]">
                           <th className="p-3 text-center w-12">ลำดับ</th>
                           <th className="p-3">ชื่อสินค้า</th>
                           <th className="p-3">BATCH</th>
@@ -2331,13 +2346,13 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                               ? `${thickness} x ${width}`
                               : coil.spec;
                           return (
-                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                            <tr key={idx} className="hover:bg-[#edf7fb]/50 dark:hover:bg-slate-800/50 transition-colors">
                               <td className="p-3 text-center font-bold text-slate-500">{idx + 1}</td>
                               <td className="p-3 font-semibold text-slate-800 dark:text-slate-200">
                                 <div>{formattedSpec}</div>
                                 <div className="text-[10px] text-slate-400">เกรด: {coil.grade} • เครื่อง: {coil.machine}</div>
                               </td>
-                              <td className="p-3 font-mono font-bold text-cyan-600 dark:text-cyan-400">{coil.batch}</td>
+                              <td className="p-3 font-mono font-bold text-[#075985] dark:text-[#38bdf8]">{coil.batch}</td>
                               <td className="p-3 font-medium text-slate-700 dark:text-slate-300">{thickness}</td>
                               <td className="p-3 font-medium text-slate-700 dark:text-slate-300">{width}</td>
                               <td className="p-3 text-right font-black text-slate-900 dark:text-slate-100">{coil.weightKg.toLocaleString()} kg</td>
@@ -2352,16 +2367,16 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
             </div>
 
             {/* Modal Footer Actions */}
-            <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-5 py-3.5 bg-[#f5f8fa] dark:bg-[#0c1930] border-t border-[#d9e2e8] dark:border-[#1e3a5f] flex items-center justify-between gap-2">
               <div>
                 {selectedBasket.coils.length === 0 && (
                   <button
                     type="button"
                     onClick={() => handleDeleteEmptyBasket(selectedBasket.id, selectedBasket.rowId)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800 text-xs font-bold transition-all"
+                    className={FIORI_BTN_DANGER_GHOST}
                     title="ลบตะกร้าว่างนี้ออกจากแถว"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={14} />
                     <span>ลบตะกร้านี้ออกจากแถว</span>
                   </button>
                 )}
@@ -2369,7 +2384,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsDetailModalOpen(false)}
-                className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-cyan-500 text-white font-bold text-xs hover:bg-slate-800 dark:hover:bg-cyan-400 transition-colors"
+                className={FIORI_BTN_PRIMARY}
               >
                 <span>ปิดหน้าต่าง</span>
               </button>
@@ -2383,26 +2398,30 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
       {/* ========================================================================= */}
       {isAddBasketModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <div className="px-6 py-4 bg-gradient-to-r from-cyan-600 to-blue-700 text-white flex items-center justify-between">
-              <h3 className="text-base font-bold flex items-center gap-2">
+          <div className="bg-white dark:bg-slate-900 rounded-[6px] max-w-md w-full shadow-2xl border border-[#b9c9d2] dark:border-[#1e3a5f] overflow-hidden">
+            <div className="px-5 py-3.5 bg-[#087eaf] text-white flex items-center justify-between">
+              <h3 className="text-[15px] font-bold flex items-center gap-2">
                 <Plus size={18} />
                 <span>สร้างตะกร้าจัดเก็บใหม่ ({currentBuilding.buildingNameTh})</span>
               </h3>
-              <button type="button" onClick={() => setIsAddBasketModalOpen(false)} className="text-white/80 hover:text-white">
-                <X size={18} />
+              <button
+                type="button"
+                onClick={() => setIsAddBasketModalOpen(false)}
+                className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-[4px] border border-white/25 bg-white/10 text-white hover:bg-white/20 transition-colors cursor-pointer"
+              >
+                <X size={16} />
               </button>
             </div>
 
-            <form onSubmit={handleCreateNewBasket} className="p-6 space-y-4">
+            <form onSubmit={handleCreateNewBasket} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
                   เลือกแถว (Row):
                 </label>
                 <select
                   value={newBasketRowId}
                   onChange={(e) => setNewBasketRowId(e.target.value)}
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className={`${FIORI_CONTROL_INPUT} w-full px-3 font-medium`}
                 >
                   <option value="A">แถว A (Row A)</option>
                   <option value="B">แถว B (Row B)</option>
@@ -2414,7 +2433,7 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
                   หมายเลขตะกร้า (Basket No. e.g. 06, 07):
                 </label>
                 <input
@@ -2423,15 +2442,15 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                   value={newBasketNo}
                   onChange={(e) => setNewBasketNo(e.target.value)}
                   required
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className={`${FIORI_CONTROL_INPUT} w-full px-3 font-medium`}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  รหัสตะกร้าจะถูกสร้างให้อัตโนมัติ: <strong className="text-cyan-600">{activeBuildingId}-{newBasketRowId}{(newBasketNo || "00").padStart(2, "0")}</strong>
+                <p className="text-[12px] text-slate-500 dark:text-slate-400 mt-1.5">
+                  รหัสตะกร้าจะถูกสร้างให้อัตโนมัติ: <strong className="text-[#075985] dark:text-[#38bdf8]">{activeBuildingId}-{newBasketRowId}{(newBasketNo || "00").padStart(2, "0")}</strong>
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-200 mb-1.5">
                   ความจุน้ำหนักสูงสุด (Max Capacity kg):
                 </label>
                 <input
@@ -2441,21 +2460,21 @@ export const SpaceManagementView: React.FC<SpaceManagementViewProps> = ({
                   required
                   min={500}
                   max={10000}
-                  className="w-full p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  className={`${FIORI_CONTROL_INPUT} w-full px-3 font-medium`}
                 />
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-2">
+              <div className="pt-3 border-t border-[#e5edf2] dark:border-[#1e3a5f] flex items-center justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsAddBasketModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-300"
+                  className={FIORI_BTN_SECONDARY}
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold shadow-md"
+                  className={FIORI_BTN_PRIMARY}
                 >
                   บันทึกตะกร้าใหม่
                 </button>

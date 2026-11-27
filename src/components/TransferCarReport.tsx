@@ -19,10 +19,36 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
+  X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { PickListOrder, SlitBarcodeRecord, SapMasterItem } from "./SlitFilmManagement";
 import { getStoredMachineStaging } from "../data/machineStagingStorage";
+
+const FIORI_BTN_BASE =
+  "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[7px] !text-[14px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+
+const FIORI_BTN_SECONDARY = `${FIORI_BTN_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_BTN_SUCCESS = `${FIORI_BTN_BASE} border-[#107e3e] bg-[#107e3e] text-white hover:bg-[#0d6933] hover:border-[#0d6933] dark:border-emerald-600 dark:bg-emerald-600 dark:text-white dark:hover:bg-emerald-700 dark:hover:border-emerald-700`;
+
+const FIORI_BTN_ICON_COMPACT =
+  "inline-flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-[4px] border border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8] transition-colors cursor-pointer";
+
+const FIORI_BTN_COMPACT_BASE =
+  "inline-flex min-h-[30px] items-center justify-center gap-1 rounded-[4px] border px-3 py-1 !text-[12.5px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_COMPACT_PRIMARY = `${FIORI_BTN_COMPACT_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985]`;
+
+const FIORI_BTN_COMPACT_SECONDARY = `${FIORI_BTN_COMPACT_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_CONTROL_INPUT =
+  "h-[36px] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[14px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none transition-colors";
+
+const FIORI_SURFACE_CARD =
+  "rounded-[4px] border border-[#d9e2e8] dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] shadow-xs";
 
 export interface TransferCarTripItem {
   id: string;
@@ -611,55 +637,69 @@ export function TransferCarReport({
   };
 
   return (
-    <div className="space-y-2.5 sm:space-y-4">
-      {/* 1. Header Banner & Filter Controls (2-Row Structured Layout) */}
-      <div className="rounded-xl sm:rounded-2xl border p-3 sm:p-4 bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-md overflow-hidden">
-        <div className="flex flex-col gap-2.5 sm:gap-3">
-          {/* Row 1: Main Title and Icon */}
-          <div className="flex items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100 dark:border-[#1e3a5f]/80">
-            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-              <div className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-md shadow-orange-500/20 shrink-0">
-                <Truck size={18} className="sm:w-[22px] sm:h-[22px]" />
+    <div className="space-y-3 sm:space-y-4">
+      {/* 1. SAP Fiori Header & Filter Toolbar */}
+      <div className={`${FIORI_SURFACE_CARD} p-3.5 sm:p-4 overflow-hidden`}>
+        <div className="flex flex-col gap-3">
+          {/* Row 1: Main Title and Scope */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] shrink-0">
+                <Truck size={20} />
               </div>
-              <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
-                <h2 className="text-sm sm:text-lg font-black tracking-tight text-slate-900 dark:text-white leading-snug">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-[15px] sm:text-[18px] font-bold tracking-tight text-slate-900 dark:text-white leading-snug">
                   {isThai
                     ? "รายงานปริมาณการใช้งาน Transfer Car ประจำเดือน"
                     : "Transfer Car Monthly Usage Report"}
                 </h2>
-                <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-xs font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0 whitespace-nowrap">
-                  TM06 & TM07
-                </span>
+                <div className="mt-0.5 flex items-center gap-2 text-[12px] text-slate-500 dark:text-slate-400">
+                  <span className="font-semibold text-[#075985] dark:text-[#38bdf8]">TM06 &amp; TM07</span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {isThai
+                      ? `ประจำเดือน ${selectedMonth}`
+                      : `Period ${selectedMonth}`}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Row 2: Action Tools - Month Picker, Machine Filter, Export Excel */}
-          <div className="flex flex-nowrap sm:flex-wrap items-center justify-between gap-1.5 sm:gap-2 w-full">
-            <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 sm:gap-2 w-full sm:w-auto sm:flex-initial min-w-0">
-              {/* Month Selector */}
-              <div className="flex h-[32px] sm:h-[35px] items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 rounded-md border bg-slate-50 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f] flex-1 min-w-0 sm:flex-initial sm:shrink-0">
-                <Calendar size={13} className="text-amber-500 shrink-0 sm:w-[14px] sm:h-[14px]" />
-                <label className="hidden sm:inline text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0">
-                  {isThai ? "เดือน/ปี:" : "Month:"}
+          {/* Row 2: Action Tools - Month Picker, Machine Filter Segmented Control, Export Excel */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5 w-full">
+            <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+              {/* Month Selector (SAP Fiori 36px control) */}
+              <div className="flex items-center gap-2 shrink-0">
+                <label
+                  htmlFor="transfer-car-month"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                >
+                  <Calendar size={15} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
+                  <span>{isThai ? "เดือน/ปี" : "Month"}</span>
                 </label>
                 <input
+                  id="transfer-car-month"
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="h-[24px] sm:h-[27px] w-full min-w-0 sm:w-auto px-1 sm:px-2 rounded bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-[10.5px] sm:text-xs font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-xs"
+                  className={`${FIORI_CONTROL_INPUT} px-2.5 font-mono font-semibold cursor-pointer`}
                 />
               </div>
 
-              {/* Machine Filter Toggle Buttons */}
-              <div className="inline-flex h-[32px] sm:h-[35px] shrink-0 items-center rounded-md p-0.5 border bg-slate-100 dark:bg-[#0c1930] border-slate-200 dark:border-[#1e3a5f]">
+              {/* Machine Filter Segmented Control (SAP Fiori) */}
+              <div
+                role="group"
+                aria-label={isThai ? "ตัวกรองเครื่องจักร" : "Machine Filter"}
+                className="inline-flex min-h-[36px] shrink-0 items-stretch rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0c1930] p-[2px] gap-[2px]"
+              >
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("ALL")}
-                  className={`h-[26px] sm:h-[29px] px-1.5 sm:px-3 rounded text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`inline-flex min-h-[30px] items-center justify-center rounded-[3px] px-3 sm:px-[14px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     selectedMachineFilter === "ALL"
-                      ? "bg-white dark:bg-blue-600 text-blue-600 dark:text-white shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      ? "bg-[#087eaf] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
                   }`}
                 >
                   <span className="sm:hidden">{isThai ? "ทั้งหมด" : "All"}</span>
@@ -668,10 +708,10 @@ export function TransferCarReport({
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("TM06")}
-                  className={`h-[26px] sm:h-[29px] px-1.5 sm:px-3 rounded text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`inline-flex min-h-[30px] items-center justify-center rounded-[3px] px-3 sm:px-[14px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     selectedMachineFilter === "TM06"
-                      ? "bg-amber-500 text-white shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      ? "bg-[#b45309] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#b45309] dark:hover:text-amber-400"
                   }`}
                 >
                   TM06
@@ -679,10 +719,10 @@ export function TransferCarReport({
                 <button
                   type="button"
                   onClick={() => setSelectedMachineFilter("TM07")}
-                  className={`h-[26px] sm:h-[29px] px-1.5 sm:px-3 rounded text-[10.5px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`inline-flex min-h-[30px] items-center justify-center rounded-[3px] px-3 sm:px-[14px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     selectedMachineFilter === "TM07"
-                      ? "bg-blue-600 text-white shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      ? "bg-[#075985] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
                   }`}
                 >
                   TM07
@@ -690,109 +730,105 @@ export function TransferCarReport({
               </div>
             </div>
 
-            {/* Export Excel Button */}
+            {/* Export Excel Button (SAP Fiori Success Action) */}
             <button
               type="button"
               onClick={handleExportExcel}
               disabled={filteredTrips.length === 0}
-              className={`hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-xs shrink-0 whitespace-nowrap ml-auto ${
-                filteredTrips.length === 0
-                  ? "opacity-50 bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
-                  : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-95"
-              }`}
+              className={`${FIORI_BTN_SUCCESS} min-h-[36px] ml-auto`}
               title={isThai ? "ส่งออกรายงานเป็นไฟล์ Excel (.xlsx)" : "Export report as Excel"}
             >
-              <FileSpreadsheet size={14} className="shrink-0" />
+              <FileSpreadsheet size={15} className="shrink-0" />
               <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* 2. KPI Summary Dashboard Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        {/* Card 1: Total Trips */}
-        <div className="p-2.5 sm:p-4 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10.5px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+      {/* 2. KPI Summary Tiles (SAP Fiori Analytical Cards) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        {/* Tile 1: Total Trips */}
+        <div className={`${FIORI_SURFACE_CARD} p-3.5 sm:p-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] sm:text-[13px] font-semibold text-slate-600 dark:text-slate-300 truncate">
               {isThai ? "จำนวนรอบขนย้าย (Trips)" : "Total Trips"}
             </span>
-            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
-              <Truck size={14} className="sm:w-4 sm:h-4" />
+            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[4px] bg-amber-50 dark:bg-amber-950/40 text-[#b45309] dark:text-amber-400 shrink-0">
+              <Truck size={15} />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-            <span className="text-base sm:text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-[20px] sm:text-[24px] font-bold text-slate-900 dark:text-white tabular-nums leading-none">
               {stats.totalTrips.toLocaleString()}
             </span>
-            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold">{isThai ? "รอบ" : "trips"}</span>
+            <span className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">{isThai ? "รอบ" : "trips"}</span>
           </div>
-          <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1">
-            <span className="truncate">TM06: {stats.tm06.trips} รอบ</span>
-            <span className="truncate">TM07: {stats.tm07.trips} รอบ</span>
+          <div className="mt-2 pt-2 border-t border-[#eef3f6] dark:border-[#1e3a5f]/70 text-[11.5px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-1 tabular-nums">
+            <span className="truncate">TM06: {stats.tm06.trips} {isThai ? "รอบ" : "trips"}</span>
+            <span className="truncate">TM07: {stats.tm07.trips} {isThai ? "รอบ" : "trips"}</span>
           </div>
         </div>
 
-        {/* Card 2: Total Strips */}
-        <div className="p-2.5 sm:p-4 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10.5px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+        {/* Tile 2: Total Strips */}
+        <div className={`${FIORI_SURFACE_CARD} p-3.5 sm:p-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] sm:text-[13px] font-semibold text-slate-600 dark:text-slate-300 truncate">
               {isThai ? "จำนวนแถบที่ย้าย (Strips)" : "Total Strips"}
             </span>
-            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
-              <Layers size={14} className="sm:w-4 sm:h-4" />
+            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] shrink-0">
+              <Layers size={15} />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-            <span className="text-base sm:text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-[20px] sm:text-[24px] font-bold text-slate-900 dark:text-white tabular-nums leading-none">
               {stats.totalStrips.toLocaleString()}
             </span>
-            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold">{isThai ? "แถบ" : "coils"}</span>
+            <span className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">{isThai ? "แถบ" : "coils"}</span>
           </div>
-          <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-400 flex items-center justify-between gap-1">
-            <span className="truncate">TM06: {stats.tm06.strips} แถบ</span>
-            <span className="truncate">TM07: {stats.tm07.strips} แถบ</span>
+          <div className="mt-2 pt-2 border-t border-[#eef3f6] dark:border-[#1e3a5f]/70 text-[11.5px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-1 tabular-nums">
+            <span className="truncate">TM06: {stats.tm06.strips} {isThai ? "แถบ" : "pcs"}</span>
+            <span className="truncate">TM07: {stats.tm07.strips} {isThai ? "แถบ" : "pcs"}</span>
           </div>
         </div>
 
-        {/* Card 3: Total Weight */}
-        <div className="p-2.5 sm:p-4 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10.5px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+        {/* Tile 3: Total Weight */}
+        <div className={`${FIORI_SURFACE_CARD} p-3.5 sm:p-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] sm:text-[13px] font-semibold text-slate-600 dark:text-slate-300 truncate">
               {isThai ? "น้ำหนักรวมทั้งหมด (Weight)" : "Total Weight"}
             </span>
-            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-              <Scale size={14} className="sm:w-4 sm:h-4" />
+            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[4px] bg-emerald-50 dark:bg-emerald-950/40 text-[#107e3e] dark:text-emerald-400 shrink-0">
+              <Scale size={15} />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-            <span className="text-base sm:text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-[20px] sm:text-[24px] font-bold text-slate-900 dark:text-white tabular-nums leading-none">
               {formatTwoDecimals(stats.totalWeightTon)}
             </span>
-            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold">{isThai ? "ตัน" : "tons"}</span>
+            <span className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">{isThai ? "ตัน" : "tons"}</span>
           </div>
-          <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-400 truncate">
-            <span>({formatTwoDecimals(stats.totalWeightKg)} kg)</span>
+          <div className="mt-2 pt-2 border-t border-[#eef3f6] dark:border-[#1e3a5f]/70 text-[11.5px] text-slate-500 dark:text-slate-400 truncate tabular-nums">
+            <span>{formatTwoDecimals(stats.totalWeightKg)} kg</span>
           </div>
         </div>
 
-        {/* Card 4: Average Weight per Trip */}
-        <div className="p-2.5 sm:p-4 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10.5px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
+        {/* Tile 4: Average Weight per Trip */}
+        <div className={`${FIORI_SURFACE_CARD} p-3.5 sm:p-4`}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[12px] sm:text-[13px] font-semibold text-slate-600 dark:text-slate-300 truncate">
               {isThai ? "น้ำหนักเฉลี่ยต่อรอบ (Avg/Trip)" : "Avg Weight/Trip"}
             </span>
-            <div className="p-1.5 sm:p-2 rounded-md sm:rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
-              <TrendingUp size={14} className="sm:w-4 sm:h-4" />
+            <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[4px] bg-slate-100 dark:bg-[#0d223f] text-[#075985] dark:text-[#38bdf8] shrink-0">
+              <TrendingUp size={15} />
             </div>
           </div>
-          <div className="mt-1 sm:mt-2 flex items-baseline gap-1 sm:gap-2">
-            <span className="text-base sm:text-2xl font-extrabold text-slate-900 dark:text-white tabular-nums">
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className="text-[20px] sm:text-[24px] font-bold text-slate-900 dark:text-white tabular-nums leading-none">
               {formatTwoDecimals(stats.avgWeightKgPerTrip)}
             </span>
-            <span className="text-[10px] sm:text-xs text-slate-400 font-semibold">kg/{isThai ? "รอบ" : "trip"}</span>
+            <span className="text-[12px] text-slate-500 dark:text-slate-400 font-medium">kg/{isThai ? "รอบ" : "trip"}</span>
           </div>
-          <div className="mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] text-slate-400 truncate">
+          <div className="mt-2 pt-2 border-t border-[#eef3f6] dark:border-[#1e3a5f]/70 text-[11.5px] text-slate-500 dark:text-slate-400 truncate tabular-nums">
             <span>
               {stats.totalTrips > 0
                 ? `${(stats.totalStrips / stats.totalTrips).toFixed(1)} ${isThai ? "แถบเฉลี่ย/รอบ" : "strips/trip"}`
@@ -803,39 +839,39 @@ export function TransferCarReport({
       </div>
 
       {/* 2.5 Daily & Per-Machine (TM06 & TM07) Transfer Trips Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 sm:gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
         {/* Daily Transfer Trips Chart (TM06 & TM07 per day) */}
-        <div className="lg:col-span-2 rounded-xl sm:rounded-2xl border p-3 sm:p-5 bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs flex flex-col justify-between">
+        <div className={`lg:col-span-2 ${FIORI_SURFACE_CARD} p-3.5 sm:p-4 flex flex-col justify-between`}>
           <div>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 pb-2 sm:pb-3 mb-2.5 sm:mb-4 border-b border-slate-100 dark:border-[#1e3a5f]">
-              <div className="flex items-center gap-2 sm:gap-2.5">
-                <div className="p-1.5 sm:p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
-                  <BarChart3 size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-[32px] w-[32px] items-center justify-center rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] shrink-0">
+                  <BarChart3 size={16} />
                 </div>
                 <div>
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-snug">
                     {isThai
                       ? "กราฟแสดงรอบในการย้ายแต่ละวัน (แยกตามเครื่องจักร TM06 และ TM07)"
                       : "Daily Transfer Trips by Machine (TM06 & TM07)"}
                   </h3>
-                  <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
                     {isThai
-                      ? `ประจำเดือน ${selectedMonth} • วันที่มีการย้าย ${dailyChartData.activeDaysCount} วัน`
-                      : `Month ${selectedMonth} • Active days: ${dailyChartData.activeDaysCount}`}
+                      ? `ประจำเดือน ${selectedMonth} · วันที่มีการย้าย ${dailyChartData.activeDaysCount} วัน`
+                      : `Month ${selectedMonth} · Active days: ${dailyChartData.activeDaysCount}`}
                   </p>
                 </div>
               </div>
 
               {/* Legend */}
-              <div className="flex items-center gap-3 sm:gap-4 text-[10.5px] sm:text-xs font-semibold">
-                <div className="flex items-center gap-1 sm:gap-1.5">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-xs bg-amber-500 inline-block shadow-xs" />
+              <div className="flex items-center gap-4 text-[12px] font-semibold shrink-0 tabular-nums">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-[2px] bg-[#d97706] inline-block" />
                   <span className="text-slate-700 dark:text-slate-300">
                     TM06 ({stats.tm06.trips} {isThai ? "รอบ" : "trips"})
                   </span>
                 </div>
-                <div className="flex items-center gap-1 sm:gap-1.5">
-                  <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-xs bg-blue-600 inline-block shadow-xs" />
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-[2px] bg-[#087eaf] inline-block" />
                   <span className="text-slate-700 dark:text-slate-300">
                     TM07 ({stats.tm07.trips} {isThai ? "รอบ" : "trips"})
                   </span>
@@ -844,9 +880,9 @@ export function TransferCarReport({
             </div>
 
             {filteredTrips.length === 0 ? (
-              <div className="h-36 sm:h-52 flex flex-col items-center justify-center text-center rounded-xl bg-slate-50/70 dark:bg-[#0c1930]/50 border border-dashed border-slate-200 dark:border-[#1e3a5f] p-4 sm:p-6">
-                <BarChart3 size={24} className="text-slate-300 dark:text-slate-600 mb-1.5 sm:mb-2 sm:w-7 sm:h-7" />
-                <p className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-400">
+              <div className="h-40 sm:h-52 flex flex-col items-center justify-center text-center rounded-[4px] bg-[#f8fafc] dark:bg-[#0c1930]/60 border border-dashed border-[#cbd5e1] dark:border-[#1e3a5f] p-4 sm:p-6">
+                <BarChart3 size={24} className="text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-[13px] font-semibold text-slate-600 dark:text-slate-400">
                   {isThai
                     ? "ยังไม่มีข้อมูลรอบการย้ายรายวันในเดือนที่เลือก"
                     : "No daily transfer trip data for selected month"}
@@ -856,7 +892,7 @@ export function TransferCarReport({
               <div className="overflow-x-auto pb-1">
                 <div className="min-w-[580px] sm:min-w-[640px]">
                   {/* Y-axis scale + Bars area */}
-                  <div className="relative h-48 sm:h-64 pt-6 sm:pt-8 pb-1.5 sm:pb-2 px-1.5 sm:px-2 rounded-xl bg-slate-50/60 dark:bg-[#0c1930]/60 border border-slate-100 dark:border-[#1e3a5f]/80 flex items-end gap-1">
+                  <div className="relative h-48 sm:h-64 pt-6 sm:pt-8 pb-1.5 sm:pb-2 px-2 rounded-[4px] bg-[#f8fafc] dark:bg-[#0c1930]/60 border border-[#e5edf2] dark:border-[#1e3a5f]/80 flex items-end gap-1">
                     {/* Horizontal reference lines */}
                     <div className="absolute inset-x-2 top-6 sm:top-8 bottom-6 sm:bottom-7 pointer-events-none flex flex-col justify-between">
                       {[1, 0.5, 0].map((ratio, idx) => {
@@ -865,9 +901,9 @@ export function TransferCarReport({
                         return (
                           <div
                             key={idx}
-                            className="w-full border-b border-dashed border-slate-200/80 dark:border-[#1e3a5f]/70 flex items-center"
+                            className="w-full border-b border-dashed border-slate-200/90 dark:border-[#1e3a5f]/70 flex items-center"
                           >
-                            <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500 -mt-3.5 pr-1">
+                            <span className="text-[10px] font-mono tabular-nums text-slate-400 dark:text-slate-500 -mt-3.5 pr-1">
                               {val}
                             </span>
                           </div>
@@ -895,19 +931,19 @@ export function TransferCarReport({
                           key={d.dateStr}
                           className="group relative flex-1 min-w-[16px] sm:min-w-[18px] h-full flex flex-col items-center justify-end z-10 hover:z-50"
                         >
-                          {/* Hover Tooltip (Positioned inside chart top area so it never clips) */}
+                          {/* Hover Tooltip */}
                           {hasActivity && (
                             <div
-                              className={`opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 absolute top-1.5 ${tooltipHorizontalPos} z-50 w-56 p-2.5 rounded-xl bg-slate-900/95 dark:bg-slate-800/95 text-white text-[10.5px] shadow-xl border border-slate-700 backdrop-blur-xs`}
+                              className={`opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 absolute top-1.5 ${tooltipHorizontalPos} z-50 w-56 p-2.5 rounded-[4px] bg-slate-900/95 dark:bg-slate-800/95 text-white text-[11px] shadow-lg border border-slate-700`}
                             >
-                              <div className="font-bold text-amber-300 border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
+                              <div className="font-bold text-sky-300 border-b border-slate-700 pb-1 mb-1.5 flex items-center justify-between">
                                 <span>{d.displayDate}</span>
-                                <span>
+                                <span className="tabular-nums">
                                   {isThai ? `รวม ${d.totalTrips} รอบ` : `Total ${d.totalTrips} trips`}
                                 </span>
                               </div>
-                              <div className="space-y-1.5 font-mono">
-                                <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                              <div className="space-y-1.5 font-mono tabular-nums">
+                                <div className="p-1.5 rounded-[3px] bg-amber-500/10 border border-amber-500/25">
                                   <div className="flex items-center justify-between text-amber-400 font-bold">
                                     <span>TM06:</span>
                                     <span>
@@ -924,8 +960,8 @@ export function TransferCarReport({
                                   </div>
                                 </div>
 
-                                <div className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                                  <div className="flex items-center justify-between text-blue-400 font-bold">
+                                <div className="p-1.5 rounded-[3px] bg-sky-500/10 border border-sky-500/25">
+                                  <div className="flex items-center justify-between text-sky-400 font-bold">
                                     <span>TM07:</span>
                                     <span>
                                       {d.tm07Trips} {isThai ? "รอบ" : "trips"} ({d.tm07Strips}{" "}
@@ -957,15 +993,15 @@ export function TransferCarReport({
                             {(selectedMachineFilter === "ALL" || selectedMachineFilter === "TM06") && (
                               <div className="flex-1 h-full flex flex-col items-center justify-end">
                                 {d.tm06Trips > 0 && (
-                                  <span className="text-[9px] font-mono font-extrabold text-amber-600 dark:text-amber-400 leading-none mb-0.5">
+                                  <span className="text-[9.5px] font-mono tabular-nums font-bold text-[#b45309] dark:text-amber-400 leading-none mb-0.5">
                                     {d.tm06Trips}
                                   </span>
                                 )}
                                 <div
                                   style={{ height: `${tm06HeightPct}%` }}
-                                  className={`w-full max-w-[10px] rounded-t-xs transition-all ${
+                                  className={`w-full max-w-[10px] rounded-t-[2px] transition-all ${
                                     d.tm06Trips > 0
-                                      ? "bg-gradient-to-t from-amber-600 to-amber-400 shadow-xs"
+                                      ? "bg-[#d97706] dark:bg-amber-500"
                                       : "h-[2px] bg-slate-200 dark:bg-slate-800"
                                   }`}
                                 />
@@ -976,15 +1012,15 @@ export function TransferCarReport({
                             {(selectedMachineFilter === "ALL" || selectedMachineFilter === "TM07") && (
                               <div className="flex-1 h-full flex flex-col items-center justify-end">
                                 {d.tm07Trips > 0 && (
-                                  <span className="text-[9px] font-mono font-extrabold text-blue-600 dark:text-blue-400 leading-none mb-0.5">
+                                  <span className="text-[9.5px] font-mono tabular-nums font-bold text-[#075985] dark:text-[#38bdf8] leading-none mb-0.5">
                                     {d.tm07Trips}
                                   </span>
                                 )}
                                 <div
                                   style={{ height: `${tm07HeightPct}%` }}
-                                  className={`w-full max-w-[10px] rounded-t-xs transition-all ${
+                                  className={`w-full max-w-[10px] rounded-t-[2px] transition-all ${
                                     d.tm07Trips > 0
-                                      ? "bg-gradient-to-t from-blue-700 to-blue-500 shadow-xs"
+                                      ? "bg-[#087eaf] dark:bg-[#38bdf8]"
                                       : "h-[2px] bg-slate-200 dark:bg-slate-800"
                                   }`}
                                 />
@@ -994,9 +1030,9 @@ export function TransferCarReport({
 
                           {/* X-Axis Day Number */}
                           <span
-                            className={`mt-1 sm:mt-1.5 text-[9px] sm:text-[9.5px] font-mono leading-none ${
+                            className={`mt-1.5 text-[9.5px] font-mono tabular-nums leading-none ${
                               hasActivity
-                                ? "font-extrabold text-slate-900 dark:text-white"
+                                ? "font-bold text-slate-900 dark:text-white"
                                 : "text-slate-400 dark:text-slate-500"
                             }`}
                           >
@@ -1013,20 +1049,20 @@ export function TransferCarReport({
         </div>
 
         {/* Per-Machine Comparison Chart (TM06 vs TM07) */}
-        <div className="rounded-xl sm:rounded-2xl border p-3 sm:p-5 bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs flex flex-col justify-between">
+        <div className={`${FIORI_SURFACE_CARD} p-3.5 sm:p-4 flex flex-col justify-between`}>
           <div>
-            <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3 mb-2.5 sm:mb-4 border-b border-slate-100 dark:border-[#1e3a5f]">
-              <div className="flex items-center gap-2 sm:gap-2.5">
-                <div className="p-1.5 sm:p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0">
-                  <Cpu size={16} className="sm:w-[18px] sm:h-[18px]" />
+            <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-[32px] w-[32px] items-center justify-center rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] shrink-0">
+                  <Cpu size={16} />
                 </div>
                 <div>
-                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  <h3 className="text-[14px] font-bold text-slate-900 dark:text-white leading-snug">
                     {isThai
                       ? "กราฟเปรียบเทียบรอบย้ายแต่ละเครื่องจักร"
                       : "Trips by Machine (TM06 vs TM07)"}
                   </h3>
-                  <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
                     {isThai
                       ? "สัดส่วนจำนวนรอบ แถบ และน้ำหนักแยกตามเครื่อง"
                       : "Share of trips, strips, and weight per machine"}
@@ -1036,39 +1072,39 @@ export function TransferCarReport({
             </div>
 
             {filteredTrips.length === 0 ? (
-              <div className="h-36 sm:h-52 flex flex-col items-center justify-center text-center rounded-xl bg-slate-50/70 dark:bg-[#0c1930]/50 border border-dashed border-slate-200 dark:border-[#1e3a5f] p-4 sm:p-6">
-                <Cpu size={24} className="text-slate-300 dark:text-slate-600 mb-1.5 sm:mb-2 sm:w-7 sm:h-7" />
-                <p className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-slate-400">
+              <div className="h-40 sm:h-52 flex flex-col items-center justify-center text-center rounded-[4px] bg-[#f8fafc] dark:bg-[#0c1930]/60 border border-dashed border-[#cbd5e1] dark:border-[#1e3a5f] p-4 sm:p-6">
+                <Cpu size={24} className="text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-[13px] font-semibold text-slate-600 dark:text-slate-400">
                   {isThai
                     ? "ยังไม่มีข้อมูลเปรียบเทียบเครื่องจักร"
                     : "No machine comparison data available"}
                 </p>
               </div>
             ) : (
-              <div className="space-y-2.5 sm:space-y-4">
+              <div className="space-y-3">
                 {/* TM06 Bar Block */}
-                <div className="p-2.5 sm:p-3 rounded-xl border bg-amber-50/40 dark:bg-amber-950/15 border-amber-200/70 dark:border-amber-800/50">
-                  <div className="flex items-center justify-between mb-1 sm:mb-1.5">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span className="px-1.5 sm:px-2 py-0.5 rounded-md text-[11px] sm:text-xs font-extrabold bg-amber-500 text-white">
+                <div className="p-3 rounded-[4px] border border-amber-200 dark:border-amber-800/60 bg-amber-50/40 dark:bg-amber-950/15">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-[3px] text-[12px] font-bold bg-[#b45309] text-white">
                         TM06
                       </span>
-                      <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <span className="text-[12.5px] font-semibold text-slate-700 dark:text-slate-200 tabular-nums">
                         {stats.totalTrips > 0
                           ? `${((stats.tm06.trips / stats.totalTrips) * 100).toFixed(1)}%`
                           : "0.0%"}
                       </span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm sm:text-base font-extrabold text-amber-600 dark:text-amber-400 tabular-nums">
+                    <div className="text-right tabular-nums">
+                      <span className="text-[16px] font-bold text-[#b45309] dark:text-amber-400">
                         {stats.tm06.trips.toLocaleString()}
                       </span>
-                      <span className="text-[10.5px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 ml-1">
+                      <span className="text-[12px] font-medium text-slate-500 dark:text-slate-400 ml-1">
                         {isThai ? "รอบ" : "trips"}
                       </span>
                     </div>
                   </div>
-                  <div className="w-full h-2 sm:h-3 rounded-full bg-slate-200/80 dark:bg-[#0c1930] overflow-hidden">
+                  <div className="w-full h-2.5 rounded-[2px] bg-slate-200/80 dark:bg-[#0c1930] overflow-hidden">
                     <div
                       style={{
                         width: `${
@@ -1077,10 +1113,10 @@ export function TransferCarReport({
                             : 0
                         }%`,
                       }}
-                      className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+                      className="h-full rounded-[2px] bg-[#d97706] transition-all duration-300"
                     />
                   </div>
-                  <div className="mt-1.5 sm:mt-2 flex items-center justify-between text-[10.5px] sm:text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                  <div className="mt-2 flex items-center justify-between text-[12px] text-slate-600 dark:text-slate-300 tabular-nums">
                     <span>
                       {isThai ? "จำนวนแถบ:" : "Strips:"}{" "}
                       <strong className="font-mono">{stats.tm06.strips.toLocaleString()}</strong>{" "}
@@ -1095,28 +1131,28 @@ export function TransferCarReport({
                 </div>
 
                 {/* TM07 Bar Block */}
-                <div className="p-2.5 sm:p-3 rounded-xl border bg-blue-50/40 dark:bg-blue-950/15 border-blue-200/70 dark:border-blue-800/50">
-                  <div className="flex items-center justify-between mb-1 sm:mb-1.5">
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span className="px-1.5 sm:px-2 py-0.5 rounded-md text-[11px] sm:text-xs font-extrabold bg-blue-600 text-white">
+                <div className="p-3 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-[#edf7fb]/50 dark:bg-[#0d223f]/40">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-[3px] text-[12px] font-bold bg-[#087eaf] text-white">
                         TM07
                       </span>
-                      <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-200">
+                      <span className="text-[12.5px] font-semibold text-slate-700 dark:text-slate-200 tabular-nums">
                         {stats.totalTrips > 0
                           ? `${((stats.tm07.trips / stats.totalTrips) * 100).toFixed(1)}%`
                           : "0.0%"}
                       </span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm sm:text-base font-extrabold text-blue-600 dark:text-blue-400 tabular-nums">
+                    <div className="text-right tabular-nums">
+                      <span className="text-[16px] font-bold text-[#075985] dark:text-[#38bdf8]">
                         {stats.tm07.trips.toLocaleString()}
                       </span>
-                      <span className="text-[10.5px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 ml-1">
+                      <span className="text-[12px] font-medium text-slate-500 dark:text-slate-400 ml-1">
                         {isThai ? "รอบ" : "trips"}
                       </span>
                     </div>
                   </div>
-                  <div className="w-full h-2 sm:h-3 rounded-full bg-slate-200/80 dark:bg-[#0c1930] overflow-hidden">
+                  <div className="w-full h-2.5 rounded-[2px] bg-slate-200/80 dark:bg-[#0c1930] overflow-hidden">
                     <div
                       style={{
                         width: `${
@@ -1125,10 +1161,10 @@ export function TransferCarReport({
                             : 0
                         }%`,
                       }}
-                      className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-300"
+                      className="h-full rounded-[2px] bg-[#087eaf] transition-all duration-300"
                     />
                   </div>
-                  <div className="mt-1.5 sm:mt-2 flex items-center justify-between text-[10.5px] sm:text-[11px] text-slate-600 dark:text-slate-300 font-medium">
+                  <div className="mt-2 flex items-center justify-between text-[12px] text-slate-600 dark:text-slate-300 tabular-nums">
                     <span>
                       {isThai ? "จำนวนแถบ:" : "Strips:"}{" "}
                       <strong className="font-mono">{stats.tm07.strips.toLocaleString()}</strong>{" "}
@@ -1147,25 +1183,51 @@ export function TransferCarReport({
         </div>
       </div>
 
-      {/* 3. Search and Quick Filter Bar */}
-      <div className="filterbar flex flex-row items-center justify-between gap-2 sm:gap-3 px-3 py-2.5 sm:px-[18px] sm:py-3 rounded-xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-        <div className="relative flex-1 min-w-0">
-          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 sm:w-3.5 sm:h-3.5" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={
-              isThai
-                ? "ค้นหาใบสั่งเบิก, Batch, วันที่..."
-                : "Search Order, Batch, Date..."
-            }
-            className="field w-full rounded-md font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-amber-500"
-            style={{ width: "100%", height: 35, minHeight: 35, padding: "7px 10px 7px 32px", borderRadius: 6, fontSize: 12 }}
-          />
+      {/* 3. Search and Quick Filter Bar (SAP Fiori Table Toolbar) */}
+      <div className={`${FIORI_SURFACE_CARD} flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-3.5 py-2.5 sm:px-4 sm:py-3`}>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="relative flex-1 min-w-0 max-w-xl">
+            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={
+                isThai
+                  ? "ค้นหาใบสั่งเบิก, Batch, วันที่..."
+                  : "Search Order, Batch, Date..."
+              }
+              className={`${FIORI_CONTROL_INPUT} w-full pl-9 pr-9`}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                title={isThai ? "ล้างคำค้นหา" : "Clear search"}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-[26px] w-[26px] items-center justify-center rounded-[3px] text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-[#152b4f] dark:hover:text-slate-200 transition-colors cursor-pointer"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          {(searchTerm || selectedMachineFilter !== "ALL") && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm("");
+                setSelectedMachineFilter("ALL");
+              }}
+              className={FIORI_BTN_SECONDARY}
+              title={isThai ? "รีเซ็ตตัวกรองทั้งหมด" : "Reset filters"}
+            >
+              <RotateCcw size={14} className="shrink-0" />
+              <span className="hidden sm:inline">{isThai ? "ล้างตัวกรอง" : "Reset"}</span>
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] sm:text-xs font-semibold text-slate-500 dark:text-slate-400 shrink-0">
+        <div className="flex items-center gap-2 text-[12.5px] font-semibold text-slate-600 dark:text-slate-300 shrink-0 tabular-nums">
           <span className="sm:hidden">
             {isThai ? `${filteredTrips.length}/${computedTrips.length} รอบ` : `${filteredTrips.length}/${computedTrips.length}`}
           </span>
@@ -1180,22 +1242,22 @@ export function TransferCarReport({
       {/* 4. Trips Table or Empty State */}
       {filteredTrips.length === 0 ? (
         /* Clean Production Empty State */
-        <div className="rounded-xl sm:rounded-2xl border p-6 sm:p-12 text-center bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs">
-          <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-2 sm:mb-3 rounded-xl sm:rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-500">
-            <Truck size={24} className="sm:w-8 sm:h-8" />
+        <div className={`${FIORI_SURFACE_CARD} p-8 sm:p-12 text-center`}>
+          <div className="w-12 h-12 mx-auto mb-3 rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] border border-[#b9c9d2] dark:border-[#1e3a5f] flex items-center justify-center text-[#087eaf] dark:text-[#38bdf8]">
+            <Truck size={24} />
           </div>
-          <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-200 mb-1">
+          <h3 className="text-[15px] font-bold text-slate-800 dark:text-slate-200 mb-1">
             {isThai
               ? "ไม่พบข้อมูลการใช้งาน Transfer Car ในเดือนที่เลือก"
               : "No Transfer Car Usage Records Found"}
           </h3>
-          <p className="hidden sm:block text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
+          <p className="text-[13px] text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-3">
             {isThai
               ? `ยังไม่มีรายการเบิกหรือขนย้ายเหล็กสลิตเข้าเครื่อง TM06 หรือ TM07 ในช่วงเดือน ${selectedMonth} หรือไม่ตรงกับเงื่อนไขการค้นหา`
               : `No slit coils were transported to TM06 or TM07 during ${selectedMonth}.`}
           </p>
-          <div className="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#0c1930] text-[11px] text-slate-600 dark:text-slate-300">
-            <AlertCircle size={13} className="text-amber-500" />
+          <div className="inline-flex items-center gap-2 text-[12px] text-slate-500 dark:text-slate-400">
+            <AlertCircle size={14} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
             <span>
               {isThai
                 ? "ข้อมูลจะถูกบันทึกอัตโนมัติเมื่อมีการสแกนในเมนู 'จ่ายหน้าเครื่อง' (Machine Issue) ของเครื่อง TM06 หรือ TM07"
@@ -1204,25 +1266,25 @@ export function TransferCarReport({
           </div>
         </div>
       ) : (
-        /* Detailed Trips Table */
-        <div className="rounded-xl sm:rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-xs overflow-hidden">
+        /* Detailed Trips Table (SAP Fiori Responsive Table) */
+        <div className={`${FIORI_SURFACE_CARD} overflow-hidden`}>
           <div className="overflow-x-auto">
-            <table className="w-full text-[10.5px] sm:text-xs border-collapse">
+            <table className="w-full text-[12.5px] sm:text-[13px] border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 font-bold uppercase tracking-wider text-[10px] sm:text-[11px]">
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit w-9 sm:w-12">#</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "รอบที่" : "Trip No."}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "วันที่" : "Date"}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "ช่วงเวลาย้าย" : "Time Window"}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เครื่องจักร" : "Machine"}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เลขที่ใบสั่งเบิก" : "Order No."}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "จำนวนแถบ" : "Strips"}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-right !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "น้ำหนักรวม (กก.)" : "Weight (kg)"}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-right !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "น้ำหนักรวม (ตัน)" : "Weight (ton)"}</th>
-                  <th className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center !bg-transparent !text-inherit w-20 sm:w-28 whitespace-nowrap">{isThai ? "รายละเอียด" : "Actions"}</th>
+                <tr className="border-b border-[#d9e2e8] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 font-semibold text-[12px] sm:text-[13px]">
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit w-11">#</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "รอบที่" : "Trip No."}</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "วันที่" : "Date"}</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "ช่วงเวลาย้าย" : "Time Window"}</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เครื่องจักร" : "Machine"}</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เลขที่ใบสั่งเบิก" : "Order No."}</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "จำนวนแถบ" : "Strips"}</th>
+                  <th className="!py-2.5 !px-3 !text-right !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "น้ำหนักรวม (กก.)" : "Weight (kg)"}</th>
+                  <th className="!py-2.5 !px-3 !text-right !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "น้ำหนักรวม (ตัน)" : "Weight (ton)"}</th>
+                  <th className="!py-2.5 !px-3 !text-center !bg-transparent !text-inherit w-32 whitespace-nowrap">{isThai ? "รายละเอียด" : "Actions"}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[#1e3a5f]/60">
+              <tbody className="divide-y divide-[#e5edf2] dark:divide-[#1e3a5f]/70">
                 {filteredTrips.map((trip) => {
                   const isExpanded = expandedTripId === trip.id;
                   const isTM06 = trip.machineId === "TM06";
@@ -1230,51 +1292,43 @@ export function TransferCarReport({
                   return (
                     <React.Fragment key={trip.id}>
                       <tr
-                        className={`transition-colors hover:bg-slate-50/80 dark:hover:bg-[#152646] ${
-                          isExpanded ? "bg-amber-50/40 dark:bg-amber-950/20" : ""
+                        className={`transition-colors hover:bg-[#edf7fb]/60 dark:hover:bg-[#152646] ${
+                          isExpanded ? "bg-[#edf7fb]/80 dark:bg-[#0d223f]/70" : ""
                         }`}
                       >
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center text-slate-400 font-mono text-[10px] sm:text-[11px] w-9 sm:w-12">
+                        <td className="!py-2.5 !px-3 !text-center text-slate-400 font-mono w-11">
                           <button
                             type="button"
                             onClick={() => setExpandedTripId(isExpanded ? null : trip.id)}
-                            className="inline-flex items-center justify-center p-0.5 sm:p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 cursor-pointer"
+                            aria-label={isExpanded ? (isThai ? "ซ่อนรายการแถบย่อย" : "Collapse coils") : (isThai ? "แสดงรายการแถบย่อย" : "Expand coils")}
+                            className={FIORI_BTN_ICON_COMPACT}
                           >
-                            {isExpanded ? <ChevronDown size={13} className="sm:w-3.5 sm:h-3.5" /> : <ChevronRight size={13} className="sm:w-3.5 sm:h-3.5" />}
+                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           </button>
                         </td>
 
                         {/* Trip Number */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap">
-                          <span className="inline-flex items-center justify-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 font-mono text-[10.5px] sm:text-xs">
-                            <Truck size={11} className="text-amber-500 shrink-0 sm:w-3 sm:h-3" />
-                            <span>{isThai ? `รอบที่ ${trip.tripNo}` : `Trip #${trip.tripNo}`}</span>
-                          </span>
+                        <td className="!py-2.5 !px-3 !text-center font-semibold text-slate-800 dark:text-slate-100 whitespace-nowrap font-mono tabular-nums">
+                          {isThai ? `รอบที่ ${trip.tripNo}` : `Trip #${trip.tripNo}`}
                         </td>
 
                         {/* Date */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                          <div className="inline-flex items-center justify-center gap-1 sm:gap-1.5">
-                            <Calendar size={12} className="text-slate-400 shrink-0 hidden sm:block sm:w-[13px] sm:h-[13px]" />
-                            <span>{trip.displayDate}</span>
-                          </div>
+                        <td className="!py-2.5 !px-3 !text-center font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap tabular-nums">
+                          {trip.displayDate}
                         </td>
 
                         {/* Time Window */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center font-mono text-[10.5px] sm:text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                          <div className="inline-flex items-center justify-center gap-1 sm:gap-1.5">
-                            <Clock size={12} className="text-amber-500 shrink-0 hidden sm:block sm:w-[13px] sm:h-[13px]" />
-                            <span>{trip.timePeriod}</span>
-                          </div>
+                        <td className="!py-2.5 !px-3 !text-center font-mono text-[12px] text-slate-600 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                          {trip.timePeriod}
                         </td>
 
-                        {/* Machine Badge */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center whitespace-nowrap">
+                        {/* Machine Status Indicator (SAP Fiori flat tag) */}
+                        <td className="!py-2.5 !px-3 !text-center whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center justify-center px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-extrabold ${
+                            className={`inline-flex items-center justify-center px-2 py-0.5 rounded-[3px] text-[11.5px] font-bold border ${
                               isTM06
-                                ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
-                                : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300 dark:border-blue-700"
+                                ? "bg-amber-50 text-[#b45309] border-amber-300 dark:bg-amber-900/35 dark:text-amber-300 dark:border-amber-700"
+                                : "bg-[#edf7fb] text-[#075985] border-[#b9c9d2] dark:bg-[#0d223f] dark:text-[#38bdf8] dark:border-[#1e3a5f]"
                             }`}
                           >
                             {trip.machineId}
@@ -1282,95 +1336,93 @@ export function TransferCarReport({
                         </td>
 
                         {/* Order No */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center font-mono text-[10.5px] sm:text-xs font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                        <td className="!py-2.5 !px-3 !text-center font-mono text-[12.5px] font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">
                           {trip.orderNo}
                         </td>
 
                         {/* Strip Count */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center font-bold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
-                          <span className="inline-flex items-center justify-center px-1.5 sm:px-2 py-0.5 rounded bg-slate-100 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
-                            {trip.stripCount} {isThai ? "แถบ" : "pcs"}
-                          </span>
+                        <td className="!py-2.5 !px-3 !text-center font-semibold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                          {trip.stripCount} {isThai ? "แถบ" : "pcs"}
                         </td>
 
                         {/* Total Weight Kg */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-right font-mono font-bold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                        <td className="!py-2.5 !px-3 !text-right font-mono font-semibold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
                           {formatTwoDecimals(trip.totalWeightKg)}
                         </td>
 
                         {/* Total Weight Ton */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-right font-mono font-extrabold text-emerald-600 dark:text-emerald-400 tabular-nums whitespace-nowrap">
+                        <td className="!py-2.5 !px-3 !text-right font-mono font-bold text-[#107e3e] dark:text-emerald-400 tabular-nums whitespace-nowrap">
                           {formatTwoDecimals(trip.totalWeightTon)}
                         </td>
 
-                        {/* Expand/Collapse Button */}
-                        <td className="!py-2 sm:!py-3 !px-2 sm:!px-3.5 !text-center w-20 sm:w-28 whitespace-nowrap">
+                        {/* Expand/Collapse Button (SAP Fiori Compact Action) */}
+                        <td className="!py-2.5 !px-3 !text-center w-32 whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => setExpandedTripId(isExpanded ? null : trip.id)}
-                            className="inline-flex items-center justify-center gap-0.5 sm:gap-1 px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg text-[10px] sm:text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 border border-amber-200 dark:border-amber-800 cursor-pointer transition-all"
+                            className={isExpanded ? FIORI_BTN_COMPACT_PRIMARY : FIORI_BTN_COMPACT_SECONDARY}
                           >
                             <span>{isExpanded ? (isThai ? "ซ่อน" : "Hide") : (isThai ? "ดูแถบย่อย" : "View Coils")}</span>
-                            {isExpanded ? <ChevronDown size={11} className="sm:w-3 sm:h-3" /> : <ChevronRight size={11} className="sm:w-3 sm:h-3" />}
+                            {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                           </button>
                         </td>
                       </tr>
 
                       {/* Expandable Coils Breakdown Sub-table */}
                       {isExpanded && (
-                        <tr className="bg-slate-50/70 dark:bg-[#0a1628]/80 border-b border-slate-200 dark:border-[#1e3a5f]">
-                          <td colSpan={10} className="!p-2 sm:!p-4">
-                            <div className="rounded-lg sm:rounded-xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] p-2 sm:p-3 shadow-inner">
-                              <div className="flex items-center justify-between pb-1.5 sm:pb-2 mb-1.5 sm:mb-2 border-b border-slate-100 dark:border-[#1e3a5f]/80">
-                                <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1 sm:gap-1.5">
-                                  <Layers size={13} className="text-amber-500 shrink-0 sm:w-3.5 sm:h-3.5" />
+                        <tr className="bg-[#f5f8fa]/80 dark:bg-[#0a1628]/80 border-b border-[#d9e2e8] dark:border-[#1e3a5f]">
+                          <td colSpan={10} className="!p-3 sm:!p-4">
+                            <div className="rounded-[4px] border bg-white dark:bg-[#111e38] border-[#d9e2e8] dark:border-[#1e3a5f] p-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
+                                <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                                  <Layers size={14} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
                                   <span>
                                     {isThai
                                       ? `รายการแถบเหล็กสลิตที่ขนย้ายในรอบนี้ (${trip.items.length} รายการ)`
                                       : `Coil strips transported in this trip (${trip.items.length} items)`}
                                   </span>
                                 </span>
-                                <span className="text-[10.5px] sm:text-[11px] text-slate-400 font-mono shrink-0">
+                                <span className="text-[12px] text-slate-500 dark:text-slate-400 font-mono shrink-0">
                                   {isThai ? "ปลายทาง: " : "Destination: "}
-                                  <strong className="text-slate-700 dark:text-slate-200">{trip.machineId}</strong>
+                                  <strong className="text-slate-800 dark:text-slate-200">{trip.machineId}</strong>
                                 </span>
                               </div>
 
                               <div className="overflow-x-auto">
-                                <table className="w-full text-[10.5px] sm:text-xs border-collapse">
+                                <table className="w-full text-[12px] sm:text-[12.5px] border-collapse">
                                   <thead>
-                                    <tr className="text-[10px] sm:text-[10.5px] font-semibold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-[#1e3a5f] bg-slate-50/60 dark:bg-[#0c1930]/60">
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center !bg-transparent !text-inherit w-8 sm:w-10">#</th>
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-left !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "รหัส Batch" : "Batch No."}</th>
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "ความหนา (mm)" : "Thickness (mm)"}</th>
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "ความกว้าง (mm)" : "Width (mm)"}</th>
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เกรด (Grade)" : "Grade"}</th>
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-right !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "น้ำหนัก (กก.)" : "Weight (kg)"}</th>
-                                      <th className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เวลายิงสแกน" : "Scan Time"}</th>
+                                    <tr className="text-[11.5px] sm:text-[12px] font-semibold text-slate-600 dark:text-slate-300 border-b border-[#e5edf2] dark:border-[#1e3a5f] bg-[#f8fafc] dark:bg-[#0c1930]/70">
+                                      <th className="!py-2 !px-3 !text-center !bg-transparent !text-inherit w-10">#</th>
+                                      <th className="!py-2 !px-3 !text-left !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "รหัส Batch" : "Batch No."}</th>
+                                      <th className="!py-2 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "ความหนา (mm)" : "Thickness (mm)"}</th>
+                                      <th className="!py-2 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "ความกว้าง (mm)" : "Width (mm)"}</th>
+                                      <th className="!py-2 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เกรด (Grade)" : "Grade"}</th>
+                                      <th className="!py-2 !px-3 !text-right !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "น้ำหนัก (กก.)" : "Weight (kg)"}</th>
+                                      <th className="!py-2 !px-3 !text-center !bg-transparent !text-inherit whitespace-nowrap">{isThai ? "เวลายิงสแกน" : "Scan Time"}</th>
                                     </tr>
                                   </thead>
-                                  <tbody className="divide-y divide-slate-100 dark:divide-[#1e3a5f]/40">
+                                  <tbody className="divide-y divide-[#eef3f6] dark:divide-[#1e3a5f]/50">
                                     {trip.items.map((item, idx) => (
-                                      <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-[#152646]/60">
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center font-mono text-[10px] sm:text-[11px] text-slate-400 w-8 sm:w-10">
+                                      <tr key={item.id} className="hover:bg-[#edf7fb]/50 dark:hover:bg-[#152646]/60">
+                                        <td className="!py-2 !px-3 !text-center font-mono text-slate-400 tabular-nums w-10">
                                           {idx + 1}
                                         </td>
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-left font-mono font-bold text-blue-600 dark:text-cyan-400 whitespace-nowrap">
+                                        <td className="!py-2 !px-3 !text-left font-mono font-semibold text-[#075985] dark:text-[#38bdf8] whitespace-nowrap">
                                           {item.batch}
                                         </td>
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                        <td className="!py-2 !px-3 !text-center font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                           {item.certThickness}
                                         </td>
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap">
+                                        <td className="!py-2 !px-3 !text-center font-mono tabular-nums text-slate-700 dark:text-slate-300 whitespace-nowrap">
                                           {item.width}
                                         </td>
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                        <td className="!py-2 !px-3 !text-center text-slate-600 dark:text-slate-300 whitespace-nowrap">
                                           {item.grade}
                                         </td>
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-right font-mono font-bold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
+                                        <td className="!py-2 !px-3 !text-right font-mono font-semibold text-slate-800 dark:text-slate-100 tabular-nums whitespace-nowrap">
                                           {formatTwoDecimals(item.weightKg)}
                                         </td>
-                                        <td className="!py-1.5 sm:!py-2 !px-2 sm:!px-3 !text-center text-slate-500 font-mono text-[10px] sm:text-[11px] whitespace-nowrap">
+                                        <td className="!py-2 !px-3 !text-center text-slate-500 dark:text-slate-400 font-mono text-[11.5px] tabular-nums whitespace-nowrap">
                                           {item.timestampStr}
                                         </td>
                                       </tr>

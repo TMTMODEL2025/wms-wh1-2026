@@ -69,6 +69,35 @@ interface DailyReportViewProps {
   onSelectedDateChange?: (date: string) => void;
 }
 
+const FIORI_BTN_BASE =
+  "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[7px] !text-[14px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+
+const FIORI_BTN_SECONDARY = `${FIORI_BTN_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_BTN_SUCCESS = `${FIORI_BTN_BASE} border-[#107e3e] bg-[#107e3e] text-white hover:bg-[#0d6933] hover:border-[#0d6933] dark:border-emerald-600 dark:bg-emerald-600 dark:text-white dark:hover:bg-emerald-700 dark:hover:border-emerald-700`;
+
+const FIORI_BTN_CRITICAL = `${FIORI_BTN_BASE} border-[#b45309] bg-[#b45309] text-white hover:bg-[#92400e] hover:border-[#92400e] dark:border-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-700 dark:hover:border-amber-700`;
+
+const FIORI_BTN_LINE = `${FIORI_BTN_BASE} border-[#06C755] bg-[#06C755] text-white hover:bg-[#05b34c] hover:border-[#05b34c]`;
+
+const FIORI_BTN_ICON_SECONDARY =
+  "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[4px] border border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8] transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_COMPACT_BASE =
+  "inline-flex min-h-[30px] items-center justify-center gap-1 rounded-[4px] border px-3 py-1 !text-[13px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_COMPACT_PRIMARY = `${FIORI_BTN_COMPACT_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985]`;
+
+const FIORI_BTN_COMPACT_SECONDARY = `${FIORI_BTN_COMPACT_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_CONTROL_INPUT =
+  "h-[36px] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[14px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none transition-colors";
+
+const FIORI_SEGMENTED_GROUP =
+  "inline-flex min-h-[36px] items-stretch rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0c1930] p-[2px] gap-[2px]";
+
 const REPORT_BUILDING_META: Array<{
   buildingId: "H" | "F" | "E9" | "E10" | "I";
   buildingNameTh: string;
@@ -3303,50 +3332,60 @@ export function DailyReportView({
       {/* =========================================================================
           REPORT MODE SWITCHER (Daily Report vs Monthly Report vs Storage Space Report)
           ========================================================================= */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-3 p-0.5 sm:p-2.5 rounded-lg sm:rounded-2xl bg-slate-100/90 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] shadow-xs">
-        <div className="flex items-center justify-between sm:inline-flex sm:flex-wrap w-full sm:w-auto rounded-md sm:rounded-xl p-0.5 sm:p-1 bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-xs gap-0.5 sm:gap-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 sm:p-3 rounded-[4px] bg-white dark:bg-[#111e38] border border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs">
+        <div
+          role="tablist"
+          aria-label={isThai ? "ประเภทของรายงาน" : "Report Mode"}
+          className={`${FIORI_SEGMENTED_GROUP} w-full sm:w-auto flex sm:inline-flex`}
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={reportMode === "daily"}
             onClick={() => setReportMode("daily")}
-            className={`flex-1 sm:flex-initial px-1 sm:px-4 py-1 sm:py-2 rounded sm:rounded-lg text-[9px] sm:text-sm font-bold sm:font-extrabold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
+            className={`flex-1 sm:flex-initial inline-flex min-h-[32px] items-center justify-center gap-1.5 px-2.5 sm:px-[14px] py-1.5 rounded-[3px] !text-[12.5px] sm:!text-[14px] font-semibold leading-tight transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               reportMode === "daily"
-                ? "bg-cyan-600 text-white shadow-sm"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-[#087eaf] text-white shadow-xs"
+                : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
             }`}
           >
-            <FileText size={10} className="shrink-0 w-2.5 h-2.5 sm:w-4 sm:h-4" />
+            <FileText size={15} className="shrink-0" />
             <span>{isThai ? "รายงานประจำวัน" : "Daily Report"}</span>
           </button>
 
           <button
             type="button"
+            role="tab"
+            aria-selected={reportMode === "monthly"}
             onClick={() => setReportMode("monthly")}
-            className={`flex-1 sm:flex-initial px-1 sm:px-4 py-1 sm:py-2 rounded sm:rounded-lg text-[9px] sm:text-sm font-bold sm:font-extrabold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
+            className={`flex-1 sm:flex-initial inline-flex min-h-[32px] items-center justify-center gap-1.5 px-2.5 sm:px-[14px] py-1.5 rounded-[3px] !text-[12.5px] sm:!text-[14px] font-semibold leading-tight transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               reportMode === "monthly"
-                ? "bg-cyan-600 text-white shadow-sm"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-[#087eaf] text-white shadow-xs"
+                : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
             }`}
           >
-            <Calendar size={10} className="shrink-0 w-2.5 h-2.5 sm:w-4 sm:h-4" />
+            <Calendar size={15} className="shrink-0" />
             <span>{isThai ? "รายงานประจำเดือน" : "Monthly Report"}</span>
           </button>
 
           <button
             type="button"
+            role="tab"
+            aria-selected={reportMode === "space"}
             onClick={() => setReportMode("space")}
-            className={`flex-1 sm:flex-initial px-1 sm:px-4 py-1 sm:py-2 rounded sm:rounded-lg text-[9px] sm:text-sm font-bold sm:font-extrabold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
+            className={`flex-1 sm:flex-initial inline-flex min-h-[32px] items-center justify-center gap-1.5 px-2.5 sm:px-[14px] py-1.5 rounded-[3px] !text-[12.5px] sm:!text-[14px] font-semibold leading-tight transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
               reportMode === "space"
-                ? "bg-cyan-600 text-white shadow-sm"
-                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                ? "bg-[#087eaf] text-white shadow-xs"
+                : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
             }`}
           >
-            <Boxes size={10} className="shrink-0 w-2.5 h-2.5 sm:w-4 sm:h-4" />
+            <Boxes size={15} className="shrink-0" />
             <span className="sm:hidden">{isThai ? "พื้นที่จัดเก็บ" : "Space"}</span>
             <span className="hidden sm:inline">{isThai ? "รายงานพื้นที่จัดเก็บเหล็กสลิต" : "Storage Space Report"}</span>
           </button>
         </div>
 
-        <div className="hidden sm:flex text-[11px] font-medium text-slate-500 dark:text-slate-400 px-2 items-center gap-2">
+        <div className="hidden sm:flex text-[12px] font-medium text-slate-500 dark:text-slate-400 px-1 items-center gap-2">
           <span>
             {reportMode === "daily"
               ? isThai
@@ -3366,22 +3405,19 @@ export function DailyReportView({
       {reportMode === "daily" ? (
         <>
           {/* =========================================================================
-              HEADER & FILTER BAR (Section 1 Requirement)
+              HEADER & FILTER BAR (SAP Fiori Toolbar)
               ========================================================================= */}
-          {/* =========================================================================
-              HEADER & FILTER BAR (Compact Inline Single Row Layout)
-              ========================================================================= */}
-      <div className="p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-2 sm:gap-3 overflow-hidden">
+      <div className="p-3.5 sm:p-4 rounded-[4px] bg-white dark:bg-[#111e38] border border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-3 overflow-hidden">
         {/* Left: Title & Subtitle */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-          <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs shrink-0">
-            <FileText size={18} className="sm:w-[22px] sm:h-[22px]" />
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] shrink-0">
+            <FileText size={20} />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
+            <h2 className="text-[15px] sm:text-[18px] font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
               <span className="truncate">{isThai ? "รายงานประจำวัน (Daily Report)" : "Daily Production & Material Report"}</span>
             </h2>
-            <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate">
+            <p className="hidden sm:block text-[12px] text-slate-500 dark:text-slate-400 truncate">
               {isThai
                 ? "สรุปการรับเข้าวัตถุดิบเครื่องจักร SM01 - SM04 และรายงานการเบิกจ่ายหน้าเครื่องประจำวัน"
                 : "Daily Machine Inbound & Dispensing Summary Report"}
@@ -3389,44 +3425,45 @@ export function DailyReportView({
           </div>
         </div>
 
-        {/* Right: Inline Compact Controls (Date, Shift, Excel, Print) */}
-        <div className="flex items-center justify-start lg:justify-end gap-1.5 sm:gap-2 flex-wrap w-full lg:w-auto max-w-full shrink-0">
-          {/* 1. Compact Date Selector */}
-          <div className="h-[35px] px-2.5 rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1.5 text-xs flex-1 sm:flex-initial justify-between sm:justify-start shrink-0">
-            <div className="flex items-center gap-1 shrink-0">
-              <Calendar size={13} className="text-cyan-500 shrink-0 sm:w-3.5 sm:h-3.5" />
-              <span className="font-bold text-slate-700 dark:text-slate-300 text-xs shrink-0">
-                {isThai ? "วันที่:" : "Date:"}
-              </span>
-            </div>
+        {/* Right: SAP Fiori Action Controls (Date, Shift, Screenshot, LINE, Excel, Print) */}
+        <div className="flex items-center justify-start lg:justify-end gap-2 flex-wrap w-full lg:w-auto max-w-full shrink-0">
+          {/* 1. Date Selector */}
+          <div className="flex items-center gap-2 shrink-0">
+            <label
+              htmlFor="daily-report-date"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+            >
+              <Calendar size={15} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
+              <span>{isThai ? "วันที่" : "Date"}</span>
+            </label>
             <input
+              id="daily-report-date"
               type="date"
               value={selectedDate}
               onChange={(e) => {
                 setSelectedDate(e.target.value);
                 setHasUserChangedShift(false);
               }}
-              className="h-[27px] px-2 rounded text-xs font-mono font-bold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer shadow-xs"
+              className={`${FIORI_CONTROL_INPUT} px-2.5 font-mono font-semibold cursor-pointer`}
             />
           </div>
 
-          {/* 2. Compact Shift Selector + Integrated Period Badge */}
-          <div className="h-[35px] px-2 rounded-md bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1.5 text-xs shrink-0">
-            <Clock size={13} className="text-amber-500 shrink-0 hidden sm:block sm:w-3.5 sm:h-3.5" />
-            <div className="inline-flex rounded p-0.5 bg-slate-200/80 dark:bg-[#122342] border border-slate-300 dark:border-[#1e3a5f]">
+          {/* 2. Shift Segmented Selector */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className={FIORI_SEGMENTED_GROUP}>
               <button
                 type="button"
                 onClick={() => {
                   setHasUserChangedShift(true);
                   setSelectedShift("day");
                 }}
-                className={`h-[25px] px-2.5 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   selectedShift === "day"
-                    ? "bg-amber-500 text-white shadow-xs font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-[#b45309] text-white shadow-xs"
+                    : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#b45309] dark:hover:text-amber-400"
                 }`}
               >
-                <Sun size={11} className="sm:w-3 sm:h-3" />
+                <Sun size={14} className="shrink-0" />
                 <span>{isThai ? "กะเช้า" : "Day"}</span>
               </button>
 
@@ -3436,26 +3473,23 @@ export function DailyReportView({
                   setHasUserChangedShift(true);
                   setSelectedShift("night");
                 }}
-                className={`h-[25px] px-2.5 rounded text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                className={`inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                   selectedShift === "night"
-                    ? "bg-indigo-600 text-white shadow-xs font-extrabold"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                    ? "bg-[#075985] text-white shadow-xs"
+                    : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
                 }`}
               >
-                <Moon size={11} className="sm:w-3 sm:h-3" />
+                <Moon size={14} className="shrink-0" />
                 <span>{isThai ? "กะดึก" : "Night"}</span>
               </button>
             </div>
 
-            {/* Embedded Shift Period Badge */}
-            <span className="hidden 2xl:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-cyan-500/10 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/20 whitespace-nowrap">
-              {selectedShift === "day"
-                ? "08:00-20:00 น."
-                : "20:00-08:00 น."}
+            <span className="hidden 2xl:inline-block font-mono text-[12px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap tabular-nums">
+              {selectedShift === "day" ? "08:00-20:00 น." : "20:00-08:00 น."}
             </span>
           </div>
 
-          {/* 3. Capture Screenshot (Scoped: Total Inbound Card -> Chart 4) */}
+          {/* 3. Capture Screenshot */}
           <button
             type="button"
             onClick={handleCaptureScreenshotClick}
@@ -3465,17 +3499,17 @@ export function DailyReportView({
                 ? "แคปภาพเฉพาะส่วนสรุป (รับเข้าคลังรวม ถึง 4. กราฟแนวโน้มรายชั่วโมง)"
                 : "Capture summary dashboard (Total Inbound through Chart 4)"
             }
-            className="flex h-[35px] px-2.5 sm:px-3 rounded-md text-xs font-bold bg-sky-600 hover:bg-sky-700 disabled:opacity-60 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            className={`${FIORI_BTN_PRIMARY} min-h-[36px]`}
           >
             {isCapturingSummary && shareModalMode !== "line" ? (
-              <Loader2 size={14} className="shrink-0 animate-spin" />
+              <Loader2 size={15} className="shrink-0 animate-spin" />
             ) : (
-              <Camera size={14} className="shrink-0" />
+              <Camera size={15} className="shrink-0" />
             )}
             <span>{isThai ? "แคปหน้าจอ" : "Screenshot"}</span>
           </button>
 
-          {/* 4. Share to LINE (Scoped Image + Summary Text for Manager) */}
+          {/* 4. Share to LINE */}
           <button
             type="button"
             onClick={handleOpenLineShareClick}
@@ -3485,12 +3519,12 @@ export function DailyReportView({
                 ? "แชร์ภาพสรุปและข้อความแจ้งผู้จัดการผ่าน LINE"
                 : "Share summary image & message to Manager via LINE"
             }
-            className="flex h-[35px] px-2.5 sm:px-3 rounded-md text-xs font-bold bg-[#06C755] hover:bg-[#05b34c] disabled:opacity-60 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            className={`${FIORI_BTN_LINE} min-h-[36px]`}
           >
             {isCapturingSummary && shareModalMode === "line" ? (
-              <Loader2 size={14} className="shrink-0 animate-spin" />
+              <Loader2 size={15} className="shrink-0 animate-spin" />
             ) : (
-              <MessageCircle size={14} className="shrink-0" />
+              <MessageCircle size={15} className="shrink-0" />
             )}
             <span>{isThai ? "แชร์ส่ง LINE" : "Share LINE"}</span>
           </button>
@@ -3499,9 +3533,9 @@ export function DailyReportView({
           <button
             type="button"
             onClick={exportToExcel}
-            className="hidden sm:flex h-[35px] px-3 rounded-md text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+            className={`${FIORI_BTN_SUCCESS} hidden sm:inline-flex min-h-[36px]`}
           >
-            <FileSpreadsheet size={14} className="shrink-0" />
+            <FileSpreadsheet size={15} className="shrink-0" />
             <span>{isThai ? "ส่งออก Excel" : "Export"}</span>
           </button>
 
@@ -3509,9 +3543,9 @@ export function DailyReportView({
           <button
             type="button"
             onClick={() => window.print()}
-            className="hidden sm:flex h-[35px] px-3 rounded-md text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+            className={`${FIORI_BTN_SECONDARY} hidden sm:inline-flex min-h-[36px]`}
           >
-            <Printer size={14} className="shrink-0" />
+            <Printer size={15} className="shrink-0" />
             <span>{isThai ? "พิมพ์" : "Print"}</span>
           </button>
         </div>
@@ -3627,7 +3661,7 @@ export function DailyReportView({
         <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-4">
           <div className="flex items-center justify-between border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <BarChart3 size={16} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+              <BarChart3 size={14} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                 {isThai ? "1. กราฟสรุปการรับเข้าวัตถุดิบ (SM01-04 & รับเข้าภายนอก)" : "1. Material Inbound Summary (SM01-04 & External)"}
               </h3>
@@ -3738,7 +3772,7 @@ export function DailyReportView({
         <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-4">
           <div className="flex items-center justify-between border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <BarChart3 size={16} className="text-amber-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+              <BarChart3 size={14} className="text-amber-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                 {isThai ? "2. กราฟสรุปการเบิกจ่าย รายเครื่องจักรผลิต" : "2. Machine Dispensing Summary"}
               </h3>
@@ -3836,7 +3870,7 @@ export function DailyReportView({
         <div className="lg:col-span-1 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2 border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
             <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              <PieChartIcon size={16} className="text-purple-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+              <PieChartIcon size={14} className="text-purple-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
                 {isThai ? "3. สัดส่วนการรับเข้า-จ่ายออก ทั้ง2กะ" : "3. Inbound-Outbound Distribution (Both Shifts)"}
               </h3>
@@ -3985,7 +4019,7 @@ export function DailyReportView({
         <div className="lg:col-span-2 p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-3">
           <div className="flex items-center justify-between border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Activity size={16} className="text-emerald-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+              <Activity size={14} className="text-emerald-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
               <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                 {isThai ? "4. กราฟแนวโน้มการรับเข้า-เบิกจ่าย รายชั่วโมงในกะ" : "4. Hourly Shift Throughput Timeline"}
               </h3>
@@ -4139,7 +4173,7 @@ export function DailyReportView({
         <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
-              <Layers size={16} className="sm:w-5 sm:h-5" />
+              <Layers size={14} className="sm:w-5 sm:h-5" />
             </div>
             <div>
               <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5 sm:gap-2">
@@ -4264,26 +4298,25 @@ export function DailyReportView({
                 </table>
               </div>
 
-              {/* Section 1 Pagination Control Bar */}
+              {/* Section 1 Pagination Control Bar (SAP Fiori) */}
               {totalSmRecords > 0 && (
-                <div className="p-2.5 sm:p-4 bg-slate-50/80 dark:bg-[#0d1b33]/80 border-t border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                <div className="px-3.5 py-2.5 sm:px-4 sm:py-3 bg-[#f5f8fa] dark:bg-[#0d1b33]/90 border-t border-[#d9e2e8] dark:border-[#1e3a5f] flex flex-col sm:flex-row items-center justify-between gap-2.5 text-[12.5px] font-semibold text-slate-600 dark:text-slate-300">
                   {/* Left: Info & Rows per page selector */}
-                  <div className="flex flex-wrap items-center gap-2 text-[11px] sm:text-xs">
-                    <span>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="tabular-nums">
                       {isThai
                         ? `แสดงรายการที่ ${smStartIndex + 1} - ${smEndIndex} จากทั้งหมด ${totalSmRecords.toLocaleString()} รายการ`
                         : `Showing ${smStartIndex + 1} - ${smEndIndex} of ${totalSmRecords.toLocaleString()} records`}
                     </span>
-                    <div className="flex items-center gap-1 ml-1 sm:ml-2">
-                      <span className="text-[10px] sm:text-[11px] text-slate-400">{isThai ? "แสดงหน้าละ:" : "Per page:"}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[12px] text-slate-500 dark:text-slate-400">{isThai ? "แสดงหน้าละ:" : "Per page:"}</span>
                       <select
                         value={smInboundPageSize}
                         onChange={(e) => {
                           setSmInboundPageSize(Number(e.target.value));
                           setSmInboundPage(1);
                         }}
-                        className="field font-normal rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                        style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                        className={`${FIORI_CONTROL_INPUT} !h-[32px] px-2.5 !text-[13px] font-mono cursor-pointer`}
                       >
                         <option value={10}>10</option>
                         <option value={20}>20</option>
@@ -4299,13 +4332,13 @@ export function DailyReportView({
                       type="button"
                       disabled={currentSmPage <= 1}
                       onClick={() => setSmInboundPage((p) => Math.max(1, p - 1))}
-                      className="px-2.5 py-1 sm:py-1.5 rounded-lg border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-cyan-950/40 cursor-pointer transition-all flex items-center gap-1 active:scale-95 text-xs font-bold shadow-xs"
+                      className={FIORI_BTN_COMPACT_SECONDARY}
                     >
                       <ChevronLeft size={14} />
                       <span>{isThai ? "หน้าก่อนหน้า" : "Prev"}</span>
                     </button>
 
-                    <span className="px-3 py-1 rounded-lg bg-cyan-500/10 dark:bg-cyan-950/80 text-cyan-600 dark:text-cyan-400 font-mono font-black text-xs border border-cyan-500/30">
+                    <span className="inline-flex min-h-[30px] items-center px-3 rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#075985] dark:text-[#38bdf8] font-mono tabular-nums font-semibold text-[12.5px] border border-[#b9c9d2] dark:border-[#1e3a5f]">
                       {isThai ? `หน้า ${currentSmPage} / ${totalSmPages}` : `Page ${currentSmPage} of ${totalSmPages}`}
                     </span>
 
@@ -4313,7 +4346,7 @@ export function DailyReportView({
                       type="button"
                       disabled={currentSmPage >= totalSmPages}
                       onClick={() => setSmInboundPage((p) => Math.min(totalSmPages, p + 1))}
-                      className="px-2.5 py-1 sm:py-1.5 rounded-lg border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-cyan-950/40 cursor-pointer transition-all flex items-center gap-1 active:scale-95 text-xs font-bold shadow-xs"
+                      className={FIORI_BTN_COMPACT_SECONDARY}
                     >
                       <span>{isThai ? "หน้าถัดไป" : "Next"}</span>
                       <ChevronRight size={14} />
@@ -4333,7 +4366,7 @@ export function DailyReportView({
         <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
-              <Cpu size={16} className="sm:w-5 sm:h-5" />
+              <Cpu size={14} className="sm:w-5 sm:h-5" />
             </div>
             <div>
               <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center flex-wrap gap-1.5 sm:gap-2">
@@ -4437,22 +4470,22 @@ export function DailyReportView({
            MONTHLY REPORT VIEW (Cumulative Daily & Machine Analytics)
            ========================================================================= */
         <>
-          {/* MONTHLY HEADER & FILTER BAR */}
-          <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-1.5 sm:gap-3 overflow-hidden">
+          {/* MONTHLY HEADER & FILTER BAR (SAP Fiori) */}
+          <div className="p-3.5 sm:p-4 rounded-[4px] bg-white dark:bg-[#111e38] border border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-3 overflow-hidden">
             {/* Left: Title & Subtitle */}
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs shrink-0">
-                <Calendar size={16} className="sm:w-[22px] sm:h-[22px]" />
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] shrink-0">
+                <Calendar size={20} />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-xs sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                <h2 className="text-[15px] sm:text-[18px] font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
                   <span className="truncate">
                     {isThai
                       ? "รายงานประจำเดือน (Monthly Cumulative Report)"
                       : "Monthly Cumulative Production & Material Report"}
                   </span>
                 </h2>
-                <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                <p className="hidden sm:block text-[12px] text-slate-500 dark:text-slate-400 truncate">
                   {isThai
                     ? "สรุปยอดสะสมการรับเข้าวัตถุดิบและเบิกจ่ายหน้าเครื่องรายวัน รายเครื่องจักร และสัดส่วนรวมตลอดทั้งเดือน"
                     : "Monthly Cumulative Inbound, Machine Dispensing & Daily Trend Summary"}
@@ -4461,78 +4494,77 @@ export function DailyReportView({
             </div>
 
             {/* Right: Monthly Filter Controls (Month/Year, Shift Filter, Export Excel, Print) */}
-            <div className="flex items-center justify-between sm:justify-start lg:justify-end gap-1 sm:gap-2 flex-nowrap sm:flex-wrap w-full lg:w-auto max-w-full shrink-0">
+            <div className="flex items-center justify-start lg:justify-end gap-2.5 flex-wrap w-full lg:w-auto max-w-full shrink-0">
               {/* 1. Month/Year Selector */}
-              <div className="px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs shrink-0">
-                <div className="flex items-center gap-1 shrink-0">
-                  <Calendar size={11} className="text-cyan-500 shrink-0 w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span className="hidden sm:inline font-bold text-slate-700 dark:text-slate-300 text-[11px] shrink-0">
-                    {isThai ? "เดือน/ปี:" : "Month:"}
-                  </span>
-                </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <label
+                  htmlFor="monthly-report-month"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap"
+                >
+                  <Calendar size={15} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
+                  <span className="hidden sm:inline">{isThai ? "เดือน/ปี" : "Month"}</span>
+                </label>
                 <input
+                  id="monthly-report-month"
                   type="month"
                   value={selectedMonth}
                   onChange={(e) => {
                     setSelectedMonth(e.target.value);
                     setMonthlyLedgerPage(1);
                   }}
-                  className="w-[102px] sm:w-auto px-1 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-lg text-[10px] sm:text-xs font-mono font-bold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500 cursor-pointer shadow-xs"
+                  className={`${FIORI_CONTROL_INPUT} px-2.5 font-mono font-semibold cursor-pointer`}
                 />
               </div>
 
-              {/* 2. Shift Filter Selector (All / Day / Night) */}
-              <div className="px-1 sm:px-2.5 py-0.5 sm:py-1.5 rounded-lg sm:rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs flex-1 sm:flex-initial min-w-0 justify-center shrink-0">
-                <Clock size={13} className="text-amber-500 shrink-0 hidden sm:block sm:w-3.5 sm:h-3.5" />
-                <div className="flex sm:inline-flex w-full sm:w-auto rounded sm:rounded-lg p-0.5 bg-slate-200/80 dark:bg-[#122342] border border-slate-300 dark:border-[#1e3a5f] gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setMonthlyShiftFilter("all")}
-                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
-                      monthlyShiftFilter === "all"
-                        ? "bg-cyan-600 text-white shadow-xs font-extrabold"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    <Layers size={10} className="shrink-0 w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    <span>{isThai ? "รวมทุกกะ" : "All Shifts"}</span>
-                  </button>
+              {/* 2. Shift Filter Segmented Control (All / Day / Night) */}
+              <div className={FIORI_SEGMENTED_GROUP}>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyShiftFilter("all")}
+                  className={`inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    monthlyShiftFilter === "all"
+                      ? "bg-[#087eaf] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
+                  }`}
+                >
+                  <Layers size={14} className="shrink-0" />
+                  <span>{isThai ? "รวมทุกกะ" : "All Shifts"}</span>
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setMonthlyShiftFilter("day")}
-                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
-                      monthlyShiftFilter === "day"
-                        ? "bg-amber-500 text-white shadow-xs font-extrabold"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    <Sun size={10} className="shrink-0 w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    <span>{isThai ? "กะเช้า" : "Day"}</span>
-                  </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyShiftFilter("day")}
+                  className={`inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    monthlyShiftFilter === "day"
+                      ? "bg-[#b45309] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#b45309] dark:hover:text-amber-400"
+                  }`}
+                >
+                  <Sun size={14} className="shrink-0" />
+                  <span>{isThai ? "กะเช้า" : "Day"}</span>
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setMonthlyShiftFilter("night")}
-                    className={`flex-1 sm:flex-initial px-1.5 sm:px-2 py-0.5 sm:py-1 rounded sm:rounded-md text-[9.5px] sm:text-[11px] font-bold tracking-tight sm:tracking-normal transition-all flex items-center justify-center gap-0.5 sm:gap-1 cursor-pointer whitespace-nowrap ${
-                      monthlyShiftFilter === "night"
-                        ? "bg-indigo-600 text-white shadow-xs font-extrabold"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    <Moon size={10} className="shrink-0 w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                    <span>{isThai ? "กะดึก" : "Night"}</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyShiftFilter("night")}
+                  className={`inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    monthlyShiftFilter === "night"
+                      ? "bg-[#075985] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
+                  }`}
+                >
+                  <Moon size={14} className="shrink-0" />
+                  <span>{isThai ? "กะดึก" : "Night"}</span>
+                </button>
               </div>
 
               {/* 3. Export Monthly Excel */}
               <button
                 type="button"
                 onClick={exportMonthlyToExcel}
-                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+                className={`${FIORI_BTN_SUCCESS} hidden sm:inline-flex min-h-[36px]`}
               >
-                <FileSpreadsheet size={14} className="shrink-0" />
+                <FileSpreadsheet size={15} className="shrink-0" />
                 <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
               </button>
 
@@ -4540,9 +4572,9 @@ export function DailyReportView({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                className={`${FIORI_BTN_SECONDARY} hidden sm:inline-flex min-h-[36px]`}
               >
-                <Printer size={14} className="shrink-0" />
+                <Printer size={15} className="shrink-0" />
                 <span>{isThai ? "พิมพ์" : "Print"}</span>
               </button>
             </div>
@@ -4652,7 +4684,7 @@ export function DailyReportView({
           <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <Activity size={16} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+                <Activity size={14} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
                 <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                   {isThai
                     ? `1. กราฟแนวโน้มรับเข้า-จ่ายออกรายวัน ตลอดทั้งเดือน (วันที่ 1 - ${monthlyAnalytics.daysInMonth})`
@@ -4786,7 +4818,7 @@ export function DailyReportView({
             <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-4">
               <div className="flex items-center justify-between border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <BarChart3 size={16} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+                  <BarChart3 size={14} className="text-cyan-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
                   <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                     {isThai
                       ? "2. ยอดสะสมรับเข้าแยกตามเครื่องจักร (SM)"
@@ -4891,7 +4923,7 @@ export function DailyReportView({
             <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-4">
               <div className="flex items-center justify-between border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
                 <div className="flex items-center gap-1.5 sm:gap-2">
-                  <BarChart3 size={16} className="text-amber-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+                  <BarChart3 size={14} className="text-amber-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
                   <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                     {isThai
                       ? "3. ยอดสะสมเบิกจ่ายแยกตามเครื่องจักรผลิต"
@@ -4996,7 +5028,7 @@ export function DailyReportView({
             <div className="p-3 sm:p-5 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md space-y-2.5 sm:space-y-3.5 flex flex-col justify-between">
               <div className="flex items-center justify-between gap-2 border-b pb-2 sm:pb-3 border-slate-200 dark:border-[#1e3a5f]">
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <PieChartIcon size={16} className="text-purple-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
+                  <PieChartIcon size={14} className="text-purple-500 shrink-0 sm:w-[18px] sm:h-[18px]" />
                   <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white truncate">
                     {isThai
                       ? "4. สัดส่วนการรับเข้า-จ่ายออกรวมทั้งเดือน"
@@ -5139,7 +5171,7 @@ export function DailyReportView({
             <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
               <div className="flex items-center gap-2 sm:gap-3">
                 <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
-                  <Layers size={16} className="sm:w-5 sm:h-5" />
+                  <Layers size={14} className="sm:w-5 sm:h-5" />
                 </div>
                 <div>
                   <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
@@ -5157,9 +5189,9 @@ export function DailyReportView({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-slate-500 dark:text-slate-400 font-semibold">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 text-[13px]">
+                  <span className="text-slate-600 dark:text-slate-300 font-semibold whitespace-nowrap">
                     {isThai ? "แสดงหน้าละ:" : "Rows:"}
                   </span>
                   <select
@@ -5168,8 +5200,7 @@ export function DailyReportView({
                       setMonthlyLedgerPageSize(Number(e.target.value));
                       setMonthlyLedgerPage(1);
                     }}
-                    className="field font-mono font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                    style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                    className={`${FIORI_CONTROL_INPUT} !h-[34px] px-2.5 !text-[13px] font-mono cursor-pointer`}
                   >
                     <option value={7} className="bg-white dark:bg-[#111e38]">
                       7 {isThai ? "วัน" : "days"}
@@ -5192,11 +5223,7 @@ export function DailyReportView({
                     setShowOnlyActiveDays((prev) => !prev);
                     setMonthlyLedgerPage(1);
                   }}
-                  className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10.5px] sm:text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
-                    showOnlyActiveDays
-                      ? "bg-cyan-600 text-white border-cyan-600"
-                      : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
-                  }`}
+                  className={showOnlyActiveDays ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                 >
                   {showOnlyActiveDays
                     ? isThai
@@ -5332,9 +5359,9 @@ export function DailyReportView({
                     </table>
                   </div>
 
-                  {/* Pagination Footer Bar */}
-                  <div className="px-2.5 sm:px-4 py-2 sm:py-3 bg-slate-50 dark:bg-[#0d1b33] border-t border-slate-200 dark:border-[#1e3a5f] flex flex-row items-center justify-between gap-1.5 sm:gap-3 text-[10.5px] sm:text-xs">
-                    <div className="text-slate-600 dark:text-slate-400 font-medium font-mono truncate">
+                  {/* Pagination Footer Bar (SAP Fiori) */}
+                  <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-[#f5f8fa] dark:bg-[#0d1b33] border-t border-[#d9e2e8] dark:border-[#1e3a5f] flex flex-row items-center justify-between gap-2 sm:gap-3 text-[12px] sm:text-[13px]">
+                    <div className="text-slate-600 dark:text-slate-400 font-medium font-mono tabular-nums truncate">
                       {totalRows === 0 ? (
                         isThai ? "ไม่มีข้อมูลแสดงผล" : "Showing 0 of 0 days"
                       ) : (
@@ -5357,14 +5384,14 @@ export function DailyReportView({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         disabled={safeCurrentPage <= 1}
                         onClick={() => setMonthlyLedgerPage((p) => Math.max(1, p - 1))}
-                        className="px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#182a4a] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5 sm:gap-1 transition-all cursor-pointer whitespace-nowrap"
+                        className={FIORI_BTN_COMPACT_SECONDARY}
                       >
-                        <ChevronLeft size={13} className="sm:w-3.5 sm:h-3.5" />
+                        <ChevronLeft size={14} />
                         <span className="hidden sm:inline">{isThai ? "ก่อนหน้า" : "Prev"}</span>
                       </button>
 
@@ -5374,10 +5401,10 @@ export function DailyReportView({
                             key={pageNum}
                             type="button"
                             onClick={() => setMonthlyLedgerPage(pageNum)}
-                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md sm:rounded-lg font-mono font-bold text-[10.5px] sm:text-xs transition-all cursor-pointer ${
+                            className={`inline-flex h-[30px] min-w-[30px] items-center justify-center px-2 rounded-[4px] border font-mono tabular-nums !text-[13px] font-semibold transition-colors cursor-pointer ${
                               pageNum === safeCurrentPage
-                                ? "bg-cyan-600 text-white shadow-xs"
-                                : "bg-white dark:bg-[#111e38] text-slate-600 dark:text-slate-300 border border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#182a4a]"
+                                ? "border-[#087eaf] bg-[#087eaf] text-white"
+                                : "border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f]"
                             }`}
                           >
                             {pageNum}
@@ -5389,10 +5416,10 @@ export function DailyReportView({
                         type="button"
                         disabled={safeCurrentPage >= totalPages}
                         onClick={() => setMonthlyLedgerPage((p) => Math.min(totalPages, p + 1))}
-                        className="px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg font-bold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#182a4a] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-0.5 sm:gap-1 transition-all cursor-pointer whitespace-nowrap"
+                        className={FIORI_BTN_COMPACT_SECONDARY}
                       >
-                        <span className="hidden sm:inline">{isThai ? "ถัดไป (Next Page)" : "Next Page"}</span>
-                        <ChevronRight size={13} className="sm:w-3.5 sm:h-3.5" />
+                        <span className="hidden sm:inline">{isThai ? "ถัดไป" : "Next"}</span>
+                        <ChevronRight size={14} />
                       </button>
                     </div>
                   </div>
@@ -5406,14 +5433,14 @@ export function DailyReportView({
            STORAGE SPACE REPORT VIEW (Warehouse Baskets + Machine Staging Area)
            ========================================================================= */
         <>
-          {/* HEADER & FILTER BAR FOR STORAGE SPACE REPORT */}
-          <div className="px-1.5 py-2 sm:p-4 rounded-xl sm:rounded-2xl bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] shadow-md flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-1.5 sm:gap-3 overflow-hidden">
-            <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 px-0.5 sm:px-0">
-              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shadow-xs shrink-0">
-                <Boxes size={16} className="sm:w-[22px] sm:h-[22px]" />
+          {/* HEADER & FILTER BAR FOR STORAGE SPACE REPORT (SAP Fiori) */}
+          <div className="p-3.5 sm:p-4 rounded-[4px] bg-white dark:bg-[#111e38] border border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs flex flex-col lg:flex-row lg:flex-wrap lg:items-center justify-between gap-3 overflow-hidden">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="flex h-[38px] w-[38px] items-center justify-center rounded-[4px] bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] shrink-0">
+                <Boxes size={20} />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-xs sm:text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                <h2 className="text-[15px] sm:text-[18px] font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2 truncate">
                   <span className="sm:hidden truncate">
                     {isThai ? "รายงานพื้นที่จัดเก็บเหล็กสลิต" : "Slit Steel Storage Space Report"}
                   </span>
@@ -5423,7 +5450,7 @@ export function DailyReportView({
                       : "Slit Steel Storage Space Report"}
                   </span>
                 </h2>
-                <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                <p className="hidden sm:block text-[12px] text-slate-500 dark:text-slate-400 truncate">
                   {isThai
                     ? "สรุปสถานะคลังจัดเก็บตะกร้าเหล็กสลิต (อาคาร H, F, E9, E10, I) และพื้นที่วางวัตถุดิบรอผลิตหน้าเครื่องจักร (TM 1-14 / CF 1, 2, 4, 5)"
                     : "Comprehensive report for Warehouse Basket Storage by Building and Machine Staging Areas"}
@@ -5431,31 +5458,31 @@ export function DailyReportView({
               </div>
             </div>
 
-            <div className="flex items-center justify-start lg:justify-end gap-1 sm:gap-2 flex-nowrap sm:flex-wrap w-full lg:w-auto max-w-full min-w-0 shrink-0">
-              {/* Sub-view Switcher: Warehouse vs Machine */}
-              <div className="flex items-center justify-between sm:inline-flex w-full sm:w-auto min-w-0 rounded-md sm:rounded-xl p-0.5 sm:p-1 bg-slate-100 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] gap-0.5 sm:gap-0 shrink-0">
+            <div className="flex items-center justify-start lg:justify-end gap-2 flex-wrap w-full lg:w-auto max-w-full min-w-0 shrink-0">
+              {/* Sub-view Switcher: Warehouse vs Machine (SAP Fiori Segmented Control) */}
+              <div className={`${FIORI_SEGMENTED_GROUP} w-full sm:w-auto flex sm:inline-flex`}>
                 <button
                   type="button"
                   onClick={() => setSpaceReportSubTab("warehouse")}
-                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-2.5 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
+                  className={`flex-1 sm:flex-initial inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 sm:px-[14px] rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     spaceReportSubTab === "warehouse"
-                      ? "bg-cyan-600 text-white shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      ? "bg-[#087eaf] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
                   }`}
                 >
-                  <Building2 size={9} className="shrink-0 w-2.5 h-2.5 sm:w-[13px] sm:h-[13px]" />
+                  <Building2 size={14} className="shrink-0" />
                   <span>{isThai ? "คลังตะกร้าอาคาร" : "Warehouse Baskets"}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setSpaceReportSubTab("machine")}
-                  className={`flex-1 sm:flex-initial min-w-0 px-1 sm:px-2.5 py-1 sm:py-1.5 rounded sm:rounded-lg text-[8.5px] sm:text-xs font-bold tracking-tighter sm:tracking-normal leading-tight transition-all flex items-center justify-center gap-0.5 sm:gap-1.5 cursor-pointer whitespace-nowrap ${
+                  className={`flex-1 sm:flex-initial inline-flex min-h-[30px] items-center justify-center gap-1.5 px-3 sm:px-[14px] rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                     spaceReportSubTab === "machine"
-                      ? "bg-cyan-600 text-white shadow-xs"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      ? "bg-[#087eaf] text-white shadow-xs"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-[#152b4f] hover:text-[#075985] dark:hover:text-[#38bdf8]"
                   }`}
                 >
-                  <Cpu size={9} className="shrink-0 w-2.5 h-2.5 sm:w-[13px] sm:h-[13px]" />
+                  <Cpu size={14} className="shrink-0" />
                   <span>{isThai ? "พื้นที่หน้าเครื่อง" : "Machine Staging"}</span>
                 </button>
               </div>
@@ -5464,9 +5491,9 @@ export function DailyReportView({
               <button
                 type="button"
                 onClick={exportSpaceReportToExcel}
-                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs items-center gap-1.5 transition-all cursor-pointer active:scale-95 whitespace-nowrap shrink-0"
+                className={`${FIORI_BTN_SUCCESS} hidden sm:inline-flex min-h-[36px]`}
               >
-                <FileSpreadsheet size={14} className="shrink-0" />
+                <FileSpreadsheet size={15} className="shrink-0" />
                 <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
               </button>
 
@@ -5474,9 +5501,9 @@ export function DailyReportView({
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-[#182a4a] hover:bg-slate-200 dark:hover:bg-[#20375e] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#1e3a5f] shadow-xs items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shrink-0"
+                className={`${FIORI_BTN_SECONDARY} hidden sm:inline-flex min-h-[36px]`}
               >
-                <Printer size={14} className="shrink-0" />
+                <Printer size={15} className="shrink-0" />
                 <span>{isThai ? "พิมพ์" : "Print"}</span>
               </button>
             </div>
@@ -5520,15 +5547,15 @@ export function DailyReportView({
               : filteredSpaceData.spaceCapacitySummary.spacePercent;
 
             return (
-              <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-2.5 sm:p-5 text-white shadow-xl border border-cyan-500/30 dark:border-cyan-500/40">
+              <div className="relative overflow-hidden rounded-[4px] bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 dark:from-[#0b1528] dark:via-[#0f223d] dark:to-[#132b4f] p-3.5 sm:p-5 text-white shadow-xs border border-[#1e3a5f]">
                 <div className="absolute -right-12 -bottom-12 opacity-10 pointer-events-none hidden sm:block">
                   <Boxes size={240} />
                 </div>
 
                 {!isMachineTab && filteredSpaceData.selectedBuilding && (
-                  <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/15">
-                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-cyan-200">
-                      <Building2 size={15} className="text-cyan-400 shrink-0" />
+                  <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-white/15">
+                    <div className="flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-sky-200">
+                      <Building2 size={15} className="text-sky-300 shrink-0" />
                       <span>
                         {isThai
                           ? `กำลังแสดงข้อมูลสรุป: ${filteredSpaceData.selectedBuilding.buildingNameTh}`
@@ -5538,18 +5565,18 @@ export function DailyReportView({
                     <button
                       type="button"
                       onClick={() => setSpaceBuildingFilter("all")}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] sm:text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 transition-all cursor-pointer flex items-center gap-1"
+                      className="inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-[4px] border border-white/30 bg-white/15 hover:bg-white/25 px-3 py-1 !text-[13px] font-semibold text-white transition-colors cursor-pointer whitespace-nowrap"
                     >
-                      <X size={12} />
+                      <X size={13} />
                       <span>{isThai ? "แสดงทุกอาคาร" : "Show All Buildings"}</span>
                     </button>
                   </div>
                 )}
 
                 {isMachineTab && spaceMachineCategoryFilter !== "all" && (
-                  <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/15">
-                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-cyan-200">
-                      <Cpu size={15} className="text-cyan-400 shrink-0" />
+                  <div className="relative z-10 flex flex-wrap items-center justify-between gap-2 mb-3 pb-2.5 border-b border-white/15">
+                    <div className="flex items-center gap-2 text-[13px] sm:text-[14px] font-semibold text-sky-200">
+                      <Cpu size={15} className="text-sky-300 shrink-0" />
                       <span>
                         {spaceMachineCategoryFilter === "pipe"
                           ? isThai
@@ -5563,9 +5590,9 @@ export function DailyReportView({
                     <button
                       type="button"
                       onClick={() => setSpaceMachineCategoryFilter("all")}
-                      className="px-2.5 py-1 rounded-lg text-[10.5px] sm:text-xs font-bold bg-white/15 hover:bg-white/25 text-white border border-white/25 transition-all cursor-pointer flex items-center gap-1"
+                      className="inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-[4px] border border-white/30 bg-white/15 hover:bg-white/25 px-3 py-1 !text-[13px] font-semibold text-white transition-colors cursor-pointer whitespace-nowrap"
                     >
-                      <X size={12} />
+                      <X size={13} />
                       <span>{isThai ? "แสดงทุกกลุ่มเครื่องจักร" : "Show All Machines"}</span>
                     </button>
                   </div>
@@ -5811,7 +5838,7 @@ export function DailyReportView({
                   <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-slate-100 dark:border-[#1e3a5f]">
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
-                        <Cpu size={16} className="sm:w-5 sm:h-5" />
+                        <Cpu size={14} className="sm:w-5 sm:h-5" />
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white flex items-center gap-2 truncate">
@@ -5990,7 +6017,7 @@ export function DailyReportView({
                   <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-slate-100 dark:border-[#1e3a5f]">
                     <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
                       <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                        <Layers size={16} className="sm:w-5 sm:h-5" />
+                        <Layers size={14} className="sm:w-5 sm:h-5" />
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-xs sm:text-sm md:text-base font-black text-slate-800 dark:text-white flex items-center gap-2 truncate">
@@ -6154,10 +6181,10 @@ export function DailyReportView({
               BUILDING SPACE SUMMARY CARDS & WAREHOUSE BUILDING SELECTOR (H, F, E9, E10, I)
               ========================================================================= */}
           {spaceReportSubTab === "warehouse" && (
-            <div className="bg-white dark:bg-[#111e38] rounded-xl sm:rounded-2xl p-2.5 sm:p-4 shadow-md border border-slate-200 dark:border-[#1e3a5f]">
-              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 px-0.5 sm:px-1 pb-2.5 mb-2.5 sm:mb-3 border-b border-slate-200/80 dark:border-[#1e3a5f]">
-                <div className="flex items-center gap-2 text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
-                  <Building2 size={15} className="text-cyan-500 shrink-0" />
+            <div className="bg-white dark:bg-[#111e38] rounded-[4px] p-3.5 sm:p-4 shadow-xs border border-[#d9e2e8] dark:border-[#1e3a5f]">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2.5 pb-3 mb-3 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
+                <div className="flex items-center gap-2 text-[13px] sm:text-[14px] font-bold text-slate-800 dark:text-slate-100">
+                  <Building2 size={16} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
                   <span>
                     {isThai
                       ? "ปริมาณพื้นที่รวมทั้งหมดของแต่ละอาคาร & เลือกอาคารคลังสินค้า"
@@ -6165,28 +6192,23 @@ export function DailyReportView({
                   </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setSpaceBuildingFilter("all")}
-                    className={`px-2.5 py-1.5 rounded-lg text-[10.5px] sm:text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
-                      spaceBuildingFilter === "all"
-                        ? "bg-cyan-600 text-white border-cyan-500 shadow-xs"
-                        : "bg-slate-50 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f] hover:border-cyan-500/60"
-                    }`}
+                    className={spaceBuildingFilter === "all" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                   >
                     {isThai ? "ทุกอาคาร (5 อาคาร)" : "All Buildings (5)"}
                   </button>
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="hidden sm:inline text-slate-500 dark:text-slate-400 font-semibold">
+                  <div className="flex items-center gap-2">
+                    <span className="hidden sm:inline text-[13px] text-slate-600 dark:text-slate-300 font-semibold whitespace-nowrap">
                       {isThai ? "เลือกอาคารคลังสินค้า:" : "Select Building:"}
                     </span>
                     <select
                       value={spaceBuildingFilter}
                       onChange={(e) => setSpaceBuildingFilter(e.target.value)}
-                      className="field font-medium rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                      style={{ height: 34, minHeight: 34, padding: "5px 10px", borderRadius: 8, fontSize: 12 }}
+                      className={`${FIORI_CONTROL_INPUT} px-2.5 cursor-pointer`}
                     >
                       <option value="all" className="bg-white dark:bg-[#111e38]">
                         {isThai ? "แสดงทุกอาคาร (H, F, E9, E10, I)" : "All Buildings (H, F, E9, E10, I)"}
@@ -6201,7 +6223,7 @@ export function DailyReportView({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-1.5 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
                 {storageSpaceAnalytics.buildingSummaries.map((tab, idx) => {
                   const isActive = spaceBuildingFilter === tab.buildingId;
                   const isNegativeRemaining = tab.remainingSpaceTons < 0;
@@ -6223,28 +6245,28 @@ export function DailyReportView({
                           setSpaceBuildingFilter((prev) => (prev === tab.buildingId ? "all" : tab.buildingId));
                         }
                       }}
-                      className={`group flex flex-col justify-between p-2 sm:p-3.5 rounded-xl transition-all border text-left relative overflow-hidden cursor-pointer ${
+                      className={`group flex flex-col justify-between p-2.5 sm:p-3.5 rounded-[4px] transition-colors border text-left relative overflow-hidden cursor-pointer ${
                         isLastOddItem ? "col-span-2 sm:col-span-1" : ""
                       } ${
                         isActive
-                          ? "bg-gradient-to-br from-cyan-500/15 via-blue-500/10 to-indigo-500/15 dark:from-cyan-950/80 dark:to-blue-900/60 border-cyan-500 dark:border-cyan-400 shadow-md ring-1 sm:ring-2 ring-cyan-500/20"
-                          : "bg-slate-50 dark:bg-[#0c1930]/80 border-slate-200 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#162746] hover:border-slate-300 dark:hover:border-cyan-500/50"
+                          ? "bg-[#edf7fb] dark:bg-[#0d223f] border-[#087eaf] dark:border-[#38bdf8] ring-1 ring-[#087eaf]/30"
+                          : "bg-[#f8fafc] dark:bg-[#0c1930]/80 border-[#d9e2e8] dark:border-[#1e3a5f] hover:bg-[#edf7fb]/60 dark:hover:bg-[#152b4f] hover:border-[#087eaf]"
                       }`}
                     >
                       {/* Card Header: Building Name & Basket Occupancy % */}
-                      <div className="flex items-center justify-between w-full pb-1 mb-1 sm:pb-2 sm:mb-2 border-b border-slate-200/70 dark:border-slate-700/70">
+                      <div className="flex items-center justify-between w-full pb-1.5 mb-1.5 sm:pb-2 sm:mb-2 border-b border-[#e5edf2] dark:border-slate-700/70">
                         <span
-                          className={`text-xs sm:text-base font-black ${
-                            isActive ? "text-cyan-600 dark:text-cyan-300" : "text-slate-800 dark:text-slate-100"
+                          className={`text-[13px] sm:text-[15px] font-bold ${
+                            isActive ? "text-[#075985] dark:text-[#38bdf8]" : "text-slate-800 dark:text-slate-100"
                           }`}
                         >
                           {isThai ? tab.buildingNameTh : tab.buildingNameEn}
                         </span>
                         <span
-                          className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-full ${
+                          className={`text-[11px] font-bold font-mono tabular-nums px-2 py-0.5 rounded-[3px] ${
                             isActive
-                              ? "bg-cyan-500 text-white"
-                              : "bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                              ? "bg-[#087eaf] text-white"
+                              : "bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-200"
                           }`}
                         >
                           {tab.occupancyPercent}%
@@ -6374,7 +6396,7 @@ export function DailyReportView({
               <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
-                    <Layers size={16} className="sm:w-5 sm:h-5" />
+                    <Layers size={14} className="sm:w-5 sm:h-5" />
                   </div>
                   <div>
                     <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -6505,7 +6527,7 @@ export function DailyReportView({
               <div className="p-2.5 sm:p-5 bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
                 <div className="flex items-center gap-2 sm:gap-3">
                   <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 shrink-0">
-                    <Cpu size={16} className="sm:w-5 sm:h-5" />
+                    <Cpu size={14} className="sm:w-5 sm:h-5" />
                   </div>
                   <div>
                     <h3 className="text-xs sm:text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
@@ -6523,17 +6545,18 @@ export function DailyReportView({
                   </div>
                 </div>
 
-                {/* Machine Category & Activity Filter */}
-                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500 font-semibold">{isThai ? "กลุ่มเครื่อง:" : "Category:"}</span>
+                {/* Machine Category & Activity Filter (SAP Fiori) */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[13px] text-slate-600 dark:text-slate-300 font-semibold whitespace-nowrap">
+                      {isThai ? "กลุ่มเครื่อง:" : "Category:"}
+                    </span>
                     <select
                       value={spaceMachineCategoryFilter}
                       onChange={(e) =>
                         setSpaceMachineCategoryFilter(e.target.value as "all" | "pipe" | "c_channel")
                       }
-                      className="field font-normal rounded-md bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                      style={{ height: 35, minHeight: 35, padding: "7px 10px", borderRadius: 6, fontSize: 12 }}
+                      className={`${FIORI_CONTROL_INPUT} px-2.5 cursor-pointer`}
                     >
                       <option value="all" className="bg-white dark:bg-[#111e38]">
                         {isThai ? "ทุกกลุ่มเครื่องจักร (18 เครื่อง)" : "All Machines (18)"}
@@ -6550,11 +6573,7 @@ export function DailyReportView({
                   <button
                     type="button"
                     onClick={() => setShowOnlyActiveMachines((prev) => !prev)}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl text-[10.5px] sm:text-xs font-bold border transition-all cursor-pointer whitespace-nowrap ${
-                      showOnlyActiveMachines
-                        ? "bg-amber-500 text-white border-amber-500"
-                        : "bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-300 border-slate-300 dark:border-[#1e3a5f]"
-                    }`}
+                    className={showOnlyActiveMachines ? FIORI_BTN_CRITICAL : FIORI_BTN_SECONDARY}
                   >
                     {showOnlyActiveMachines
                       ? isThai
@@ -6643,91 +6662,91 @@ export function DailyReportView({
 
                                   return (
                                     <div className="flex flex-row items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap">
-                                      {/* 1) รอย้ายเข้า */}
-                                      {showMoveIn && (
-                                        <div
-                                          className={`flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg border text-[10.5px] sm:text-xs transition-colors ${
-                                            prodStatus.waitingMoveInActive
-                                              ? "bg-amber-500/10 border-amber-500/40 text-amber-900 dark:text-amber-200"
-                                              : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400"
-                                          }`}
-                                        >
-                                          <label className="flex items-center gap-1 sm:gap-1.5 cursor-pointer select-none font-bold shrink-0">
-                                            <input
-                                              type="checkbox"
-                                              checked={prodStatus.waitingMoveInActive}
-                                              onChange={(e) => {
-                                                const isChecked = e.target.checked;
-                                                handleUpdateProductionStatus(m.machineId, {
-                                                  waitingMoveInActive: isChecked,
-                                                  waitingMoveInCoils: isChecked ? (prodStatus.waitingMoveInCoils || 0) : 0,
-                                                  waitingSlitActive: false,
-                                                  waitingSlitCoils: 0,
-                                                });
-                                              }}
-                                              className="rounded border-slate-300 text-amber-600 focus:ring-amber-500 cursor-pointer w-3 h-3 sm:w-3.5 sm:h-3.5"
-                                            />
-                                            <span className={prodStatus.waitingMoveInActive ? "text-amber-700 dark:text-amber-300 font-bold" : "text-slate-500"}>
-                                              {isThai ? "รอย้ายเข้า" : "Wait In"}
-                                            </span>
-                                          </label>
+                                        {/* 1) รอย้ายเข้า */}
+                                        {showMoveIn && (
+                                          <div
+                                            className={`flex items-center gap-2 px-2 py-1 rounded-[4px] border text-[12px] transition-colors ${
+                                              prodStatus.waitingMoveInActive
+                                                ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200"
+                                                : "bg-[#f8fafc] dark:bg-[#0d1b33] border-[#b9c9d2] dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300"
+                                            }`}
+                                          >
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none font-semibold shrink-0">
+                                              <input
+                                                type="checkbox"
+                                                checked={prodStatus.waitingMoveInActive}
+                                                onChange={(e) => {
+                                                  const isChecked = e.target.checked;
+                                                  handleUpdateProductionStatus(m.machineId, {
+                                                    waitingMoveInActive: isChecked,
+                                                    waitingMoveInCoils: isChecked ? (prodStatus.waitingMoveInCoils || 0) : 0,
+                                                    waitingSlitActive: false,
+                                                    waitingSlitCoils: 0,
+                                                  });
+                                                }}
+                                                className="rounded-[3px] border-[#b9c9d2] text-[#b45309] focus:ring-[#b45309] cursor-pointer w-3.5 h-3.5"
+                                              />
+                                              <span className={prodStatus.waitingMoveInActive ? "text-[#b45309] dark:text-amber-300 font-semibold" : "text-slate-600 dark:text-slate-300"}>
+                                                {isThai ? "รอย้ายเข้า" : "Wait In"}
+                                              </span>
+                                            </label>
 
-                                          <div className="flex items-center gap-1 shrink-0">
-                                            <input
-                                              type="number"
-                                              min={0}
-                                              value={prodStatus.waitingMoveInCoils || ""}
-                                              placeholder="0"
-                                              onChange={(e) => {
-                                                const val = parseInt(e.target.value, 10);
-                                                const num = isNaN(val) ? 0 : Math.max(0, val);
-                                                handleUpdateProductionStatus(m.machineId, {
-                                                  waitingMoveInCoils: num,
-                                                  waitingMoveInActive: num > 0 ? true : prodStatus.waitingMoveInActive,
-                                                  ...(num > 0 ? { waitingSlitActive: false, waitingSlitCoils: 0 } : {}),
-                                                });
-                                              }}
-                                              className={`w-11 sm:w-14 px-1 sm:px-1.5 py-0.5 text-center font-mono font-black text-[10.5px] sm:text-xs rounded border focus:outline-none focus:ring-1 focus:ring-amber-500 ${
-                                                prodStatus.waitingMoveInActive
-                                                  ? "bg-white dark:bg-slate-900 border-amber-400 text-amber-700 dark:text-amber-300 shadow-xs"
-                                                  : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-400"
-                                              }`}
-                                            />
-                                            <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400">{isThai ? "แถบ" : "coils"}</span>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                value={prodStatus.waitingMoveInCoils || ""}
+                                                placeholder="0"
+                                                onChange={(e) => {
+                                                  const val = parseInt(e.target.value, 10);
+                                                  const num = isNaN(val) ? 0 : Math.max(0, val);
+                                                  handleUpdateProductionStatus(m.machineId, {
+                                                    waitingMoveInCoils: num,
+                                                    waitingMoveInActive: num > 0 ? true : prodStatus.waitingMoveInActive,
+                                                    ...(num > 0 ? { waitingSlitActive: false, waitingSlitCoils: 0 } : {}),
+                                                  });
+                                                }}
+                                                className={`h-[26px] w-14 px-1.5 text-center font-mono tabular-nums font-bold !text-[13px] rounded-[4px] border focus:outline-none ${
+                                                  prodStatus.waitingMoveInActive
+                                                    ? "bg-white dark:bg-[#041029] border-[#b45309] text-[#b45309] dark:text-amber-300"
+                                                    : "bg-white dark:bg-[#041029] border-[#b9c9d2] dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300"
+                                                }`}
+                                              />
+                                              <span className="text-[11.5px] font-medium text-slate-500 dark:text-slate-400">{isThai ? "แถบ" : "coils"}</span>
+                                            </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        )}
 
-                                      {/* 2) รอสลิต */}
-                                      {showSlit && (
-                                        <div
-                                          className={`flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg border text-[10.5px] sm:text-xs transition-colors ${
-                                            prodStatus.waitingSlitActive
-                                              ? "bg-blue-500/10 border-blue-500/40 text-blue-900 dark:text-blue-200"
-                                              : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700/60 text-slate-500 dark:text-slate-400"
-                                          }`}
-                                        >
-                                          <label className="flex items-center gap-1 sm:gap-1.5 cursor-pointer select-none font-bold shrink-0">
-                                            <input
-                                              type="checkbox"
-                                              checked={prodStatus.waitingSlitActive}
-                                              onChange={(e) => {
-                                                const isChecked = e.target.checked;
-                                                handleUpdateProductionStatus(m.machineId, {
-                                                  waitingSlitActive: isChecked,
-                                                  waitingSlitCoils: 0,
-                                                  waitingMoveInActive: false,
-                                                  waitingMoveInCoils: 0,
-                                                });
-                                              }}
-                                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-3 h-3 sm:w-3.5 sm:h-3.5"
-                                            />
-                                            <span className={prodStatus.waitingSlitActive ? "text-blue-700 dark:text-blue-300 font-bold" : "text-slate-500"}>
-                                              {isThai ? "รอสลิต" : "Wait Slit"}
-                                            </span>
-                                          </label>
-                                        </div>
-                                      )}
+                                        {/* 2) รอสลิต */}
+                                        {showSlit && (
+                                          <div
+                                            className={`flex items-center gap-2 px-2 py-1 rounded-[4px] border text-[12px] transition-colors ${
+                                              prodStatus.waitingSlitActive
+                                                ? "bg-[#edf7fb] dark:bg-[#0d223f] border-[#087eaf] dark:border-[#38bdf8] text-[#075985] dark:text-[#38bdf8]"
+                                                : "bg-[#f8fafc] dark:bg-[#0d1b33] border-[#b9c9d2] dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300"
+                                            }`}
+                                          >
+                                            <label className="flex items-center gap-1.5 cursor-pointer select-none font-semibold shrink-0">
+                                              <input
+                                                type="checkbox"
+                                                checked={prodStatus.waitingSlitActive}
+                                                onChange={(e) => {
+                                                  const isChecked = e.target.checked;
+                                                  handleUpdateProductionStatus(m.machineId, {
+                                                    waitingSlitActive: isChecked,
+                                                    waitingSlitCoils: 0,
+                                                    waitingMoveInActive: false,
+                                                    waitingMoveInCoils: 0,
+                                                  });
+                                                }}
+                                                className="rounded-[3px] border-[#b9c9d2] text-[#087eaf] focus:ring-[#087eaf] cursor-pointer w-3.5 h-3.5"
+                                              />
+                                              <span className={prodStatus.waitingSlitActive ? "text-[#075985] dark:text-[#38bdf8] font-semibold" : "text-slate-600 dark:text-slate-300"}>
+                                                {isThai ? "รอสลิต" : "Wait Slit"}
+                                              </span>
+                                            </label>
+                                          </div>
+                                        )}
                                     </div>
                                   );
                                 })()}
@@ -6784,23 +6803,23 @@ export function DailyReportView({
           onClick={() => setShareModalMode(null)}
         >
           <div
-            className="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-[#0f1d36] border border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
+            className="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-[6px] bg-white dark:bg-[#0f1d36] border border-[#b9c9d2] dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0b162b] flex items-center justify-between gap-3">
+            <div className="px-4 sm:px-5 py-3.5 border-b border-[#d9e2e8] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0b162b] flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className={`p-2 rounded-xl shrink-0 ${
+                  className={`flex h-[36px] w-[36px] items-center justify-center rounded-[4px] border shrink-0 ${
                     shareModalMode === "line"
-                      ? "bg-[#06C755]/15 text-[#06C755] border border-[#06C755]/30"
-                      : "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/30"
+                      ? "bg-[#06C755]/15 text-[#06C755] border-[#06C755]/30"
+                      : "bg-[#edf7fb] dark:bg-[#0d223f] text-[#087eaf] dark:text-[#38bdf8] border-[#b9c9d2] dark:border-[#1e3a5f]"
                   }`}
                 >
                   {shareModalMode === "line" ? <MessageCircle size={18} /> : <Camera size={18} />}
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
+                  <h3 className="text-[15px] sm:text-[16px] font-bold text-slate-900 dark:text-white truncate">
                     {shareModalMode === "line"
                       ? isThai
                         ? "แชร์รายงานประจำวันส่ง LINE แจ้งผู้จัดการ"
@@ -6809,7 +6828,7 @@ export function DailyReportView({
                       ? "แคปหน้าจอสรุปรายงานประจำวัน (Daily Report)"
                       : "Daily Report Summary Screenshot"}
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400 truncate">
                     {isThai
                       ? `ขอบเขตภาพ: รับเข้าคลังรวม (เครื่อง & ภายนอก) ถึง 4. กราฟแนวโน้มรายชั่วโมง · วันที่ ${formattedSelectedDateLabel}`
                       : `Scope: Total Inbound Card through 4. Hourly Throughput · ${formattedSelectedDateLabel}`}
@@ -6821,37 +6840,29 @@ export function DailyReportView({
                 type="button"
                 onClick={() => setShareModalMode(null)}
                 aria-label="Close"
-                className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-slate-800 cursor-pointer shrink-0"
+                className={FIORI_BTN_ICON_SECONDARY}
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
-            {/* Modal Mode Switcher Tabs */}
-            <div className="px-4 sm:px-5 pt-3 bg-white dark:bg-[#0f1d36] flex items-center gap-2 border-b border-slate-100 dark:border-[#1e3a5f]/70 pb-2.5">
+            {/* Modal Mode Switcher Tabs (SAP Fiori) */}
+            <div className="px-4 sm:px-5 py-2.5 bg-white dark:bg-[#0f1d36] flex flex-wrap items-center gap-2 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
               <button
                 type="button"
                 onClick={() => setShareModalMode("capture")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
-                  shareModalMode === "capture"
-                    ? "bg-sky-600 text-white shadow-xs"
-                    : "bg-slate-100 dark:bg-[#162848] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#1e345c]"
-                }`}
+                className={shareModalMode === "capture" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
               >
-                <ImageIcon size={14} />
+                <ImageIcon size={15} />
                 <span>{isThai ? "ภาพแคปหน้าจอ (.PNG)" : "Screenshot (.PNG)"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setShareModalMode("line")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
-                  shareModalMode === "line"
-                    ? "bg-[#06C755] text-white shadow-xs"
-                    : "bg-slate-100 dark:bg-[#162848] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#1e345c]"
-                }`}
+                className={shareModalMode === "line" ? FIORI_BTN_LINE : FIORI_BTN_SECONDARY}
               >
-                <MessageCircle size={14} />
+                <MessageCircle size={15} />
                 <span>{isThai ? "แชร์ส่ง LINE ผู้จัดการ" : "Share to LINE"}</span>
               </button>
 
@@ -6859,12 +6870,12 @@ export function DailyReportView({
                 type="button"
                 onClick={captureDailySummaryRange}
                 disabled={isCapturingSummary}
-                className="ml-auto px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 dark:bg-[#162848] hover:bg-slate-200 dark:hover:bg-[#1e345c] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#244370] flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                className={`${FIORI_BTN_SECONDARY} ml-auto`}
               >
                 {isCapturingSummary ? (
-                  <Loader2 size={12} className="animate-spin" />
+                  <Loader2 size={14} className="animate-spin" />
                 ) : (
-                  <Camera size={12} />
+                  <Camera size={14} />
                 )}
                 <span>{isThai ? "แคปใหม่" : "Recapture"}</span>
               </button>
@@ -6874,7 +6885,7 @@ export function DailyReportView({
             <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
               {captureFeedback && (
                 <div
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border ${
+                  className={`px-3 py-2 rounded-[4px] text-[13px] font-semibold flex items-center gap-2 border ${
                     captureFeedback.type === "success"
                       ? "bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
                       : captureFeedback.type === "error"
@@ -6888,10 +6899,10 @@ export function DailyReportView({
               )}
 
               {/* Captured Image Preview Box */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                    <ImageIcon size={14} className="text-sky-500" />
+                  <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                    <ImageIcon size={15} className="text-[#087eaf] dark:text-[#38bdf8]" />
                     <span>
                       {isThai
                         ? "ตัวอย่างภาพที่จะส่งให้ผู้จัดการ (เฉพาะ Card รับเข้าคลังรวม → กราฟที่ 4)"
@@ -6899,32 +6910,32 @@ export function DailyReportView({
                     </span>
                   </span>
                   {capturedSummary && (
-                    <span className="text-[10.5px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[220px]">
+                    <span className="text-[11.5px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-[220px]">
                       {capturedSummary.fileName}
                     </span>
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200 dark:border-[#1e3a5f] bg-slate-100 dark:bg-[#081020] p-2 sm:p-3 flex items-center justify-center min-h-[180px] max-h-[360px] overflow-auto">
+                <div className="rounded-[4px] border border-[#d9e2e8] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#081020] p-2.5 sm:p-3 flex items-center justify-center min-h-[180px] max-h-[360px] overflow-auto">
                   {isCapturingSummary ? (
                     <div className="flex flex-col items-center justify-center gap-2 py-10 text-slate-500 dark:text-slate-400">
-                      <Loader2 size={28} className="animate-spin text-sky-500" />
-                      <span className="text-xs font-bold">
+                      <Loader2 size={28} className="animate-spin text-[#087eaf]" />
+                      <span className="text-[13px] font-semibold">
                         {isThai ? "กำลังแคปภาพรายงานประจำวัน..." : "Capturing Daily Report..."}
                       </span>
                     </div>
                   ) : captureError ? (
-                    <div className="text-xs font-semibold text-rose-600 dark:text-rose-400 text-center py-8">
+                    <div className="text-[13px] font-semibold text-rose-600 dark:text-rose-400 text-center py-8">
                       {captureError}
                     </div>
                   ) : capturedSummary ? (
                     <img
                       src={capturedSummary.dataUrl}
                       alt={capturedSummary.fileName}
-                      className="w-full h-auto rounded-lg shadow-md border border-slate-200/80 dark:border-slate-700/80"
+                      className="w-full h-auto rounded-[4px] shadow-sm border border-[#d9e2e8] dark:border-slate-700/80"
                     />
                   ) : (
-                    <div className="text-xs text-slate-400 py-8">
+                    <div className="text-[13px] text-slate-400 py-8">
                       {isThai ? "ยังไม่มีภาพแคปหน้าจอ" : "No screenshot captured yet."}
                     </div>
                   )}
@@ -6938,18 +6949,18 @@ export function DailyReportView({
                       onClick={() =>
                         triggerImageDownload(capturedSummary.dataUrl, capturedSummary.fileName)
                       }
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white shadow-xs cursor-pointer transition-all active:scale-95"
+                      className={FIORI_BTN_PRIMARY}
                     >
-                      <Download size={13} />
+                      <Download size={14} />
                       <span>{isThai ? "บันทึกรูปภาพ (.PNG)" : "Download .PNG"}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleCopyCapturedImage}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-[#162848] hover:bg-slate-100 dark:hover:bg-[#1e345c] text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-[#244370] cursor-pointer transition-all active:scale-95"
+                      className={FIORI_BTN_SECONDARY}
                     >
-                      <Copy size={13} />
+                      <Copy size={14} />
                       <span>{isThai ? "คัดลอกรูป (วางใน LINE)" : "Copy Image"}</span>
                     </button>
 
@@ -6957,9 +6968,9 @@ export function DailyReportView({
                       <button
                         type="button"
                         onClick={handleNativeShareWithImage}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-[#06C755] hover:bg-[#05b34c] text-white shadow-xs cursor-pointer transition-all active:scale-95"
+                        className={FIORI_BTN_LINE}
                       >
-                        <Share2 size={13} />
+                        <Share2 size={14} />
                         <span>{isThai ? "แชร์รูปเข้า LINE / แอป" : "Share Image via App"}</span>
                       </button>
                     )}
@@ -6969,9 +6980,9 @@ export function DailyReportView({
 
               {/* Editable LINE Summary Text (Shown prominently in LINE mode) */}
               {shareModalMode === "line" && (
-                <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-[#1e3a5f]">
+                <div className="space-y-2 pt-3 border-t border-[#e5edf2] dark:border-[#1e3a5f]">
                   <div className="flex items-center justify-between gap-2">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <label className="text-[13px] font-semibold text-slate-700 dark:text-slate-200">
                       {isThai
                         ? "ข้อความสรุปสำหรับส่งแจ้งผู้จัดการใน LINE (แก้ไขเพิ่มเติมได้)"
                         : "Summary message for Manager in LINE (editable)"}
@@ -6983,7 +6994,7 @@ export function DailyReportView({
                           setIsLineMessageEdited(false);
                           setCustomLineMessage(generatedLineSummaryMessage);
                         }}
-                        className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 hover:underline cursor-pointer"
+                        className={FIORI_BTN_COMPACT_SECONDARY}
                       >
                         {isThai ? "รีเซ็ตข้อความอัตโนมัติ" : "Reset text"}
                       </button>
@@ -6996,18 +7007,18 @@ export function DailyReportView({
                       setCustomLineMessage(e.target.value);
                       setIsLineMessageEdited(true);
                     }}
-                    className="w-full rounded-xl border border-slate-300 dark:border-[#244370] bg-slate-50 dark:bg-[#0a1426] p-3 text-xs font-mono text-slate-900 dark:text-slate-100 leading-relaxed focus:outline-none focus:border-[#06C755]"
+                    className="w-full rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] p-3 text-[13px] font-mono text-slate-900 dark:text-slate-100 leading-relaxed focus:outline-none focus:border-[#087eaf] dark:focus:border-[#38bdf8]"
                   />
                 </div>
               )}
             </div>
 
             {/* Modal Footer */}
-            <div className="px-4 sm:px-5 py-3 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0b162b] flex flex-wrap items-center justify-between gap-2">
+            <div className="px-4 sm:px-5 py-3 border-t border-[#d9e2e8] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0b162b] flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setShareModalMode(null)}
-                className="px-3.5 py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200/80 dark:hover:bg-slate-800 cursor-pointer"
+                className={FIORI_BTN_SECONDARY}
               >
                 {isThai ? "ปิดหน้าต่าง" : "Close"}
               </button>
@@ -7016,9 +7027,9 @@ export function DailyReportView({
                 <button
                   type="button"
                   onClick={handleCopyLineText}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white cursor-pointer"
+                  className={FIORI_BTN_PRIMARY}
                 >
-                  <Copy size={13} />
+                  <Copy size={14} />
                   <span>{isThai ? "คัดลอกข้อความ" : "Copy Text"}</span>
                 </button>
 
@@ -7026,11 +7037,11 @@ export function DailyReportView({
                   href={lineShareHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white shadow-xs transition-opacity hover:opacity-95 bg-[#06C755]"
+                  className={FIORI_BTN_LINE}
                 >
-                  <MessageCircle size={14} />
+                  <MessageCircle size={15} />
                   <span>{isThai ? "เปิด LINE แชร์ให้ผู้จัดการ" : "Open LINE Share"}</span>
-                  <ExternalLink size={12} />
+                  <ExternalLink size={13} />
                 </a>
               </div>
             </div>

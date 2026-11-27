@@ -57,6 +57,32 @@ interface SlitWorkforceManagementViewProps {
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
 }
 
+const FIORI_BTN_BASE =
+  "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[7px] !text-[14px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+
+const FIORI_BTN_SECONDARY = `${FIORI_BTN_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_BTN_SUCCESS = `${FIORI_BTN_BASE} border-[#107e3e] bg-[#107e3e] text-white hover:bg-[#0d6933] hover:border-[#0d6933] dark:border-emerald-600 dark:bg-emerald-600 dark:text-white dark:hover:bg-emerald-700 dark:hover:border-emerald-700`;
+
+const FIORI_BTN_ICON_BASE =
+  "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[4px] border !text-[12px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_ICON_SECONDARY = `${FIORI_BTN_ICON_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_BTN_ICON_DANGER = `${FIORI_BTN_ICON_BASE} border-[#fca5a5] bg-white text-[#b91c1c] hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444]`;
+
+const FIORI_BTN_COMPACT_BASE =
+  "inline-flex min-h-[28px] items-center justify-center gap-1 rounded-[4px] border px-2.5 py-1 !text-[12px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_COMPACT_PRIMARY = `${FIORI_BTN_COMPACT_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985]`;
+
+const FIORI_BTN_COMPACT_SECONDARY = `${FIORI_BTN_COMPACT_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_CONTROL_INPUT =
+  "h-[36px] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[14px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none transition-colors";
+
 const MACHINE_GROUP_OPTIONS: {
   key: SlitWorkforceMachineGroup;
   labelTh: string;
@@ -1417,18 +1443,18 @@ export function SlitWorkforceManagementView({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
-          {/* Working Date Switcher */}
-          <div className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] p-1">
+          {/* Working Date Switcher (SAP Fiori) */}
+          <div className="inline-flex items-center gap-1">
             <button
               type="button"
               onClick={() => setSelectedDate((d) => addDaysToYmd(d, -1))}
               aria-label={isThai ? "วันก่อนหน้า" : "Previous day"}
-              className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-[#193055] transition-colors cursor-pointer"
+              className={FIORI_BTN_ICON_SECONDARY}
             >
-              <ChevronLeft size={14} />
+              <ChevronLeft size={15} />
             </button>
-            <div className="flex items-center gap-1.5 px-1.5">
-              <Calendar size={13} className="text-sky-600 dark:text-sky-400 shrink-0" />
+            <div className="inline-flex h-[34px] items-center gap-1.5 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] px-2.5 focus-within:border-[#087eaf] dark:focus-within:border-[#38bdf8]">
+              <Calendar size={14} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
               <input
                 type="date"
                 value={selectedDate}
@@ -1436,16 +1462,16 @@ export function SlitWorkforceManagementView({
                   if (e.target.value) setSelectedDate(e.target.value);
                 }}
                 aria-label={isThai ? "วันที่ปฏิบัติงาน" : "Working date"}
-                className="bg-transparent text-xs font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100 outline-none dark:[color-scheme:dark]"
+                className="bg-transparent !text-[14px] font-mono font-bold tabular-nums text-slate-900 dark:text-slate-100 outline-none dark:[color-scheme:dark]"
               />
             </div>
             <button
               type="button"
               onClick={() => setSelectedDate((d) => addDaysToYmd(d, 1))}
               aria-label={isThai ? "วันถัดไป" : "Next day"}
-              className="p-1.5 rounded-md text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-[#193055] transition-colors cursor-pointer"
+              className={FIORI_BTN_ICON_SECONDARY}
             >
-              <ChevronRight size={14} />
+              <ChevronRight size={15} />
             </button>
           </div>
 
@@ -1453,7 +1479,7 @@ export function SlitWorkforceManagementView({
             <button
               type="button"
               onClick={() => setSelectedDate(todayYmd)}
-              className="px-2.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-[#24426b] bg-white dark:bg-[#132544] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#193055] transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              className={FIORI_BTN_SECONDARY}
             >
               {isThai ? "วันนี้" : "Today"}
             </button>
@@ -1462,7 +1488,7 @@ export function SlitWorkforceManagementView({
           <button
             type="button"
             onClick={() => setActiveView("infographic")}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className={FIORI_BTN_SUCCESS}
           >
             <BarChart3 size={15} />
             <span>{isThai ? "รายงาน Infographic (ส่ง LINE)" : "LINE Infographic Report"}</span>
@@ -1472,7 +1498,7 @@ export function SlitWorkforceManagementView({
             type="button"
             onClick={handleExportExcel}
             disabled={filteredRows.length === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-[#24426b] bg-white dark:bg-[#132544] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#193055] disabled:opacity-45 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className={FIORI_BTN_SECONDARY}
           >
             <FileSpreadsheet size={15} />
             <span>{isThai ? "ส่งออก Excel" : "Export Excel"}</span>
@@ -1481,7 +1507,7 @@ export function SlitWorkforceManagementView({
           <button
             type="button"
             onClick={openCreateModal}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+            className={FIORI_BTN_PRIMARY}
           >
             <Plus size={15} />
             <span>{isThai ? "มอบหมายเพิ่มเติม" : "Assign Extra"}</span>
@@ -1561,9 +1587,9 @@ export function SlitWorkforceManagementView({
 
       {/* Filter Toolbar + Unified Roster & Assignment Table */}
       <div className="bg-white dark:bg-[#0f1d36] border border-slate-200 dark:border-[#1e3a5f] rounded-xl overflow-hidden">
-        {/* Filter Controls */}
+        {/* Filter Controls (SAP Fiori Style) */}
         <div className="p-4 border-b border-slate-200 dark:border-[#1e3a5f] space-y-3">
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             {/* Search */}
             <div className="relative flex-1 min-w-[200px]">
               <Search
@@ -1579,7 +1605,7 @@ export function SlitWorkforceManagementView({
                     ? "ค้นหาชื่อพนักงาน, รหัส, ส่วนงาน, เครื่องจักร, พื้นที่, หน้าที่..."
                     : "Search employee, ID, section, machine, area, duty..."
                 }
-                className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                className={`w-full pl-9 pr-3 ${FIORI_CONTROL_INPUT}`}
               />
             </div>
 
@@ -1588,7 +1614,7 @@ export function SlitWorkforceManagementView({
               value={departmentScope}
               onChange={(e) => setDepartmentScope(e.target.value)}
               aria-label={isThai ? "เลือกส่วนงานพนักงาน" : "Filter by section"}
-              className="px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+              className={`px-3 font-semibold ${FIORI_CONTROL_INPUT}`}
             >
               <option value="film_slit">
                 {isThai
@@ -1612,7 +1638,7 @@ export function SlitWorkforceManagementView({
               value={filterArea}
               onChange={(e) => setFilterArea(e.target.value)}
               aria-label={isThai ? "กรองตามพื้นที่/อาคาร" : "Filter by area"}
-              className="px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+              className={`px-3 font-semibold ${FIORI_CONTROL_INPUT}`}
             >
               <option value="all">
                 {isThai ? "ทุกพื้นที่ / อาคาร" : "All Areas / Buildings"}
@@ -1628,17 +1654,17 @@ export function SlitWorkforceManagementView({
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="inline-flex items-center gap-1 px-2.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                className={FIORI_BTN_SECONDARY}
               >
-                <RotateCcw size={13} />
+                <RotateCcw size={14} />
                 <span>{isThai ? "ล้างตัวกรอง" : "Reset"}</span>
               </button>
             )}
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2.5">
-            {/* Shift Segmented Control */}
-            <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-[#0a1426] border border-slate-200 dark:border-[#1e3a5f]">
+            {/* Shift Filter Buttons (SAP Fiori) */}
+            <div className="inline-flex flex-wrap items-center gap-1.5">
               {(
                 [
                   { key: "all", label: isThai ? "ทุกกะ" : "All Shifts" },
@@ -1650,20 +1676,18 @@ export function SlitWorkforceManagementView({
                   key={tab.key}
                   type="button"
                   onClick={() => setFilterShift(tab.key)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    filterShift === tab.key
-                      ? "bg-white dark:bg-[#193055] text-slate-900 dark:text-white shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                  }`}
+                  className={filterShift === tab.key ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                 >
-                  {tab.label}
+                  {tab.key === "day" && <Sun size={14} />}
+                  {tab.key === "night" && <Moon size={14} />}
+                  <span>{tab.label}</span>
                 </button>
               ))}
             </div>
 
-            {/* Machine Group Segmented Control + Specific Machine Code Filter */}
+            {/* Machine Group Filter Buttons + Specific Machine Code Filter (SAP Fiori) */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-[#0a1426] border border-slate-200 dark:border-[#1e3a5f]">
+              <div className="inline-flex flex-wrap items-center gap-1.5">
                 {(["all", "TM", "CF", "ML", "ZF"] as const).map((grp) => (
                   <button
                     key={grp}
@@ -1678,11 +1702,9 @@ export function SlitWorkforceManagementView({
                         setFilterMachineCode("all");
                       }
                     }}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold font-mono transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                      filterMachineGroup === grp
-                        ? "bg-sky-600 text-white"
-                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                    }`}
+                    className={`${
+                      filterMachineGroup === grp ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY
+                    } ${grp !== "all" ? "font-mono" : ""}`}
                   >
                     {grp === "all" ? (isThai ? "ทุกกลุ่ม" : "All") : grp}
                   </button>
@@ -1702,7 +1724,7 @@ export function SlitWorkforceManagementView({
                   }
                 }}
                 aria-label={isThai ? "กรองตามรหัสเครื่องจักร" : "Filter by machine code"}
-                className="px-3 py-1.5 text-xs font-mono font-semibold rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                className={`px-3 font-mono font-semibold ${FIORI_CONTROL_INPUT}`}
               >
                 <option value="all">
                   {isThai ? "ทุกรหัสเครื่อง (23)" : "All Machines (23)"}
@@ -1813,7 +1835,7 @@ export function SlitWorkforceManagementView({
                           <button
                             type="button"
                             onClick={() => setDepartmentScope("all")}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-[#24426b] bg-white dark:bg-[#132544] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#193055] transition-colors cursor-pointer"
+                            className={FIORI_BTN_SECONDARY}
                           >
                             <span>{isThai ? "แสดงพนักงานทั้งหมด" : "Show All Staff"}</span>
                           </button>
@@ -1822,7 +1844,7 @@ export function SlitWorkforceManagementView({
                           <button
                             type="button"
                             onClick={handleResetFilters}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white transition-colors cursor-pointer"
+                            className={FIORI_BTN_PRIMARY}
                           >
                             <RotateCcw size={14} />
                             <span>{isThai ? "ล้างตัวกรอง" : "Clear Filters"}</span>
@@ -1934,9 +1956,10 @@ export function SlitWorkforceManagementView({
                                   `กำหนดกะเช้า: ${row.employeeName}`
                                 )
                               }
-                              className="px-2 py-1 rounded border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-100 cursor-pointer"
+                              className={FIORI_BTN_COMPACT_SECONDARY}
                             >
-                              {isThai ? "เช้า" : "Day"}
+                              <Sun size={12} />
+                              <span>{isThai ? "เช้า" : "Day"}</span>
                             </button>
                             <button
                               type="button"
@@ -1948,9 +1971,10 @@ export function SlitWorkforceManagementView({
                                   `กำหนดกะดึก: ${row.employeeName}`
                                 )
                               }
-                              className="px-2 py-1 rounded border border-indigo-300 dark:border-indigo-500/40 bg-indigo-50 dark:bg-indigo-500/10 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 cursor-pointer"
+                              className={FIORI_BTN_COMPACT_SECONDARY}
                             >
-                              {isThai ? "ดึก" : "Night"}
+                              <Moon size={12} />
+                              <span>{isThai ? "ดึก" : "Night"}</span>
                             </button>
                           </div>
                         )}
@@ -1969,7 +1993,7 @@ export function SlitWorkforceManagementView({
                             )
                           }
                           aria-label={`เลือกพื้นที่สำหรับ ${row.employeeName}`}
-                          className="w-full min-w-[145px] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                          className="w-full min-w-[145px] h-[32px] px-2.5 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[12px] font-medium text-slate-900 dark:text-slate-100 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none"
                         >
                           <option value="">
                             {isThai ? "— เลือกพื้นที่/อาคาร —" : "— Select Area —"}
@@ -1988,7 +2012,7 @@ export function SlitWorkforceManagementView({
                       {/* Machine Groups Multi-Select Inline Toggle (TM, CF, ML, ZF) + Selected Machines */}
                       <td className="py-2.5 px-3">
                         <div className="space-y-1.5 min-w-[205px]">
-                          <div className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 dark:bg-[#0a1426] border border-slate-200 dark:border-[#1e3a5f]">
+                          <div className="inline-flex items-center gap-1">
                             {ALL_SLIT_MACHINE_GROUPS.map((grp) => {
                               const selected = currentGroups.includes(grp);
                               return (
@@ -2006,11 +2030,11 @@ export function SlitWorkforceManagementView({
                                       ? `คลิกเพื่อเพิ่มกลุ่ม ${grp}`
                                       : `Add ${grp}`
                                   }
-                                  className={`px-2.5 py-1 rounded-md text-[11px] font-mono font-bold transition-colors cursor-pointer whitespace-nowrap ${
+                                  className={`${
                                     selected
-                                      ? "bg-sky-600 text-white shadow-xs"
-                                      : "text-slate-600 dark:text-slate-400 hover:bg-white/70 dark:hover:bg-[#193055] hover:text-slate-900 dark:hover:text-white"
-                                  }`}
+                                      ? FIORI_BTN_COMPACT_PRIMARY
+                                      : FIORI_BTN_COMPACT_SECONDARY
+                                  } font-mono`}
                                 >
                                   {grp}
                                 </button>
@@ -2072,7 +2096,7 @@ export function SlitWorkforceManagementView({
                             <button
                               type="button"
                               onClick={() => openDetailModalForRow(row)}
-                              className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 hover:underline whitespace-nowrap shrink-0 cursor-pointer pt-0.5"
+                              className="px-2 py-0.5 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-[#075985] dark:text-[#38bdf8] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:hover:bg-[#152b4f] !text-[11px] font-semibold whitespace-nowrap shrink-0 cursor-pointer transition-colors"
                             >
                               {isThai ? "เลือกเครื่อง" : "Pick"}
                             </button>
@@ -2093,7 +2117,7 @@ export function SlitWorkforceManagementView({
                             )
                           }
                           aria-label={`เลือกหน้าที่สำหรับ ${row.employeeName}`}
-                          className="w-full min-w-[190px] px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-[#24426b] bg-slate-50 dark:bg-[#0a1426] text-xs font-medium text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                          className="w-full min-w-[190px] h-[32px] px-2.5 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[12px] font-medium text-slate-900 dark:text-slate-100 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none"
                         >
                           <option value="">
                             {isThai ? "— เลือกหน้าที่ —" : "— Select Duty —"}
@@ -2127,9 +2151,9 @@ export function SlitWorkforceManagementView({
                         </button>
                       </td>
 
-                      {/* Actions */}
+                      {/* Actions (SAP Fiori Icon Buttons) */}
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => openDetailModalForRow(row)}
@@ -2138,18 +2162,18 @@ export function SlitWorkforceManagementView({
                                 ? "ระบุเครื่องจักรย่อย / แก้ไขรายละเอียด"
                                 : "Specify Machines / Edit Details"
                             }
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-50 dark:text-slate-400 dark:hover:text-sky-400 dark:hover:bg-sky-950/40 transition-colors cursor-pointer"
+                            className={FIORI_BTN_ICON_SECONDARY}
                           >
-                            <Edit2 size={15} />
+                            <Edit2 size={14} />
                           </button>
                           {asn && (
                             <button
                               type="button"
                               onClick={() => handleDeleteAssignment(asn)}
                               title={isThai ? "ล้างการมอบหมาย" : "Clear Assignment"}
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:text-slate-400 dark:hover:text-rose-400 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                              className={FIORI_BTN_ICON_DANGER}
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={14} />
                             </button>
                           )}
                         </div>
@@ -2196,16 +2220,16 @@ export function SlitWorkforceManagementView({
               <button
                 type="button"
                 onClick={() => setIsFormOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#193055] transition-colors cursor-pointer"
+                className={FIORI_BTN_ICON_SECONDARY}
                 aria-label={isThai ? "ปิดหน้าต่าง" : "Close modal"}
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             <form onSubmit={handleSaveAssignment} className="p-5 space-y-4">
               {formError && (
-                <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs font-medium text-rose-700 dark:text-rose-300">
+                <div className="p-3 rounded-[4px] bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs font-medium text-rose-700 dark:text-rose-300">
                   {formError}
                 </div>
               )}
@@ -2221,7 +2245,7 @@ export function SlitWorkforceManagementView({
                     required
                     value={formWorkingDate}
                     onChange={(e) => setFormWorkingDate(e.target.value)}
-                    className="w-full px-3 py-2 text-sm font-mono tabular-nums rounded-lg border border-slate-300 dark:border-[#24426b] bg-white dark:bg-[#0a1426] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/40"
+                    className={`w-full px-3 font-mono tabular-nums dark:[color-scheme:dark] ${FIORI_CONTROL_INPUT}`}
                   />
                 </div>
 
@@ -2233,11 +2257,7 @@ export function SlitWorkforceManagementView({
                     <button
                       type="button"
                       onClick={() => setFormShift("day")}
-                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                        formShift === "day"
-                          ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-800 dark:text-amber-300"
-                          : "bg-white dark:bg-[#0a1426] border-slate-300 dark:border-[#24426b] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#132544]"
-                      }`}
+                      className={formShift === "day" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                     >
                       <Sun size={14} />
                       <span>{isThai ? "กะเช้า (08-20)" : "Day (08-20)"}</span>
@@ -2245,11 +2265,7 @@ export function SlitWorkforceManagementView({
                     <button
                       type="button"
                       onClick={() => setFormShift("night")}
-                      className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
-                        formShift === "night"
-                          ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-800 dark:text-indigo-300"
-                          : "bg-white dark:bg-[#0a1426] border-slate-300 dark:border-[#24426b] text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#132544]"
-                      }`}
+                      className={formShift === "night" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                     >
                       <Moon size={14} />
                       <span>{isThai ? "กะดึก (20-08)" : "Night (20-08)"}</span>
@@ -2361,11 +2377,11 @@ export function SlitWorkforceManagementView({
                     <button
                       type="button"
                       onClick={handleSelectAllSlitMachines}
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
+                      className={
                         ALL_SLIT_MACHINE_CODES.every((c) => formSelectedMachines.includes(c))
-                          ? "bg-sky-600 border-sky-600 text-white"
-                          : "bg-sky-50 dark:bg-sky-950/40 border-sky-300 dark:border-sky-800 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50"
-                      }`}
+                          ? FIORI_BTN_COMPACT_PRIMARY
+                          : FIORI_BTN_COMPACT_SECONDARY
+                      }
                     >
                       {ALL_SLIT_MACHINE_CODES.every((c) => formSelectedMachines.includes(c))
                         ? isThai
@@ -2379,7 +2395,7 @@ export function SlitWorkforceManagementView({
                       <button
                         type="button"
                         onClick={handleClearAllFormMachines}
-                        className="px-2 py-1 rounded-md text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-[#193055] transition-colors cursor-pointer"
+                        className={FIORI_BTN_COMPACT_SECONDARY}
                       >
                         {isThai ? "ล้างทั้งหมด" : "Clear All"}
                       </button>
@@ -2387,7 +2403,7 @@ export function SlitWorkforceManagementView({
                   </div>
                 </div>
 
-                {/* 4 Group Multi-Select Toggle Cards */}
+                {/* 4 Group Multi-Select Toggle Cards (SAP Fiori) */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {MACHINE_GROUP_OPTIONS.map((grp) => {
                     const isSelected = formMachineGroups.includes(grp.key);
@@ -2399,16 +2415,16 @@ export function SlitWorkforceManagementView({
                         key={grp.key}
                         type="button"
                         onClick={() => handleToggleFormMachineGroup(grp.key)}
-                        className={`px-3 py-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                        className={`px-3 py-2 rounded-[4px] border text-left transition-colors cursor-pointer ${
                           isSelected
-                            ? "bg-sky-50 dark:bg-sky-950/50 border-sky-600 text-sky-900 dark:text-sky-200"
-                            : "bg-white dark:bg-[#0a1426] border-slate-300 dark:border-[#24426b] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-[#132544]"
+                            ? "bg-[#edf7fb] dark:bg-[#0d2747] border-[#087eaf] text-[#075985] dark:text-[#7dd3fc]"
+                            : "bg-white dark:bg-[#0d1b33] border-[#b9c9d2] dark:border-[#1e3a5f] text-slate-700 dark:text-slate-300 hover:bg-[#edf7fb]/60 dark:hover:bg-[#152b4f]"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-sm font-bold font-mono">{grp.key}</span>
                           {isSelected && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold text-sky-700 dark:text-sky-300">
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold text-[#087eaf] dark:text-[#38bdf8]">
                               <Check size={12} />
                               {selectedInGrpCount > 0
                                 ? `${selectedInGrpCount}/${grp.machines.length}`
@@ -2479,11 +2495,9 @@ export function SlitWorkforceManagementView({
                                 key={mCode}
                                 type="button"
                                 onClick={() => toggleSpecificMachine(mCode)}
-                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-mono font-semibold border transition-colors cursor-pointer ${
-                                  active
-                                    ? "bg-sky-600 border-sky-600 text-white"
-                                    : "bg-white dark:bg-[#0f1d36] border-slate-200 dark:border-[#24426b] text-slate-700 dark:text-slate-300 hover:border-sky-400"
-                                }`}
+                                className={`${
+                                  active ? FIORI_BTN_COMPACT_PRIMARY : FIORI_BTN_COMPACT_SECONDARY
+                                } font-mono`}
                               >
                                 {active && <Check size={11} />}
                                 <span>{mCode}</span>
@@ -2683,20 +2697,20 @@ export function SlitWorkforceManagementView({
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-[#1e3a5f]">
+              {/* Modal Footer (SAP Fiori) */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200 dark:border-[#1e3a5f]">
                 <button
                   type="button"
                   onClick={() => setIsFormOpen(false)}
                   disabled={isSaving}
-                  className="px-4 py-2 rounded-lg text-xs font-semibold border border-slate-300 dark:border-[#24426b] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#193055] transition-colors cursor-pointer"
+                  className={FIORI_BTN_SECONDARY}
                 >
                   {isThai ? "ยกเลิก" : "Cancel"}
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-55 transition-colors cursor-pointer"
+                  className={FIORI_BTN_PRIMARY}
                 >
                   <Check size={14} />
                   <span>

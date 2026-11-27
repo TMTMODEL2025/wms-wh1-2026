@@ -50,6 +50,19 @@ export interface MachineStagingAreaProps {
   isThai?: boolean;
 }
 
+// SAP Fiori design tokens for Machine Staging Area
+const FIORI_BTN_BASE =
+  "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[7px] !text-[14px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+const FIORI_BTN_DANGER = `${FIORI_BTN_BASE} border-[#b91c1c] bg-[#b91c1c] text-white hover:bg-[#991b1b] hover:border-[#991b1b] dark:border-rose-600 dark:bg-rose-600 dark:text-white dark:hover:bg-rose-700 dark:hover:border-rose-700`;
+const FIORI_BTN_DANGER_GHOST = `${FIORI_BTN_BASE} border-[#fca5a5] bg-white text-[#b91c1c] hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444]`;
+const FIORI_BTN_COMPACT_BASE =
+  "inline-flex min-h-[32px] items-center justify-center gap-1.5 rounded-[4px] border px-2.5 py-1 !text-[13px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+const FIORI_BTN_COMPACT_SECONDARY = `${FIORI_BTN_COMPACT_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+const FIORI_BTN_COMPACT_DANGER_SOLID = `${FIORI_BTN_COMPACT_BASE} border-[#b91c1c] bg-[#b91c1c] text-white hover:bg-[#991b1b] hover:border-[#991b1b]`;
+const FIORI_BTN_ICON_DANGER =
+  "inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[4px] border border-[#fca5a5] bg-white text-[#b91c1c] hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444] transition-colors cursor-pointer";
+
 export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: externalIsThai }) => {
   const { language } = useLanguage();
   const isThai = externalIsThai ?? (language === "th");
@@ -602,12 +615,12 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
   return (
     <div className="w-full space-y-3 sm:space-y-6 pb-8 sm:pb-12 text-slate-800 dark:text-slate-100 font-sans">
       {/* Top Banner */}
-      <div className="relative overflow-hidden rounded-xl sm:rounded-2xl bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 p-3 sm:p-6 md:p-8 text-white shadow-xl border border-cyan-500/30">
+      <div className="relative overflow-hidden rounded-[6px] bg-gradient-to-r from-slate-900 via-sky-950 to-blue-900 p-3 sm:p-6 md:p-7 text-white shadow-md border border-[#087eaf]/40">
         <div className="relative z-10 flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto justify-start">
             <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-              <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 shrink-0">
-                <Cpu size={18} className="sm:w-[26px] sm:h-[26px]" />
+              <div className="p-2 sm:p-2.5 rounded-[4px] bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 shrink-0">
+                <Cpu size={18} className="sm:w-[24px] sm:h-[24px]" />
               </div>
               <h1 className="text-sm sm:text-xl md:text-2xl font-black text-white flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <span className="truncate">แคร่วัตถุดิบหน้าเครื่อง</span>
@@ -617,9 +630,9 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
         </div>
 
         {/* 5 Overall Summary Cards (All Machines: TM + CF) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 mt-2.5 sm:mt-6 pt-2.5 sm:pt-6 border-t border-white/10">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1.5 sm:gap-3 mt-2.5 sm:mt-5 pt-2.5 sm:pt-5 border-t border-white/15">
           {/* การ์ดที่ 1: พื้นที่จัดเก็บทั้งหมด (ตัน) */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+          <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-1">
                 <span className="text-slate-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
@@ -647,7 +660,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
           </div>
 
           {/* การ์ดที่ 2: พื้นที่ใช้ไป (ตัน) */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+          <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-1">
                 <span className="text-amber-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
@@ -678,7 +691,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
           </div>
 
           {/* การ์ดที่ 3: พื้นที่คงเหลือ (ตัน) */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+          <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between gap-1">
                 <span className="text-emerald-300 text-[9.5px] sm:text-xs font-semibold tracking-tight sm:tracking-normal truncate">
@@ -709,7 +722,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
           </div>
 
           {/* การ์ดที่ 4: จำนวนแคร่ทั้งหมด */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
+          <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2 sm:p-3.5 border border-white/15 min-w-0 flex flex-col justify-between">
             {(() => {
               const rackUsagePercent = allCategoriesSummary.all.totalRacks > 0
                 ? Math.round((allCategoriesSummary.all.usedRacks / allCategoriesSummary.all.totalRacks) * 100)
@@ -749,7 +762,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
           </div>
 
           {/* การ์ดที่ 5: จำนวนเมตรทั้งหมด */}
-          <div className="bg-white/10 backdrop-blur-md rounded-lg sm:rounded-xl p-2 sm:p-3.5 border border-white/15 min-w-0 col-span-2 sm:col-span-1 flex flex-col justify-between">
+          <div className="bg-white/10 backdrop-blur-md rounded-[4px] p-2 sm:p-3.5 border border-white/15 min-w-0 col-span-2 sm:col-span-1 flex flex-col justify-between">
             {(() => {
               const meterUsagePercent = allCategoriesSummary.all.totalCapacityMeters > 0
                 ? Math.round((allCategoriesSummary.all.usedMeters / allCategoriesSummary.all.totalCapacityMeters) * 100)
@@ -795,15 +808,15 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
         {/* TM Group Summary Card */}
         <div
           onClick={() => setActiveCategory("pipe")}
-          className={`rounded-xl sm:rounded-2xl p-3 sm:p-5 bg-white dark:bg-slate-900 shadow-md border-2 transition-all cursor-pointer ${
+          className={`rounded-[6px] p-3 sm:p-5 bg-white dark:bg-slate-900 shadow-xs border transition-colors cursor-pointer ${
             activeCategory === "pipe"
-              ? "border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-500/15"
-              : "border-slate-200 dark:border-slate-800 hover:border-cyan-300 dark:hover:border-slate-700"
+              ? "border-[#087eaf] dark:border-[#38bdf8] ring-1 ring-[#087eaf]/25"
+              : "border-[#d9e2e8] dark:border-[#1e3a5f] hover:border-[#087eaf]/60"
           }`}
         >
-          <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20 shrink-0">
+              <div className="p-1.5 sm:p-2 rounded-[4px] bg-[#edf7fb] dark:bg-[#0d2240] text-[#087eaf] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] shrink-0">
                 <Cpu size={16} className="sm:w-5 sm:h-5" />
               </div>
               <div className="min-w-0">
@@ -840,7 +853,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {/* 1. มีแคร่ทั้งหมด */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 min-w-0 flex flex-col justify-between">
+            <div className="rounded-[4px] p-2 sm:p-3 bg-[#f8fafc] dark:bg-slate-800/60 border border-[#d9e2e8] dark:border-[#1e3a5f] min-w-0 flex flex-col justify-between">
               <div>
                 <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
                   มีแคร่ทั้งหมด
@@ -865,7 +878,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             </div>
 
             {/* 2. ใช้ไป */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
+            <div className="rounded-[4px] p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
@@ -898,7 +911,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             </div>
 
             {/* 3. คงเหลือ */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
+            <div className="rounded-[4px] p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
               <div>
                 <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
                   คงเหลือ
@@ -946,15 +959,15 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
         {/* CF Group Summary Card */}
         <div
           onClick={() => setActiveCategory("c_channel")}
-          className={`rounded-xl sm:rounded-2xl p-3 sm:p-5 bg-white dark:bg-slate-900 shadow-md border-2 transition-all cursor-pointer ${
+          className={`rounded-[6px] p-3 sm:p-5 bg-white dark:bg-slate-900 shadow-xs border transition-colors cursor-pointer ${
             activeCategory === "c_channel"
-              ? "border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-500/15"
-              : "border-slate-200 dark:border-slate-800 hover:border-cyan-300 dark:hover:border-slate-700"
+              ? "border-[#087eaf] dark:border-[#38bdf8] ring-1 ring-[#087eaf]/25"
+              : "border-[#d9e2e8] dark:border-[#1e3a5f] hover:border-[#087eaf]/60"
           }`}
         >
-          <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-slate-100 dark:border-slate-800">
+          <div className="flex items-center justify-between gap-2 pb-2 sm:pb-3.5 mb-2 sm:mb-3.5 border-b border-[#e5edf2] dark:border-[#1e3a5f]">
             <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-              <div className="p-1.5 sm:p-2.5 rounded-lg sm:rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
+              <div className="p-1.5 sm:p-2 rounded-[4px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 shrink-0">
                 <Layers size={16} className="sm:w-5 sm:h-5" />
               </div>
               <div className="min-w-0">
@@ -991,7 +1004,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
           <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
             {/* 1. มีแคร่ทั้งหมด */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/70 min-w-0 flex flex-col justify-between">
+            <div className="rounded-[4px] p-2 sm:p-3 bg-[#f8fafc] dark:bg-slate-800/60 border border-[#d9e2e8] dark:border-[#1e3a5f] min-w-0 flex flex-col justify-between">
               <div>
                 <div className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">
                   มีแคร่ทั้งหมด
@@ -1016,7 +1029,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             </div>
 
             {/* 2. ใช้ไป */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
+            <div className="rounded-[4px] p-2 sm:p-3 bg-sky-50/70 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 min-w-0 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] sm:text-[11px] font-bold text-sky-700 dark:text-sky-300">
@@ -1049,7 +1062,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             </div>
 
             {/* 3. คงเหลือ */}
-            <div className="rounded-lg sm:rounded-xl p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
+            <div className="rounded-[4px] p-2 sm:p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 min-w-0 flex flex-col justify-between">
               <div>
                 <div className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
                   คงเหลือ
@@ -1096,19 +1109,19 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
       </div>
 
       {/* Category Tabs: TM (Pipe) vs CF (C-Channel) */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-md border border-slate-200 dark:border-slate-800 space-y-2.5 sm:space-y-3">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2 sm:pb-2.5">
-          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
+      <div className="bg-white dark:bg-slate-900 rounded-[6px] p-2.5 sm:p-3.5 shadow-xs border border-[#d9e2e8] dark:border-[#1e3a5f] space-y-2.5 sm:space-y-3">
+        <div className="flex items-center justify-between gap-2 border-b border-[#e5edf2] dark:border-[#1e3a5f] pb-2.5">
+          <div className="grid grid-cols-2 sm:inline-flex min-h-[36px] items-stretch gap-[2px] p-[2px] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0c1930] w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setActiveCategory("pipe")}
-              className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[32px] px-3 sm:px-4 py-1.5 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
                 activeCategory === "pipe"
-                  ? "bg-slate-900 dark:bg-cyan-500 text-white shadow-md"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  ? "bg-[#087eaf] text-white shadow-xs"
+                  : "text-[#075985] dark:text-[#7dd3fc] hover:bg-white/80 dark:hover:bg-[#132645]"
               }`}
             >
-              <Cpu size={13} className="shrink-0 sm:w-[15px] sm:h-[15px]" />
+              <Cpu size={14} className="shrink-0 sm:w-[15px] sm:h-[15px]" />
               <span className="sm:hidden">TM 1 - TM 14 (14)</span>
               <span className="hidden sm:inline">เครื่องผลิตท่อ TM 1 - TM 14 (14 เครื่อง)</span>
             </button>
@@ -1116,13 +1129,13 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             <button
               type="button"
               onClick={() => setActiveCategory("c_channel")}
-              className={`px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
+              className={`min-h-[32px] px-3 sm:px-4 py-1.5 rounded-[3px] !text-[13px] sm:!text-[14px] font-semibold transition-colors flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 cursor-pointer whitespace-nowrap ${
                 activeCategory === "c_channel"
-                  ? "bg-slate-900 dark:bg-cyan-500 text-white shadow-md"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  ? "bg-[#087eaf] text-white shadow-xs"
+                  : "text-[#075985] dark:text-[#7dd3fc] hover:bg-white/80 dark:hover:bg-[#132645]"
               }`}
             >
-              <Layers size={13} className="shrink-0 sm:w-[15px] sm:h-[15px]" />
+              <Layers size={14} className="shrink-0 sm:w-[15px] sm:h-[15px]" />
               <span className="sm:hidden">CF 1, 2, 4, 5 (4)</span>
               <span className="hidden sm:inline">เครื่องผลิตตัวซี CF 1, CF 2, CF 4, CF 5 (4 เครื่อง)</span>
             </button>
@@ -1151,22 +1164,22 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                   key={m.machineId}
                   type="button"
                   onClick={() => setSelectedMachineId(m.machineId)}
-                  className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl border text-left transition-all relative overflow-hidden flex flex-col justify-between cursor-pointer ${
+                  className={`p-2 sm:p-2.5 rounded-[4px] border text-left transition-colors relative overflow-hidden flex flex-col justify-between cursor-pointer ${
                     isSelected
-                      ? "bg-cyan-50 dark:bg-cyan-950/50 border-cyan-500 shadow-sm ring-1 sm:ring-2 ring-cyan-500/20"
-                      : "bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700/70 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      ? "bg-[#edf7fb] dark:bg-[#0d2240] border-[#087eaf] dark:border-[#38bdf8] shadow-xs ring-1 ring-[#087eaf]/25"
+                      : "bg-[#f8fafc] dark:bg-[#0c1930] border-[#d9e2e8] dark:border-[#1e3a5f] hover:bg-[#edf7fb]/50 dark:hover:bg-[#132645] hover:border-[#087eaf]/60"
                   }`}
                 >
                   <div className="flex items-center justify-between w-full gap-1">
                     <span
-                      className={`text-[11px] sm:text-xs font-black ${
-                        isSelected ? "text-cyan-700 dark:text-cyan-300" : "text-slate-700 dark:text-slate-200"
+                      className={`text-[12px] sm:text-[13px] font-black ${
+                        isSelected ? "text-[#075985] dark:text-[#38bdf8]" : "text-slate-700 dark:text-slate-200"
                       }`}
                     >
                       {m.machineCode}
                     </span>
                     <span
-                      className={`text-[9.5px] sm:text-[10px] font-bold px-1 sm:px-1.5 py-0.2 rounded whitespace-nowrap ${
+                      className={`text-[9.5px] sm:text-[10.5px] font-bold px-1.5 py-0.5 rounded-[4px] whitespace-nowrap ${
                         usedMeters > 0
                           ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300/40"
                           : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40"
@@ -1176,7 +1189,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                     </span>
                   </div>
 
-                  <div className="mt-1 sm:mt-2 text-[9.5px] sm:text-[10px] text-slate-500 dark:text-slate-400 flex justify-between items-center gap-1">
+                  <div className="mt-1 sm:mt-2 text-[9.5px] sm:text-[10.5px] text-slate-500 dark:text-slate-400 flex justify-between items-center gap-1">
                     <span className="shrink-0">{m.racks.length} แคร่</span>
                     <span className="font-mono tabular-nums truncate">
                       {usedMeters === 0
@@ -1193,7 +1206,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
       {/* Racks List for Current Machine */}
       <div className="space-y-2.5 sm:space-y-4">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <h2 className="text-xs sm:text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 sm:gap-2 min-w-0">
               <span className="whitespace-nowrap">แคร่หน้าเครื่อง {currentMachine.machineCode}</span>
@@ -1206,32 +1219,32 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             </h2>
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={handleFillAllRacksToFull}
-              className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold text-[9.5px] sm:text-[11px] leading-tight transition-colors flex items-center gap-0.5 sm:gap-1 shadow-2xs cursor-pointer whitespace-nowrap"
+              className={`${FIORI_BTN_DANGER} px-2.5 sm:px-3.5 !text-[12.5px] sm:!text-[13.5px]`}
               title="ปรับแคร่ทุกแคร่ให้เต็มพิกัดแคร่ (100%) ทันที"
             >
-              <Layers size={10} className="sm:w-3 sm:h-3 shrink-0" />
+              <Layers size={14} className="shrink-0" />
               <span>เต็มทุกแคร่</span>
             </button>
             <button
               type="button"
               onClick={handleResetAllRacksToEmpty}
-              className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-rose-950/40 dark:hover:text-rose-300 font-semibold text-[9.5px] sm:text-[11px] leading-tight transition-colors flex items-center gap-0.5 sm:gap-1 border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer whitespace-nowrap"
+              className={`${FIORI_BTN_DANGER_GHOST} px-2.5 sm:px-3.5 !text-[12.5px] sm:!text-[13.5px]`}
               title="ล้างข้อมูลแคร่ทุกเครื่องเป็น 0 เมตร"
             >
-              <RotateCcw size={10} className="sm:w-3 sm:h-3 shrink-0" />
+              <RotateCcw size={14} className="shrink-0" />
               <span className="sm:hidden">ล้างทั้งหมด</span>
               <span className="hidden sm:inline">ล้างข้อมูลแคร่ทั้งหมด</span>
             </button>
             <button
               type="button"
               onClick={handleAddNewRack}
-              className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-md sm:rounded-lg bg-slate-900 dark:bg-cyan-500 hover:bg-slate-800 text-white font-semibold text-[9.5px] sm:text-[11px] leading-tight transition-colors flex items-center gap-0.5 sm:gap-1 shadow-2xs cursor-pointer whitespace-nowrap"
+              className={`${FIORI_BTN_PRIMARY} px-2.5 sm:px-3.5 !text-[12.5px] sm:!text-[13.5px]`}
             >
-              <Plus size={10} className="sm:w-3 sm:h-3 shrink-0" />
+              <Plus size={14} className="shrink-0" />
               <span className="sm:hidden">เพิ่มแคร่</span>
               <span className="hidden sm:inline">เพิ่มแคร่ใหม่</span>
             </button>
@@ -1253,25 +1266,25 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
             return (
               <div
                 key={`${rack.rackId}-${rIdx}`}
-                className={`bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl px-2.5 py-2 sm:p-3.5 shadow-xs border space-y-1.5 sm:space-y-2 transition-all ${
+                className={`bg-white dark:bg-slate-900 rounded-[6px] px-2.5 py-2.5 sm:p-3.5 shadow-xs border space-y-2 transition-colors ${
                   isMaintenance
-                    ? "border-rose-200 dark:border-rose-900/50 opacity-90"
-                    : "border-slate-200/90 dark:border-slate-800"
+                    ? "border-rose-300 dark:border-rose-900/60 opacity-90"
+                    : "border-[#d9e2e8] dark:border-[#1e3a5f]"
                 }`}
               >
                 {/* Single-Line Compact Header Row (No +/- Stepper) */}
-                <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-2">
                   {/* Left: Rack Badge, Name & Status Pill */}
-                  <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
                     <div
-                      className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg border flex items-center justify-center font-mono font-black text-[11px] sm:text-xs shrink-0 ${
+                      className={`w-6 h-6 sm:w-7 sm:h-7 rounded-[4px] border flex items-center justify-center font-mono font-black text-[11px] sm:text-xs shrink-0 ${
                         isMaintenance
                           ? "bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400"
                           : usedMeters >= maxMeters
                           ? "bg-rose-500/15 border-rose-500/30 text-rose-600 dark:text-rose-400"
                           : usedMeters === 0
                           ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-                          : "bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border-cyan-500/30 text-cyan-600 dark:text-cyan-400"
+                          : "bg-[#edf7fb] dark:bg-[#0d2240] border-[#087eaf]/40 text-[#075985] dark:text-[#38bdf8]"
                       }`}
                     >
                       {String(rack.rackNo).padStart(2, "0")}
@@ -1280,7 +1293,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                       {formatRackName(rack.rackNo, currentMachine)}
                     </h3>
                     <span
-                      className={`inline-block text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-md border whitespace-nowrap truncate ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}
+                      className={`inline-block text-[10.5px] sm:text-[11.5px] font-bold px-2 py-0.5 rounded-[4px] border whitespace-nowrap truncate ${statusInfo.bg} ${statusInfo.color} ${statusInfo.border}`}
                     >
                       {statusInfo.label}
                     </span>
@@ -1288,23 +1301,23 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
 
                   {/* Right: Inline Summary & Desktop Rack Actions */}
                   <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-[10.5px] sm:text-xs font-mono tabular-nums flex items-center gap-1 text-slate-500 dark:text-slate-400">
-                      <span className="hidden md:inline text-[11px] font-sans">
+                    <div className="text-[11px] sm:text-xs font-mono tabular-nums flex items-center gap-1 text-slate-500 dark:text-slate-400">
+                      <span className="hidden md:inline text-[12px] font-sans">
                         สถานะการใช้งานแคร่ปัจจุบัน:
                       </span>
                       <strong className="text-slate-800 dark:text-slate-100">
                         {usedMeters}/{maxMeters}ม.
                       </strong>
                       <span className="text-slate-300 dark:text-slate-600">·</span>
-                      <strong className="text-cyan-600 dark:text-cyan-400">
+                      <strong className="text-[#075985] dark:text-[#38bdf8]">
                         {formatTons(usedTons)}/{formatTons(maxTons)}T
                       </strong>
                     </div>
 
                     {/* Desktop Rack Length & Maintenance Actions */}
                     <div className="hidden sm:flex items-center gap-1.5">
-                      <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
-                        <Ruler size={12} className="text-slate-400 shrink-0" />
+                      <div className="inline-flex h-[32px] items-center gap-1.5 bg-white dark:bg-[#041029] px-2 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] focus-within:border-[#087eaf] dark:focus-within:border-[#38bdf8]">
+                        <Ruler size={13} className="text-slate-400 shrink-0" />
                         <select
                           value={maxMeters}
                           disabled={isMaintenance}
@@ -1312,7 +1325,7 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                             handleUpdateRackLength(rack.rackId, parseInt(e.target.value, 10))
                           }
                           aria-label="ความยาวแคร่"
-                          className="bg-transparent font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer text-[11px] disabled:opacity-50"
+                          className="h-full bg-transparent font-semibold text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer !text-[13px] disabled:opacity-50"
                         >
                           <option value={1} className="dark:bg-slate-900">1 ม. (13.3T)</option>
                           <option value={2} className="dark:bg-slate-900">2 ม. (26.7T)</option>
@@ -1326,16 +1339,12 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                       <button
                         type="button"
                         onClick={() => handleToggleRackMaintenance(rack.rackId)}
-                        className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-colors flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
-                          isMaintenance
-                            ? "bg-rose-500 hover:bg-rose-600 text-white border-rose-600"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
-                        }`}
+                        className={isMaintenance ? FIORI_BTN_COMPACT_DANGER_SOLID : FIORI_BTN_COMPACT_SECONDARY}
                         title={isMaintenance ? "เปิดใช้งานแคร่" : "ปิดปรับปรุงแคร่"}
                       >
                         <AlertTriangle
-                          size={12}
-                          className={isMaintenance ? "text-white" : "text-amber-500"}
+                          size={13}
+                          className={isMaintenance ? "text-white" : "text-amber-600 dark:text-amber-400"}
                         />
                         <span>{isMaintenance ? "เปิดใช้" : "ซ่อมบำรุง"}</span>
                       </button>
@@ -1344,27 +1353,27 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                         <button
                           type="button"
                           onClick={() => handleDeleteRack(rack.rackId)}
-                          className="inline-flex p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer shrink-0"
+                          className={FIORI_BTN_ICON_DANGER}
                           title="ลบแคร่ที่ว่างนี้"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={14} />
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Slim Mobile-First Touch Progress Bar + Quick Meter Pills */}
-                <div className="space-y-1">
+                {/* Slim Mobile-First Touch Progress Bar + Quick Meter Buttons */}
+                <div className="space-y-1.5">
                   <div className="relative select-none py-0.5">
                     {/* Slim Track Container */}
                     <div
-                      className={`relative w-full h-6 sm:h-7 rounded-lg border overflow-hidden transition-colors ${
+                      className={`relative w-full h-6 sm:h-7 rounded-[4px] border overflow-hidden transition-colors ${
                         isMaintenance
                           ? "bg-rose-950/10 border-rose-300 dark:bg-rose-950/30 dark:border-rose-800/60"
                           : usedMeters === 0
                           ? "bg-emerald-500/10 border-emerald-500/35 dark:bg-emerald-950/30 dark:border-emerald-700/50"
-                          : "bg-slate-100 dark:bg-slate-950/90 border-slate-200/90 dark:border-slate-800"
+                          : "bg-slate-100 dark:bg-slate-950/90 border-[#d9e2e8] dark:border-[#1e3a5f]"
                       }`}
                     >
                       {/* Segmented 1-Meter Grid Dividers */}
@@ -1478,8 +1487,8 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                     />
                   </div>
 
-                  {/* Compact One-Tap Meter Step Pills (0 ม. ... maxMeters ม.) */}
-                  <div className="grid grid-flow-col auto-cols-fr gap-1">
+                  {/* Compact One-Tap Meter Step Buttons (SAP Fiori) */}
+                  <div className="grid grid-flow-col auto-cols-fr gap-1.5">
                     {Array.from({ length: maxMeters + 1 }).map((_, mVal) => {
                       const isActive = usedMeters === mVal;
                       return (
@@ -1488,19 +1497,19 @@ export const MachineStagingArea: React.FC<MachineStagingAreaProps> = ({ isThai: 
                           type="button"
                           disabled={isMaintenance}
                           onClick={() => handleUpdateUsedMeters(rack.rackId, mVal)}
-                          className={`h-6 sm:h-6.5 rounded-md font-mono text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-0.5 active:scale-95 ${
+                          className={`min-h-[30px] rounded-[4px] border font-mono !text-[12.5px] sm:!text-[13px] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-0.5 ${
                             isActive
                               ? mVal >= maxMeters
-                                ? "bg-rose-600 text-white shadow-2xs"
+                                ? "border-[#b91c1c] bg-[#b91c1c] text-white"
                                 : mVal === 0
-                                ? "bg-emerald-600 text-white shadow-2xs"
-                                : "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-2xs"
-                              : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/70"
+                                ? "border-[#107e3e] bg-[#107e3e] text-white"
+                                : "border-[#087eaf] bg-[#087eaf] text-white"
+                              : "border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]"
                           } disabled:opacity-40 disabled:cursor-not-allowed`}
                           title={`แตะเพื่อตั้งค่าใช้แคร่ ${mVal} เมตร`}
                         >
                           <span>{mVal}</span>
-                          <span className="text-[9px] opacity-85">ม.</span>
+                          <span className="text-[11px] opacity-85">ม.</span>
                         </button>
                       );
                     })}
