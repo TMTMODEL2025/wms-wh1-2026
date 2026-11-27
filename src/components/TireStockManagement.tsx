@@ -16,6 +16,7 @@ import {
   WifiOff,
   RefreshCw,
   ChevronDown,
+  ChevronUp,
   History,
   Check,
   Truck,
@@ -45,6 +46,10 @@ import {
   getActiveRecorderDisplay,
 } from "../services/authWorkforceService";
 import { useAuth } from "../contexts/AuthContext";
+import {
+  ForkliftWheelPositionDiagram,
+  getWheelPositionOptionsForVehicle,
+} from "./ForkliftWheelPositionDiagram";
 
 interface TireStockManagementProps {
   vehicles: Vehicle[];
@@ -85,16 +90,6 @@ interface OutboundTireSelection {
   selectedTypes: MhTireComponentType[];
   qtyByType: Record<keyof MhTireQtyByType, string>;
 }
-
-const WHEEL_POSITION_OPTIONS = [
-  "ล้อหน้าซ้าย (FL)",
-  "ล้อหน้าขวา (FR)",
-  "ล้อหลังซ้าย (RL)",
-  "ล้อหลังขวา (RR)",
-  "คู่ล้อหน้า (Front Pair)",
-  "คู่ล้อหลัง (Rear Pair)",
-  "ครบชุด 4 ล้อ (Full Set)",
-];
 
 export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const { currentUser } = useAuth();
@@ -144,6 +139,13 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
   const [tireNotes, setTireNotes] = useState<string>("");
   const [tireSearchQuery, setTireSearchQuery] = useState<string>("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [expandedRecordIds, setExpandedRecordIds] = useState<string[]>([]);
+
+  const toggleExpandedRecord = (id: string) => {
+    setExpandedRecordIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
 
   // Cloud-backed Combobox dropdown visibility
   const [showSizeDropdown, setShowSizeDropdown] = useState<boolean>(false);
@@ -557,10 +559,21 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
 
   const handleOutboundVehicleChange = (nextVehicleId: string) => {
     setTireVehicleId(nextVehicleId);
+    setTireWheelPosition("");
     setOutboundSelections({});
     setShowAllStockInOutbound(false);
     setOutboundSelectionError("");
   };
+
+  const selectedOutboundVehicle = useMemo(
+    () => (tireVehicleId ? vehicleById.get(tireVehicleId) : undefined),
+    [tireVehicleId, vehicleById]
+  );
+
+  const activeWheelPositionOptions = useMemo(
+    () => getWheelPositionOptionsForVehicle(tireVehicleId, selectedOutboundVehicle),
+    [tireVehicleId, selectedOutboundVehicle]
+  );
 
   const toggleOutboundTireItem = (item: StockTireCatalogItem) => {
     setOutboundSelections((prev) => {
@@ -826,6 +839,16 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
         tr.technicianOrReceiver.toLowerCase().includes(q)
     );
   }, [tireRecords, tireSearchQuery]);
+
+  const filteredInboundRecords = useMemo(
+    () => filteredTireRecords.filter((tr) => tr.transactionType === "Inbound"),
+    [filteredTireRecords]
+  );
+
+  const filteredOutboundRecords = useMemo(
+    () => filteredTireRecords.filter((tr) => tr.transactionType === "Outbound"),
+    [filteredTireRecords]
+  );
 
   const handleCreateTireTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1224,223 +1247,349 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="ts-stats-table w-full text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
-                <th className="ts-left font-bold whitespace-nowrap">เลขที่รายการ & วัน-เวลา</th>
-                <th className="ts-center font-bold whitespace-nowrap">ประเภท</th>
-                <th className="ts-left font-bold whitespace-nowrap">ขนาดยาง & ยี่ห้อ</th>
-                <th className="ts-right font-bold whitespace-nowrap">จำนวน (เส้น)</th>
-                <th className="ts-right font-bold whitespace-nowrap">ราคา/หน่วย & รวม</th>
-                <th className="ts-left font-bold whitespace-nowrap">รถ / หางลาก</th>
-                <th className="ts-left font-bold whitespace-nowrap">แหล่งที่มา</th>
-                <th className="ts-left font-bold whitespace-nowrap">ผู้รับผิดชอบ / หมายเหตุ</th>
-                <th className="ts-center font-bold whitespace-nowrap">จัดการ</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
-              {filteredTireRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="ts-center py-10 text-slate-500 dark:text-slate-400">
-                    ยังไม่มีประวัติรายการสต๊อกยางในฐานข้อมูล (mh_tire_stock)
-                  </td>
-                </tr>
-              ) : (
-                filteredTireRecords.map((tr) => (
-                  <tr
-                    key={tr.id}
-                    className="hover:bg-slate-50 dark:hover:bg-[#162744]/60 transition-colors"
+        <div className="p-3 sm:p-4 grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          {(["Inbound", "Outbound"] as const).map((panelType) => {
+            const isInbound = panelType === "Inbound";
+            const panelRecords = isInbound ? filteredInboundRecords : filteredOutboundRecords;
+            const panelTotalQty = panelRecords.reduce((sum, tr) => sum + (Number(tr.qty) || 0), 0);
+
+            return (
+              <div
+                key={panelType}
+                className="rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] overflow-hidden min-w-0"
+              >
+                <div
+                  className={`px-3.5 py-2.5 border-b border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2 ${
+                    isInbound
+                      ? "bg-emerald-50/70 dark:bg-emerald-950/25"
+                      : "bg-sky-50/70 dark:bg-sky-950/25"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-6 h-6 rounded flex items-center justify-center shrink-0 ${
+                        isInbound
+                          ? "bg-emerald-600 text-white"
+                          : "bg-[#087eaf] text-white"
+                      }`}
+                    >
+                      {isInbound ? <ArrowDownLeft size={14} /> : <ArrowUpRight size={14} />}
+                    </span>
+                    <h3
+                      className={`text-xs font-bold ${
+                        isInbound
+                          ? "text-emerald-900 dark:text-emerald-200"
+                          : "text-sky-900 dark:text-sky-200"
+                      }`}
+                    >
+                      {isInbound ? "รายการรับเข้ายาง (Inbound)" : "รายการเบิกออกยาง (Outbound)"}
+                    </h3>
+                  </div>
+
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-bold tabular-nums border ${
+                      isInbound
+                        ? "bg-white dark:bg-[#0d1b33] text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                        : "bg-white dark:bg-[#0d1b33] text-[#087eaf] dark:text-sky-300 border-sky-200 dark:border-sky-800"
+                    }`}
                   >
-                    <td className="ts-left whitespace-nowrap">
-                      <div className="font-bold text-[#087eaf] dark:text-sky-400 tabular-nums">
-                        {tr.transactionNo}
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
-                        {tr.date} · {tr.time}
-                      </div>
-                    </td>
-                    <td className="ts-center whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${
-                          tr.transactionType === "Inbound"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                            : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
-                        }`}
-                      >
-                        {tr.transactionType === "Inbound" ? "+ รับเข้าสต๊อก" : "- เบิกเปลี่ยนยาง"}
-                      </span>
-                    </td>
-                    <td className="ts-left ts-wrap min-w-[160px]">
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">
-                        {tr.tireSize}
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        ยี่ห้อ: {tr.brand}
-                      </div>
-                      {tr.tireTypes && tr.tireTypes.length > 0 && (
-                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                          {tr.tireTypes.map((tType) => (
-                            <span
-                              key={tType}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 whitespace-nowrap"
-                            >
-                              <Check size={10} strokeWidth={2.75} className="shrink-0" />
-                              <span>{tType}</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="ts-right font-bold tabular-nums whitespace-nowrap">
-                      <div
-                        className={
-                          tr.transactionType === "Inbound"
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-sky-600 dark:text-sky-400"
-                        }
-                      >
-                        {tr.transactionType === "Inbound" ? "+" : "-"}
-                        {tr.qty} เส้น
-                      </div>
-                      {tr.qtyByType && (
-                        <div className="mt-0.5 flex flex-wrap justify-end gap-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                          {TIRE_TYPE_QTY_FIELDS.filter((f) => (tr.qtyByType?.[f.key] || 0) > 0).map(
-                            (f) => (
-                              <span
-                                key={f.key}
-                                className="px-1 py-0.5 rounded bg-slate-100 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-slate-700 dark:text-slate-300"
-                              >
-                                {f.type} {tr.qtyByType?.[f.key]}
-                              </span>
-                            )
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="ts-right tabular-nums whitespace-nowrap">
-                      <div className="font-bold text-slate-900 dark:text-slate-100">
-                        {tr.totalCost.toLocaleString()} บาท
-                      </div>
-                      {tr.unitCostByType && tr.qtyByType ? (
-                        <div className="mt-0.5 flex flex-wrap justify-end gap-1 text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                          {TIRE_TYPE_QTY_FIELDS.filter((f) => (tr.qtyByType?.[f.key] || 0) > 0).map(
-                            (f) => (
-                              <span
-                                key={f.key}
-                                className="px-1 py-0.5 rounded bg-slate-100 dark:bg-[#0d1b33] border border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300"
-                              >
-                                {f.type} @{(tr.unitCostByType?.[f.key] || 0).toLocaleString()}
-                              </span>
-                            )
-                          )}
-                        </div>
+                    {panelRecords.length.toLocaleString()} รายการ · รวม {isInbound ? "+" : "-"}
+                    {panelTotalQty.toLocaleString()} เส้น
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="ts-stats-table w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300">
+                        <th className="ts-left font-bold whitespace-nowrap">เลขที่รายการ & วัน-เวลา</th>
+                        <th className="ts-center font-bold whitespace-nowrap">ประเภท</th>
+                        <th className="ts-left font-bold whitespace-nowrap">ขนาดยาง & ยี่ห้อ</th>
+                        <th className="ts-right font-bold whitespace-nowrap">จำนวน (เส้น)</th>
+                        <th className="ts-left font-bold whitespace-nowrap">ผู้รับผิดชอบ</th>
+                        <th className="ts-center font-bold whitespace-nowrap">เพิ่มเติม</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-[#1e3a5f]">
+                      {panelRecords.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="ts-center py-8 text-slate-500 dark:text-slate-400"
+                          >
+                            {isInbound
+                              ? "ยังไม่มีรายการรับเข้ายางในฐานข้อมูล"
+                              : "ยังไม่มีรายการเบิกออกยางในฐานข้อมูล"}
+                          </td>
+                        </tr>
                       ) : (
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          @{tr.unitCost.toLocaleString()} บาท
-                        </div>
-                      )}
-                    </td>
-                    <td className="ts-left ts-wrap min-w-[170px]">
-                      {tr.transactionType === "Inbound" ? (
-                        tr.compatibleVehicles && tr.compatibleVehicles.length > 0 ? (
-                          <div className="flex flex-wrap items-center gap-1">
-                            {tr.compatibleVehicles.map((vid) => {
-                              const trailer = isTrailerId(vid);
-                              return (
-                                <span
-                                  key={vid}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border tabular-nums ${
-                                    trailer
-                                      ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
-                                      : "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
-                                  }`}
+                        panelRecords.map((tr) => {
+                          const isExpanded = expandedRecordIds.includes(tr.id);
+                          const activeQtyFields = tr.qtyByType
+                            ? TIRE_TYPE_QTY_FIELDS.filter((f) => (tr.qtyByType?.[f.key] || 0) > 0)
+                            : [];
+                          return (
+                            <React.Fragment key={tr.id}>
+                              <tr
+                                onClick={() => toggleExpandedRecord(tr.id)}
+                                className={`cursor-pointer transition-colors ${
+                                  isExpanded
+                                    ? isInbound
+                                      ? "bg-emerald-50/40 dark:bg-emerald-950/20"
+                                      : "bg-sky-50/50 dark:bg-[#132544]"
+                                    : "hover:bg-slate-50 dark:hover:bg-[#162744]/60"
+                                }`}
+                              >
+                                <td className="ts-left whitespace-nowrap">
+                                  <div className="font-bold text-[#087eaf] dark:text-sky-400 tabular-nums">
+                                    {tr.transactionNo}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                                    {tr.date} · {tr.time}
+                                  </div>
+                                </td>
+                                <td className="ts-center whitespace-nowrap">
+                                  <span
+                                    className={`inline-flex items-center px-2 py-0.5 rounded border text-[11px] font-semibold whitespace-nowrap ${
+                                      isInbound
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                        : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                                    }`}
+                                  >
+                                    {isInbound ? "+ รับเข้าสต๊อก" : "- เบิกเปลี่ยนยาง"}
+                                  </span>
+                                </td>
+                                <td className="ts-left ts-wrap min-w-[120px]">
+                                  <div className="font-semibold text-slate-900 dark:text-slate-100">
+                                    {tr.tireSize}
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    ยี่ห้อ: {tr.brand}
+                                  </div>
+                                </td>
+                                <td className="ts-right font-bold tabular-nums whitespace-nowrap">
+                                  <div
+                                    className={
+                                      isInbound
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-sky-600 dark:text-sky-400"
+                                    }
+                                  >
+                                    {isInbound ? "+" : "-"}
+                                    {tr.qty} เส้น
+                                  </div>
+                                </td>
+                                <td className="ts-left ts-wrap min-w-[110px]">
+                                  <div className="font-semibold text-slate-800 dark:text-slate-200">
+                                    {tr.technicianOrReceiver}
+                                  </div>
+                                </td>
+                                <td
+                                  className="ts-center whitespace-nowrap"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  {vid}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 dark:text-slate-500">-</span>
-                        )
-                      ) : (
-                        <div>
-                          <div className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
-                            {tr.vehicleId || "-"}
-                          </div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {tr.wheelPosition || "-"}
-                            {tr.operatingHours ? ` · ${tr.operatingHours} ชม.` : ""}
-                          </div>
-                        </div>
+                                  <div className="inline-flex items-center justify-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandedRecord(tr.id)}
+                                      className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold border transition-colors whitespace-nowrap ${
+                                        isExpanded
+                                          ? "bg-[#087eaf] text-white border-[#087eaf]"
+                                          : "bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:border-[#087eaf] hover:text-[#087eaf] dark:hover:text-sky-300"
+                                      }`}
+                                      title={isExpanded ? "ซ่อนข้อมูลเพิ่มเติม" : "แสดงข้อมูลเพิ่มเติม"}
+                                    >
+                                      <span>{isExpanded ? "ซ่อน" : "เพิ่มเติม"}</span>
+                                      {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                    </button>
+
+                                    {confirmDeleteId === tr.id ? (
+                                      <div className="inline-flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteTireRecord(tr.id)}
+                                          className="px-2 py-1 rounded text-[11px] font-bold bg-rose-600 text-white whitespace-nowrap"
+                                        >
+                                          ยืนยันลบ
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setConfirmDeleteId(null)}
+                                          className="px-2 py-1 rounded text-[11px] border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33]"
+                                        >
+                                          ยกเลิก
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmDeleteId(tr.id)}
+                                        className="p-1.5 rounded border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                        title="ลบรายการ"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+
+                              {isExpanded && (
+                                <tr className="bg-slate-50/90 dark:bg-[#0c1930]">
+                                  <td colSpan={6} className="px-3 py-2.5">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                                      {/* Detail 1: Tire Type Breakdown & Quantities */}
+                                      <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] space-y-1.5">
+                                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                          รายละเอียดประเภทยาง & จำนวน
+                                        </div>
+                                        {activeQtyFields.length > 0 ? (
+                                          <div className="space-y-1 tabular-nums">
+                                            {activeQtyFields.map((f) => {
+                                              const qtyVal = tr.qtyByType?.[f.key] || 0;
+                                              const costVal =
+                                                tr.unitCostByType?.[f.key] ?? tr.unitCost ?? 0;
+                                              return (
+                                                <div
+                                                  key={f.key}
+                                                  className="flex items-center justify-between gap-2 text-[11px]"
+                                                >
+                                                  <span className="inline-flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
+                                                    <Check
+                                                      size={11}
+                                                      strokeWidth={2.75}
+                                                      className="text-emerald-600 dark:text-emerald-400 shrink-0"
+                                                    />
+                                                    {f.type}
+                                                  </span>
+                                                  <span className="text-slate-600 dark:text-slate-300">
+                                                    {qtyVal.toLocaleString()} เส้น · @
+                                                    {costVal.toLocaleString()} บ.
+                                                  </span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : tr.tireTypes && tr.tireTypes.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {tr.tireTypes.map((tType) => (
+                                              <span
+                                                key={tType}
+                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                              >
+                                                <Check size={10} strokeWidth={2.75} />
+                                                {tType}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                                            ไม่ได้ระบุแยกประเภทยาง
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Detail 2: Price & Total Cost */}
+                                      <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] space-y-1 tabular-nums">
+                                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                          ราคา/หน่วย & มูลค่ารวม
+                                        </div>
+                                        <div className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                                          {tr.totalCost.toLocaleString()} บาท
+                                        </div>
+                                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                                          เฉลี่ย @{tr.unitCost.toLocaleString()} บาท/เส้น
+                                        </div>
+                                      </div>
+
+                                      {/* Detail 3: Vehicle / Trailer Info */}
+                                      <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] space-y-1.5">
+                                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                          {isInbound
+                                            ? "รถ / หางลากที่ผูกไว้"
+                                            : "รถ / ตำแหน่งล้อที่เปลี่ยน"}
+                                        </div>
+                                        {isInbound ? (
+                                          tr.compatibleVehicles &&
+                                          tr.compatibleVehicles.length > 0 ? (
+                                            <div className="flex flex-wrap items-center gap-1">
+                                              {tr.compatibleVehicles.map((vid) => {
+                                                const trailer = isTrailerId(vid);
+                                                return (
+                                                  <span
+                                                    key={vid}
+                                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border tabular-nums ${
+                                                      trailer
+                                                        ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                                        : "bg-sky-50 text-sky-800 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:border-sky-800"
+                                                    }`}
+                                                  >
+                                                    {vid}
+                                                  </span>
+                                                );
+                                              })}
+                                            </div>
+                                          ) : (
+                                            <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                                              -
+                                            </div>
+                                          )
+                                        ) : (
+                                          <div className="space-y-0.5 tabular-nums">
+                                            <div className="font-bold text-slate-900 dark:text-slate-100">
+                                              รถ {tr.vehicleId || "-"}
+                                            </div>
+                                            <div className="text-[11px] text-slate-600 dark:text-slate-300">
+                                              {tr.wheelPosition || "-"}
+                                              {tr.operatingHours
+                                                ? ` · ${tr.operatingHours.toLocaleString()} ชม.`
+                                                : ""}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Detail 4: Source (Supplier/PO) & Notes */}
+                                      <div className="p-2.5 rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] space-y-1">
+                                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                                          {isInbound
+                                            ? "แหล่งที่มา (Supplier / PO) & หมายเหตุ"
+                                            : "หมายเหตุเพิ่มเติม"}
+                                        </div>
+                                        {isInbound && (
+                                          <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                            {tr.supplierOrInvoice || "-"}
+                                          </div>
+                                        )}
+                                        <div className="text-[11px] text-slate-700 dark:text-slate-300">
+                                          {tr.notes || "-"}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })
                       )}
-                    </td>
-                    <td className="ts-left ts-wrap min-w-[160px]">
-                      {tr.transactionType === "Inbound" ? (
-                        <div>
-                          <div className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                            Supplier / PO
-                          </div>
-                          <div className="text-slate-700 dark:text-slate-300">
-                            {tr.supplierOrInvoice || "-"}
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-slate-400 dark:text-slate-500">-</span>
-                      )}
-                    </td>
-                    <td className="ts-left ts-wrap min-w-[160px]">
-                      <div className="font-semibold text-slate-800 dark:text-slate-200">
-                        {tr.technicianOrReceiver}
-                      </div>
-                      {tr.notes && (
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {tr.notes}
-                        </div>
-                      )}
-                    </td>
-                    <td className="ts-center whitespace-nowrap">
-                      {confirmDeleteId === tr.id ? (
-                        <div className="inline-flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTireRecord(tr.id)}
-                            className="px-2 py-1 rounded text-[11px] font-bold bg-rose-600 text-white whitespace-nowrap"
-                          >
-                            ยืนยันลบ
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="px-2 py-1 rounded text-[11px] border border-slate-300 dark:border-[#1e3a5f]"
-                          >
-                            ยกเลิก
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDeleteId(tr.id)}
-                          className="p-1.5 rounded border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                          title="ลบรายการ"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 
       {/* Tire Stock Inbound / Outbound Modal */}
       {isTireModalOpen && (
         <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-2xl max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)] flex flex-col min-h-0 overflow-hidden shadow-xl">
+          <div
+            className={`bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full ${
+              tireTxType === "Outbound" ? "max-w-3xl" : "max-w-2xl"
+            } max-h-[calc(100dvh-24px)] sm:max-h-[calc(100dvh-32px)] flex flex-col min-h-0 overflow-hidden shadow-xl`}
+          >
             <div className="shrink-0 px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex justify-between items-center">
               <div>
                 <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
@@ -2478,7 +2627,15 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                     )}
                   </div>
 
-                  {/* Step 3: Wheel Position & Operating Hours */}
+                  {/* Step 3: 3D Top-Down Dynamic Wheel Diagram + Wheel Position & Operating Hours */}
+                  <div className="sm:col-span-2">
+                    <ForkliftWheelPositionDiagram
+                      vehicleId={tireVehicleId}
+                      vehicle={selectedOutboundVehicle}
+                      selectedPosition={tireWheelPosition}
+                      onSelectPosition={setTireWheelPosition}
+                    />
+                  </div>
                   <div>
                     <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       ตำแหน่งล้อที่เปลี่ยน *
@@ -2490,7 +2647,7 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                       className="w-full px-3 py-2 rounded border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-900 dark:text-slate-100"
                     >
                       <option value="">— เลือกตำแหน่งล้อ —</option>
-                      {WHEEL_POSITION_OPTIONS.map((pos) => (
+                      {activeWheelPositionOptions.map((pos) => (
                         <option key={pos} value={pos}>
                           {pos}
                         </option>
