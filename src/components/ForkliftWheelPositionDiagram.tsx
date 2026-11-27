@@ -8,14 +8,23 @@ import { Check } from "lucide-react";
 import {
   VehicleTypeCandidate,
   isForkliftVehicle,
+  isTractorVehicle,
   isTrailerVehicle,
 } from "../utils/vehicleHelpers";
 import forkliftEightWheelImg from "../assets/images/forklift_eight_wheel_topdown_1795767239875.jpg";
 import forkliftSixWheelImg from "../assets/images/forklift_six_wheel_topdown_1795768525751.jpg";
 import trailerFourWheelImg from "../assets/images/trailer_four_wheel_topdown_1795768528894.jpg";
 import trailerTwelveWheelImg from "../assets/images/trailer_twelve_wheel_topdown_1795768529888.jpg";
+import tractorFourWheelImg from "../assets/images/tractor_four_wheel_topdown_1795769518611.jpg";
+import tractorSixWheelImg from "../assets/images/tractor_six_wheel_topdown_1795769519935.jpg";
 
-export type VehicleWheelProfileKey = "fl_6w" | "ttl_4w" | "ttl_12w" | "default_8w";
+export type VehicleWheelProfileKey =
+  | "fl_6w"
+  | "tt_4w"
+  | "tt_6w"
+  | "ttl_4w"
+  | "ttl_12w"
+  | "default_8w";
 
 export type WheelCalloutCode =
   | "FL"
@@ -159,6 +168,164 @@ const FL_SIX_WHEEL_CALLOUTS: ForkliftWheelCallout[] = [
     endY: 758,
     boxX: 1138,
     boxY: 729,
+    boxW: 420,
+    boxH: 58,
+  },
+];
+
+/** 1B) รถหัวลาก TT รุ่นล้อเดี่ยว 4 ล้อ (เบอร์ TT-03 ถึง TT-15 และ TT-19 ถึง TT-27 / TTEV) */
+const TT_FOUR_WHEEL_CALLOUTS: ForkliftWheelCallout[] = [
+  {
+    code: "FL",
+    label: "ล้อหน้าซ้าย (FL)",
+    side: "left",
+    dotX: 612,
+    dotY: 254,
+    elbowX: 548,
+    elbowY: 254,
+    endX: 462,
+    endY: 254,
+    boxX: 42,
+    boxY: 225,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "FR",
+    label: "ล้อหน้าขวา (FR)",
+    side: "right",
+    dotX: 988,
+    dotY: 254,
+    elbowX: 1052,
+    elbowY: 254,
+    endX: 1138,
+    endY: 254,
+    boxX: 1138,
+    boxY: 225,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RL",
+    label: "ล้อหลังซ้าย (RL)",
+    side: "left",
+    dotX: 576,
+    dotY: 666,
+    elbowX: 520,
+    elbowY: 666,
+    endX: 462,
+    endY: 666,
+    boxX: 42,
+    boxY: 637,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RR",
+    label: "ล้อหลังขวา (RR)",
+    side: "right",
+    dotX: 1024,
+    dotY: 666,
+    elbowX: 1080,
+    elbowY: 666,
+    endX: 1138,
+    endY: 666,
+    boxX: 1138,
+    boxY: 637,
+    boxW: 420,
+    boxH: 58,
+  },
+];
+
+/** 1C) รถหัวลาก TT รุ่นล้อหน้าเดี่ยว ล้อหลังคู่ รวม 6 ล้อ (เบอร์ TT-16 ถึง TT-18) */
+const TT_SIX_WHEEL_CALLOUTS: ForkliftWheelCallout[] = [
+  {
+    code: "FL",
+    label: "ล้อหน้าซ้าย (FL)",
+    side: "left",
+    dotX: 612,
+    dotY: 248,
+    elbowX: 548,
+    elbowY: 248,
+    endX: 462,
+    endY: 248,
+    boxX: 42,
+    boxY: 219,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "FR",
+    label: "ล้อหน้าขวา (FR)",
+    side: "right",
+    dotX: 988,
+    dotY: 248,
+    elbowX: 1052,
+    elbowY: 248,
+    endX: 1138,
+    endY: 248,
+    boxX: 1138,
+    boxY: 219,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RLO",
+    label: "ล้อหลังซ้ายนอก (RLO)",
+    side: "left",
+    dotX: 558,
+    dotY: 655,
+    elbowX: 518,
+    elbowY: 646,
+    endX: 462,
+    endY: 646,
+    boxX: 42,
+    boxY: 617,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RLI",
+    label: "ล้อหลังซ้ายใน (RLI)",
+    side: "left",
+    dotX: 624,
+    dotY: 736,
+    elbowX: 594,
+    elbowY: 782,
+    endX: 462,
+    endY: 782,
+    boxX: 42,
+    boxY: 753,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RRO",
+    label: "ล้อหลังขวานอก (RRO)",
+    side: "right",
+    dotX: 1042,
+    dotY: 655,
+    elbowX: 1082,
+    elbowY: 646,
+    endX: 1138,
+    endY: 646,
+    boxX: 1138,
+    boxY: 617,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RRI",
+    label: "ล้อหลังขวาใน (RRI)",
+    side: "right",
+    dotX: 976,
+    dotY: 736,
+    elbowX: 1006,
+    elbowY: 782,
+    endX: 1138,
+    endY: 782,
+    boxX: 1138,
+    boxY: 753,
     boxW: 420,
     boxH: 58,
   },
@@ -567,6 +734,34 @@ const WHEEL_DIAGRAM_PROFILES: Record<VehicleWheelProfileKey, WheelDiagramProfile
       "ครบชุด 6 ล้อ (Full Set)",
     ],
   },
+  tt_4w: {
+    key: "tt_4w",
+    title: "ผังตำแหน่งล้อรถหัวลาก TT (4 ล้อเดี่ยว: หน้าเดี่ยว / หลังเดี่ยว)",
+    specBadge: "4 ล้อเดี่ยว (หน้า 1+1 · หลัง 1+1)",
+    imageSrc: tractorFourWheelImg,
+    imageAlt: "ผังตำแหน่งล้อรถหัวลาก TT รุ่นล้อเดี่ยว 4 ล้อ",
+    callouts: TT_FOUR_WHEEL_CALLOUTS,
+    extraGroupOptions: [
+      "คู่ล้อหน้า (Front Pair)",
+      "คู่ล้อหลัง (Rear Pair)",
+      "ครบชุด 4 ล้อ (Full Set)",
+    ],
+  },
+  tt_6w: {
+    key: "tt_6w",
+    title: "ผังตำแหน่งล้อรถหัวลาก TT (6 ล้อ: หน้าเดี่ยว 2 / หลังคู่ 4)",
+    specBadge: "6 ล้อ (หน้า 1+1 · หลังคู่ 2+2)",
+    imageSrc: tractorSixWheelImg,
+    imageAlt: "ผังตำแหน่งล้อรถหัวลาก TT รุ่นล้อหน้าเดี่ยว ล้อหลังคู่ รวม 6 ล้อ",
+    callouts: TT_SIX_WHEEL_CALLOUTS,
+    extraGroupOptions: [
+      "ล้อหลังซ้าย (RL)",
+      "ล้อหลังขวา (RR)",
+      "คู่ล้อหน้า (Front Pair)",
+      "คู่ล้อหลัง (Rear Pair)",
+      "ครบชุด 6 ล้อ (Full Set)",
+    ],
+  },
   ttl_4w: {
     key: "ttl_4w",
     title: "ผังตำแหน่งล้อหางลาก TTL (4 ล้อเดี่ยว: ข้างละ 1 ล้อ)",
@@ -633,6 +828,21 @@ export function resolveWheelProfileForVehicle(
       return "ttl_4w";
     }
     return "ttl_12w";
+  }
+
+  if (
+    compact.startsWith("TTEV") ||
+    compact.startsWith("TT") ||
+    (vehicle && isTractorVehicle(vehicle))
+  ) {
+    const ttNumMatch = compact.match(/^TT(?:EV)?0*(\d+)$/);
+    if (ttNumMatch) {
+      const ttNum = Number(ttNumMatch[1]);
+      if (ttNum >= 16 && ttNum <= 18) {
+        return "tt_6w";
+      }
+    }
+    return "tt_4w";
   }
 
   if (compact.startsWith("FL") || (vehicle && isForkliftVehicle(vehicle))) {
