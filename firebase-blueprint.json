@@ -418,6 +418,25 @@
       },
       "required": ["id", "vehicleId", "pmCategory", "lastPmDate"]
     },
+    "MhPmMatrixRecord": {
+      "title": "Material Handling Interactive PM Matrix Record",
+      "description": "Interactive PM checklist matrix (D/W/250H/500H/1000H/2000H) per vehicle category (Forklift, Electric Tractor, Diesel Tractor) or individual vehicle",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "vehicleCategory": { "type": "string", "enum": ["forklift", "ev_tractor", "diesel_tractor"], "maxLength": 32 },
+        "targetKey": { "type": "string", "maxLength": 64 },
+        "vehicleId": { "type": "string", "maxLength": 64 },
+        "checks": { "type": "object" },
+        "status": { "type": "string", "enum": ["draft", "submitted"], "maxLength": 32 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "submittedAt": { "type": "string", "maxLength": 64 },
+        "submittedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "vehicleCategory", "targetKey", "checks", "status", "updatedAt"]
+    },
     "MhPreStartInspectionRecord": {
       "title": "Material Handling Pre-Start Daily Inspection Record",
       "description": "Daily vehicle pre-start inspection checklist and mileage/operating hours reading",
@@ -806,6 +825,10 @@
     "/mh_pm_schedules/{scheduleId}": {
       "schema": "MhPmScheduleRecord",
       "description": "Dedicated collection for Material Handling vehicle Preventive Maintenance (PM) schedules and history"
+    },
+    "/mh_pm_matrix/{matrixId}": {
+      "schema": "MhPmMatrixRecord",
+      "description": "Dedicated collection for Material Handling interactive PM checklist matrices (Forklift, Electric Tractor, Diesel Tractor)"
     },
     "/mh_prestart_inspections/{inspectionId}": {
       "schema": "MhPreStartInspectionRecord",

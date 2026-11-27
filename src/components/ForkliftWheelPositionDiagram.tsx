@@ -7,6 +7,7 @@ import React from "react";
 import { Check } from "lucide-react";
 import {
   VehicleTypeCandidate,
+  isClampTruckVehicle,
   isForkliftVehicle,
   isTractorVehicle,
   isTrailerVehicle,
@@ -17,11 +18,13 @@ import trailerFourWheelImg from "../assets/images/trailer_four_wheel_topdown_179
 import trailerTwelveWheelImg from "../assets/images/trailer_twelve_wheel_topdown_1795768529888.jpg";
 import tractorFourWheelImg from "../assets/images/tractor_four_wheel_topdown_1795769518611.jpg";
 import tractorSixWheelImg from "../assets/images/tractor_six_wheel_topdown_1795769519935.jpg";
+import clampTruckEightWheelImg from "../assets/images/sc_clamp_eight_wheel_topdown_1795770729731.jpg";
 
 export type VehicleWheelProfileKey =
   | "fl_6w"
   | "tt_4w"
   | "tt_6w"
+  | "sc_8w"
   | "ttl_4w"
   | "ttl_12w"
   | "default_8w";
@@ -326,6 +329,130 @@ const TT_SIX_WHEEL_CALLOUTS: ForkliftWheelCallout[] = [
     endY: 782,
     boxX: 1138,
     boxY: 753,
+    boxW: 420,
+    boxH: 58,
+  },
+];
+
+/** 1D) รถคีบ SC (SC-* / หแ-*) — 8 ล้อคู่ (ล้อคู่ หน้า-หลัง ข้างละ 2 ล้อ) */
+const SC_EIGHT_WHEEL_CALLOUTS: ForkliftWheelCallout[] = [
+  {
+    code: "FLI",
+    label: "ล้อหน้าซ้ายใน (FLI)",
+    side: "left",
+    dotX: 693,
+    dotY: 312,
+    elbowX: 616,
+    elbowY: 198,
+    endX: 462,
+    endY: 198,
+    boxX: 42,
+    boxY: 169,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "FLO",
+    label: "ล้อหน้าซ้ายนอก (FLO)",
+    side: "left",
+    dotX: 646,
+    dotY: 312,
+    elbowX: 566,
+    elbowY: 286,
+    endX: 462,
+    endY: 286,
+    boxX: 42,
+    boxY: 257,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "FRI",
+    label: "ล้อหน้าขวาใน (FRI)",
+    side: "right",
+    dotX: 907,
+    dotY: 312,
+    elbowX: 984,
+    elbowY: 198,
+    endX: 1138,
+    endY: 198,
+    boxX: 1138,
+    boxY: 169,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "FRO",
+    label: "ล้อหน้าขวานอก (FRO)",
+    side: "right",
+    dotX: 954,
+    dotY: 312,
+    elbowX: 1034,
+    elbowY: 286,
+    endX: 1138,
+    endY: 286,
+    boxX: 1138,
+    boxY: 257,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RLO",
+    label: "ล้อหลังซ้ายนอก (RLO)",
+    side: "left",
+    dotX: 592,
+    dotY: 684,
+    elbowX: 530,
+    elbowY: 670,
+    endX: 462,
+    endY: 670,
+    boxX: 42,
+    boxY: 641,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RLI",
+    label: "ล้อหลังซ้ายใน (RLI)",
+    side: "left",
+    dotX: 654,
+    dotY: 748,
+    elbowX: 634,
+    elbowY: 836,
+    endX: 462,
+    endY: 836,
+    boxX: 42,
+    boxY: 807,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RRO",
+    label: "ล้อหลังขวานอก (RRO)",
+    side: "right",
+    dotX: 1008,
+    dotY: 684,
+    elbowX: 1070,
+    elbowY: 670,
+    endX: 1138,
+    endY: 670,
+    boxX: 1138,
+    boxY: 641,
+    boxW: 420,
+    boxH: 58,
+  },
+  {
+    code: "RRI",
+    label: "ล้อหลังขวาใน (RRI)",
+    side: "right",
+    dotX: 946,
+    dotY: 748,
+    elbowX: 966,
+    elbowY: 836,
+    endX: 1138,
+    endY: 836,
+    boxX: 1138,
+    boxY: 807,
     boxW: 420,
     boxH: 58,
   },
@@ -762,6 +889,23 @@ const WHEEL_DIAGRAM_PROFILES: Record<VehicleWheelProfileKey, WheelDiagramProfile
       "ครบชุด 6 ล้อ (Full Set)",
     ],
   },
+  sc_8w: {
+    key: "sc_8w",
+    title: "ผังตำแหน่งล้อรถคีบ SC (8 ล้อคู่: หน้าคู่ 4 / หลังคู่ 4)",
+    specBadge: "8 ล้อคู่ (หน้า 2+2 · หลัง 2+2)",
+    imageSrc: clampTruckEightWheelImg,
+    imageAlt: "ผังตำแหน่งล้อรถคีบ SC แบบ 8 ล้อคู่ หน้า-หลัง ข้างละ 2 ล้อ",
+    callouts: SC_EIGHT_WHEEL_CALLOUTS,
+    extraGroupOptions: [
+      "ล้อหน้าซ้าย (FL)",
+      "ล้อหน้าขวา (FR)",
+      "ล้อหลังซ้าย (RL)",
+      "ล้อหลังขวา (RR)",
+      "คู่ล้อหน้า (Front Pair)",
+      "คู่ล้อหลัง (Rear Pair)",
+      "ครบชุด 8 ล้อ (Full Set)",
+    ],
+  },
   ttl_4w: {
     key: "ttl_4w",
     title: "ผังตำแหน่งล้อหางลาก TTL (4 ล้อเดี่ยว: ข้างละ 1 ล้อ)",
@@ -821,6 +965,15 @@ export function resolveWheelProfileForVehicle(
     .trim()
     .toUpperCase();
   const compact = raw.replace(/[\s_-]+/g, "");
+
+  if (
+    compact.startsWith("SC") ||
+    compact.startsWith("หแ") ||
+    compact.startsWith("CLAMP") ||
+    (vehicle && isClampTruckVehicle(vehicle))
+  ) {
+    return "sc_8w";
+  }
 
   if (compact.startsWith("TTL") || (vehicle && isTrailerVehicle(vehicle))) {
     const numMatch = compact.match(/^TTL0*(\d+)$/);

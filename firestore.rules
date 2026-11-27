@@ -161,6 +161,20 @@ service cloud.firestore {
         && (!('history' in data) || (data.history is list && data.history.size() <= 50));
     }
 
+    function isValidMhPmMatrix(data) {
+      return data.id is string && data.id.size() > 0 && data.id.size() <= 128
+        && data.vehicleCategory in ['forklift', 'ev_tractor', 'diesel_tractor']
+        && data.targetKey is string && data.targetKey.size() > 0 && data.targetKey.size() <= 64
+        && data.checks is map && data.checks.size() <= 100
+        && data.status in ['draft', 'submitted']
+        && data.updatedAt is string && data.updatedAt.size() <= 64
+        && (!('vehicleId' in data) || (data.vehicleId is string && data.vehicleId.size() <= 64))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.size() <= 128))
+        && (!('submittedAt' in data) || (data.submittedAt is string && data.submittedAt.size() <= 64))
+        && (!('submittedBy' in data) || (data.submittedBy is string && data.submittedBy.size() <= 128));
+    }
+
     function isValidMhPreStartInspection(data) {
       return data.id is string && data.id.size() <= 128
         && data.vehicleId is string && data.vehicleId.size() > 0 && data.vehicleId.size() <= 64
@@ -420,6 +434,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isValidId(scheduleId) && isValidMhPmSchedule(request.resource.data);
       allow delete: if isValidId(scheduleId);
+    }
+
+    match /mh_pm_matrix/{matrixId} {
+      allow read: if true;
+      allow create, update: if isValidId(matrixId) && isValidMhPmMatrix(request.resource.data);
+      allow delete: if isValidId(matrixId);
     }
 
     match /mh_prestart_inspections/{inspectionId} {

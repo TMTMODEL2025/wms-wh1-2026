@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Clock,
   Edit2,
   Filter,
@@ -59,6 +60,7 @@ import {
 } from "../services/authWorkforceService";
 import { useAuth } from "../contexts/AuthContext";
 import { Pm3dInteractiveWorkspace } from "./pm3d/Pm3dInteractiveWorkspace";
+import { PmMatrixTableView } from "./PmMatrixTableView";
 import {
   getVehicleSearchableText,
   getVehicleTypeDisplayLabel,
@@ -71,7 +73,7 @@ interface PmScheduleManagementProps {
   employees?: Employee[];
 }
 
-type PmTabMode = "table" | "calendar" | "history" | "pm3d";
+type PmTabMode = "matrix" | "table" | "calendar" | "history" | "pm3d";
 type PmHealthStatus = "overdue" | "due-today" | "due-soon" | "normal" | "paused";
 
 interface CalendarEventItem {
@@ -1671,7 +1673,19 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         >
           <div className="flex items-center gap-2 flex-wrap">
             {/* View Tabs */}
-            <div className="inline-flex rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100/80 dark:bg-[#0a1628] p-0.5">
+            <div className="inline-flex rounded-md border border-slate-200 dark:border-[#1e3a5f] bg-slate-100/80 dark:bg-[#0a1628] p-0.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setActiveTab("matrix")}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors whitespace-nowrap ${
+                  activeTab === "matrix"
+                    ? "bg-white dark:bg-[#122646] text-[#087eaf] dark:text-sky-300 shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+                }`}
+              >
+                <ClipboardCheck size={14} />
+                ตาราง PM
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveTab("table")}
@@ -1749,7 +1763,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
         </div>
 
         {/* Standard Filterbar (35px / 12px / borderRadius 6px / px-3 py-2.5 sm:px-[18px] sm:py-3) */}
-        {activeTab !== "calendar" && activeTab !== "pm3d" && (
+        {activeTab !== "calendar" && activeTab !== "pm3d" && activeTab !== "matrix" && (
           <div className="filterbar px-3 py-2.5 sm:px-[18px] sm:py-3 flex gap-3 flex-wrap items-center">
             <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
               <Search
@@ -1833,6 +1847,11 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
               </button>
             )}
           </div>
+        )}
+
+        {/* TAB 0: INTERACTIVE PM SCHEDULE MATRIX TABLE */}
+        {activeTab === "matrix" && (
+          <PmMatrixTableView vehicles={vehicles} cloudRealtime={cloudRealtime} />
         )}
 
         {/* TAB 1: PM SCHEDULE TABLE */}

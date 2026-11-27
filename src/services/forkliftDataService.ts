@@ -21,6 +21,7 @@ export const MH_TIRE_STOCK_COLLECTION = "mh_tire_stock";
 export const MH_DAILY_DUTY_COLLECTION = "mh_daily_duty";
 export const MH_DELIVERY_POINTS_COLLECTION = "mh_delivery_points";
 export const MH_PM_SCHEDULES_COLLECTION = "mh_pm_schedules";
+export const MH_PM_MATRIX_COLLECTION = "mh_pm_matrix";
 export const MH_PRESTART_INSPECTIONS_COLLECTION = "mh_prestart_inspections";
 
 // ============================================================================
@@ -493,6 +494,22 @@ export interface MhPmScheduleRecord {
   history?: MhPmHistoryEntry[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type MhPmMatrixCategory = "forklift" | "ev_tractor" | "diesel_tractor";
+
+export interface MhPmMatrixRecord {
+  id: string;
+  vehicleCategory: MhPmMatrixCategory;
+  targetKey: string; // "TEMPLATE" or specific vehicleId e.g. "FL-01"
+  vehicleId?: string;
+  checks: Record<string, string[]>; // itemId -> checked column keys (e.g. ["D", "250H"])
+  status: "draft" | "submitted";
+  notes?: string;
+  updatedBy?: string;
+  updatedAt: string;
+  submittedAt?: string;
+  submittedBy?: string;
 }
 
 // ============================================================================
@@ -2920,4 +2937,173 @@ export async function saveMhPreStartInspectionToCloud(
 
   return { saved, duePmSchedules };
 }
+
+// ============================================================================
+// 9. Interactive PM Schedule Matrix (mh_pm_matrix) Cloud & Local Cache
+// ============================================================================
+const MH_PM_MATRIX_CACHE_KEY = "tmt_mh_pm_matrix_cache_v1";
+
+function sanitizeMhPmMatrixPayload(
+  r: Partial<MhPmMatrixRecord> & { id: string; vehicleCategory: MhPmMatrixCategory; targetKey: string }
+): MhPmMatrixRecord {
+  const nowIso = new Date().toISOString().replace("T", " ").slice(0, 19);
+  const cleanId = sanitizeDocId(r.id) || `PMM_${r.vehicleCategory}_${Date.now()}`;
+  const cleanCategory: MhPmMatrixCategory =
+    r.vehicleCategory === "ev_tractor" || r.vehicleCategory === "diesel_tractor"
+      ? r.vehicleCategory
+      : "forklift";
+
+  const cleanChecks: Record<string, string[]> = {};
+  if (r.checks && typeof r.checks === "object") {
+    Object.entries(r.checks).forEach(([rowKey, cols]) => {
+      const k = String(rowKey || "").trim().slice(0, 64);
+      if (!k) return;
+      if (Array.isArray(cols)) {
+        const uniqueCols = Array.from(
+          new Set(
+            cols
+              .map((c) => String(c || "").trim().slice(0, 24))
+              .filter(Boolean)
+          )
+        ).slice(0, 12);
+        cleanChecks[k] = uniqueCols;
+      }
+    });
+  }
+
+  const payload: MhPmMatrixRecord = {
+    id: cleanId,
+    vehicleCategory: cleanCategory,
+    targetKey: String(r.targetKey || "TEMPLATE").trim().slice(0, 64) || "TEMPLATE",
+    checks: cleanChecks,
+    status: r.status === "submitted" ? "submitted" : "draft",
+    updatedAt: String(r.updatedAt || nowIso).slice(0, 64),
+  };
+
+  if (r.vehicleId && String(r.vehicleId).trim()) {
+    payload.vehicleId = String(r.vehicleId).trim().slice(0, 64);
+  }
+  if (r.notes && String(r.notes).trim()) {
+    payload.notes = String(r.notes).trim().slice(0, 500);
+  }
+  if (r.updatedBy && String(r.updatedBy).trim()) {
+    payload.updatedBy = String(r.updatedBy).trim().slice(0, 128);
+  }
+  if (r.submittedAt && String(r.submittedAt).trim()) {
+    payload.submittedAt = String(r.submittedAt).trim().slice(0, 64);
+  }
+  if (r.submittedBy && String(r.submittedBy).trim()) {
+    payload.submittedBy = String(r.submittedBy).trim().slice(0, 128);
+  }
+
+  return payload;
+}
+
+export function loadCachedMhPmMatrixRecords(): MhPmMatrixRecord[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(MH_PM_MATRIX_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedMhPmMatrixRecords(records: MhPmMatrixRecord[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(MH_PM_MATRIX_CACHE_KEY, JSON.stringify(records));
+  } catch {
+    // ignore storage quota error
+  }
+}
+
+export async function fetchMhPmMatrixRecordsOnce(): Promise<MhPmMatrixRecord[]> {
+  try {
+    const snap = await getDocs(collection(dbForklift, MH_PM_MATRIX_COLLECTION));
+    const records: MhPmMatrixRecord[] = [];
+    snap.forEach((docSnap) => {
+      const data = docSnap.data() as MhPmMatrixRecord;
+      if (data && data.id && data.vehicleCategory) {
+        records.push(data);
+      }
+    });
+    if (records.length > 0) {
+      saveCachedMhPmMatrixRecords(records);
+      return records;
+    }
+    return loadCachedMhPmMatrixRecords();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, MH_PM_MATRIX_COLLECTION);
+    return loadCachedMhPmMatrixRecords();
+  }
+}
+
+export function subscribeToMhPmMatrixRecords(
+  onData: (records: MhPmMatrixRecord[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const channelKey = "mh_pm_matrix_listener";
+  if (!forkliftCloudRealtimeEnabled) {
+    fetchMhPmMatrixRecordsOnce().then(onData).catch((err) => onError?.(err));
+    return () => {};
+  }
+
+  const colRef = collection(dbForklift, MH_PM_MATRIX_COLLECTION);
+  const unsub = onSnapshot(
+    colRef,
+    (snapshot) => {
+      const records: MhPmMatrixRecord[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as MhPmMatrixRecord;
+        if (data && data.id && data.vehicleCategory) {
+          records.push(data);
+        }
+      });
+      if (records.length > 0 || !snapshot.metadata.fromCache) {
+        saveCachedMhPmMatrixRecords(records);
+      }
+      onData(records);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.LIST, MH_PM_MATRIX_COLLECTION);
+      onError?.(error);
+    }
+  );
+
+  return registerForkliftFirestoreListener(channelKey, unsub);
+}
+
+export async function saveMhPmMatrixRecordToCloud(
+  record: Partial<MhPmMatrixRecord> & { id: string; vehicleCategory: MhPmMatrixCategory; targetKey: string }
+): Promise<boolean> {
+  const payload = sanitizeMhPmMatrixPayload(record);
+  const cached = loadCachedMhPmMatrixRecords();
+  const nextCache = [payload, ...cached.filter((item) => item.id !== payload.id)];
+  saveCachedMhPmMatrixRecords(nextCache);
+
+  const docRef = doc(dbForklift, MH_PM_MATRIX_COLLECTION, payload.id);
+  return runForkliftFirestoreWriteWithGuard(
+    () => setDoc(docRef, payload, { merge: false }),
+    OperationType.WRITE,
+    `${MH_PM_MATRIX_COLLECTION}/${payload.id}`
+  );
+}
+
+export async function deleteMhPmMatrixRecordFromCloud(id: string): Promise<boolean> {
+  const cleanId = sanitizeDocId(id);
+  if (!cleanId) return false;
+  const cached = loadCachedMhPmMatrixRecords();
+  saveCachedMhPmMatrixRecords(cached.filter((item) => item.id !== cleanId));
+
+  const docRef = doc(dbForklift, MH_PM_MATRIX_COLLECTION, cleanId);
+  return runForkliftFirestoreWriteWithGuard(
+    () => deleteDoc(docRef),
+    OperationType.DELETE,
+    `${MH_PM_MATRIX_COLLECTION}/${cleanId}`
+  );
+}
+
 
