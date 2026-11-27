@@ -347,6 +347,22 @@
         "transactionType": { "type": "string", "maxLength": 32 },
         "tireSize": { "type": "string", "maxLength": 128 },
         "brand": { "type": "string", "maxLength": 64 },
+        "tireTypes": {
+          "type": "array",
+          "description": "Selected tire component types on inbound/outbound transaction (ยางนอก, ยางใน, ยางรอง)"
+        },
+        "qtyByType": {
+          "type": "object",
+          "description": "Tire quantities broken down by component type (outer, inner, flap)"
+        },
+        "unitCostByType": {
+          "type": "object",
+          "description": "Tire unit cost (THB) broken down by component type (outer, inner, flap)"
+        },
+        "compatibleVehicles": {
+          "type": "array",
+          "description": "Vehicle and trailer IDs compatible with this tire size"
+        },
         "qty": { "type": "number" },
         "unitCost": { "type": "number" },
         "totalCost": { "type": "number" },

@@ -370,6 +370,21 @@ export type MhTireSize =
 
 export type MhTireTransactionType = "Inbound" | "Outbound";
 
+export const MH_TIRE_COMPONENT_TYPES = ["ยางนอก", "ยางใน", "ยางรอง"] as const;
+export type MhTireComponentType = (typeof MH_TIRE_COMPONENT_TYPES)[number];
+
+export interface MhTireQtyByType {
+  outer: number; // ยางนอก
+  inner: number; // ยางใน
+  flap: number; // ยางรอง
+}
+
+export interface MhTireUnitCostByType {
+  outer: number; // ราคาต่อเส้น ยางนอก (บาท)
+  inner: number; // ราคาต่อเส้น ยางใน (บาท)
+  flap: number; // ราคาต่อเส้น ยางรอง (บาท)
+}
+
 export interface MhTireStockRecord {
   id: string;
   transactionNo: string;
@@ -378,6 +393,9 @@ export interface MhTireStockRecord {
   transactionType: MhTireTransactionType;
   tireSize: MhTireSize | string;
   brand: string;
+  tireTypes?: MhTireComponentType[]; // ประเภทยางที่รับเข้า/เบิกออก: ยางนอก, ยางใน, ยางรอง
+  qtyByType?: MhTireQtyByType; // จำนวน (เส้น) แยกตามประเภทยาง
+  unitCostByType?: MhTireUnitCostByType; // ราคาต่อเส้น (บาท) แยกตามประเภทยาง
   qty: number;
   unitCost: number;
   totalCost: number;
@@ -1682,6 +1700,60 @@ function sanitizeMhTireStockPayload(r: MhTireStockRecord): MhTireStockRecord {
       ).slice(0, 100)
     : [];
 
+  const validTireTypeSet = new Set<string>(MH_TIRE_COMPONENT_TYPES);
+  const safeTireTypes = Array.isArray(r.tireTypes)
+    ? MH_TIRE_COMPONENT_TYPES.filter((t) =>
+        r.tireTypes!.some((item) => String(item || "").trim() === t && validTireTypeSet.has(t))
+      )
+    : [];
+
+  let safeQtyByType: MhTireQtyByType | undefined;
+  if (r.qtyByType && typeof r.qtyByType === "object") {
+    const outer =
+      typeof r.qtyByType.outer === "number" && !isNaN(r.qtyByType.outer)
+        ? Math.max(0, Math.floor(r.qtyByType.outer))
+        : 0;
+    const inner =
+      typeof r.qtyByType.inner === "number" && !isNaN(r.qtyByType.inner)
+        ? Math.max(0, Math.floor(r.qtyByType.inner))
+        : 0;
+    const flap =
+      typeof r.qtyByType.flap === "number" && !isNaN(r.qtyByType.flap)
+        ? Math.max(0, Math.floor(r.qtyByType.flap))
+        : 0;
+    if (outer + inner + flap > 0) {
+      safeQtyByType = { outer, inner, flap };
+    }
+  }
+
+  let safeUnitCostByType: MhTireUnitCostByType | undefined;
+  if (r.unitCostByType && typeof r.unitCostByType === "object") {
+    const outer =
+      typeof r.unitCostByType.outer === "number" && !isNaN(r.unitCostByType.outer)
+        ? Math.max(0, r.unitCostByType.outer)
+        : 0;
+    const inner =
+      typeof r.unitCostByType.inner === "number" && !isNaN(r.unitCostByType.inner)
+        ? Math.max(0, r.unitCostByType.inner)
+        : 0;
+    const flap =
+      typeof r.unitCostByType.flap === "number" && !isNaN(r.unitCostByType.flap)
+        ? Math.max(0, r.unitCostByType.flap)
+        : 0;
+    if (safeQtyByType || outer + inner + flap > 0) {
+      safeUnitCostByType = { outer, inner, flap };
+    }
+  }
+
+  const computedTotalCost =
+    typeof r.totalCost === "number" && !isNaN(r.totalCost) && r.totalCost >= 0
+      ? r.totalCost
+      : safeQtyByType && safeUnitCostByType
+        ? safeQtyByType.outer * safeUnitCostByType.outer +
+          safeQtyByType.inner * safeUnitCostByType.inner +
+          safeQtyByType.flap * safeUnitCostByType.flap
+        : safeTotalCost;
+
   return stripUndefinedDeep({
     id: docId,
     transactionNo: String(r.transactionNo || docId).trim().slice(0, 64),
@@ -1690,9 +1762,12 @@ function sanitizeMhTireStockPayload(r: MhTireStockRecord): MhTireStockRecord {
     transactionType: r.transactionType === "Outbound" ? "Outbound" : "Inbound",
     tireSize: String(r.tireSize || "-").trim().slice(0, 128),
     brand: String(r.brand || "-").trim().slice(0, 64),
+    tireTypes: safeTireTypes.length > 0 ? safeTireTypes : undefined,
+    qtyByType: safeQtyByType,
+    unitCostByType: safeUnitCostByType,
     qty: safeQty,
     unitCost: safeUnitCost,
-    totalCost: safeTotalCost,
+    totalCost: computedTotalCost,
     supplierOrInvoice: r.supplierOrInvoice
       ? String(r.supplierOrInvoice).trim().slice(0, 128)
       : undefined,
