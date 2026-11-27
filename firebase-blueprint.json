@@ -462,6 +462,7 @@
         "operationalStatus": { "type": "string", "maxLength": 32 },
         "department": { "type": "string", "maxLength": 128 },
         "capacityTon": { "type": "number" },
+        "engineType": { "type": "string", "maxLength": 128 },
         "status": { "type": "string", "maxLength": 32 },
         "createdAt": { "type": "string", "maxLength": 64 },
         "updatedAt": { "type": "string", "maxLength": 64 }

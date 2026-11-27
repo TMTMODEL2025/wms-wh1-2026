@@ -190,7 +190,8 @@ service cloud.firestore {
         && (!('description' in data) || (data.description is string && data.description.size() <= 256))
         && (!('registrationNumber' in data) || (data.registrationNumber is string && data.registrationNumber.size() <= 64))
         && (!('department' in data) || (data.department is string && data.department.size() <= 128))
-        && (!('capacityTon' in data) || (data.capacityTon is number && data.capacityTon >= 0 && data.capacityTon <= 1000));
+        && (!('capacityTon' in data) || (data.capacityTon is number && data.capacityTon >= 0 && data.capacityTon <= 1000))
+        && (!('engineType' in data) || (data.engineType is string && data.engineType.size() <= 128));
     }
 
     function isValidWmsVehicleAssignment(data) {

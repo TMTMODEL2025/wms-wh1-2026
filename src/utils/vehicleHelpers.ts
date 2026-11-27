@@ -15,6 +15,7 @@ export type VehicleTypeCandidate = {
   vehicleDescription?: string;
   registrationNumber?: string;
   department?: string;
+  engineType?: string;
 };
 
 function getPrimaryVehicleCodeUpper(v: VehicleTypeCandidate): string {
@@ -265,6 +266,7 @@ export function getVehicleSearchableText(v: VehicleTypeCandidate): string {
     v.vehicleType,
     v.type,
     v.department,
+    v.engineType,
     resolved,
     displayLabel,
     extraKeywords,

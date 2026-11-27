@@ -62,6 +62,15 @@ interface VehicleManagementProps {
   onLogTransaction?: (activity: string, reference: string, status: string) => void;
 }
 
+const VEHICLE_ENGINE_SUGGESTIONS = [
+  "ดีเซล (Diesel)",
+  "ไฟฟ้า (Electric / EV)",
+  "แก๊ส LPG",
+  "เบนซิน (Gasoline)",
+  "ไฮบริด (Hybrid)",
+  "ไม่มีเครื่องยนต์ (หางลาก)",
+] as const;
+
 export function VehicleManagement({
   vehicles,
   assignments,
@@ -286,6 +295,7 @@ export function VehicleManagement({
     registrationNumber: string;
     department: string;
     capacityTon?: number;
+    engineType?: string;
     operationalStatus: VehicleOperationalStatus;
     activeStatus: VehicleActiveStatus;
   }) => {
@@ -316,6 +326,7 @@ export function VehicleManagement({
     });
     const resolvedLabel =
       resolvedVehicleType === "ElectricTractor" ? "หัวลากไฟฟ้า" : resolvedVehicleType;
+    const cleanEngineType = form.engineType?.trim().slice(0, 128) || undefined;
 
     const newVehicle: Vehicle = {
       id: trimmedId,
@@ -327,6 +338,7 @@ export function VehicleManagement({
       registrationNumber: form.registrationNumber.trim() || `TMT-${trimmedId}`,
       department: form.department,
       capacityTon: form.capacityTon,
+      engineType: cleanEngineType,
       operationalStatus: form.operationalStatus,
       activeStatus: form.activeStatus,
       status: form.operationalStatus === "Maintenance" ? "Maintenance" : form.activeStatus === "Inactive" ? "Inactive" : "Available",
@@ -355,6 +367,7 @@ export function VehicleManagement({
     registrationNumber: string;
     department: string;
     capacityTon?: number;
+    engineType?: string;
     operationalStatus: VehicleOperationalStatus;
   }) => {
     if (!editingVehicle) return { success: false, error: "No vehicle selected" };
@@ -374,6 +387,7 @@ export function VehicleManagement({
     });
     const resolvedLabel =
       resolvedVehicleType === "ElectricTractor" ? "หัวลากไฟฟ้า" : resolvedVehicleType;
+    const cleanEngineType = form.engineType?.trim().slice(0, 128) || undefined;
 
     const updatedVehicle: Vehicle = {
       ...editingVehicle,
@@ -383,6 +397,7 @@ export function VehicleManagement({
       registrationNumber: form.registrationNumber.trim(),
       department: form.department,
       capacityTon: form.capacityTon,
+      engineType: cleanEngineType,
       operationalStatus: form.operationalStatus,
       status: form.operationalStatus === "Maintenance" ? "Maintenance" : editingVehicle.activeStatus === "Inactive" ? "Inactive" : "Available",
       updatedAt: timestampStr,
@@ -854,6 +869,7 @@ export function VehicleManagement({
                         {isElectricTractorVehicle(vehicle)
                           ? `ประเภท: หัวลากไฟฟ้า · Dept: ${vehicle.department}`
                           : `Dept: ${vehicle.department}`}
+                        {vehicle.engineType ? ` · เครื่องยนต์: ${vehicle.engineType}` : ""}
                       </div>
                     </td>
 
@@ -1175,6 +1191,7 @@ function AddVehicleModal({
     registrationNumber: string;
     department: string;
     capacityTon?: number;
+    engineType?: string;
     operationalStatus: VehicleOperationalStatus;
     activeStatus: VehicleActiveStatus;
   }) => { success: boolean; error?: string };
@@ -1191,18 +1208,38 @@ function AddVehicleModal({
       : defaultVehicleType === "Other"
       ? "SC-"
       : "";
+  const initialEngine =
+    defaultVehicleType === "ElectricTractor"
+      ? "ไฟฟ้า (Electric / EV)"
+      : defaultVehicleType === "Trailer"
+      ? "ไม่มีเครื่องยนต์ (หางลาก)"
+      : "";
   const [vehicleId, setVehicleId] = useState<string>(initialPrefix);
   const [vehicleType, setVehicleType] = useState<VehicleType>(defaultVehicleType);
   const [description, setDescription] = useState<string>("");
   const [registrationNumber, setRegistrationNumber] = useState<string>("");
   const [department, setDepartment] = useState<string>(departments[0] || "Material Handling - Fleet");
   const [capacityTon, setCapacityTon] = useState<string>("");
+  const [engineType, setEngineType] = useState<string>(initialEngine);
   const [operationalStatus, setOperationalStatus] = useState<VehicleOperationalStatus>("Available");
   const [activeStatus, setActiveStatus] = useState<VehicleActiveStatus>("Active");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const syncAutoEngineSuggestion = (nextType: VehicleType) => {
+    const cleanCurrent = engineType.trim();
+    const isAutoEmptyOrDefault =
+      !cleanCurrent ||
+      cleanCurrent === "ไฟฟ้า (Electric / EV)" ||
+      cleanCurrent === "ไม่มีเครื่องยนต์ (หางลาก)";
+    if (!isAutoEmptyOrDefault) return;
+    if (nextType === "ElectricTractor") setEngineType("ไฟฟ้า (Electric / EV)");
+    else if (nextType === "Trailer") setEngineType("ไม่มีเครื่องยนต์ (หางลาก)");
+    else if (cleanCurrent === "ไม่มีเครื่องยนต์ (หางลาก)") setEngineType("");
+  };
+
   const handleVehicleTypeChange = (nextType: VehicleType) => {
     setVehicleType(nextType);
+    syncAutoEngineSuggestion(nextType);
     const trimmed = vehicleId.trim().toUpperCase();
     if (
       !trimmed ||
@@ -1226,14 +1263,19 @@ function AddVehicleModal({
     const upper = rawVal.trim().toUpperCase();
     if (upper.startsWith("TTEV")) {
       setVehicleType("ElectricTractor");
+      syncAutoEngineSuggestion("ElectricTractor");
     } else if (upper.startsWith("TTL-")) {
       setVehicleType("Trailer");
+      syncAutoEngineSuggestion("Trailer");
     } else if (upper.startsWith("FL-")) {
       setVehicleType("Forklift");
+      syncAutoEngineSuggestion("Forklift");
     } else if (upper.startsWith("SC-") || upper.startsWith("หแ")) {
       setVehicleType("Other");
+      syncAutoEngineSuggestion("Other");
     } else if (upper.startsWith("TT-") && vehicleType === "ElectricTractor") {
       setVehicleType("Tractor");
+      syncAutoEngineSuggestion("Tractor");
     }
   };
 
@@ -1266,6 +1308,7 @@ function AddVehicleModal({
       registrationNumber: registrationNumber.trim(),
       department,
       capacityTon: capacityTon ? parseFloat(capacityTon) : undefined,
+      engineType: engineType.trim() || undefined,
       operationalStatus,
       activeStatus,
     });
@@ -1383,6 +1426,23 @@ function AddVehicleModal({
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label className="form-field">
+              เครื่องยนต์ (Engine)
+              <input
+                className="field"
+                list="register-vehicle-engine-options"
+                value={engineType}
+                onChange={(e) => setEngineType(e.target.value)}
+                maxLength={128}
+                placeholder="เช่น ดีเซล, ไฟฟ้า (EV), แก๊ส LPG, หรือรุ่นเครื่องยนต์"
+              />
+              <datalist id="register-vehicle-engine-options">
+                {VEHICLE_ENGINE_SUGGESTIONS.map((opt) => (
+                  <option value={opt} key={opt} />
+                ))}
+              </datalist>
+            </label>
+
+            <label className="form-field">
               Assigned Department / Section *
               <select
                 className="field"
@@ -1397,7 +1457,9 @@ function AddVehicleModal({
                 ))}
               </select>
             </label>
+          </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <label className="form-field">
               Operational Status *
               <select
@@ -1411,20 +1473,20 @@ function AddVehicleModal({
                 <option value="Out of Service">Out of Service (Standby)</option>
               </select>
             </label>
-          </div>
 
-          <label className="form-field">
-            Active Status *
-            <select
-              className="field"
-              value={activeStatus}
-              onChange={(e) => setActiveStatus(e.target.value as VehicleActiveStatus)}
-              required
-            >
-              <option value="Active">Active (Eligible for operational assignments)</option>
-              <option value="Inactive">Inactive (Decommissioned / Standby)</option>
-            </select>
-          </label>
+            <label className="form-field">
+              Active Status *
+              <select
+                className="field"
+                value={activeStatus}
+                onChange={(e) => setActiveStatus(e.target.value as VehicleActiveStatus)}
+                required
+              >
+                <option value="Active">Active (Eligible for operational assignments)</option>
+                <option value="Inactive">Inactive (Decommissioned / Standby)</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="modal-actions">
@@ -1456,6 +1518,7 @@ function EditVehicleModal({
     registrationNumber: string;
     department: string;
     capacityTon?: number;
+    engineType?: string;
     operationalStatus: VehicleOperationalStatus;
   }) => { success: boolean; error?: string };
 }) {
@@ -1464,6 +1527,7 @@ function EditVehicleModal({
   const [registrationNumber, setRegistrationNumber] = useState<string>(vehicle.registrationNumber || "");
   const [department, setDepartment] = useState<string>(vehicle.department);
   const [capacityTon, setCapacityTon] = useState<string>(vehicle.capacityTon ? String(vehicle.capacityTon) : "");
+  const [engineType, setEngineType] = useState<string>(vehicle.engineType || "");
   const [operationalStatus, setOperationalStatus] = useState<VehicleOperationalStatus>(vehicle.operationalStatus);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -1482,6 +1546,7 @@ function EditVehicleModal({
       registrationNumber: registrationNumber.trim(),
       department,
       capacityTon: capacityTon ? parseFloat(capacityTon) : undefined,
+      engineType: engineType.trim() || undefined,
       operationalStatus,
     });
 
@@ -1609,19 +1674,38 @@ function EditVehicleModal({
             </label>
           </div>
 
-          <label className="form-field">
-            Operational Status *
-            <select
-              className="field"
-              value={operationalStatus}
-              onChange={(e) => setOperationalStatus(e.target.value as VehicleOperationalStatus)}
-              required
-            >
-              <option value="Available">Available (Ready for assignment)</option>
-              <option value="Maintenance">Maintenance (Under repair / servicing)</option>
-              <option value="Out of Service">Out of Service (Standby / Inactive)</option>
-            </select>
-          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <label className="form-field">
+              เครื่องยนต์ (Engine)
+              <input
+                className="field"
+                list="edit-vehicle-engine-options"
+                value={engineType}
+                onChange={(e) => setEngineType(e.target.value)}
+                maxLength={128}
+                placeholder="เช่น ดีเซล, ไฟฟ้า (EV), แก๊ส LPG, หรือรุ่นเครื่องยนต์"
+              />
+              <datalist id="edit-vehicle-engine-options">
+                {VEHICLE_ENGINE_SUGGESTIONS.map((opt) => (
+                  <option value={opt} key={opt} />
+                ))}
+              </datalist>
+            </label>
+
+            <label className="form-field">
+              Operational Status *
+              <select
+                className="field"
+                value={operationalStatus}
+                onChange={(e) => setOperationalStatus(e.target.value as VehicleOperationalStatus)}
+                required
+              >
+                <option value="Available">Available (Ready for assignment)</option>
+                <option value="Maintenance">Maintenance (Under repair / servicing)</option>
+                <option value="Out of Service">Out of Service (Standby / Inactive)</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         <div className="modal-actions">
@@ -1761,6 +1845,10 @@ function VehicleDetailsModal({
             <div className="vehicle-spec-box" style={{ padding: "8px 12px", border: "1px solid #f1f5f9", borderRadius: 4 }}>
               <span>Registered Date: </span>
               <strong>{vehicle.createdAt}</strong>
+            </div>
+            <div className="vehicle-spec-box" style={{ padding: "8px 12px", border: "1px solid #f1f5f9", borderRadius: 4, gridColumn: "1 / -1" }}>
+              <span>เครื่องยนต์ (Engine): </span>
+              <strong>{vehicle.engineType || "-"}</strong>
             </div>
           </div>
 

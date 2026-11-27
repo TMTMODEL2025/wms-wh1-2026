@@ -110,6 +110,7 @@ export interface Vehicle {
   operationalStatus: VehicleOperationalStatus; // "Available" | "In Use" | "Maintenance" | "Out of Service"
   department: string; // e.g. "Material Handling - Fleet"
   capacityTon?: number; // e.g. 5.0
+  engineType?: string; // e.g. "ดีเซล (Diesel)", "ไฟฟ้า (Electric / EV)", "แก๊ส LPG"
   status: "Available" | "Maintenance" | "Inactive"; // Backward compatibility alias
   createdAt: string;
   updatedAt: string;
