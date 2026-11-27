@@ -9542,29 +9542,29 @@ export function SlitFilmManagement({
 
       {/* 4. Table Section: 10-Column Scanned Batch Summary Table (AGENT.MD Standards) */}
       {activeMode === "movement_history" && (
-        <section className="w-full max-w-full min-w-0 rounded-lg border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-sm overflow-hidden">
-        {/* Collapsible Header with Chevron */}
+        <section className="w-full max-w-full min-w-0 rounded-[6px] border bg-white dark:bg-[#111e38] border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs overflow-hidden">
+        {/* Collapsible Header with Chevron (SAP Fiori) */}
         <div
           onClick={() => setIsTableCollapsed(!isTableCollapsed)}
-          className="py-2.5 px-3 md:px-4 flex flex-nowrap items-center justify-between gap-2 cursor-pointer select-none bg-slate-50 dark:bg-[#0d1b33] border-b border-slate-200 dark:border-[#1e3a5f] hover:bg-slate-100/70 dark:hover:bg-[#142340] transition-colors overflow-hidden"
+          className="py-2.5 px-3 md:px-4 flex flex-nowrap items-center justify-between gap-2 cursor-pointer select-none bg-[#f5f8fa] dark:bg-[#0d1b33] border-b border-[#d9e2e8] dark:border-[#1e3a5f] hover:bg-[#edf7fb]/60 dark:hover:bg-[#142340] transition-colors overflow-hidden"
         >
           <div className="flex items-center gap-2 md:gap-2.5 min-w-0 flex-1 overflow-hidden">
-            <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex-shrink-0">
-              <TableIcon size={15} />
+            <div className="p-1.5 rounded-[4px] bg-[#edf7fb] dark:bg-[#0d2240] text-[#087eaf] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] flex-shrink-0">
+              <TableIcon size={16} />
             </div>
             <div className="flex flex-col justify-center min-w-0 flex-1 overflow-hidden">
               <div className="flex items-center gap-1.5 md:gap-2 whitespace-nowrap flex-nowrap min-w-0 overflow-hidden">
-                <h3 className="text-xs md:text-sm font-extrabold text-slate-900 dark:text-slate-100 truncate">
+                <h3 className="text-xs md:text-[15px] font-extrabold text-slate-900 dark:text-slate-100 truncate">
                   {isThai ? "ตารางประวัติการเคลื่อนไหว" : "History Summary Table"}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10.5px] font-extrabold bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 whitespace-nowrap flex-shrink-0">
+                <span className="px-2 py-0.5 rounded-[4px] text-[11px] font-bold bg-[#edf7fb] dark:bg-[#0d2240] text-[#075985] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] font-mono tabular-nums whitespace-nowrap flex-shrink-0">
                   {filteredList.length} {isThai ? "รายการ" : "items"}
                 </span>
-                <span className="hidden md:inline-block text-[10.5px] font-mono font-bold px-2 py-0.5 rounded bg-slate-200/80 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border border-slate-300/50 dark:border-[#1e3a5f] whitespace-nowrap flex-shrink-0">
+                <span className="hidden md:inline-block text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-[4px] bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border border-[#b9c9d2] dark:border-[#1e3a5f] tabular-nums whitespace-nowrap flex-shrink-0">
                   {totalWeightKg.toLocaleString()} kg ({totalWeightTon} TON)
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 whitespace-nowrap truncate mt-0.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap truncate mt-0.5">
                 {isTableCollapsed
                   ? (isThai ? "สถานะ: ย่อไว้ (คลิกเพื่อขยายดูตาราง)" : "Status: Collapsed (click to expand)")
                   : (isThai ? "สถานะ: ขยายตาราง (คลิกเพื่อย่อตาราง)" : "Status: Expanded (click to collapse)")}
@@ -9573,11 +9573,11 @@ export function SlitFilmManagement({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0 whitespace-nowrap ml-1 md:ml-2">
-            <span className="hidden md:inline-block text-xs font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <span className="hidden md:inline-block text-[13px] font-semibold text-[#075985] dark:text-[#38bdf8] whitespace-nowrap">
               {isTableCollapsed ? (isThai ? "ขยายตาราง" : "Expand Table") : (isThai ? "ย่อตาราง" : "Collapse Table")}
             </span>
-            <div className={`p-1.5 md:p-1 rounded-md border bg-white dark:bg-[#0c1930] border-slate-300 dark:border-[#1e3a5f] text-slate-600 dark:text-slate-300 transition-transform duration-200 ${isTableCollapsed ? "" : "rotate-180"}`}>
-              <ChevronDown size={14} />
+            <div className={`inline-flex h-[30px] w-[30px] items-center justify-center rounded-[4px] border bg-white dark:bg-[#0c1930] border-[#b9c9d2] dark:border-[#1e3a5f] text-[#075985] dark:text-[#38bdf8] transition-transform duration-200 ${isTableCollapsed ? "" : "rotate-180"}`}>
+              <ChevronDown size={15} />
             </div>
           </div>
         </div>
@@ -9585,11 +9585,11 @@ export function SlitFilmManagement({
         {/* Collapsible Content */}
         {!isTableCollapsed && (
           <div className="w-full max-w-full min-w-0">
-            {/* Table Toolbar & Search & Page Size (Single Row on Mobile < md + Inline Row on Desktop >= md) */}
-            <div className="filterbar w-full max-w-full min-w-0 !p-2 md:!px-[18px] md:!py-2.5 border-b flex !flex-row !flex-nowrap md:!flex-wrap !items-center md:justify-between !gap-1.5 md:!gap-2 overflow-x-auto md:overflow-visible bg-slate-50/50 dark:bg-[#0e1c36] border-slate-200 dark:border-[#1e3a5f]">
+            {/* Table Toolbar & Search & Page Size (SAP Fiori Single Row on Mobile < md + Inline Row on Desktop >= md) */}
+            <div className="filterbar w-full max-w-full min-w-0 !p-2.5 md:!px-4 md:!py-2.5 border-b flex !flex-row !flex-nowrap md:!flex-wrap !items-center md:justify-between !gap-2 overflow-x-auto md:overflow-visible bg-[#f5f8fa] dark:bg-[#0c1930] border-[#d9e2e8] dark:border-[#1e3a5f]">
               {/* Search Input */}
-              <div className="relative flex-1 min-w-[115px] md:min-w-[220px]">
-                <Search size={14} className="pointer-events-none absolute left-2 md:left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative flex-1 min-w-[120px] md:min-w-[220px]">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={searchKeyword}
@@ -9598,7 +9598,7 @@ export function SlitFilmManagement({
                     setCurrentPage(1);
                   }}
                   placeholder={isThai ? "ค้นหา Batch, Grade, เครื่อง, Location..." : "Filter by Batch, Grade, Machine, Location..."}
-                  className="field w-full min-w-0 !h-9 !min-h-[36px] !py-1.5 !pl-7 md:!pl-8 !pr-6 md:!pr-8 !rounded-md !text-xs font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-400 focus:outline-none focus:border-cyan-500/50"
+                  className={`${FIORI_CONTROL_INPUT} field w-full min-w-0 !h-[36px] !min-h-[36px] !py-[7px] !pl-8 !pr-8 !rounded-[4px] !text-[14px] font-normal`}
                 />
                 {searchKeyword && (
                   <button
@@ -9608,22 +9608,22 @@ export function SlitFilmManagement({
                       setCurrentPage(1);
                     }}
                     aria-label={isThai ? "ล้างคำค้นหา" : "Clear search"}
-                    className="absolute right-1 md:right-1.5 top-1/2 -translate-y-1/2 p-1 md:p-0.5 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-[4px] text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 cursor-pointer transition-colors"
                   >
-                    <X size={13} />
+                    <X size={14} />
                   </button>
                 )}
               </div>
 
               {/* Date Filter & Rows Per Page (Same Single Row on Mobile & Desktop) */}
-              <div className="flex items-center gap-1.5 md:gap-2 shrink-0 text-xs text-slate-600 dark:text-slate-300">
+              <div className="flex items-center gap-2 shrink-0 text-[13px] text-slate-700 dark:text-slate-300">
                 {/* Date Picker */}
-                <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-                  <label className="hidden md:flex items-center gap-1 text-xs font-normal text-slate-500 dark:text-slate-400">
-                    <Calendar size={12} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <label className="hidden md:flex items-center gap-1 text-[13px] font-semibold text-slate-700 dark:text-slate-300">
+                    <Calendar size={13} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
                     <span>{isThai ? "วันที่:" : "Date:"}</span>
                   </label>
-                  <div className="relative flex items-center gap-1 shrink-0">
+                  <div className="relative flex items-center gap-1.5 shrink-0">
                     <input
                       type="date"
                       value={historyDateFilter}
@@ -9633,7 +9633,7 @@ export function SlitFilmManagement({
                       }}
                       aria-label={isThai ? "วันที่" : "Date"}
                       title={isThai ? "กรองตามวันที่" : "Filter by date"}
-                      className="field w-[114px] sm:w-[132px] md:w-auto !h-9 !min-h-[36px] !py-1.5 !px-1.5 md:!px-2 !rounded-md !text-[11px] md:!text-xs font-mono font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                      className={`${FIORI_CONTROL_INPUT} field w-[124px] sm:w-[144px] md:w-auto !h-[36px] !min-h-[36px] !py-1.5 !px-2.5 !rounded-[4px] !text-[13px] md:!text-[14px] font-mono font-normal dark:[color-scheme:dark] cursor-pointer`}
                     />
                     {historyDateFilter && (
                       <button
@@ -9643,17 +9643,17 @@ export function SlitFilmManagement({
                           setCurrentPage(1);
                         }}
                         title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
-                        className="shrink-0 p-1.5 md:p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                        className={`${FIORI_BTN_ICON_DANGER} h-[36px] w-[36px]`}
                       >
-                        <X size={12} />
+                        <X size={14} />
                       </button>
                     )}
                   </div>
                 </div>
 
                 {/* Page Size Selector */}
-                <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
-                  <label className="hidden md:inline text-xs font-normal text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <label className="hidden md:inline text-[13px] font-semibold text-slate-700 dark:text-slate-300">
                     {isThai ? "แสดง:" : "Show:"}
                   </label>
                   <select
@@ -9663,7 +9663,7 @@ export function SlitFilmManagement({
                       setCurrentPage(1);
                     }}
                     aria-label={isThai ? "จำนวนแถวต่อหน้า" : "Rows per page"}
-                    className="field w-[82px] sm:w-[96px] md:w-auto !h-9 !min-h-[36px] !py-1.5 !px-1.5 md:!px-2.5 !rounded-md !text-[11px] md:!text-xs font-normal bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-cyan-500/50 cursor-pointer"
+                    className={`${FIORI_CONTROL_INPUT} field w-[92px] sm:w-[106px] md:w-auto !h-[36px] !min-h-[36px] !py-1.5 !px-2.5 !rounded-[4px] !text-[13px] md:!text-[14px] font-normal cursor-pointer`}
                   >
                     <option value={5}>5 {isThai ? "แถว/หน้า" : "/ page"}</option>
                     <option value={10}>10 {isThai ? "แถว/หน้า" : "/ page"}</option>
@@ -9682,9 +9682,9 @@ export function SlitFilmManagement({
                     }}
                     title={isThai ? "ล้างตัวกรองทั้งหมด" : "Reset All Filters"}
                     aria-label={isThai ? "ล้างตัวกรองทั้งหมด" : "Reset All Filters"}
-                    className="md:hidden shrink-0 h-9 w-9 inline-flex items-center justify-center rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0c1930] text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 transition-colors cursor-pointer active:scale-95"
+                    className={`md:hidden ${FIORI_BTN_ICON_SECONDARY} h-[36px] w-[36px]`}
                   >
-                    <RotateCcw size={13} />
+                    <RotateCcw size={15} />
                   </button>
                 )}
               </div>
@@ -9694,7 +9694,7 @@ export function SlitFilmManagement({
             <div className="w-full max-w-full overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse whitespace-nowrap">
                 <thead>
-                  <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-[#1e3a5f]">
+                  <tr className="bg-[#f5f8fa] dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-b border-[#d9e2e8] dark:border-[#1e3a5f]">
                     <th className="hidden md:table-cell py-1 px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">No.</th>
                     <th className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap bg-cyan-50/50 dark:bg-cyan-950/20 text-cyan-700 dark:text-cyan-300">
                       Batch
@@ -9862,12 +9862,12 @@ export function SlitFilmManagement({
                           </td>
 
                           {/* 9. รับจากเครื่อง (Dropdown SM01-SM04 or Machine Badge) */}
-                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10 align-middle">
+                          <td className="!px-2 !py-2 md:!py-1 md:!px-1.5 whitespace-nowrap bg-emerald-50/30 dark:bg-emerald-950/10 align-middle">
                             {AVAILABLE_MACHINES.includes(row.machine) ? (
                               <select
                                 value={row.machine}
                                 onChange={(e) => handleMachineChange(row.id, e.target.value)}
-                                className="bg-white dark:bg-[#0c1930] text-xs md:text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 py-1 px-1.5 md:py-0 md:px-0.5 md:h-4.5 rounded border border-slate-300 dark:border-[#1e3a5f] focus:outline-none focus:border-cyan-500 leading-none"
+                                className="h-[28px] rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] px-2 !text-[12.5px] font-mono font-semibold text-slate-800 dark:text-slate-100 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none cursor-pointer"
                               >
                                 {AVAILABLE_MACHINES.map((m) => (
                                   <option key={m} value={m}>
@@ -9876,7 +9876,7 @@ export function SlitFilmManagement({
                                 ))}
                               </select>
                             ) : (
-                              <span className="inline-flex items-center px-1.5 py-0.5 md:py-0.2 rounded font-mono font-bold text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-[4px] font-mono font-bold text-[11px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                                 {row.machine}
                               </span>
                             )}
@@ -9906,23 +9906,23 @@ export function SlitFilmManagement({
                           </td>
 
                           {/* 12. จัดการ (ลบแถว / ดูรายละเอียด) */}
-                          <td className="!px-2 !py-2 md:!py-0 md:!px-1 text-center whitespace-nowrap align-middle">
-                            <div className="inline-flex items-center gap-1.5 md:gap-1">
+                          <td className="!px-2 !py-2 md:!py-1 md:!px-1.5 text-center whitespace-nowrap align-middle">
+                            <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => setSelectedRecord(row)}
-                                className="p-1.5 md:p-0.5 rounded bg-cyan-50/80 md:bg-transparent dark:bg-cyan-950/40 md:dark:bg-transparent text-cyan-600 hover:text-cyan-700 hover:bg-cyan-100 md:hover:bg-cyan-50 dark:hover:bg-cyan-950/60 cursor-pointer"
+                                className={`${FIORI_BTN_ICON_SECONDARY} h-[30px] w-[30px]`}
                                 title={isThai ? "ดูรายละเอียด" : "View Details"}
                               >
-                                <Eye size={14} className="md:w-[11px] md:h-[11px]" />
+                                <Eye size={14} />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteRecord(row.id, row.batch)}
-                                className="p-1.5 md:p-0.5 rounded bg-rose-50/80 md:bg-transparent dark:bg-rose-950/40 md:dark:bg-transparent text-rose-500 hover:text-rose-700 hover:bg-rose-100 md:hover:bg-rose-50 dark:hover:bg-rose-950/60 cursor-pointer"
+                                className={`${FIORI_BTN_ICON_DANGER} h-[30px] w-[30px]`}
                                 title={isThai ? "ลบรายการ" : "Remove"}
                               >
-                                <Trash2 size={14} className="md:w-[11px] md:h-[11px]" />
+                                <Trash2 size={14} />
                               </button>
                             </div>
                           </td>
@@ -9934,10 +9934,10 @@ export function SlitFilmManagement({
               </table>
             </div>
 
-            {/* Pagination Controls Bar (Centered & Touch-Friendly on Mobile + Inline on Desktop) */}
-            <div className="p-3 border-t flex flex-col md:flex-row md:flex-wrap items-center md:justify-between gap-2.5 md:gap-3 text-xs bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+            {/* Pagination Controls Bar (SAP Fiori) */}
+            <div className="p-3 border-t flex flex-col md:flex-row md:flex-wrap items-center md:justify-between gap-2.5 md:gap-3 text-[13px] bg-[#f5f8fa] dark:bg-[#0c1930] border-[#d9e2e8] dark:border-[#1e3a5f]">
               {/* Pagination Status Text */}
-              <div className="text-slate-600 dark:text-slate-300 font-medium text-center md:text-left text-[11px] md:text-xs">
+              <div className="text-slate-600 dark:text-slate-300 font-medium text-center md:text-left text-[12px] md:text-[13px]">
                 {isThai
                   ? `แสดง ${filteredList.length === 0 ? 0 : startIndex + 1} - ${endIndex} จากทั้งหมด ${filteredList.length} รายการ (หน้าที่ ${validCurrentPage} จาก ${totalPages})`
                   : `Showing ${filteredList.length === 0 ? 0 : startIndex + 1} - ${endIndex} of ${filteredList.length} items (Page ${validCurrentPage} of ${totalPages})`}
@@ -9949,32 +9949,24 @@ export function SlitFilmManagement({
                   type="button"
                   onClick={() => handlePageChange(1)}
                   disabled={validCurrentPage <= 1}
-                  className={`min-h-[36px] min-w-[36px] md:min-h-0 md:min-w-0 p-2 md:p-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
-                    validCurrentPage <= 1
-                      ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
-                      : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
-                  }`}
+                  className={FIORI_BTN_ICON_SECONDARY}
                   title={isThai ? "หน้าแรก" : "First Page"}
                 >
-                  <ChevronsLeft size={14} />
+                  <ChevronsLeft size={15} />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handlePageChange(validCurrentPage - 1)}
                   disabled={validCurrentPage <= 1}
-                  className={`min-h-[36px] md:min-h-0 px-3 py-2 md:px-2.5 md:py-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                    validCurrentPage <= 1
-                      ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
-                      : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
-                  }`}
+                  className={FIORI_BTN_SECONDARY}
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={15} />
                   <span>{isThai ? "ก่อนหน้า" : "Previous"}</span>
                 </button>
 
                 {/* Page Indicator */}
-                <div className="min-h-[36px] md:min-h-0 min-w-[54px] md:min-w-0 px-3 py-1.5 md:py-1 rounded-md md:rounded bg-slate-200/70 dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 font-mono text-xs font-bold border border-slate-300/70 dark:border-[#1e3a5f] flex items-center justify-center">
+                <div className="inline-flex min-h-[34px] min-w-[60px] items-center justify-center px-3 rounded-[4px] bg-white dark:bg-[#0d1b33] text-slate-800 dark:text-slate-100 font-mono text-[13.5px] font-bold border border-[#b9c9d2] dark:border-[#1e3a5f] tabular-nums">
                   {validCurrentPage} / {totalPages}
                 </div>
 
@@ -9982,43 +9974,35 @@ export function SlitFilmManagement({
                   type="button"
                   onClick={() => handlePageChange(validCurrentPage + 1)}
                   disabled={validCurrentPage >= totalPages}
-                  className={`min-h-[36px] md:min-h-0 px-3 py-2 md:px-2.5 md:py-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                    validCurrentPage >= totalPages
-                      ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
-                      : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
-                  }`}
+                  className={FIORI_BTN_SECONDARY}
                 >
                   <span>{isThai ? "ถัดไป" : "Next"}</span>
-                  <ChevronRight size={14} />
+                  <ChevronRight size={15} />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handlePageChange(totalPages)}
                   disabled={validCurrentPage >= totalPages}
-                  className={`min-h-[36px] min-w-[36px] md:min-h-0 md:min-w-0 p-2 md:p-1.5 rounded-md md:rounded border text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
-                    validCurrentPage >= totalPages
-                      ? "opacity-40 cursor-not-allowed bg-slate-100 dark:bg-[#0c1930] text-slate-400 border-slate-200 dark:border-slate-800"
-                      : "bg-white dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-slate-300 dark:border-[#1e3a5f] hover:bg-slate-100 dark:hover:bg-[#172b4d]"
-                  }`}
+                  className={FIORI_BTN_ICON_SECONDARY}
                   title={isThai ? "หน้าสุดท้าย" : "Last Page"}
                 >
-                  <ChevronsRight size={14} />
+                  <ChevronsRight size={15} />
                 </button>
               </div>
             </div>
 
             {/* Table Footer with Structured KG / TON Summary */}
-            <div className="p-2.5 md:py-2.5 md:px-3 border-t flex flex-wrap items-center justify-between gap-2 md:gap-3 bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
-              <div className="w-full md:w-auto flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2 rounded-lg md:rounded-none bg-emerald-50/80 dark:bg-emerald-950/30 md:bg-transparent md:dark:bg-transparent border border-emerald-200/80 dark:border-emerald-800/60 md:border-0 px-3 py-2 md:p-0 text-xs text-slate-600 dark:text-slate-300">
-                <span className="font-semibold md:font-normal text-slate-700 dark:text-slate-300">
+            <div className="p-3 border-t flex flex-wrap items-center justify-between gap-2 md:gap-3 bg-white dark:bg-[#0d1b33] border-[#d9e2e8] dark:border-[#1e3a5f]">
+              <div className="w-full md:w-auto flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2 rounded-[4px] md:rounded-none bg-emerald-50/80 dark:bg-emerald-950/30 md:bg-transparent md:dark:bg-transparent border border-emerald-200/80 dark:border-emerald-800/60 md:border-0 px-3 py-2 md:p-0 text-[13px] text-slate-700 dark:text-slate-300">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
                   {isThai ? "ยอดรวมน้ำหนักรอบนี้:" : "Total Weight:"}
                 </span>
                 <div className="flex items-center justify-between md:justify-start gap-2">
-                  <strong className="text-emerald-700 dark:text-emerald-400 font-mono text-sm font-extrabold tabular-nums">
+                  <strong className="text-[#107e3e] dark:text-emerald-400 font-mono text-[14px] font-extrabold tabular-nums">
                     {totalWeightKg.toLocaleString()} <span className="text-xs font-bold">kg</span>
                   </strong>
-                  <span className="px-2 py-0.5 md:p-0 rounded-md md:rounded-none bg-white/80 dark:bg-[#0c1930] md:bg-transparent md:dark:bg-transparent border border-emerald-200 dark:border-emerald-800/70 md:border-0 font-mono font-bold md:font-normal text-xs text-emerald-700 dark:text-emerald-300 md:text-slate-400 tabular-nums">
+                  <span className="px-2 py-0.5 md:p-0 rounded-[4px] md:rounded-none bg-white/80 dark:bg-[#0c1930] md:bg-transparent md:dark:bg-transparent border border-emerald-200 dark:border-emerald-800/70 md:border-0 font-mono font-bold md:font-normal text-xs text-[#107e3e] dark:text-emerald-300 md:text-slate-500 tabular-nums">
                     <span className="hidden md:inline">(</span>
                     {totalWeightTon} TON
                     <span className="hidden md:inline">)</span>
@@ -10337,41 +10321,41 @@ export function SlitFilmManagement({
       {activeMode === "stock_balance" && (
         <>
           {/* Top-Right Action Buttons aligned on the same row as main heading 'เหล็กสลิต / ฟิล์ม' */}
-          <div className="flex items-center gap-1.5 absolute -top-[38px] right-0 z-20">
-            {/* Export Excel Button (Compact Height) */}
+          <div className="flex items-center gap-2 absolute -top-[42px] right-0 z-20">
+            {/* Export Excel Button (SAP Fiori) */}
             <button
               type="button"
               onClick={handleExportStockBalanceExcel}
               disabled={filteredStockList.length === 0}
-              className="hidden sm:inline-flex h-7 px-2.5 py-1 rounded-lg text-[11px] leading-none font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white shadow-xs items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-emerald-700"
+              className={`hidden sm:inline-flex ${FIORI_BTN_SUCCESS} px-[12px] py-[6px] !text-[13.5px]`}
             >
-              <FileSpreadsheet size={13} className="text-emerald-100 shrink-0" />
+              <FileSpreadsheet size={14} className="shrink-0" />
               <span>{isThai ? "Export Excel" : "Export Excel"}</span>
             </button>
 
-            {/* SAP Data Upload Button (Compact Height) */}
+            {/* SAP Data Upload Button (SAP Fiori) */}
             <button
               type="button"
               onClick={() => setIsSapModalOpen(true)}
-              className="hidden sm:inline-flex h-7 px-2.5 py-1 rounded-lg text-[11px] leading-none font-bold bg-[#1c2d42] hover:bg-[#111f30] dark:bg-[#1e3a5f] dark:hover:bg-[#284c7a] text-white shadow-xs items-center gap-1.5 cursor-pointer transition-all active:scale-95 border border-[#2d4b6e] dark:border-[#385f8d]"
+              className={`hidden sm:inline-flex ${FIORI_BTN_PRIMARY} px-[12px] py-[6px] !text-[13.5px]`}
             >
-              <FileSpreadsheet size={13} className="text-cyan-400 shrink-0" />
+              <FileSpreadsheet size={14} className="shrink-0" />
               <span>{isThai ? "อัปโหลดข้อมูลจาก SAP" : "Upload SAP Data"}</span>
             </button>
           </div>
 
-          <section className="w-full max-w-full min-w-0 p-2.5 sm:p-3.5 rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200/90 dark:border-[#1e3a5f] shadow-sm space-y-2.5 font-sans animate-fade-in">
+          <section className="w-full max-w-full min-w-0 p-3 sm:p-4 rounded-[6px] border bg-white dark:bg-[#111e38] border-[#d9e2e8] dark:border-[#1e3a5f] shadow-xs space-y-3 font-sans animate-fade-in">
             {/* Header & Subtitle */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5 border-slate-100 dark:border-[#1e3a5f]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-2.5 border-[#e5edf2] dark:border-[#1e3a5f]">
               <div className="flex items-start sm:items-center justify-between gap-2 w-full sm:w-auto">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="p-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="p-1.5 rounded-[4px] bg-[#edf7fb] dark:bg-[#0d2240] text-[#087eaf] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f] shrink-0">
                     <Package size={18} />
                   </div>
                   <div className="min-w-0">
-                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-slate-100 flex flex-wrap items-center gap-2">
                       <span>{isThai ? "Stock คงคลัง" : "Stock Balance"}</span>
-                      <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 whitespace-nowrap">
+                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-[4px] bg-emerald-50 dark:bg-emerald-950/60 text-[#107e3e] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 whitespace-nowrap font-mono tabular-nums">
                         {filteredStockList.length} {isThai ? "รายการ" : "items"}
                       </span>
                     </h2>
@@ -10384,18 +10368,18 @@ export function SlitFilmManagement({
                 </div>
 
                 {/* Mobile Total TON badge on top-right */}
-                <div className="sm:hidden shrink-0 px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs whitespace-nowrap">
+                <div className="sm:hidden shrink-0 px-2.5 py-1 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-[#107e3e] dark:text-emerald-300 font-mono font-extrabold text-xs whitespace-nowrap tabular-nums">
                   {stockTotalWeightTon} TON
                 </div>
               </div>
 
               {/* Desktop Total TON */}
               <div className="hidden sm:flex flex-wrap items-center gap-2 shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-semibold text-slate-600 dark:text-slate-400">
                     {isThai ? "รวมน้ำหนักคลัง:" : "Total Stock:"}
                   </span>
-                  <div className="px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono font-extrabold text-xs">
+                  <div className="px-3 py-1 rounded-[4px] bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-[#107e3e] dark:text-emerald-300 font-mono font-extrabold text-[13px] tabular-nums">
                     {stockTotalWeightTon} TON
                   </div>
                 </div>
@@ -10403,7 +10387,7 @@ export function SlitFilmManagement({
             </div>
 
           {/* SAP Fiori Style Top Toolbar: Mobile 2-Row Balanced Layout (< md) + Desktop Inline Row (>= md) */}
-          <div className="filterbar w-full max-w-full min-w-0 flex !flex-col md:!flex-row md:!flex-wrap !items-stretch md:!items-center justify-between !gap-2 p-2.5 md:px-[18px] md:py-2.5 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f]">
+          <div className="filterbar w-full max-w-full min-w-0 flex !flex-col md:!flex-row md:!flex-wrap !items-stretch md:!items-center justify-between !gap-2 p-2.5 md:px-4 md:py-2.5 rounded-[4px] bg-[#f5f8fa] dark:bg-[#0c1930] border border-[#d9e2e8] dark:border-[#1e3a5f]">
             {/* Row 1 (Mobile < md): Primary Search + Compact Status | Unwrapped into Desktop Row via md:contents */}
             <div className="flex items-center gap-2 w-full min-w-0 md:contents">
               {/* Search Input (Primary expandable field) */}
@@ -10421,7 +10405,7 @@ export function SlitFilmManagement({
                       ? "ค้นหา Batch, Location, Grade, Material No..."
                       : "Search by Batch, Location, Grade..."
                   }
-                  className="field w-full min-w-0 !h-9 !min-h-[36px] !py-[7px] !pl-8 !pr-7 !rounded-md !text-xs font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500"
+                  className={`${FIORI_CONTROL_INPUT} field w-full min-w-0 !h-[36px] !min-h-[36px] !py-[7px] !pl-8 !pr-8 !rounded-[4px] !text-[14px] font-normal`}
                 />
                 {stockSearchKeyword && (
                   <button
@@ -10431,7 +10415,7 @@ export function SlitFilmManagement({
                       setStockCurrentPage(1);
                     }}
                     aria-label="Clear search"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 md:p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded-[4px] text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 cursor-pointer transition-colors"
                   >
                     <X size={14} />
                   </button>
@@ -10439,12 +10423,12 @@ export function SlitFilmManagement({
               </div>
 
               {/* Status Filter (Compact beside Search on Mobile < md, Inline after Date on Desktop >= md) */}
-              <div className="shrink-0 w-[124px] sm:w-[144px] md:w-auto md:order-3 flex items-center md:gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <label className="hidden md:inline text-xs font-semibold text-slate-700 dark:text-slate-300 shrink-0">
+              <div className="shrink-0 w-[132px] sm:w-[152px] md:w-auto md:order-3 flex items-center md:gap-1.5 text-[13px] font-semibold text-slate-700 dark:text-slate-300">
+                <label className="hidden md:inline text-[13px] font-semibold text-slate-700 dark:text-slate-300 shrink-0">
                   {isThai ? "สถานะ:" : "Status:"}
                 </label>
                 <div className="relative w-full md:w-auto min-w-0">
-                  <Filter size={12} className="md:hidden pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400" />
+                  <Filter size={13} className="md:hidden pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[#087eaf] dark:text-[#38bdf8]" />
                   <select
                     value={stockStatusFilter}
                     onChange={(e) => {
@@ -10453,7 +10437,7 @@ export function SlitFilmManagement({
                     }}
                     aria-label={isThai ? "สถานะ" : "Status"}
                     title={isThai ? "สถานะ" : "Status"}
-                    className="field w-full md:w-auto min-w-0 !h-9 md:!h-[35px] !min-h-[36px] md:!min-h-[35px] !py-1.5 !pl-6 !pr-1.5 md:!px-2.5 !rounded-md !text-xs font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className={`${FIORI_CONTROL_INPUT} field w-full md:w-auto min-w-0 !h-[36px] !min-h-[36px] !py-1.5 !pl-6 !pr-2 md:!px-3 !rounded-[4px] !text-[14px] font-normal cursor-pointer`}
                   >
                     <option value="all">{isThai ? "ทั้งหมด (All)" : "All Status"}</option>
                     <option value="ready">{isThai ? "🟢 พร้อมใช้ (Unrestricted)" : "🟢 Ready"}</option>
@@ -10467,12 +10451,12 @@ export function SlitFilmManagement({
             {/* Row 2 (Mobile < md): Balanced Date + Page Size | Unwrapped into Desktop Row via md:contents */}
             <div className="flex items-end gap-2 w-full min-w-0 md:contents">
               {/* Date Filter */}
-              <div className="flex-1 min-w-0 md:flex-initial md:w-auto md:order-2 flex flex-col md:flex-row md:items-center gap-1 md:gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <label className="flex items-center gap-1 text-[11px] md:text-xs font-semibold text-slate-600 dark:text-slate-400 md:text-slate-700 md:dark:text-slate-300">
-                  <Calendar size={12} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="flex-1 min-w-0 md:flex-initial md:w-auto md:order-2 flex flex-col md:flex-row md:items-center gap-1 md:gap-1.5 text-[13px] font-semibold text-slate-700 dark:text-slate-300">
+                <label className="flex items-center gap-1 text-[12px] md:text-[13px] font-semibold text-slate-600 dark:text-slate-400 md:text-slate-700 md:dark:text-slate-300">
+                  <Calendar size={13} className="text-[#087eaf] dark:text-[#38bdf8] shrink-0" />
                   <span>{isThai ? "วันที่" : "Date"}<span className="hidden md:inline">:</span></span>
                 </label>
-                <div className="relative flex items-center w-full md:w-auto min-w-0 gap-1">
+                <div className="relative flex items-center w-full md:w-auto min-w-0 gap-1.5">
                   <input
                     type="date"
                     value={stockDateFilter}
@@ -10480,7 +10464,7 @@ export function SlitFilmManagement({
                       setStockDateFilter(e.target.value);
                       setStockCurrentPage(1);
                     }}
-                    className="field flex-1 md:flex-initial w-full md:w-auto min-w-0 max-w-full !h-9 md:!h-[35px] !min-h-[36px] md:!min-h-[35px] !py-1.5 !px-2 !rounded-md !text-xs font-mono font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 dark:[color-scheme:dark] focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className={`${FIORI_CONTROL_INPUT} field flex-1 md:flex-initial w-full md:w-auto min-w-0 max-w-full !h-[36px] !min-h-[36px] !py-1.5 !px-2.5 !rounded-[4px] !text-[14px] font-mono font-normal dark:[color-scheme:dark] cursor-pointer`}
                   />
                   {stockDateFilter && (
                     <button
@@ -10490,17 +10474,17 @@ export function SlitFilmManagement({
                         setStockCurrentPage(1);
                       }}
                       title={isThai ? "ล้างตัวกรองวันที่ (แสดงทั้งหมด)" : "Clear date filter"}
-                      className="shrink-0 p-1.5 md:p-1 rounded-md bg-slate-200/80 dark:bg-slate-800 text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors cursor-pointer"
+                      className={`${FIORI_BTN_ICON_DANGER} h-[36px] w-[36px]`}
                     >
-                      <X size={12} />
+                      <X size={14} />
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Page Size Dropdown (Aligned with Status column above on mobile < md, at end on desktop >= md) */}
-              <div className="shrink-0 w-[124px] sm:w-[144px] md:w-auto md:order-4 flex flex-col md:flex-row md:items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                <span className="md:hidden text-[11px] font-semibold text-slate-600 dark:text-slate-400">
+              <div className="shrink-0 w-[132px] sm:w-[152px] md:w-auto md:order-4 flex flex-col md:flex-row md:items-center gap-1 text-[13px] font-semibold text-slate-700 dark:text-slate-300">
+                <span className="md:hidden text-[12px] font-semibold text-slate-600 dark:text-slate-400">
                   {isThai ? "จำนวนแถว" : "Rows"}
                 </span>
                 <select
@@ -10510,7 +10494,7 @@ export function SlitFilmManagement({
                     setStockCurrentPage(1);
                   }}
                   aria-label="Rows per page"
-                  className="field w-full md:w-auto min-w-0 !h-9 md:!h-[35px] !min-h-[36px] md:!min-h-[35px] !py-1.5 !px-2 !rounded-md !text-xs font-normal bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  className={`${FIORI_CONTROL_INPUT} field w-full md:w-auto min-w-0 !h-[36px] !min-h-[36px] !py-1.5 !px-2.5 !rounded-[4px] !text-[14px] font-normal cursor-pointer`}
                 >
                   <option value={10}>10 {isThai ? "แถว" : "rows"}</option>
                   <option value={20}>20 {isThai ? "แถว" : "rows"}</option>
@@ -10529,17 +10513,17 @@ export function SlitFilmManagement({
                   setStockStatusFilter("all");
                   setStockCurrentPage(1);
                 }}
-                className="md:hidden w-full inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 text-xs font-semibold cursor-pointer transition-colors"
+                className={`md:hidden w-full ${FIORI_BTN_SECONDARY}`}
                 title={isThai ? "ล้างตัวกรองทั้งหมด" : "Reset all filters"}
               >
-                <RotateCcw size={12} />
+                <RotateCcw size={14} />
                 <span>{isThai ? "ล้างตัวกรองทั้งหมด" : "Reset all filters"}</span>
               </button>
             )}
           </div>
 
           {/* SAP Fiori Compact Table */}
-          <div className="w-full overflow-x-auto border rounded-xl bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f]">
+          <div className="w-full overflow-x-auto border rounded-[4px] bg-white dark:bg-[#111e38] border-[#d9e2e8] dark:border-[#1e3a5f]">
             <table className="w-full text-xs border-collapse whitespace-nowrap">
               <colgroup>
                 <col className="w-14" />
@@ -10553,7 +10537,7 @@ export function SlitFilmManagement({
                 <col className="w-20" />
               </colgroup>
               <thead>
-                <tr className="bg-slate-100 dark:bg-[#0c1930] text-slate-700 dark:text-slate-300 border-b border-slate-200 dark:border-[#1e3a5f] font-bold">
+                <tr className="bg-[#f5f8fa] dark:bg-[#0c1930] text-slate-700 dark:text-slate-200 border-b border-[#d9e2e8] dark:border-[#1e3a5f] font-bold">
                   <th className="!py-2.5 !px-3 !text-center w-14 align-middle">No.</th>
                   <th className="!py-2.5 !px-3 !text-center text-blue-700 dark:text-blue-400 align-middle">Location</th>
                   <th className="!py-2.5 !px-3 !text-center text-cyan-700 dark:text-cyan-300 bg-cyan-50/50 dark:bg-cyan-950/20 align-middle">
@@ -10624,20 +10608,20 @@ export function SlitFilmManagement({
                         <td className="!py-2 !px-3 !text-center whitespace-nowrap align-middle">
                           <div className="inline-flex items-center justify-center">
                             {row.stockStatus === "preparing" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-2xs">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[10.5px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                                 <span>{isThai ? "กำลังเตรียม" : "Preparing"}</span>
                                 {row.preparedOrderNo && (
-                                  <span className="font-mono text-[9px] opacity-90">#{row.preparedOrderNo}</span>
+                                  <span className="font-mono text-[9.5px] opacity-90">#{row.preparedOrderNo}</span>
                                 )}
                               </span>
                             ) : row.stockStatus === "pending_location" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[10.5px] font-bold bg-amber-100/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                                 <span>{isThai ? "รอสแกน Location" : "Pending Location"}</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[10.5px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                 <span>{isThai ? "พร้อมใช้" : "Ready"}</span>
                               </span>
@@ -10681,10 +10665,10 @@ export function SlitFilmManagement({
                             <button
                               type="button"
                               onClick={() => setSelectedRecord(row)}
-                              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-cyan-600 dark:text-cyan-400 cursor-pointer inline-flex items-center justify-center"
+                              className={`${FIORI_BTN_ICON_SECONDARY} h-[30px] w-[30px]`}
                               title={isThai ? "ดูรายละเอียด" : "View Details"}
                             >
-                              <Eye size={13} />
+                              <Eye size={14} />
                             </button>
                           </div>
                         </td>
@@ -10696,11 +10680,11 @@ export function SlitFilmManagement({
             </table>
           </div>
 
-          {/* Footer Summary & Pagination */}
-          <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#0c1930] border border-slate-200 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Footer Summary & Pagination (SAP Fiori) */}
+          <div className="p-3 rounded-[4px] bg-[#f5f8fa] dark:bg-[#0c1930] border border-[#d9e2e8] dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-3 text-[13px]">
             <div className="font-semibold text-slate-700 dark:text-slate-300">
               {isThai ? "ยอดรวมน้ำหนักคงคลังทั้งหมด (หน้าปัจจุบัน):" : "Total Current Stock Weight:"}{" "}
-              <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-sm ml-1">
+              <span className="font-mono font-extrabold text-[#107e3e] dark:text-emerald-400 text-[14px] ml-1 tabular-nums">
                 {stockTotalWeightTon} TON
               </span>
             </div>
@@ -10711,21 +10695,22 @@ export function SlitFilmManagement({
                 type="button"
                 onClick={() => setStockCurrentPage(1)}
                 disabled={validStockCurrentPage <= 1}
-                className="p-1.5 rounded border text-xs font-semibold bg-white dark:bg-[#111e38] border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className={FIORI_BTN_ICON_SECONDARY}
+                title={isThai ? "หน้าแรก" : "First page"}
               >
-                <ChevronsLeft size={14} />
+                <ChevronsLeft size={15} />
               </button>
               <button
                 type="button"
                 onClick={() => setStockCurrentPage(validStockCurrentPage - 1)}
                 disabled={validStockCurrentPage <= 1}
-                className="px-2.5 py-1.5 rounded border text-xs font-semibold bg-white dark:bg-[#111e38] border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+                className={FIORI_BTN_SECONDARY}
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={15} />
                 <span>{isThai ? "ก่อนหน้า" : "Prev"}</span>
               </button>
 
-              <div className="px-3 py-1 rounded bg-slate-200/60 dark:bg-[#111e38] font-mono text-xs font-bold border border-slate-300 dark:border-[#1e3a5f]">
+              <div className="inline-flex min-h-[34px] items-center justify-center px-3 rounded-[4px] bg-white dark:bg-[#0d1b33] font-mono text-[13.5px] font-bold text-slate-800 dark:text-slate-100 border border-[#b9c9d2] dark:border-[#1e3a5f] tabular-nums">
                 {validStockCurrentPage} / {stockTotalPages}
               </div>
 
@@ -10733,18 +10718,19 @@ export function SlitFilmManagement({
                 type="button"
                 onClick={() => setStockCurrentPage(validStockCurrentPage + 1)}
                 disabled={validStockCurrentPage >= stockTotalPages}
-                className="px-2.5 py-1.5 rounded border text-xs font-semibold bg-white dark:bg-[#111e38] border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+                className={FIORI_BTN_SECONDARY}
               >
                 <span>{isThai ? "ถัดไป" : "Next"}</span>
-                <ChevronRight size={14} />
+                <ChevronRight size={15} />
               </button>
               <button
                 type="button"
                 onClick={() => setStockCurrentPage(stockTotalPages)}
                 disabled={validStockCurrentPage >= stockTotalPages}
-                className="p-1.5 rounded border text-xs font-semibold bg-white dark:bg-[#111e38] border-slate-300 dark:border-[#1e3a5f] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className={FIORI_BTN_ICON_SECONDARY}
+                title={isThai ? "หน้าสุดท้าย" : "Last page"}
               >
-                <ChevronsRight size={14} />
+                <ChevronsRight size={15} />
               </button>
             </div>
           </div>
@@ -11505,22 +11491,22 @@ export function SlitFilmManagement({
           onMouseDown={() => setSelectedRecord(null)}
         >
           <div
-            className="w-full max-w-2xl rounded-xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl rounded-[6px] border bg-white dark:bg-[#111e38] border-[#b9c9d2] dark:border-[#1e3a5f] shadow-2xl overflow-hidden"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b flex items-center justify-between bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+            <div className="p-4 border-b flex items-center justify-between bg-[#f5f8fa] dark:bg-[#0d1b33] border-[#d9e2e8] dark:border-[#1e3a5f]">
               <div className="flex items-center gap-2">
-                <FileText size={18} className="text-cyan-500" />
+                <FileText size={18} className="text-[#087eaf] dark:text-[#38bdf8]" />
                 <div>
                   <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                     <span>{isThai ? "รายละเอียดรายการสแกน Batch" : "Scanned Batch Record Details"}:</span>
-                    <span className="font-mono text-cyan-600 dark:text-cyan-400">{selectedRecord.batch}</span>
+                    <span className="font-mono text-[#075985] dark:text-[#38bdf8]">{selectedRecord.batch}</span>
                     {selectedRecord.hasSapData === false ? (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
                         {isThai ? "รอข้อมูล SAP" : "Pending SAP Data"}
                       </span>
                     ) : (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                      <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                         {isThai ? "จับคู่ SAP แล้ว" : "SAP Mapped"}
                       </span>
                     )}
@@ -11536,9 +11522,9 @@ export function SlitFilmManagement({
               <button
                 type="button"
                 onClick={() => setSelectedRecord(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className={`${FIORI_BTN_ICON_SECONDARY} h-[32px] w-[32px]`}
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -11680,18 +11666,19 @@ export function SlitFilmManagement({
               </div>
             </div>
 
-            <div className="p-4 border-t flex justify-between items-center bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+            <div className="px-5 py-3.5 border-t flex justify-between items-center gap-2 bg-[#f5f8fa] dark:bg-[#0d1b33] border-[#d9e2e8] dark:border-[#1e3a5f]">
               <button
                 type="button"
                 onClick={() => handleDeleteRecord(selectedRecord.id, selectedRecord.batch)}
-                className="px-3 py-1.5 rounded text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                className={FIORI_BTN_DANGER_GHOST}
               >
-                {isThai ? "ลบรายการนี้" : "Delete Record"}
+                <Trash2 size={14} />
+                <span>{isThai ? "ลบรายการนี้" : "Delete Record"}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setSelectedRecord(null)}
-                className="px-4 py-1.5 rounded-md text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-700 dark:hover:bg-slate-600"
+                className={FIORI_BTN_PRIMARY}
               >
                 {isThai ? "ปิดหน้าต่าง" : "Close"}
               </button>
@@ -12353,25 +12340,25 @@ export function SlitFilmManagement({
           }}
         >
           <div
-            className="w-full max-w-3xl rounded-2xl border bg-white dark:bg-[#111e38] border-slate-200 dark:border-[#1e3a5f] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col font-sans"
+            className="w-full max-w-3xl rounded-[6px] border bg-white dark:bg-[#111e38] border-[#b9c9d2] dark:border-[#1e3a5f] shadow-2xl overflow-hidden max-h-[90vh] flex flex-col font-sans"
             onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="p-4 border-b flex items-center justify-between bg-slate-50 dark:bg-[#0d1b33] border-slate-200 dark:border-[#1e3a5f]">
+            <div className="p-4 border-b flex items-center justify-between bg-[#f5f8fa] dark:bg-[#0d1b33] border-[#d9e2e8] dark:border-[#1e3a5f]">
               <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl border transition-all ${
+                <div className={`p-2 rounded-[4px] border transition-colors ${
                   isSapProcessing 
                     ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/30" 
-                    : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+                    : "bg-[#edf7fb] dark:bg-[#0d2240] text-[#087eaf] dark:text-[#38bdf8] border-[#b9c9d2] dark:border-[#1e3a5f]"
                 }`}>
-                  <Database size={22} className={isSapProcessing ? "animate-pulse" : ""} />
+                  <Database size={20} className={isSapProcessing ? "animate-pulse" : ""} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
                       {isThai ? "อัปโหลดและจับคู่ข้อมูล SAP (SAP Master Data Upload)" : "Upload & Map SAP Master Data"}
                     </h3>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300 border border-blue-300 dark:border-blue-700">
+                    <span className="px-2 py-0.5 rounded-[4px] text-[10px] font-extrabold bg-[#edf7fb] text-[#075985] dark:bg-[#0d2240] dark:text-[#38bdf8] border border-[#b9c9d2] dark:border-[#1e3a5f]">
                       Officer Only
                     </span>
                   </div>
@@ -12390,13 +12377,9 @@ export function SlitFilmManagement({
                 onClick={() => {
                   if (!isSapProcessing) setIsSapModalOpen(false);
                 }}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  isSapProcessing
-                    ? "text-slate-300 dark:text-slate-700 cursor-not-allowed"
-                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                }`}
+                className={`${FIORI_BTN_ICON_SECONDARY} h-[32px] w-[32px]`}
               >
-                <X size={20} />
+                <X size={16} />
               </button>
             </div>
 
@@ -12519,9 +12502,9 @@ export function SlitFilmManagement({
                       <button
                         type="button"
                         onClick={() => sapFileInputRef.current?.click()}
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        className={FIORI_BTN_PRIMARY}
                       >
-                        <Upload size={13} />
+                        <Upload size={14} />
                         <span>{isThai ? "เลือกไฟล์ SAP (Excel .xlsx / .xls หรือ CSV)" : "Choose File (Excel / CSV)"}</span>
                       </button>
                     </div>
@@ -12606,7 +12589,7 @@ export function SlitFilmManagement({
                           ? "👉 คลิกในช่องนี้แล้วกด Ctrl + V เพื่อวางข้อมูล (รองรับ 2,600+ รายการ) หรือลากไฟล์ Excel / CSV มาวางได้ทันที\nระบบจะเริ่มตัวหน่วงเวลาประมวลผล 4 ขั้นตอนและบันทึกข้อมูลทันที..."
                           : "👉 Click here and press Ctrl + V to paste SAP data (supports 2,600+ items) or drag & drop Excel / CSV file..."
                       }
-                      className="w-full p-4 font-mono text-xs rounded-xl bg-white dark:bg-[#0c1930] border-2 border-cyan-500/80 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/30 shadow-inner"
+                      className="w-full p-3.5 font-mono text-xs rounded-[4px] bg-white dark:bg-[#041029] border border-[#087eaf] dark:border-[#38bdf8] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#087eaf]/25"
                       spellCheck={false}
                       autoFocus
                     />
@@ -12623,7 +12606,7 @@ export function SlitFilmManagement({
                 </div>
 
                 {/* Modal Footer */}
-                <div className="pt-3 border-t border-slate-100 dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
+                <div className="pt-3 border-t border-[#e5edf2] dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-2">
                   <div>
                     {sapMasterMap.size > 0 && (
                       <button
@@ -12655,7 +12638,7 @@ export function SlitFilmManagement({
                             }
                           });
                         }}
-                        className="px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/70 flex items-center gap-1.5 cursor-pointer transition-all"
+                        className={FIORI_BTN_DANGER_GHOST}
                       >
                         <Trash2 size={14} />
                         <span>
@@ -12670,7 +12653,7 @@ export function SlitFilmManagement({
                     <button
                       type="button"
                       onClick={() => setIsSapModalOpen(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-700 dark:text-slate-400"
+                      className={FIORI_BTN_SECONDARY}
                     >
                       {isThai ? "ยกเลิก" : "Cancel"}
                     </button>
@@ -12678,13 +12661,9 @@ export function SlitFilmManagement({
                       type="button"
                       onClick={() => handlePerformSapMapping(false)}
                       disabled={!sapRawText.trim()}
-                      className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95 ${
-                        !sapRawText.trim()
-                          ? "opacity-50 bg-slate-300 text-slate-500 cursor-not-allowed"
-                          : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
-                      }`}
+                      className={FIORI_BTN_PRIMARY}
                     >
-                      <Save size={16} />
+                      <Save size={15} />
                       <span>{isThai ? "บันทึกและจับคู่ข้อมูล SAP" : "Save & Map SAP Data"}</span>
                     </button>
                   </div>
