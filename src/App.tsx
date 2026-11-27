@@ -420,184 +420,167 @@ const CSS = `
     display: flex;
     flex-direction: column;
     width: 100%;
-    box-shadow: 0 4px 18px rgba(0, 210, 255, 0.35), 0 2px 10px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 4px rgba(2, 12, 27, 0.32);
   }
 
   .topbar-main {
-    height: 68px;
-    background: linear-gradient(135deg, #02122c 0%, #082245 100%);
+    height: 56px;
+    background: linear-gradient(180deg, #071730 0%, #051126 100%);
+    border-bottom: 1px solid rgba(56, 189, 248, 0.24);
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
+    gap: 16px;
     padding: 0 16px;
     position: relative;
     width: 100%;
     z-index: 2;
-    overflow: hidden;
+  }
+
+  .topbar-left-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1 1 auto;
   }
 
   .topbar-left-hamburger {
-    background: rgba(10, 22, 40, 0.85);
-    border: 1px solid rgba(0, 210, 255, 0.45);
-    color: #00e1ff;
-    width: 38px;
-    height: 38px;
-    border-radius: 8px;
+    background: rgba(15, 29, 54, 0.72);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    color: #38bdf8;
+    width: 34px;
+    height: 34px;
+    border-radius: 6px;
     display: grid;
     place-items: center;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(8px);
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
     flex-shrink: 0;
-    margin-right: 14px;
-    z-index: 20;
   }
 
   .topbar-left-hamburger:hover {
-    background: rgba(0, 194, 255, 0.3);
+    background: rgba(14, 165, 233, 0.2);
     color: #ffffff;
-    border-color: #00e1ff;
-    box-shadow: 0 0 14px rgba(0, 225, 255, 0.6);
-    transform: scale(1.05);
+    border-color: rgba(56, 189, 248, 0.65);
   }
 
   .topbar-left-hamburger:active {
-    transform: scale(0.95);
+    transform: scale(0.97);
   }
 
-  /* Sub-bar underneath Header Bar */
-  .topbar-sub {
-    height: 38px;
+  .topbar-right-group {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 20px;
-    gap: 12px;
-    background: rgba(3, 10, 24, 0.92);
-    border-top: 1px solid rgba(0, 210, 255, 0.28);
-    border-bottom: 2px solid #00d2ff;
-    backdrop-filter: blur(8px);
-    position: relative;
-    z-index: 2;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
   }
 
-  .topbar-sub-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .topbar-sub-tag {
-    font-size: 10px;
-    font-weight: 800;
-    color: #00e1ff;
-    background: rgba(0, 225, 255, 0.15);
-    border: 1px solid rgba(0, 225, 255, 0.35);
-    padding: 2px 8px;
-    border-radius: 4px;
-    letter-spacing: 0.8px;
+  .topbar-context-meta {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    text-shadow: 0 0 6px rgba(0, 225, 255, 0.5);
+    gap: 8px;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #94a3b8;
+    white-space: nowrap;
   }
 
-  .topbar-sub-tag .live-dot {
+  .topbar-status-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 600;
+    color: #4ade80;
+  }
+
+  .topbar-live-indicator {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
-    background: #10b981;
-    box-shadow: 0 0 6px #10b981;
-    animation: pulseDot 2s infinite ease-in-out;
+    border-radius: 9999px;
+    background: #22c55e;
+    flex-shrink: 0;
   }
 
-  @keyframes pulseDot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.8); }
+  .topbar-meta-sep {
+    color: rgba(148, 163, 184, 0.45);
+    user-select: none;
   }
 
-  .topbar-sub-desc {
-    font-size: 11px;
+  .topbar-divider-v {
+    width: 1px;
+    height: 20px;
+    background: rgba(148, 163, 184, 0.25);
+    margin: 0 4px;
+    flex-shrink: 0;
+  }
+
+  .topbar-clock-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11.5px;
     font-weight: 600;
-    color: #94a3b8;
-    letter-spacing: 0.3px;
-  }
-
-  .topbar-sub-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-left: auto;
+    color: #cbd5e1;
   }
 
   .topbar-utility-user-text {
-    font-size: 11px;
-    font-weight: 700;
-    color: #ffffff;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-    background: rgba(15, 23, 42, 0.7);
-    padding: 5px 12px;
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    backdrop-filter: blur(8px);
-    letter-spacing: 0.3px;
+    height: 32px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #e2e8f0;
+    background: rgba(15, 29, 54, 0.78);
+    padding: 0 11px;
+    border-radius: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
     display: inline-flex;
     align-items: center;
     gap: 6px;
     white-space: nowrap;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    flex-shrink: 0;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
   }
 
-  .topbar-utility-user-text .user-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #38bdf8;
-    box-shadow: 0 0 6px #38bdf8;
+  .topbar-utility-user-text:hover {
+    background: rgba(14, 165, 233, 0.2);
+    border-color: rgba(56, 189, 248, 0.6);
+    color: #ffffff;
   }
 
   .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     height: 100%;
     min-width: 0;
     position: relative;
-    z-index: 10;
     cursor: pointer;
     user-select: none;
-    transition: opacity 0.2s ease;
+    transition: opacity 0.16s ease;
   }
 
   .brand:hover {
-    opacity: 0.95;
+    opacity: 0.94;
   }
 
   .brand-logo-frame {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 50px;
+    height: 38px;
     width: auto;
     flex-shrink: 0;
-    padding: 2px;
   }
 
   .brand-logo-img {
-    height: 46px;
-    max-height: 48px;
+    height: 34px;
+    max-height: 36px;
     width: auto;
-    max-width: 70px;
+    max-width: 56px;
     object-fit: contain;
     display: block;
     flex-shrink: 0;
-    filter: drop-shadow(0 2px 8px rgba(0, 210, 255, 0.45));
-    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  }
-
-  .brand:hover .brand-logo-img {
-    transform: scale(1.06);
+    filter: drop-shadow(0 1px 4px rgba(0, 210, 255, 0.28));
   }
 
   .brand-text-col {
@@ -611,90 +594,55 @@ const CSS = `
   .brand-title-row {
     display: flex;
     align-items: baseline;
-    gap: 8px;
-    line-height: 1;
+    gap: 7px;
+    line-height: 1.1;
     white-space: nowrap;
   }
 
   .brand-title-wms {
-    font-size: 24px;
-    font-weight: 900;
-    letter-spacing: 1px;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
     color: #ffffff;
-    line-height: 1;
-    text-shadow: 0 0 12px rgba(0, 225, 255, 0.55), 0 2px 4px rgba(0, 0, 0, 0.85);
+    line-height: 1.1;
     font-family: 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
   .brand-divider {
-    font-size: 20px;
-    font-weight: 300;
-    color: #00d2ff;
-    opacity: 0.8;
+    font-size: 15px;
+    font-weight: 400;
+    color: rgba(148, 163, 184, 0.55);
     line-height: 1;
-    text-shadow: 0 0 8px rgba(0, 210, 255, 0.8);
-    margin: 0 1px;
   }
 
   .brand-title-wh {
-    font-size: 17px;
-    font-weight: 800;
+    font-size: 15px;
+    font-weight: 700;
     color: #38bdf8;
-    letter-spacing: 0.5px;
-    line-height: 1;
-    text-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-  }
-
-  .brand-version-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.5px;
-    color: #38bdf8;
-    background: rgba(14, 165, 233, 0.16);
-    border: 1px solid rgba(56, 189, 248, 0.45);
-    box-shadow: 0 0 8px rgba(14, 165, 233, 0.25);
-    line-height: 1.2;
-    transform: translateY(-2px);
+    letter-spacing: 0.2px;
+    line-height: 1.1;
   }
 
   .brand-sub-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    line-height: 1;
-    margin-top: 1px;
+    gap: 6px;
+    line-height: 1.15;
     white-space: nowrap;
-  }
-
-  .brand-status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    font-weight: 700;
-    color: #4ade80;
-    letter-spacing: 0.6px;
-    text-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
-  }
-
-  .brand-live-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 8px #22c55e;
-    animation: pulseDot 2s infinite ease-in-out;
   }
 
   .brand-sub-tagline {
     font-size: 11px;
     font-weight: 500;
     color: #94a3b8;
-    letter-spacing: 0.2px;
+  }
+
+  .brand-version-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 600;
+    color: #7dd3fc;
   }
 
   @media (max-width: 640px) {
@@ -702,74 +650,67 @@ const CSS = `
       display: none;
     }
     .brand-title-wms {
-      font-size: 20px;
+      font-size: 16px;
     }
     .brand-title-wh {
-      font-size: 14px;
+      font-size: 13px;
     }
     .brand-logo-img {
-      height: 36px;
-      max-height: 38px;
+      height: 30px;
+      max-height: 32px;
     }
     .topbar-main {
-      height: 62px;
+      height: 52px;
+      padding: 0 10px;
+      gap: 8px;
     }
   }
 
   .sidebar-toggle-btn {
-    background: rgba(15, 23, 42, 0.75);
-    border: 1px solid rgba(0, 210, 255, 0.35);
+    background: rgba(15, 29, 54, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.28);
     color: #38bdf8;
-    height: 28px;
+    height: 32px;
     padding: 0 10px;
     border-radius: 6px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
-    font-size: 11px;
-    font-weight: 700;
+    font-size: 11.5px;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-    backdrop-filter: blur(6px);
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .sidebar-toggle-btn:hover {
-    background: rgba(14, 165, 233, 0.25);
+    background: rgba(14, 165, 233, 0.2);
     color: #ffffff;
-    border-color: #00e1ff;
-    box-shadow: 0 0 10px rgba(0, 225, 255, 0.45);
-    transform: translateY(-0.5px);
-  }
-  .sidebar-toggle-btn:active {
-    transform: translateY(0.5px);
+    border-color: rgba(56, 189, 248, 0.6);
   }
 
   .theme-toggle-btn {
-    height: 28px;
+    height: 32px;
     padding: 0 10px;
     border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: rgba(15, 23, 42, 0.7);
-    color: #cbd5e1;
-    font-size: 11px;
-    font-weight: 700;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(15, 29, 54, 0.78);
+    color: #e2e8f0;
+    font-size: 11.5px;
+    font-weight: 600;
     display: inline-flex;
     align-items: center;
     gap: 5px;
     cursor: pointer;
-    transition: all 0.2s ease;
-    backdrop-filter: blur(6px);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .theme-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.16);
+    background: rgba(14, 165, 233, 0.2);
     color: #ffffff;
-    border-color: rgba(255, 255, 255, 0.45);
+    border-color: rgba(56, 189, 248, 0.6);
   }
 
   /* Center Navigation Tabs from the reference image */
@@ -845,26 +786,32 @@ const CSS = `
   }
 
   .lang-switcher {
+    height: 32px;
     display: inline-flex;
     align-items: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 4px;
-    padding: 1px;
-    gap: 1px;
+    background: rgba(15, 29, 54, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+    flex-shrink: 0;
   }
 
   .lang-btn {
+    height: 26px;
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 10px;
+    color: #94a3b8;
+    font-size: 11px;
     font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 3px;
+    padding: 0 8px;
+    border-radius: 4px;
     cursor: pointer;
-    transition: all 0.15s ease;
-    line-height: 1.2;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .lang-btn:hover {
@@ -872,9 +819,9 @@ const CSS = `
   }
 
   .lang-btn.active {
-    background: #00a0f5;
+    background: #0a6ed1;
     color: #ffffff;
-    font-weight: 800;
+    font-weight: 700;
   }
 
   .layout {
@@ -2240,29 +2187,35 @@ const CSS = `
     }
 
     .topbar-main {
-      height: 48px;
-      padding: 0 12px;
-    }
-
-    .topbar-sub {
-      height: 36px;
+      height: 52px;
       padding: 0 10px;
-      justify-content: flex-end;
+      gap: 8px;
     }
 
-    .topbar-sub-left {
+    .topbar-context-meta,
+    .topbar-divider-v {
       display: none;
     }
 
-    .topbar-sub-right {
+    .topbar-right-group {
       gap: 6px;
-      width: 100%;
-      justify-content: flex-end;
     }
 
-    .topbar-utility-user-text {
-      font-size: 10px;
-      padding: 3px 8px;
+    .topbar-utility-user-text,
+    .theme-toggle-btn {
+      height: 30px;
+      font-size: 11px;
+      padding: 0 8px;
+    }
+
+    .lang-switcher {
+      height: 30px;
+    }
+
+    .lang-btn {
+      height: 24px;
+      padding: 0 6px;
+      font-size: 10.5px;
     }
 
     .layout {
@@ -2271,8 +2224,8 @@ const CSS = `
       flex-direction: column;
       flex: 1;
       min-height: 0;
-      height: calc(100vh - 50px);
-      height: calc(100dvh - 50px);
+      height: calc(100vh - 52px);
+      height: calc(100dvh - 52px);
       overflow: hidden;
     }
 
@@ -3782,92 +3735,74 @@ const CSS = `
   }
 
   /* =========================================================
-     LIGHT MODE HEADER, SUB-BAR & SIDEBAR ADAPTATION
+     LIGHT MODE HEADER, SUB-BAR & SIDEBAR ADAPTATION (SAP FIORI)
      ========================================================= */
   .shell.theme-light .header-wrap {
-    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   }
   .shell.theme-light .topbar-main {
-    background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 100%);
-    border-bottom: 1px solid #cbd5e1;
+    background: #ffffff;
+    border-bottom: 1px solid #d9e0e5;
   }
   .shell.theme-light .topbar-left-hamburger {
     background: #ffffff;
     border-color: #cbd5e1;
-    color: #0284c7;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    color: #0a6ed1;
   }
   .shell.theme-light .topbar-left-hamburger:hover {
-    background: #e0f2fe;
-    color: #0369a1;
-    border-color: #0284c7;
-    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.2);
+    background: #eff6ff;
+    color: #0854a0;
+    border-color: #0a6ed1;
   }
   .shell.theme-light .brand-title-wms {
     color: #0f172a;
-    text-shadow: none;
   }
   .shell.theme-light .brand-divider {
-    color: #0284c7;
-    text-shadow: none;
+    color: #cbd5e1;
   }
   .shell.theme-light .brand-title-wh {
-    color: #0284c7;
-    text-shadow: none;
-  }
-  .shell.theme-light .brand-version-badge {
-    color: #0369a1;
-    background: #e0f2fe;
-    border-color: #7dd3fc;
-    box-shadow: none;
-  }
-  .shell.theme-light .brand-status-badge {
-    color: #16a34a;
-    text-shadow: none;
+    color: #0a6ed1;
   }
   .shell.theme-light .brand-sub-tagline {
-    color: #475569;
+    color: #64748b;
   }
-  .shell.theme-light .topbar-sub {
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
-    border-bottom: 2px solid #0284c7;
+  .shell.theme-light .brand-version-text {
+    color: #0a6ed1;
   }
-  .shell.theme-light .topbar-sub-tag {
-    color: #0369a1 !important;
-    background: #e0f2fe !important;
-    border-color: #7dd3fc !important;
-    text-shadow: none !important;
+  .shell.theme-light .topbar-context-meta {
+    color: #64748b;
   }
-  .shell.theme-light .topbar-sub-desc {
-    color: #475569;
+  .shell.theme-light .topbar-status-text {
+    color: #15803d;
+  }
+  .shell.theme-light .topbar-clock-text {
+    color: #334155;
+  }
+  .shell.theme-light .topbar-divider-v {
+    background: #e2e8f0;
   }
   .shell.theme-light .topbar-utility-user-text {
     color: #0f172a;
-    text-shadow: none;
-    background: #ffffff;
+    background: #f8fafc;
     border-color: #cbd5e1;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   }
   .shell.theme-light .topbar-utility-user-text:hover {
-    background: #f0f9ff;
-    border-color: #0284c7;
+    background: #eff6ff;
+    border-color: #0a6ed1;
+    color: #0854a0;
   }
   .shell.theme-light .theme-toggle-btn {
-    background: #ffffff;
+    background: #f8fafc;
     border-color: #cbd5e1;
     color: #0f172a;
-    text-shadow: none;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   }
   .shell.theme-light .theme-toggle-btn:hover {
-    background: #e0f2fe;
-    border-color: #0284c7;
-    color: #0369a1;
-    box-shadow: 0 2px 6px rgba(2, 132, 199, 0.2);
+    background: #eff6ff;
+    border-color: #0a6ed1;
+    color: #0854a0;
   }
   .shell.theme-light .lang-switcher {
-    background: #e2e8f0;
+    background: #f1f5f9;
     border-color: #cbd5e1;
   }
   .shell.theme-light .lang-btn {
@@ -3877,7 +3812,7 @@ const CSS = `
     color: #0f172a;
   }
   .shell.theme-light .lang-btn.active {
-    background: #0284c7;
+    background: #0a6ed1;
     color: #ffffff;
   }
 
@@ -5340,8 +5275,8 @@ function LiveClock() {
   }, []);
 
   return (
-    <span className="topbar-sub-desc hidden lg:inline font-mono text-[11px] opacity-80">
-      • {currentTime}
+    <span className="topbar-clock-text hidden xl:inline">
+      {currentTime}
     </span>
   );
 }
@@ -5676,79 +5611,68 @@ function WmsApp({
 
       <div className={`shell theme-${theme}`}>
         <header className="header-wrap">
-          {/* Main Header Bar: Full Width Background Banner with Hamburger Button at Far Left Edge */}
+          {/* Unified Single-Row SAP Fiori Shell Header Bar */}
           <div className="topbar-main">
-            {/* Sidebar Collapse/Expand Toggle Button at Far Left Edge */}
-            <button
-              type="button"
-              className="topbar-left-hamburger"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              title={sidebarCollapsed ? translations.expandSidebar : translations.collapseSidebar}
-              aria-label={sidebarCollapsed ? translations.expandSidebar : translations.collapseSidebar}
-            >
-              <Menu size={18} />
-            </button>
-
-            <div
-              className="brand"
-              onClick={() => setActive(getDefaultMenu())}
-              role="button"
-              tabIndex={0}
-              title="WMS Warehouse 1"
-            >
-              <div className="brand-logo-frame">
-                <img
-                  src="/assets/aistudio/w_logo_clean.png"
-                  alt="WMS Logo"
-                  className="brand-logo-img"
-                />
-              </div>
-              <div className="brand-text-col">
-                <div className="brand-title-row">
-                  <span className="brand-title-wms">WMS</span>
-                  <span className="brand-divider">|</span>
-                  <span className="brand-title-wh">Warehouse 1</span>
-                  <span
-                    className="brand-version-badge"
-                    title={`Version ${APP_BUILD_LABEL} • อัปเดตเมื่อ ${APP_UPDATED_DATE}`}
-                  >
-                    {APP_VERSION}
-                  </span>
-                </div>
-                <div className="brand-sub-row">
-                  <span className="brand-status-badge">
-                    <span className="brand-live-dot" />
-                    online
-                  </span>
-                  <span className="brand-sub-tagline">ระบบบริหารจัดการคลังสินค้า</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Sub-bar underneath Header Bar: USER, Dark/Light Mode Switch, and Language Switcher */}
-          <div className="topbar-sub">
-            <div className="topbar-sub-left">
-              <span className="topbar-sub-tag">
-                <span className="live-dot" />
-                SYSTEM ONLINE
-              </span>
-              <span
-                className="topbar-sub-tag"
-                style={{
-                  color: "#38bdf8",
-                  background: "rgba(14, 165, 233, 0.14)",
-                  borderColor: "rgba(56, 189, 248, 0.35)",
-                }}
-                title={`Version ${APP_BUILD_LABEL} • อัปเดตเมื่อ ${APP_UPDATED_DATE}`}
+            {/* Left Zone: Sidebar Toggle + Clean Brand Lockup */}
+            <div className="topbar-left-group">
+              <button
+                type="button"
+                className="topbar-left-hamburger"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                title={sidebarCollapsed ? translations.expandSidebar : translations.collapseSidebar}
+                aria-label={sidebarCollapsed ? translations.expandSidebar : translations.collapseSidebar}
               >
-                VER {APP_VERSION}
-              </span>
-              <span className="topbar-sub-desc hidden md:inline">คลังสินค้า 1 (Warehouse 1) • กะการทำงานปกติ</span>
-              <LiveClock />
+                <Menu size={17} />
+              </button>
+
+              <div
+                className="brand"
+                onClick={() => setActive(getDefaultMenu())}
+                role="button"
+                tabIndex={0}
+                title={`WMS Warehouse 1 · ${APP_BUILD_LABEL}`}
+              >
+                <div className="brand-logo-frame">
+                  <img
+                    src="/assets/aistudio/w_logo_clean.png"
+                    alt="WMS Logo"
+                    referrerPolicy="no-referrer"
+                    className="brand-logo-img"
+                  />
+                </div>
+                <div className="brand-text-col">
+                  <div className="brand-title-row">
+                    <span className="brand-title-wms">WMS</span>
+                    <span className="brand-divider" aria-hidden="true">|</span>
+                    <span className="brand-title-wh">Warehouse 1</span>
+                  </div>
+                  <div className="brand-sub-row">
+                    <span className="brand-sub-tagline">ระบบบริหารจัดการคลังสินค้า</span>
+                    <span className="topbar-meta-sep hidden sm:inline" aria-hidden="true">·</span>
+                    <span
+                      className="brand-version-text"
+                      title={`Version ${APP_BUILD_LABEL} • อัปเดตเมื่อ ${APP_UPDATED_DATE}`}
+                    >
+                      {APP_VERSION}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="topbar-sub-right">
+            {/* Right Zone: Concise Operational Context + SAP Fiori Utility Controls */}
+            <div className="topbar-right-group">
+              <div className="topbar-context-meta hidden lg:inline-flex">
+                <span className="topbar-status-text">
+                  <span className="topbar-live-indicator" aria-hidden="true" />
+                  <span>{language === "th" ? "ออนไลน์" : "Online"}</span>
+                </span>
+                <span className="topbar-meta-sep hidden xl:inline" aria-hidden="true">·</span>
+                <LiveClock />
+              </div>
+
+              <span className="topbar-divider-v hidden lg:block" aria-hidden="true" />
+
               <button
                 type="button"
                 onClick={openSwitchUserModal}
@@ -5757,22 +5681,20 @@ function WmsApp({
                     ? `${currentUser.employeeId} · ${currentUser.employeeName} (${currentUser.department}) — คลิกเพื่อสลับผู้ใช้`
                     : "เข้าสู่ระบบด้วยรหัสพนักงาน"
                 }
-                className="topbar-utility-user-text inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1 transition hover:bg-sky-500/20 cursor-pointer"
+                className="topbar-utility-user-text cursor-pointer"
               >
-                <span className="user-dot shrink-0" />
                 <span className="font-mono font-bold">
                   {currentUser ? currentUser.employeeId : "LOGIN"}
                 </span>
-                <span className="hidden sm:inline truncate max-w-[140px]">
+                <span className="hidden sm:inline truncate max-w-[130px]">
                   {currentUser ? currentUser.employeeName : "เข้าสู่ระบบ"}
                 </span>
                 {currentUser && currentUser.loginSection !== "all" && (
-                  <span className="hidden lg:inline text-[10px] opacity-80">
+                  <span className="hidden 2xl:inline text-[10.5px] opacity-75">
                     ({getSectionMeta(currentUser.loginSection).shortLabelTh})
                   </span>
                 )}
-                <ArrowLeftRight size={12} className="shrink-0 opacity-85" />
-                <span className="hidden md:inline text-[10px] font-bold">สลับผู้ใช้</span>
+                <ArrowLeftRight size={12} className="shrink-0 opacity-80" />
               </button>
 
               <button
@@ -5788,12 +5710,12 @@ function WmsApp({
                 {theme === "dark" ? (
                   <>
                     <Sun size={13} className="theme-icon sun-icon" />
-                    <span>{language === "th" ? "โหมดสว่าง" : "Light"}</span>
+                    <span className="hidden sm:inline">{language === "th" ? "โหมดสว่าง" : "Light"}</span>
                   </>
                 ) : (
                   <>
                     <Moon size={13} className="theme-icon moon-icon" />
-                    <span>{language === "th" ? "โหมดมืด" : "Dark"}</span>
+                    <span className="hidden sm:inline">{language === "th" ? "โหมดมืด" : "Dark"}</span>
                   </>
                 )}
               </button>

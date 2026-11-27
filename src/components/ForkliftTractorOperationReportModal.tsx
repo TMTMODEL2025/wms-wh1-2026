@@ -27,6 +27,44 @@ import {
   MhMaintenanceRecord,
   subscribeToMhMaintenance,
 } from "../services/forkliftDataService";
+import reportTractorEvImg from "../assets/images/report_tractor_ev_blue_1795748618171.jpg";
+import reportForkliftFlImg from "../assets/images/report_forklift_fl_1795747910218.jpg";
+import reportClampTruckScImg from "../assets/images/report_clamp_sc_grapple_1795748637295.jpg";
+
+// Primary reference white compact tow tractor photo (TT) & studio-matched models (Blue TTEV, FL, Wheeled Grapple SC)
+const REPORT_TRACTOR_TT_IMG = "/assets/aistudio/Screenshot_1_dd1b8f5b.jpg";
+
+interface ReportVehicleVisual {
+  src: string;
+  alt: string;
+  shortLabel: string;
+}
+
+const REPORT_VEHICLE_VISUALS: Record<
+  "Forklift" | "Tractor (EV)" | "Tractor" | "SC",
+  ReportVehicleVisual
+> = {
+  Forklift: {
+    src: reportForkliftFlImg,
+    alt: "รถโฟล์คลิฟท์ Forklift (FL) แสดงเสายกและงาหน้า",
+    shortLabel: "FL",
+  },
+  "Tractor (EV)": {
+    src: reportTractorEvImg,
+    alt: "รถลากไฟฟ้า Tractor (EV) สีฟ้า BYD T250",
+    shortLabel: "TTEV",
+  },
+  Tractor: {
+    src: REPORT_TRACTOR_TT_IMG,
+    alt: "รถลาก Tractor (TT) สีขาว กระจกหน้าบานใหญ่ ไฟไซเรนสีส้ม",
+    shortLabel: "TT",
+  },
+  SC: {
+    src: reportClampTruckScImg,
+    alt: "รถคีบ SC ล้อยาง แขนบูมไฮดรอลิกพร้อมหัวคีบเหล็ก",
+    shortLabel: "SC",
+  },
+};
 
 export interface ForkliftTractorOperationReportModalProps {
   isOpen: boolean;
@@ -276,6 +314,53 @@ function resolveVehicleSpecFromFleet(
     capacity,
     defaultTeam: preset?.defaultTeam,
   };
+}
+
+function getReportVehicleVisualByCode(
+  vehicleCode: string,
+  brandHint: string | undefined,
+  vehicles: Vehicle[]
+): ReportVehicleVisual | null {
+  const cleanCode = String(vehicleCode || "").trim().toUpperCase();
+  if (!cleanCode || cleanCode === "-") return null;
+
+  const spec = resolveVehicleSpecFromFleet(cleanCode, vehicles);
+  const hintUpper = String(brandHint || "").trim().toUpperCase();
+
+  if (spec.category === "Forklift" || cleanCode.startsWith("FL")) {
+    return REPORT_VEHICLE_VISUALS.Forklift;
+  }
+  if (
+    spec.category === "SC" ||
+    cleanCode.startsWith("SC") ||
+    hintUpper.includes("XINYUAN")
+  ) {
+    return REPORT_VEHICLE_VISUALS.SC;
+  }
+  if (
+    spec.category === "Tractor (EV)" ||
+    cleanCode.startsWith("TTEV") ||
+    hintUpper.includes("BYD") ||
+    hintUpper.includes("EV")
+  ) {
+    return REPORT_VEHICLE_VISUALS["Tractor (EV)"];
+  }
+  return REPORT_VEHICLE_VISUALS.Tractor;
+}
+
+function getReportVehicleVisualForAreaRow(
+  category: string,
+  brand: string
+): ReportVehicleVisual {
+  const brandUpper = String(brand || "").toUpperCase();
+  if (category === "Forklift") return REPORT_VEHICLE_VISUALS.Forklift;
+  if (category === "รถคีบ" || brandUpper.includes("XINYUAN")) {
+    return REPORT_VEHICLE_VISUALS.SC;
+  }
+  if (brandUpper.includes("BYD") || brandUpper.includes("EV")) {
+    return REPORT_VEHICLE_VISUALS["Tractor (EV)"];
+  }
+  return REPORT_VEHICLE_VISUALS.Tractor;
 }
 
 function isLeaveIndication(driverName: string, notes: string, workArea: string): boolean {
@@ -748,75 +833,55 @@ export const ForkliftTractorOperationReportModal: React.FC<
 
   const renderReportSheetContent = (forPrint = false) => (
     <div
-      className={`min-h-full w-full flex flex-col justify-between bg-[#f4f6f9] dark:bg-[#040d21] text-slate-900 dark:text-slate-100 overflow-hidden font-sans ${
+      className={`min-h-full w-full flex flex-col justify-between bg-[#f4f6f8] dark:bg-[#040d21] text-slate-900 dark:text-slate-100 overflow-hidden font-sans ${
         forPrint ? "print-sheet-container border-0 shadow-none bg-white text-slate-900" : ""
       }`}
     >
       {/* ===================================================================
-          1. TOP INDUSTRIAL BANNER HEADER
+          1. TOP REPORT EXECUTIVE BANNER (SAP FIORI STRUCTURED HEADER)
       =================================================================== */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-[#2c1905] via-[#1c2331] to-[#111827] px-4 py-3.5 sm:px-6 sm:py-4 text-white border-b-2 border-amber-500/70">
-        {/* Decorative Industrial Truss & Forklift Silhouette */}
-        <svg
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 h-full w-full opacity-20"
-          preserveAspectRatio="none"
-          viewBox="0 0 1400 140"
-        >
-          <defs>
-            <linearGradient id="rptBannerGrid" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.45" />
-              <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#f97316" stopOpacity="0.35" />
-            </linearGradient>
-          </defs>
-          <path
-            d="M0,25 L1400,25 M0,70 L1400,70 M0,115 L1400,115 M250,0 L180,140 M450,0 L380,140 M650,0 L580,140 M850,0 L780,140 M1050,0 L980,140 M1250,0 L1180,140"
-            stroke="url(#rptBannerGrid)"
-            strokeWidth="1.2"
-            fill="none"
-          />
-        </svg>
-
-        <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
-          {/* Left: Shift Icon + Orange Title Card + Shift Time Pill */}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-amber-300 bg-gradient-to-br from-amber-400 to-orange-600 text-slate-950 shadow-[0_0_20px_rgba(245,158,11,0.6)]">
-                {isMorning ? <Sun size={30} strokeWidth={2.4} /> : <Moon size={28} strokeWidth={2.4} />}
-              </div>
-
-              <div className="rounded-2xl border border-amber-300/50 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 px-5 py-2 shadow-lg">
-                <div className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow-xs">
-                  {shiftTitle}
-                </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                  <span className="text-xs sm:text-sm font-bold text-amber-50">
-                    รายงานการปฏิบัติงานรถยกและรถลาก
-                  </span>
-                  <span className="rounded-md bg-amber-300/90 px-2 py-0.5 font-mono text-[10px] font-black text-slate-950">
-                    Rev.00
-                  </span>
-                </div>
-              </div>
+      <div className="bg-gradient-to-r from-[#0f2537] via-[#13324a] to-[#0f2537] px-4 py-3 sm:px-6 text-white border-b-[3px] border-amber-500">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Left: Shift Icon + Structured Title & Shift Metadata */}
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border ${
+                isMorning
+                  ? "border-amber-300/60 bg-amber-500/20 text-amber-300"
+                  : "border-sky-300/60 bg-sky-500/20 text-sky-300"
+              }`}
+            >
+              {isMorning ? <Sun size={24} strokeWidth={2.2} /> : <Moon size={22} strokeWidth={2.2} />}
             </div>
 
-            <div>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/60 bg-gradient-to-r from-orange-600 to-amber-500 px-3.5 py-1 text-xs font-extrabold text-white shadow-sm">
-                <Clock size={13} />
-                <span>{shiftTimeText}</span>
-              </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-2">
+                <h1 className="text-lg sm:text-xl font-extrabold tracking-tight text-white">
+                  รายงานการปฏิบัติงานรถยกและรถลาก
+                </h1>
+                <span className="font-mono text-[11px] font-bold text-amber-300/90">
+                  Rev.00
+                </span>
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-200">
+                <span className={isMorning ? "text-amber-300 font-bold" : "text-sky-300 font-bold"}>
+                  {shiftTitle}
+                </span>
+                <span className="text-slate-400" aria-hidden="true">·</span>
+                <span className="inline-flex items-center gap-1 text-slate-200">
+                  <Clock size={12} className="text-slate-300 shrink-0" />
+                  <span>{shiftTimeText}</span>
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Right: Date Badge Card */}
-          <div className="flex items-center gap-3 rounded-2xl border border-orange-300/50 bg-gradient-to-br from-orange-500 to-red-600 px-4 py-2.5 text-white shadow-lg">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 border border-white/25">
-              <Calendar size={22} />
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-orange-100">วันที่</div>
-              <div className="font-mono text-lg sm:text-xl font-black tracking-tight tabular-nums">
+          {/* Right: Structured Report Date Block */}
+          <div className="flex items-center gap-2.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-white shrink-0">
+            <Calendar size={18} className="text-amber-300 shrink-0" />
+            <div className="leading-tight">
+              <div className="text-[10.5px] font-semibold text-slate-300">วันที่ปฏิบัติงาน</div>
+              <div className="font-mono text-base sm:text-lg font-extrabold tracking-tight tabular-nums text-white">
                 {formatReportShortDate(selectedDate)}
               </div>
             </div>
@@ -825,383 +890,406 @@ export const ForkliftTractorOperationReportModal: React.FC<
       </div>
 
       {/* ===================================================================
-          2. UPPER SUMMARY ROW (4 MAJOR BLOCKS)
+          2. UPPER SUMMARY SECTION (2 CLEAN SAP FIORI ROWS)
       =================================================================== */}
-      <div className="grid grid-cols-1 gap-3 p-3 sm:p-4 xl:grid-cols-12">
-        {/* BLOCK 1: 5 Vehicle Summary Vertical Cards (xl:col-span-5) */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 xl:col-span-5">
+      <div className="flex flex-col gap-3 p-3 sm:p-4">
+        {/* ROW A: 5 EQUAL VEHICLE SUMMARY CARDS (FULL WIDTH, ZERO OVERFLOW) */}
+        <div className="report-vehicle-cards-grid grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {/* Card 1: รถทั้งหมด */}
-          <div className="flex flex-col justify-between rounded-xl border-2 border-orange-400/80 bg-white dark:bg-[#071739] p-2.5 text-center shadow-xs">
-            <div className="flex items-center justify-center gap-1 text-xs font-extrabold text-orange-600 dark:text-amber-300">
-              <Truck size={14} />
-              <span>รถทั้งหมด</span>
+          <div className="flex flex-col justify-between overflow-hidden rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] shadow-2xs">
+            <div className="flex items-center justify-between bg-[#0f2537] dark:bg-[#0b234d] px-3 py-1.5 text-xs font-extrabold text-white">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                <Truck size={13} className="text-amber-400 shrink-0" />
+                <span>รถทั้งหมด</span>
+              </span>
+              <span className="font-mono text-[11px] font-bold text-slate-300 tabular-nums">
+                ALL
+              </span>
             </div>
-            <div className="my-4">
-              <div className="font-mono text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tabular-nums">
-                {areaVehicleSummary.grandTotal}
-              </div>
-              <div className="mt-0.5 text-xs font-bold text-slate-600 dark:text-slate-300">
-                คัน
-              </div>
-            </div>
-            <div className="flex items-center justify-center gap-1.5 text-slate-400 dark:text-sky-300/60 pb-1">
-              <Truck size={14} />
-              <Truck size={14} />
-              <Truck size={14} />
-            </div>
-          </div>
-
-          {/* Card 2: Forklift (FL) */}
-          <div className="flex flex-col justify-between overflow-hidden rounded-xl border-2 border-orange-400/80 bg-white dark:bg-[#071739] shadow-xs">
-            <div className="bg-gradient-to-r from-orange-500 to-amber-500 py-1.5 text-center text-[11px] font-black text-white">
-              Forklift (FL)
-            </div>
-            <div className="flex flex-1 flex-col items-center justify-center p-2">
-              {/* Forklift Vector Icon */}
-              <div className="flex h-14 w-16 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-400/20 text-amber-600 dark:text-amber-300">
-                <svg viewBox="0 0 64 48" className="h-11 w-14">
-                  <rect x="10" y="18" width="24" height="16" rx="3" fill="#f59e0b" />
-                  <path d="M16 18 L20 8 L32 8 L32 18 Z" fill="#fbbf24" opacity="0.85" />
-                  <rect x="36" y="6" width="3" height="30" fill="#334155" />
-                  <rect x="39" y="32" width="14" height="3" fill="#475569" />
-                  <circle cx="16" cy="36" r="5" fill="#1e293b" />
-                  <circle cx="30" cy="36" r="5" fill="#1e293b" />
-                </svg>
-              </div>
-              <div className="mt-2 font-mono text-base font-black text-slate-900 dark:text-white tabular-nums">
-                {areaVehicleSummary.cards.fl.total}{" "}
-                <span className="font-sans text-xs font-bold text-slate-600 dark:text-slate-300">
+            <div className="flex flex-1 flex-col items-center justify-between px-3 py-2.5 text-center">
+              <div className="flex items-baseline justify-center gap-1.5 py-1">
+                <span className="font-mono text-3xl font-black leading-none text-slate-900 dark:text-white tabular-nums">
+                  {areaVehicleSummary.grandTotal}
+                </span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-300">
                   คัน
                 </span>
               </div>
-            </div>
-            <div className="grid grid-cols-2 text-center text-[10px] font-extrabold text-white">
-              <div className="bg-emerald-700 py-1 tabular-nums">
-                ปกติ {areaVehicleSummary.cards.fl.normal}
-              </div>
-              <div className="bg-red-600 py-1 tabular-nums">
-                จอดซ่อม {areaVehicleSummary.cards.fl.broken}
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Tractor (EV) */}
-          <div className="flex flex-col justify-between overflow-hidden rounded-xl border-2 border-orange-400/80 bg-white dark:bg-[#071739] shadow-xs">
-            <div className="bg-gradient-to-r from-orange-500 to-amber-500 py-1.5 text-center text-[11px] font-black text-white">
-              Tractor (EV)
-            </div>
-            <div className="flex flex-1 flex-col items-center justify-center p-2">
-              <div className="flex h-14 w-16 items-center justify-center rounded-lg bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-400/20 text-sky-600 dark:text-sky-300">
-                <svg viewBox="0 0 64 48" className="h-11 w-14">
-                  <rect x="12" y="20" width="38" height="14" rx="3" fill="#0284c7" />
-                  <rect x="16" y="11" width="18" height="10" rx="2" fill="#38bdf8" />
-                  <circle cx="20" cy="36" r="5" fill="#1e293b" />
-                  <circle cx="42" cy="36" r="5" fill="#1e293b" />
-                </svg>
-              </div>
-              <div className="mt-2 font-mono text-base font-black text-slate-900 dark:text-white tabular-nums">
-                {areaVehicleSummary.cards.ev.total}{" "}
-                <span className="font-sans text-xs font-bold text-slate-600 dark:text-slate-300">
-                  คัน
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 text-center text-[10px] font-extrabold text-white">
-              <div className="bg-emerald-700 py-1 tabular-nums">
-                ปกติ {areaVehicleSummary.cards.ev.normal}
-              </div>
-              <div className="bg-red-600 py-1 tabular-nums">
-                จอดซ่อม {areaVehicleSummary.cards.ev.broken}
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Tractor */}
-          <div className="flex flex-col justify-between overflow-hidden rounded-xl border-2 border-orange-400/80 bg-white dark:bg-[#071739] shadow-xs">
-            <div className="bg-gradient-to-r from-orange-500 to-amber-500 py-1.5 text-center text-[11px] font-black text-white">
-              Tractor
-            </div>
-            <div className="flex flex-1 flex-col items-center justify-center p-2">
-              <div className="flex h-14 w-16 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200">
-                <svg viewBox="0 0 64 48" className="h-11 w-14">
-                  <rect x="10" y="20" width="42" height="14" rx="3" fill="#64748b" />
-                  <rect x="28" y="11" width="20" height="10" rx="2" fill="#94a3b8" />
-                  <circle cx="18" cy="36" r="5" fill="#1e293b" />
-                  <circle cx="44" cy="36" r="5" fill="#1e293b" />
-                </svg>
-              </div>
-              <div className="mt-2 font-mono text-base font-black text-slate-900 dark:text-white tabular-nums">
-                {areaVehicleSummary.cards.tractor.total}{" "}
-                <span className="font-sans text-xs font-bold text-slate-600 dark:text-slate-300">
-                  คัน
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 text-center text-[10px] font-extrabold text-white">
-              <div className="bg-emerald-700 py-1 tabular-nums">
-                ปกติ {areaVehicleSummary.cards.tractor.normal}
-              </div>
-              <div className="bg-red-600 py-1 tabular-nums">
-                จอดซ่อม {areaVehicleSummary.cards.tractor.broken}
-              </div>
-            </div>
-          </div>
-
-          {/* Card 5: SC (รถคีบ) */}
-          <div className="flex flex-col justify-between overflow-hidden rounded-xl border-2 border-orange-400/80 bg-white dark:bg-[#071739] shadow-xs">
-            <div className="bg-gradient-to-r from-orange-500 to-amber-500 py-1.5 text-center text-[11px] font-black text-white">
-              SC
-            </div>
-            <div className="flex flex-1 flex-col items-center justify-center p-2">
-              <div className="flex h-14 w-16 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-400/20 text-orange-600 dark:text-orange-300">
-                <svg viewBox="0 0 64 48" className="h-11 w-14">
-                  <rect x="12" y="22" width="22" height="12" rx="2" fill="#ea580c" />
-                  <path d="M32 24 L46 10 L54 18" stroke="#c2410c" strokeWidth="3.5" fill="none" />
-                  <circle cx="18" cy="36" r="4.5" fill="#1e293b" />
-                  <circle cx="28" cy="36" r="4.5" fill="#1e293b" />
-                </svg>
-              </div>
-              <div className="mt-2 font-mono text-base font-black text-slate-900 dark:text-white tabular-nums">
-                {areaVehicleSummary.cards.sc.total}{" "}
-                <span className="font-sans text-xs font-bold text-slate-600 dark:text-slate-300">
-                  คัน
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 text-center text-[10px] font-extrabold text-white">
-              <div className="bg-emerald-700 py-1 tabular-nums">
-                ปกติ {areaVehicleSummary.cards.sc.normal}
-              </div>
-              <div className="bg-red-600 py-1 tabular-nums">
-                จอดซ่อม {areaVehicleSummary.cards.sc.broken}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* BLOCK 2: ประจำพื้นที่ | แยกประเภทรถและรุ่น (xl:col-span-3) */}
-        <div className="flex flex-col overflow-hidden rounded-xl border-2 border-blue-600/80 bg-white dark:bg-[#071739] shadow-xs xl:col-span-3">
-          <div className="flex items-center justify-between bg-gradient-to-r from-blue-800 to-blue-600 px-3 py-1.5 text-xs font-extrabold text-white">
-            <span>ประจำพื้นที่</span>
-            <span className="text-[11px] text-sky-100">แยกประเภทรถและรุ่น</span>
-          </div>
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full border-collapse text-[11px]">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-sky-100 dark:bg-[#0b2559] font-extrabold text-slate-800 dark:text-sky-100">
-                  <th className="px-2 py-1 text-left">ประเภทรถ</th>
-                  <th className="px-2 py-1 text-center">รุ่น</th>
-                  <th className="bg-emerald-700 px-2 py-1 text-center text-white">ปกติ</th>
-                  <th className="bg-red-600 px-2 py-1 text-center text-white">จอดซ่อม</th>
-                  <th className="bg-blue-900 px-2 py-1 text-center text-white">รวม</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-sky-400/15 font-semibold">
-                {areaVehicleSummary.rows.map((r, idx) => {
-                  const showCategory =
-                    idx === 0 ||
-                    areaVehicleSummary.rows[idx - 1].category !== r.category;
+              {/* 4-Vehicle Fleet Preview Strip in 1 clean row */}
+              <div className="mt-2 grid w-full grid-cols-4 gap-1">
+                {(["Forklift", "Tractor (EV)", "Tractor", "SC"] as const).map((catKey) => {
+                  const vis = REPORT_VEHICLE_VISUALS[catKey];
                   return (
-                    <tr
-                      key={`area-model-${r.brand}`}
-                      className="hover:bg-sky-50/60 dark:hover:bg-sky-400/10"
+                    <div
+                      key={`fleet-mini-${catKey}`}
+                      className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/60 bg-white p-0.5"
                     >
-                      <td className="px-2 py-1 font-extrabold text-slate-800 dark:text-white">
-                        {showCategory ? r.category : ""}
-                      </td>
-                      <td className="px-2 py-1 text-center text-slate-700 dark:text-slate-200">
-                        {r.brand}
-                      </td>
-                      <td className="px-2 py-1 text-center font-mono font-extrabold text-emerald-700 dark:text-emerald-400 tabular-nums">
-                        {r.normal}
-                      </td>
-                      <td className="px-2 py-1 text-center font-mono font-extrabold text-red-600 dark:text-rose-400 tabular-nums">
-                        {r.broken}
-                      </td>
-                      <td className="px-2 py-1 text-center font-mono font-extrabold text-slate-900 dark:text-white tabular-nums">
-                        {r.total}
-                      </td>
-                    </tr>
+                      <img
+                        src={vis.src}
+                        alt={vis.alt}
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-contain select-none"
+                      />
+                    </div>
                   );
                 })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-blue-600/60 bg-slate-100 dark:bg-[#09204f] font-extrabold">
-                  <td colSpan={2} className="px-2 py-1.5 text-right text-slate-800 dark:text-white">
-                    รวม
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-emerald-700 dark:text-emerald-300 tabular-nums">
-                    {areaVehicleSummary.totalNormal}
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-red-600 dark:text-rose-300 tabular-nums">
-                    {areaVehicleSummary.totalBroken}
-                  </td>
-                  <td className="bg-blue-800 px-2 py-1.5 text-center font-mono text-white tabular-nums">
-                    {areaVehicleSummary.grandTotal}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-sky-400/20 border-t border-slate-200 dark:border-sky-400/20 text-[11px] font-bold">
+              <div className="flex items-center justify-between gap-1 whitespace-nowrap bg-emerald-50/90 dark:bg-emerald-950/45 px-2.5 py-1.5 text-emerald-800 dark:text-emerald-300">
+                <span>ปกติ</span>
+                <span className="font-mono font-extrabold tabular-nums">
+                  {areaVehicleSummary.totalNormal}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-1 whitespace-nowrap bg-rose-50/90 dark:bg-rose-950/45 px-2.5 py-1.5 text-rose-700 dark:text-rose-300">
+                <span>จอดซ่อม</span>
+                <span className="font-mono font-extrabold tabular-nums">
+                  {areaVehicleSummary.totalBroken}
+                </span>
+              </div>
+            </div>
           </div>
+
+          {/* Cards 2-5: Forklift (FL), Tractor (EV), Tractor (TT), SC (รถคีบ) */}
+          {(
+            [
+              {
+                key: "fl",
+                title: "Forklift (FL)",
+                visual: REPORT_VEHICLE_VISUALS.Forklift,
+                stats: areaVehicleSummary.cards.fl,
+              },
+              {
+                key: "ev",
+                title: "Tractor (EV)",
+                visual: REPORT_VEHICLE_VISUALS["Tractor (EV)"],
+                stats: areaVehicleSummary.cards.ev,
+              },
+              {
+                key: "tractor",
+                title: "Tractor (TT)",
+                visual: REPORT_VEHICLE_VISUALS.Tractor,
+                stats: areaVehicleSummary.cards.tractor,
+              },
+              {
+                key: "sc",
+                title: "SC (รถคีบ)",
+                visual: REPORT_VEHICLE_VISUALS.SC,
+                stats: areaVehicleSummary.cards.sc,
+              },
+            ] as const
+          ).map((card) => (
+            <div
+              key={`summary-card-${card.key}`}
+              className="flex flex-col justify-between overflow-hidden rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] shadow-2xs"
+            >
+              <div className="flex items-center justify-between bg-[#0a6ed1] dark:bg-[#0e4280] px-3 py-1.5 text-xs font-extrabold text-white">
+                <span className="whitespace-nowrap">{card.title}</span>
+                <span className="font-mono text-xs font-black tabular-nums whitespace-nowrap">
+                  {card.stats.total} คัน
+                </span>
+              </div>
+              <div className="flex flex-1 items-center justify-center p-2.5">
+                <div className="flex h-[84px] w-full items-center justify-center overflow-hidden rounded-md border border-slate-200/80 dark:border-slate-600/60 bg-white p-1.5">
+                  <img
+                    src={card.visual.src}
+                    alt={card.visual.alt}
+                    referrerPolicy="no-referrer"
+                    className="h-full w-full object-contain select-none"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-slate-200 dark:divide-sky-400/20 border-t border-slate-200 dark:border-sky-400/20 text-[11px] font-bold">
+                <div className="flex items-center justify-between gap-1 whitespace-nowrap bg-emerald-50/90 dark:bg-emerald-950/45 px-2.5 py-1.5 text-emerald-800 dark:text-emerald-300">
+                  <span>ปกติ</span>
+                  <span className="font-mono font-extrabold tabular-nums">
+                    {card.stats.normal}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-1 whitespace-nowrap bg-rose-50/90 dark:bg-rose-950/45 px-2.5 py-1.5 text-rose-700 dark:text-rose-300">
+                  <span>จอดซ่อม</span>
+                  <span className="font-mono font-extrabold tabular-nums">
+                    {card.stats.broken}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* BLOCK 3: รถสำรอง & จอดซ่อม (xl:col-span-2) */}
-        <div className="flex flex-col overflow-hidden rounded-xl border-2 border-emerald-700/80 bg-white dark:bg-[#071739] shadow-xs xl:col-span-2">
-          <div className="bg-gradient-to-r from-emerald-800 to-emerald-600 px-3 py-1.5 text-xs font-extrabold text-white">
-            รถสำรอง ({config.spareVehicles.length})
-          </div>
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full border-collapse text-[11px]">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-emerald-50 dark:bg-emerald-950/50 font-extrabold text-slate-700 dark:text-emerald-200">
-                  <th className="px-2 py-1 text-center">รหัสรถ</th>
-                  <th className="px-2 py-1 text-center">รุ่น</th>
-                  <th className="px-2 py-1 text-center">พิกัด</th>
-                  <th className="px-2 py-1 text-center">หมายเหตุ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-sky-400/15 font-semibold">
-                {config.spareVehicles.map((sp) => (
-                  <tr key={sp.id}>
-                    <td className="px-2 py-1 text-center font-mono font-extrabold text-emerald-800 dark:text-emerald-300">
-                      {sp.vehicleCode}
+        {/* ROW B: 3 BALANCED SUMMARY TABLES (12-COL SAP FIORI GRID) */}
+        <div className="report-summary-tables-grid grid grid-cols-1 gap-3 lg:grid-cols-12">
+          {/* BLOCK 2: ประจำพื้นที่ | แยกประเภทรถและรุ่น (lg:col-span-5) */}
+          <div className="flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] shadow-2xs lg:col-span-5">
+            <div className="flex h-9 items-center justify-between bg-[#0f2537] dark:bg-[#0b234d] px-3.5 text-xs font-extrabold text-white">
+              <span>ประจำพื้นที่</span>
+              <span className="text-[11px] font-semibold text-sky-200">แยกประเภทรถและรุ่น</span>
+            </div>
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full border-collapse text-[11.5px]">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-100 dark:bg-[#09204f] text-[11px] font-bold text-slate-700 dark:text-sky-100">
+                    <th className="px-3 py-1.5 text-left whitespace-nowrap">ประเภทรถ</th>
+                    <th className="px-2.5 py-1.5 text-left whitespace-nowrap">รุ่น</th>
+                    <th className="w-16 bg-emerald-700 px-2 py-1.5 text-center text-white whitespace-nowrap">ปกติ</th>
+                    <th className="w-16 bg-rose-600 px-2 py-1.5 text-center text-white whitespace-nowrap">จอดซ่อม</th>
+                    <th className="w-16 bg-[#0a6ed1] px-2 py-1.5 text-center text-white whitespace-nowrap">รวม</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/80 dark:divide-sky-400/15 font-medium">
+                  {areaVehicleSummary.rows.map((r, idx) => {
+                    const showCategory =
+                      idx === 0 ||
+                      areaVehicleSummary.rows[idx - 1].category !== r.category;
+                    const rowVisual = getReportVehicleVisualForAreaRow(r.category, r.brand);
+                    return (
+                      <tr
+                        key={`area-model-${r.brand}`}
+                        className="hover:bg-slate-50 dark:hover:bg-sky-400/10"
+                      >
+                        <td className="px-3 py-1.5 font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          {showCategory ? r.category : ""}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-left text-slate-700 dark:text-slate-200">
+                          <div className="inline-flex items-center gap-2">
+                            <span className="flex h-5 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/70 bg-white p-0.5">
+                              <img
+                                src={rowVisual.src}
+                                alt={rowVisual.alt}
+                                referrerPolicy="no-referrer"
+                                className="h-full w-full object-contain select-none"
+                              />
+                            </span>
+                            <span className="whitespace-nowrap font-semibold">{r.brand}</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-mono font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                          {r.normal}
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-mono font-bold text-rose-600 dark:text-rose-400 tabular-nums">
+                          {r.broken}
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-mono font-extrabold text-slate-900 dark:text-white tabular-nums">
+                          {r.total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 dark:border-sky-400/30 bg-slate-100 dark:bg-[#09204f] font-extrabold">
+                    <td colSpan={2} className="px-3 py-1.5 text-right text-slate-800 dark:text-white">
+                      รวมทั้งหมด
                     </td>
-                    <td className="px-2 py-1 text-center text-slate-700 dark:text-slate-200">
-                      {sp.brand}
+                    <td className="px-2 py-1.5 text-center font-mono text-emerald-700 dark:text-emerald-300 tabular-nums">
+                      {areaVehicleSummary.totalNormal}
                     </td>
-                    <td className="px-2 py-1 text-center font-mono text-slate-700 dark:text-slate-300">
-                      {sp.capacity}
+                    <td className="px-2 py-1.5 text-center font-mono text-rose-600 dark:text-rose-300 tabular-nums">
+                      {areaVehicleSummary.totalBroken}
                     </td>
-                    <td className="px-2 py-1 text-center text-slate-600 dark:text-slate-300">
-                      {sp.notes}
+                    <td className="bg-[#0a6ed1] px-2 py-1.5 text-center font-mono text-white tabular-nums">
+                      {areaVehicleSummary.grandTotal}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Sub-header: จอดซ่อม */}
-            <div className="bg-gradient-to-r from-red-700 to-red-600 px-3 py-1 text-xs font-extrabold text-white">
-              จอดซ่อม ({config.repairVehicles.length})
+                </tfoot>
+              </table>
             </div>
-            <table className="w-full border-collapse text-[11px]">
-              <tbody className="divide-y divide-slate-200 dark:divide-sky-400/15 font-semibold">
-                {config.repairVehicles.map((rp) => (
-                  <tr key={rp.id} className="bg-red-50/40 dark:bg-rose-950/20">
-                    <td className="px-2 py-1 text-center font-mono font-extrabold text-red-700 dark:text-rose-300">
-                      {rp.vehicleCode}
-                    </td>
-                    <td className="px-2 py-1 text-center text-slate-700 dark:text-slate-200">
-                      {rp.brand}
-                    </td>
-                    <td className="px-2 py-1 text-center font-mono text-slate-700 dark:text-slate-300">
-                      {rp.capacity}
-                    </td>
-                    <td className="px-2 py-1 text-center font-bold text-red-600 dark:text-rose-300">
-                      {rp.notes}
-                    </td>
+          </div>
+
+          {/* BLOCK 3: รถสำรอง & จอดซ่อม (lg:col-span-4) */}
+          <div className="flex flex-col overflow-hidden rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] shadow-2xs lg:col-span-4">
+            <div className="flex h-9 items-center justify-between bg-emerald-700 px-3.5 text-xs font-extrabold text-white">
+              <span>รถสำรอง</span>
+              <span className="font-mono tabular-nums">{config.spareVehicles.length} คัน</span>
+            </div>
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full border-collapse text-[11.5px]">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-100 dark:bg-[#09204f] text-[11px] font-bold text-slate-700 dark:text-sky-100">
+                    <th className="px-2.5 py-1.5 text-left whitespace-nowrap">รหัสรถ</th>
+                    <th className="px-2 py-1.5 text-left whitespace-nowrap">รุ่น</th>
+                    <th className="px-2 py-1.5 text-center whitespace-nowrap">พิกัด</th>
+                    <th className="px-2.5 py-1.5 text-left whitespace-nowrap">หมายเหตุ</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-200/80 dark:divide-sky-400/15 font-medium">
+                  {config.spareVehicles.map((sp) => {
+                    const spVis = getReportVehicleVisualByCode(
+                      sp.vehicleCode,
+                      sp.brand,
+                      vehicles
+                    );
+                    return (
+                      <tr key={sp.id} className="hover:bg-slate-50 dark:hover:bg-sky-400/10">
+                        <td className="px-2.5 py-1.5 font-mono font-bold text-emerald-800 dark:text-emerald-300 whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            {spVis && (
+                              <span className="flex h-5 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/70 bg-white p-0.5">
+                                <img
+                                  src={spVis.src}
+                                  alt={spVis.alt}
+                                  referrerPolicy="no-referrer"
+                                  className="h-full w-full object-contain select-none"
+                                />
+                              </span>
+                            )}
+                            <span>{sp.vehicleCode}</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 text-left text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                          {sp.brand}
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                          {sp.capacity}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-left text-slate-600 dark:text-slate-300">
+                          {sp.notes}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
 
-        {/* BLOCK 4: พนักงานทั้งหมด ณ วันนี้ (xl:col-span-2) */}
-        <div className="flex flex-col justify-between overflow-hidden rounded-xl border-2 border-emerald-800/80 bg-white dark:bg-[#071739] shadow-xs xl:col-span-2">
-          <div>
-            <div className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-900 to-emerald-700 px-3 py-1.5 text-xs font-extrabold text-white">
-              <Users size={14} />
-              <span>พนักงานทั้งหมด ณ วันนี้</span>
+              {/* Sub-header: จอดซ่อม */}
+              <div className="flex h-8 items-center justify-between border-t border-slate-200 dark:border-sky-400/20 bg-rose-700 px-3.5 text-xs font-extrabold text-white">
+                <span>จอดซ่อม</span>
+                <span className="font-mono tabular-nums">{config.repairVehicles.length} คัน</span>
+              </div>
+              <table className="w-full border-collapse text-[11.5px]">
+                <tbody className="divide-y divide-slate-200/80 dark:divide-sky-400/15 font-medium">
+                  {config.repairVehicles.map((rp) => {
+                    const rpVis = getReportVehicleVisualByCode(
+                      rp.vehicleCode,
+                      rp.brand,
+                      vehicles
+                    );
+                    return (
+                      <tr key={rp.id} className="bg-rose-50/40 dark:bg-rose-950/20">
+                        <td className="px-2.5 py-1.5 font-mono font-bold text-rose-700 dark:text-rose-300 whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5">
+                            {rpVis && (
+                              <span className="flex h-5 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/70 bg-white p-0.5">
+                                <img
+                                  src={rpVis.src}
+                                  alt={rpVis.alt}
+                                  referrerPolicy="no-referrer"
+                                  className="h-full w-full object-contain select-none"
+                                />
+                              </span>
+                            )}
+                            <span>{rp.vehicleCode}</span>
+                          </div>
+                        </td>
+                        <td className="px-2 py-1.5 text-left text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                          {rp.brand}
+                        </td>
+                        <td className="px-2 py-1.5 text-center font-mono text-slate-700 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                          {rp.capacity}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-left font-semibold text-rose-700 dark:text-rose-300">
+                          {rp.notes}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            <table className="w-full border-collapse text-[11px]">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-emerald-100/80 dark:bg-emerald-950/50 font-extrabold text-slate-800 dark:text-emerald-200">
-                  <th className="px-2.5 py-1.5 text-left">รายการ</th>
-                  <th className="px-2 py-1.5 text-center">จำนวน</th>
-                  <th className="px-2 py-1.5 text-center">คน</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 dark:divide-sky-400/15 font-bold">
-                <tr>
-                  <td className="px-2.5 py-1.5 text-slate-800 dark:text-slate-100">
-                    พนักงานทั้งหมด
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
-                    {manpowerSummary.totalStaff}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-slate-600 dark:text-slate-300">คน</td>
-                </tr>
-                <tr>
-                  <td className="px-2.5 py-1.5 text-slate-800 dark:text-slate-100">
-                    พนักงานลา
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-sm font-black text-red-600 dark:text-rose-400 tabular-nums">
-                    {manpowerSummary.leaveStaff}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-slate-600 dark:text-slate-300">คน</td>
-                </tr>
-                <tr>
-                  <td className="px-2.5 py-1.5 text-slate-800 dark:text-slate-100">
-                    พนักงานมาปฏิบัติงาน
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
-                    {manpowerSummary.workingStaff}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-slate-600 dark:text-slate-300">คน</td>
-                </tr>
-                <tr>
-                  <td className="px-2.5 py-1.5 text-slate-800 dark:text-slate-100">
-                    ออกโอที
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
-                    {manpowerSummary.earlyExitCount}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-slate-600 dark:text-slate-300">คน</td>
-                </tr>
-                <tr>
-                  <td className="px-2.5 py-1.5 text-slate-800 dark:text-slate-100">
-                    ปฏิบัติงานช่วง OT
-                  </td>
-                  <td className="px-2 py-1.5 text-center font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
-                    {manpowerSummary.otWorkCount}
-                  </td>
-                  <td className="px-2 py-1.5 text-center text-slate-600 dark:text-slate-300">คน</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
 
-          <div className="bg-emerald-800 py-1.5 text-center text-xs font-extrabold text-white">
-            {config.replacementRecruitText}
+          {/* BLOCK 4: พนักงานทั้งหมด ณ วันนี้ (lg:col-span-3) */}
+          <div className="flex flex-col justify-between overflow-hidden rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] shadow-2xs lg:col-span-3">
+            <div>
+              <div className="flex h-9 items-center gap-2 bg-[#0f4c5c] dark:bg-[#0d3b52] px-3.5 text-xs font-extrabold text-white">
+                <Users size={14} className="shrink-0" />
+                <span>พนักงานทั้งหมด ณ วันนี้</span>
+              </div>
+              <table className="w-full border-collapse text-[11.5px]">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-100 dark:bg-[#09204f] text-[11px] font-bold text-slate-700 dark:text-sky-100">
+                    <th className="px-3 py-1.5 text-left whitespace-nowrap">รายการ</th>
+                    <th className="w-16 px-2 py-1.5 text-right whitespace-nowrap">จำนวน</th>
+                    <th className="w-14 px-2.5 py-1.5 text-center whitespace-nowrap">หน่วย</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/80 dark:divide-sky-400/15 font-semibold">
+                  <tr>
+                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
+                      พนักงานทั้งหมด
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                      {manpowerSummary.totalStaff}
+                    </td>
+                    <td className="px-2.5 py-2 text-center text-slate-500 dark:text-slate-300">คน</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
+                      พนักงานลา
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono text-sm font-black text-rose-600 dark:text-rose-400 tabular-nums">
+                      {manpowerSummary.leaveStaff}
+                    </td>
+                    <td className="px-2.5 py-2 text-center text-slate-500 dark:text-slate-300">คน</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
+                      พนักงานมาปฏิบัติงาน
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono text-sm font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
+                      {manpowerSummary.workingStaff}
+                    </td>
+                    <td className="px-2.5 py-2 text-center text-slate-500 dark:text-slate-300">คน</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
+                      ออกโอที
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                      {manpowerSummary.earlyExitCount}
+                    </td>
+                    <td className="px-2.5 py-2 text-center text-slate-500 dark:text-slate-300">คน</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 text-slate-800 dark:text-slate-100">
+                      ปฏิบัติงานช่วง OT
+                    </td>
+                    <td className="px-2 py-2 text-right font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                      {manpowerSummary.otWorkCount}
+                    </td>
+                    <td className="px-2.5 py-2 text-center text-slate-500 dark:text-slate-300">คน</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-slate-200 dark:border-sky-400/20 bg-[#0f4c5c] dark:bg-[#0d3b52] px-3 py-2 text-center text-xs font-extrabold text-white">
+              {config.replacementRecruitText}
+            </div>
           </div>
         </div>
       </div>
 
       {/* ===================================================================
-          3. SECTION DIVIDER BAR WITH HAZARD STRIPES
+          3. SECTION DIVIDER BAR
       =================================================================== */}
-      <div className="mx-3 sm:mx-4 flex items-center justify-between overflow-hidden rounded-xl bg-gradient-to-r from-orange-600 via-amber-500 to-orange-500 px-4 py-2 text-white shadow-sm">
-        <div className="flex items-center gap-2 text-xs sm:text-sm font-black tracking-wide">
-          <Truck size={16} />
+      <div className="mx-3 sm:mx-4 flex items-center justify-between rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] px-4 py-2 text-slate-900 dark:text-white shadow-2xs">
+        <div className="flex items-center gap-2 text-xs sm:text-sm font-extrabold tracking-tight">
+          <Truck size={15} className="text-[#0a6ed1] dark:text-sky-400 shrink-0" />
           <span>
-            แผนการทำงานประจำวัน – {shiftTitle} | ตารางทีม A / B / C อ้างอิง Excel ต้นฉบับ
+            แผนการทำงานประจำวัน · {shiftTitle} (ตารางทีม A / B / C)
           </span>
         </div>
-        <div
-          aria-hidden="true"
-          className="hidden sm:block h-4 w-32 rounded-xs border border-amber-300/60"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(-45deg, #111827, #111827 8px, #f59e0b 8px, #f59e0b 16px)",
-          }}
-        />
+        <span className="hidden sm:inline font-mono text-[11px] font-semibold text-slate-500 dark:text-sky-200/80 tabular-nums">
+          {formatReportShortDate(selectedDate)}
+        </span>
       </div>
 
       {/* ===================================================================
           4. THREE TEAM COLUMNS (ทีม A / ทีม B / ทีม C)
       =================================================================== */}
-      <div className="flex-1 grid grid-cols-1 gap-3 p-3 sm:p-4 lg:grid-cols-3">
+      <div className="report-teams-grid flex-1 grid grid-cols-1 gap-3 p-3 sm:p-4 lg:grid-cols-3">
         {(
           [
             {
@@ -1233,73 +1321,79 @@ export const ForkliftTractorOperationReportModal: React.FC<
           return (
             <div
               key={teamMeta.teamKey}
-              className="flex flex-col justify-between overflow-hidden rounded-2xl border-2 border-slate-200 dark:border-sky-400/30 bg-white dark:bg-[#071739] shadow-sm"
+              className="flex flex-col justify-between overflow-hidden rounded-lg border border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#071739] shadow-2xs"
             >
               <div>
-                {/* Team Card Orange Header */}
-                <div className="flex items-center justify-between bg-gradient-to-r from-orange-600 to-amber-500 px-3.5 py-2 text-white">
-                  <span className="text-sm font-black tracking-wide">{teamMeta.title}</span>
-                  <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-[11px] font-extrabold text-white">
+                {/* Team Card Header */}
+                <div className="flex h-9 items-center justify-between bg-[#0f2537] dark:bg-[#0b234d] px-3.5 text-white">
+                  <span className="text-xs sm:text-sm font-extrabold tracking-tight truncate">
+                    {teamMeta.title}
+                  </span>
+                  <span className="font-mono text-[11px] font-bold text-amber-300 shrink-0 ml-2">
                     {reportShift}
                   </span>
                 </div>
 
-                {/* Team Lead & Area Info */}
-                <div className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-50/70 dark:bg-[#09204f]/60 px-3.5 py-2 text-xs">
-                  <div className="font-extrabold text-slate-900 dark:text-white">
-                    หัวหน้าทีม: <span>{teamMeta.lead}</span>
-                  </div>
-                  <div className="mt-0.5 font-extrabold text-slate-800 dark:text-sky-200">
-                    พื้นที่: <span>{teamMeta.area}</span>
+                {/* Team Lead, Area & 6 Compact Single-Line KPI Cells */}
+                <div className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-50/80 dark:bg-[#09204f]/60 px-3.5 py-2.5 text-xs">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                    <div className="font-bold text-slate-900 dark:text-white">
+                      <span className="text-slate-500 dark:text-slate-400 font-semibold">หัวหน้าทีม:</span>{" "}
+                      {teamMeta.lead}
+                    </div>
+                    <div className="font-bold text-slate-700 dark:text-sky-200">
+                      <span className="text-slate-500 dark:text-slate-400 font-semibold">พื้นที่:</span>{" "}
+                      {teamMeta.area}
+                    </div>
                   </div>
 
-                  {/* 6 Mini KPI Boxes */}
-                  <div className="mt-2 grid grid-cols-6 gap-1.5 text-center">
-                    <div className="rounded-lg border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/50 py-1">
-                      <div className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300">
+                  {/* 6 Uniform KPI Boxes */}
+                  <div className="mt-2 grid grid-cols-6 gap-1 text-center">
+                    <div className="rounded border border-emerald-200 dark:border-emerald-500/35 bg-emerald-50/80 dark:bg-emerald-950/45 py-1 px-0.5">
+                      <div className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 whitespace-nowrap">
                         ปกติ
                       </div>
-                      <div className="font-mono text-sm font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
+                      <div className="font-mono text-sm font-black text-emerald-700 dark:text-emerald-300 tabular-nums leading-tight">
                         {stats.normalVehiclesCount}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-red-300 dark:border-rose-500/40 bg-red-50 dark:bg-rose-950/50 py-1">
-                      <div className="text-[10px] font-bold text-red-700 dark:text-rose-300">
+                    <div className="rounded border border-rose-200 dark:border-rose-500/35 bg-rose-50/80 dark:bg-rose-950/45 py-1 px-0.5">
+                      <div className="text-[10px] font-bold text-rose-700 dark:text-rose-300 whitespace-nowrap">
                         จอดซ่อม
                       </div>
-                      <div className="font-mono text-sm font-black text-red-600 dark:text-rose-300 tabular-nums">
+                      <div className="font-mono text-sm font-black text-rose-600 dark:text-rose-300 tabular-nums leading-tight">
                         {stats.repairVehiclesCount}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#041029] py-1">
-                      <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                    <div className="rounded border border-slate-200 dark:border-slate-600/70 bg-white dark:bg-[#041029] py-1 px-0.5">
+                      <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         ทั้งหมด
                       </div>
-                      <div className="font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                      <div className="font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums leading-tight">
                         {stats.totalVehiclesCount}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-teal-300 dark:border-teal-500/40 bg-teal-50 dark:bg-teal-950/50 py-1">
-                      <div className="text-[10px] font-bold text-teal-800 dark:text-teal-300">
+                    <div className="rounded border border-teal-200 dark:border-teal-500/35 bg-teal-50/80 dark:bg-teal-950/45 py-1 px-0.5">
+                      <div className="text-[10px] font-bold text-teal-800 dark:text-teal-300 whitespace-nowrap">
                         มาทำงาน
                       </div>
-                      <div className="font-mono text-sm font-black text-teal-700 dark:text-teal-300 tabular-nums">
+                      <div className="font-mono text-sm font-black text-teal-700 dark:text-teal-300 tabular-nums leading-tight">
                         {stats.activeEmpCount}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-red-300 dark:border-rose-500/40 bg-red-50 dark:bg-rose-950/50 py-1">
-                      <div className="text-[10px] font-bold text-red-700 dark:text-rose-300">
+                    <div className="rounded border border-rose-200 dark:border-rose-500/35 bg-rose-50/80 dark:bg-rose-950/45 py-1 px-0.5">
+                      <div className="text-[10px] font-bold text-rose-700 dark:text-rose-300 whitespace-nowrap">
                         ลา
                       </div>
-                      <div className="font-mono text-sm font-black text-red-600 dark:text-rose-300 tabular-nums">
+                      <div className="font-mono text-sm font-black text-rose-600 dark:text-rose-300 tabular-nums leading-tight">
                         {stats.leaveEmpCount}
                       </div>
                     </div>
-                    <div className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#041029] py-1">
-                      <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                    <div className="rounded border border-slate-200 dark:border-slate-600/70 bg-white dark:bg-[#041029] py-1 px-0.5">
+                      <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
                         พนง.รวม
                       </div>
-                      <div className="font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums">
+                      <div className="font-mono text-sm font-black text-slate-900 dark:text-white tabular-nums leading-tight">
                         {stats.totalEmpCount}
                       </div>
                     </div>
@@ -1310,16 +1404,16 @@ export const ForkliftTractorOperationReportModal: React.FC<
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-[11px]">
                     <thead>
-                      <tr className="bg-[#0f2537] dark:bg-[#041029] text-white">
-                        <th className="px-2 py-1.5 text-center font-extrabold">ทะเบียนรถ</th>
-                        <th className="px-1.5 py-1.5 text-center font-extrabold">รุ่น</th>
-                        <th className="px-1.5 py-1.5 text-center font-extrabold">พิกัด</th>
-                        <th className="px-2 py-1.5 text-left font-extrabold">ชื่อพนักงานขับรถ</th>
-                        <th className="px-2 py-1.5 text-center font-extrabold">สถานที่</th>
-                        <th className="px-2 py-1.5 text-center font-extrabold">หมายเหตุ</th>
+                      <tr className="border-b border-slate-200 dark:border-sky-400/20 bg-slate-100 dark:bg-[#041029] text-slate-700 dark:text-sky-100">
+                        <th className="px-2 py-1.5 text-left font-bold whitespace-nowrap">ทะเบียนรถ</th>
+                        <th className="px-1.5 py-1.5 text-left font-bold whitespace-nowrap">รุ่น</th>
+                        <th className="px-1.5 py-1.5 text-center font-bold whitespace-nowrap">พิกัด</th>
+                        <th className="px-2 py-1.5 text-left font-bold whitespace-nowrap">ชื่อพนักงานขับรถ</th>
+                        <th className="px-2 py-1.5 text-center font-bold whitespace-nowrap">สถานที่</th>
+                        <th className="px-2 py-1.5 text-left font-bold whitespace-nowrap">หมายเหตุ</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-sky-400/15 font-semibold">
+                    <tbody className="divide-y divide-slate-200/80 dark:divide-sky-400/15 font-medium">
                       {mainRows.length === 0 ? (
                         <tr>
                           <td
@@ -1330,47 +1424,70 @@ export const ForkliftTractorOperationReportModal: React.FC<
                           </td>
                         </tr>
                       ) : (
-                        mainRows.map((row) => (
-                          <tr
-                            key={row.id}
-                            className={
-                              row.isLeave
-                                ? "bg-amber-50/70 dark:bg-amber-950/25"
-                                : "hover:bg-sky-50/50 dark:hover:bg-sky-400/10"
-                            }
-                          >
-                            <td className="px-2 py-1.5 text-center font-mono font-extrabold text-slate-900 dark:text-cyan-300 whitespace-nowrap">
-                              {row.vehicleCode}
-                            </td>
-                            <td className="px-1.5 py-1.5 text-center text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                              {row.brand}
-                            </td>
-                            <td className="px-1.5 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                              {row.capacity}
-                            </td>
-                            <td
-                              className={`px-2 py-1.5 font-extrabold ${
+                        mainRows.map((row) => {
+                          const rowVis = getReportVehicleVisualByCode(
+                            row.vehicleCode,
+                            row.brand,
+                            vehicles
+                          );
+                          return (
+                            <tr
+                              key={row.id}
+                              className={
                                 row.isLeave
-                                  ? "text-red-600 dark:text-rose-400"
-                                  : "text-slate-900 dark:text-white"
-                              }`}
+                                  ? "bg-amber-50/70 dark:bg-amber-950/25"
+                                  : "hover:bg-slate-50 dark:hover:bg-sky-400/10"
+                              }
                             >
-                              {row.driverName}
-                            </td>
-                            <td className="px-2 py-1.5 text-center text-slate-800 dark:text-sky-200">
-                              {row.workArea}
-                            </td>
-                            <td
-                              className={`px-2 py-1.5 text-center font-bold ${
-                                row.notes && row.notes !== "-"
-                                  ? "text-red-600 dark:text-amber-300"
-                                  : "text-slate-400"
-                              }`}
-                            >
-                              {row.notes || "-"}
-                            </td>
-                          </tr>
-                        ))
+                              <td className="px-2 py-1.5 font-mono font-bold text-slate-900 dark:text-cyan-300 whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1.5">
+                                  {rowVis ? (
+                                    <span className="flex h-5 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/70 bg-white p-0.5">
+                                      <img
+                                        src={rowVis.src}
+                                        alt={rowVis.alt}
+                                        referrerPolicy="no-referrer"
+                                        className="h-full w-full object-contain select-none"
+                                      />
+                                    </span>
+                                  ) : (
+                                    <span className="inline-block w-7 shrink-0 text-center text-slate-400">
+                                      -
+                                    </span>
+                                  )}
+                                  <span>{row.vehicleCode}</span>
+                                </div>
+                              </td>
+                              <td className="px-1.5 py-1.5 text-left text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {row.brand}
+                              </td>
+                              <td className="px-1.5 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                                {row.capacity}
+                              </td>
+                              <td
+                                className={`px-2 py-1.5 font-bold ${
+                                  row.isLeave
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : "text-slate-900 dark:text-white"
+                                }`}
+                              >
+                                {row.driverName}
+                              </td>
+                              <td className="px-2 py-1.5 text-center text-slate-800 dark:text-sky-200">
+                                {row.workArea}
+                              </td>
+                              <td
+                                className={`px-2 py-1.5 text-left font-semibold ${
+                                  row.notes && row.notes !== "-"
+                                    ? "text-rose-600 dark:text-amber-300"
+                                    : "text-slate-400"
+                                }`}
+                              >
+                                {row.notes || "-"}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -1380,70 +1497,108 @@ export const ForkliftTractorOperationReportModal: React.FC<
               {/* Bottom Optional Sub-Sections: รถทดแทน / ใช้รถสำรอง & จอดซ่อม */}
               <div>
                 {replacementRows.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between bg-gradient-to-r from-amber-600 to-orange-500 px-3 py-1 text-[11px] font-extrabold text-white">
+                  <div className="border-t border-slate-200 dark:border-sky-400/20">
+                    <div className="flex items-center justify-between bg-amber-600 px-3 py-1 text-[11px] font-extrabold text-white">
                       <span>รถทดแทน / ใช้รถสำรอง</span>
-                      <span>{replacementRows.length} คัน</span>
+                      <span className="font-mono tabular-nums">{replacementRows.length} คัน</span>
                     </div>
                     <table className="w-full border-collapse text-[11px]">
-                      <tbody className="divide-y divide-amber-200/70 dark:divide-amber-500/20 bg-amber-50/60 dark:bg-amber-950/20 font-semibold">
-                        {replacementRows.map((r) => (
-                          <tr key={r.id}>
-                            <td className="px-2 py-1.5 text-center font-mono font-extrabold text-slate-900 dark:text-amber-300">
-                              {r.vehicleCode}
-                            </td>
-                            <td className="px-1.5 py-1.5 text-center text-slate-600 dark:text-slate-300">
-                              {r.brand}
-                            </td>
-                            <td className="px-1.5 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300">
-                              {r.capacity}
-                            </td>
-                            <td className="px-2 py-1.5 font-extrabold text-slate-900 dark:text-white">
-                              {r.driverName}
-                            </td>
-                            <td className="px-2 py-1.5 text-center font-bold text-slate-800 dark:text-amber-200">
-                              {r.workArea}
-                            </td>
-                            <td className="px-2 py-1.5 text-center font-bold text-red-600 dark:text-amber-300">
-                              {r.notes}
-                            </td>
-                          </tr>
-                        ))}
+                      <tbody className="divide-y divide-amber-200/70 dark:divide-amber-500/20 bg-amber-50/50 dark:bg-amber-950/20 font-medium">
+                        {replacementRows.map((r) => {
+                          const repVis = getReportVehicleVisualByCode(
+                            r.vehicleCode,
+                            r.brand,
+                            vehicles
+                          );
+                          return (
+                            <tr key={r.id}>
+                              <td className="px-2 py-1.5 font-mono font-bold text-slate-900 dark:text-amber-300 whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1.5">
+                                  {repVis && (
+                                    <span className="flex h-5 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/70 bg-white p-0.5">
+                                      <img
+                                        src={repVis.src}
+                                        alt={repVis.alt}
+                                        referrerPolicy="no-referrer"
+                                        className="h-full w-full object-contain select-none"
+                                      />
+                                    </span>
+                                  )}
+                                  <span>{r.vehicleCode}</span>
+                                </div>
+                              </td>
+                              <td className="px-1.5 py-1.5 text-left text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {r.brand}
+                              </td>
+                              <td className="px-1.5 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                                {r.capacity}
+                              </td>
+                              <td className="px-2 py-1.5 font-bold text-slate-900 dark:text-white">
+                                {r.driverName}
+                              </td>
+                              <td className="px-2 py-1.5 text-center font-semibold text-slate-800 dark:text-amber-200">
+                                {r.workArea}
+                              </td>
+                              <td className="px-2 py-1.5 text-left font-semibold text-rose-600 dark:text-amber-300">
+                                {r.notes}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 )}
 
                 {repairRows.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between bg-gradient-to-r from-red-700 to-red-600 px-3 py-1 text-[11px] font-extrabold text-white">
+                  <div className="border-t border-slate-200 dark:border-sky-400/20">
+                    <div className="flex items-center justify-between bg-rose-700 px-3 py-1 text-[11px] font-extrabold text-white">
                       <span>จอดซ่อม</span>
-                      <span>{repairRows.length} คัน</span>
+                      <span className="font-mono tabular-nums">{repairRows.length} คัน</span>
                     </div>
                     <table className="w-full border-collapse text-[11px]">
-                      <tbody className="divide-y divide-red-200/70 dark:divide-rose-500/20 bg-red-50/40 dark:bg-rose-950/25 font-semibold">
-                        {repairRows.map((r) => (
-                          <tr key={r.id}>
-                            <td className="px-2 py-1.5 text-center font-mono font-extrabold text-red-700 dark:text-rose-300">
-                              {r.vehicleCode}
-                            </td>
-                            <td className="px-1.5 py-1.5 text-center text-slate-600 dark:text-slate-300">
-                              {r.brand}
-                            </td>
-                            <td className="px-1.5 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300">
-                              {r.capacity}
-                            </td>
-                            <td className="px-2 py-1.5 font-extrabold text-slate-900 dark:text-white">
-                              {r.driverName}
-                            </td>
-                            <td className="px-2 py-1.5 text-center font-bold text-red-600 dark:text-rose-300">
-                              {r.workArea}
-                            </td>
-                            <td className="px-2 py-1.5 text-center font-bold text-red-600 dark:text-rose-300">
-                              {r.notes}
-                            </td>
-                          </tr>
-                        ))}
+                      <tbody className="divide-y divide-rose-200/70 dark:divide-rose-500/20 bg-rose-50/40 dark:bg-rose-950/25 font-medium">
+                        {repairRows.map((r) => {
+                          const bVis = getReportVehicleVisualByCode(
+                            r.vehicleCode,
+                            r.brand,
+                            vehicles
+                          );
+                          return (
+                            <tr key={r.id}>
+                              <td className="px-2 py-1.5 font-mono font-bold text-rose-700 dark:text-rose-300 whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1.5">
+                                  {bVis && (
+                                    <span className="flex h-5 w-7 shrink-0 items-center justify-center overflow-hidden rounded border border-slate-200 dark:border-slate-600/70 bg-white p-0.5">
+                                      <img
+                                        src={bVis.src}
+                                        alt={bVis.alt}
+                                        referrerPolicy="no-referrer"
+                                        className="h-full w-full object-contain select-none"
+                                      />
+                                    </span>
+                                  )}
+                                  <span>{r.vehicleCode}</span>
+                                </div>
+                              </td>
+                              <td className="px-1.5 py-1.5 text-left text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                                {r.brand}
+                              </td>
+                              <td className="px-1.5 py-1.5 text-center font-mono text-slate-600 dark:text-slate-300 whitespace-nowrap tabular-nums">
+                                {r.capacity}
+                              </td>
+                              <td className="px-2 py-1.5 font-bold text-slate-900 dark:text-white">
+                                {r.driverName}
+                              </td>
+                              <td className="px-2 py-1.5 text-center font-semibold text-rose-600 dark:text-rose-300">
+                                {r.workArea}
+                              </td>
+                              <td className="px-2 py-1.5 text-left font-semibold text-rose-600 dark:text-rose-300">
+                                {r.notes}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1455,18 +1610,18 @@ export const ForkliftTractorOperationReportModal: React.FC<
       </div>
 
       {/* ===================================================================
-          5. BOTTOM FOOTER BAR (หมายเหตุ & SAFETY FIRST BADGE)
+          5. BOTTOM FOOTER BAR (หมายเหตุ & SAFETY FIRST)
       =================================================================== */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-gradient-to-r from-[#0d1b2a] via-[#13293d] to-[#0d1b2a] px-5 py-3.5 text-white">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-200 dark:border-sky-400/20 bg-[#0f2537] px-5 py-3 text-white">
         <div className="flex items-start gap-3">
-          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-400/40 bg-amber-500/15 text-amber-400">
-            <FileText size={18} />
+          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/15 text-amber-400">
+            <FileText size={16} />
           </div>
           <div>
-            <div className="text-xs font-extrabold text-amber-400">
+            <div className="text-xs font-extrabold text-amber-300">
               หมายเหตุ ({reportShift})
             </div>
-            <ol className="mt-1 space-y-0.5 text-xs font-semibold text-slate-200">
+            <ol className="mt-0.5 space-y-0.5 text-[11.5px] font-medium text-slate-200">
               {config.footerNotes.map((note, idx) => (
                 <li key={`fn-${idx}`}>
                   {idx + 1}. {note}
@@ -1476,15 +1631,15 @@ export const ForkliftTractorOperationReportModal: React.FC<
           </div>
         </div>
 
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-white/5 px-4 py-2">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500 text-slate-950 font-black">
-            <HardHat size={22} />
+        <div className="flex items-center gap-2.5 rounded-lg border border-white/15 bg-white/5 px-3.5 py-2 shrink-0">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-amber-500 text-slate-950">
+            <HardHat size={18} />
           </div>
           <div>
-            <div className="text-xs font-extrabold text-amber-400">
+            <div className="text-xs font-extrabold text-amber-300">
               ปลอดภัย ใส่ใจทุกการปฏิบัติงาน
             </div>
-            <div className="font-mono text-[10px] font-bold tracking-wider text-slate-300">
+            <div className="font-mono text-[10px] font-semibold tracking-wide text-slate-300">
               SAFETY FIRST · ACCIDENT FREE OPERATIONS
             </div>
           </div>
@@ -1497,67 +1652,68 @@ export const ForkliftTractorOperationReportModal: React.FC<
     <>
       <div className="fixed inset-0 z-50 flex h-screen w-screen flex-col overflow-hidden bg-white dark:bg-[#040d21]">
         <div className="flex h-full w-full max-w-none flex-col overflow-hidden bg-white dark:bg-[#040d21]">
-          {/* Top Modal Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-sky-400/25 bg-slate-50 dark:bg-[#07183b] px-4 py-2.5 sm:px-6">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 text-white shadow-xs">
-                <FileText size={18} />
+          {/* Top Modal Toolbar — SAP Fiori Object Page Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 dark:border-sky-400/25 bg-white dark:bg-[#07183b] px-4 py-2.5 sm:px-6 shrink-0">
+            {/* Left: Report Title + Quiet Context Metadata */}
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#0a6ed1] text-white">
+                <FileText size={17} />
               </div>
-              <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white">
+              <div className="min-w-0">
+                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white truncate">
                   หน้ารายงานการปฏิบัติงานรถยกและรถลาก
                 </h2>
-                <p className="text-[11px] font-medium text-slate-500 dark:text-sky-200/80">
-                  ดึงข้อมูลจากตารางวางแผนกำลังคนประจำวันที่ {selectedDate} ({shiftDuties.length} รายการ)
+                <p className="text-[11.5px] font-medium text-slate-500 dark:text-sky-200/80 truncate">
+                  ข้อมูลวางแผนกำลังคนประจำวันที่{" "}
+                  <span className="font-mono tabular-nums">{selectedDate}</span> ·{" "}
+                  <span className="font-mono tabular-nums">{shiftDuties.length}</span> รายการ
                 </p>
               </div>
+            </div>
 
-              {/* Shift Switcher inside Report Modal */}
-              <div className="ml-2 inline-flex rounded-xl border border-slate-300 dark:border-sky-400/30 bg-white dark:bg-[#041029] p-0.5">
+            {/* Right: Uniform Height (32px) SAP Fiori Action Controls */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {/* Segmented Shift Switcher */}
+              <div className="inline-flex h-8 items-center rounded-md border border-slate-300 dark:border-sky-400/30 bg-slate-100 dark:bg-[#041029] p-0.5">
                 <button
                   type="button"
                   onClick={() => setReportShift("กะเช้า")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-extrabold transition ${
+                  className={`inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-bold whitespace-nowrap transition-colors ${
                     reportShift === "กะเช้า"
-                      ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-xs"
+                      ? "bg-[#0a6ed1] text-white shadow-2xs"
                       : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   }`}
                 >
                   <Sun size={13} />
-                  <span>กะเช้า (Day Shift)</span>
+                  <span>กะเช้า</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setReportShift("กะดึก")}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-extrabold transition ${
+                  className={`inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-xs font-bold whitespace-nowrap transition-colors ${
                     reportShift === "กะดึก"
-                      ? "bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-xs"
+                      ? "bg-[#0a6ed1] text-white shadow-2xs"
                       : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
                   }`}
                 >
                   <Moon size={13} />
-                  <span>กะดึก (Night Shift)</span>
+                  <span>กะดึก</span>
                 </button>
               </div>
-            </div>
 
-            {/* Right Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2">
               {shiftDuties.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setUseReferencePreview((prev) => !prev)}
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-bold whitespace-nowrap transition-colors ${
                     useReferencePreview
-                      ? "border-sky-500 bg-sky-500 text-white"
-                      : "border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#0b214d] text-slate-700 dark:text-sky-100 hover:bg-slate-100 dark:hover:bg-[#11306b]"
+                      ? "border-[#0a6ed1] bg-[#0a6ed1]/10 text-[#0a6ed1] dark:bg-sky-500/20 dark:text-sky-300 dark:border-sky-400"
+                      : "border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#0b214d] text-slate-700 dark:text-sky-100 hover:bg-slate-50 dark:hover:bg-[#11306b]"
                   }`}
                 >
-                  <Sparkles size={14} />
+                  <Sparkles size={13} />
                   <span>
-                    {useReferencePreview
-                      ? "กลับไปดูข้อมูลวางแผนจริง"
-                      : "ดูตัวอย่างตามแบบฟอร์มต้นฉบับ"}
+                    {useReferencePreview ? "ดูข้อมูลวางแผนจริง" : "ดูตัวอย่างแบบฟอร์ม"}
                   </span>
                 </button>
               )}
@@ -1565,22 +1721,22 @@ export const ForkliftTractorOperationReportModal: React.FC<
               <button
                 type="button"
                 onClick={() => setIsEditingConfig((prev) => !prev)}
-                className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition ${
+                className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-bold whitespace-nowrap transition-colors ${
                   isEditingConfig
-                    ? "border-amber-500 bg-amber-500 text-slate-950"
-                    : "border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#0b214d] text-slate-700 dark:text-sky-100 hover:bg-slate-100 dark:hover:bg-[#11306b]"
+                    ? "border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                    : "border-slate-300 dark:border-sky-400/35 bg-white dark:bg-[#0b214d] text-slate-700 dark:text-sky-100 hover:bg-slate-50 dark:hover:bg-[#11306b]"
                 }`}
               >
-                <Edit3 size={14} />
-                <span>{isEditingConfig ? "ซ่อนตั้งค่ารายงาน" : "ตั้งค่าหัวหน้าทีม / รถสำรอง / หมายเหตุ"}</span>
+                <Edit3 size={13} />
+                <span>{isEditingConfig ? "ซ่อนตั้งค่า" : "ตั้งค่ารายงาน"}</span>
               </button>
 
               <button
                 type="button"
                 onClick={handlePrintReport}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 px-4 text-xs font-extrabold text-white shadow-md transition hover:brightness-110 active:scale-95"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0a6ed1] hover:bg-[#0854a0] px-3.5 text-xs font-bold text-white whitespace-nowrap shadow-2xs transition-colors"
               >
-                <Printer size={15} />
+                <Printer size={14} />
                 <span>พิมพ์รายงาน / PDF</span>
               </button>
 
@@ -1588,9 +1744,9 @@ export const ForkliftTractorOperationReportModal: React.FC<
                 type="button"
                 onClick={onClose}
                 aria-label="ปิดหน้ารายงาน"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
           </div>
@@ -1777,9 +1933,45 @@ export const ForkliftTractorOperationReportModal: React.FC<
             color: #0f172a !important;
             margin: 0 !important;
             padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal .report-vehicle-cards-grid {
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal .report-summary-tables-grid {
+            display: grid !important;
+            grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal .report-summary-tables-grid > div:nth-child(1) {
+            grid-column: span 5 / span 5 !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal .report-summary-tables-grid > div:nth-child(2) {
+            grid-column: span 4 / span 4 !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal .report-summary-tables-grid > div:nth-child(3) {
+            grid-column: span 3 / span 3 !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal .report-teams-grid {
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            gap: 8px !important;
+          }
+          body.printing-mh-daily-report #mh-daily-report-print-portal img {
+            max-width: 100% !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+            image-rendering: auto !important;
           }
           body.printing-mh-daily-report .print-sheet-container {
-            zoom: 0.72;
+            zoom: 0.68;
             box-shadow: none !important;
           }
         }
