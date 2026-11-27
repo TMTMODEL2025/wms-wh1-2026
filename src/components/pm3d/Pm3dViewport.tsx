@@ -103,7 +103,7 @@ export function Pm3dViewport({
   const lineRefs = useRef<Map<string, SVGPolylineElement>>(new Map());
   const dotGroupRefs = useRef<Map<string, SVGGElement>>(new Map());
   const [showLabels, setShowLabels] = useState<boolean>(true);
-  const [dockCollapsed, setDockCollapsed] = useState<boolean>(false);
+  const [dockCollapsed, setDockCollapsed] = useState<boolean>(true);
   const [hoveredZoneId, setHoveredZoneId] = useState<string | null>(null);
   const [webglError, setWebglError] = useState<string | null>(null);
   const [activePreset, setActivePreset] = useState<CameraPreset>("iso");
@@ -1077,7 +1077,9 @@ export function Pm3dViewport({
         <button
           type="button"
           onClick={() => setDockCollapsed((c) => !c)}
-          className="inline-flex items-center gap-1 px-3 py-1 rounded-t-md border border-b-0 border-slate-200 dark:border-[#1e3a5f] bg-white/95 dark:bg-[#0d1d35]/95 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-[#087eaf] dark:hover:text-sky-300 shadow-xs cursor-pointer whitespace-nowrap"
+          className={`inline-flex items-center gap-1 px-3 py-1 border border-slate-200 dark:border-[#1e3a5f] bg-white/95 dark:bg-[#0d1d35]/95 text-[11px] font-semibold text-slate-600 dark:text-slate-300 hover:text-[#087eaf] dark:hover:text-sky-300 shadow-xs cursor-pointer whitespace-nowrap ${
+            dockCollapsed ? "rounded-md" : "rounded-t-md border-b-0"
+          }`}
         >
           {dockCollapsed ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           <span>{dockCollapsed ? "แสดงแถบควบคุม 3D" : "ซ่อนแถบควบคุม"}</span>

@@ -71,6 +71,24 @@ interface RosterTableRow {
   existingRecord?: MhDailyDutyRecord;
 }
 
+const FIORI_BTN_BASE =
+  "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[8px] text-[12px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_ICON_BASE =
+  "inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[4px] border text-[12px] font-semibold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+
+const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+
+const FIORI_BTN_SECONDARY = `${FIORI_BTN_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_BTN_DANGER_SOLID = `${FIORI_BTN_BASE} border-[#b91c1c] bg-[#b91c1c] text-white hover:bg-[#991b1b] hover:border-[#991b1b] dark:border-[#dc2626] dark:bg-[#dc2626] dark:text-white dark:hover:bg-[#b91c1c] dark:hover:border-[#b91c1c]`;
+
+const FIORI_BTN_ICON_PRIMARY = `${FIORI_BTN_ICON_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985] dark:border-[#087eaf] dark:bg-[#087eaf] dark:text-white dark:hover:bg-[#075985] dark:hover:border-[#075985]`;
+
+const FIORI_BTN_ICON_SECONDARY = `${FIORI_BTN_ICON_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+
+const FIORI_BTN_ICON_DANGER = `${FIORI_BTN_ICON_BASE} border-[#fca5a5] bg-white text-[#b91c1c] hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444]`;
+
 function getTodayYmd(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -812,40 +830,26 @@ export function DailyDutyAssignmentPanel({
                   <button
                     type="button"
                     onClick={() => setSelectedDate(getTodayYmd())}
-                    className="h-9 rounded-lg border border-sky-300 dark:border-cyan-400/40 bg-sky-100 dark:bg-cyan-500/15 px-3 text-xs font-bold text-sky-800 dark:text-cyan-200 whitespace-nowrap transition hover:bg-sky-200 dark:hover:bg-cyan-500/25"
+                    className={FIORI_BTN_SECONDARY}
                   >
                     วันนี้
                   </button>
                 )}
               </div>
 
-              {/* Shift Counters with Radio Indicators */}
-              <div className="flex items-center gap-4 text-xs font-semibold">
+              {/* Shift Filter Buttons */}
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() =>
                     setFilterShift((prev) => (prev === "กะเช้า" ? "All" : "กะเช้า"))
                   }
-                  className="group inline-flex items-center gap-2 text-slate-700 dark:text-slate-200 transition hover:text-sky-700 dark:hover:text-white"
+                  className={filterShift === "กะเช้า" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                   title="คลิกเพื่อกรองตารางเฉพาะกะเช้า"
                 >
-                  <span
-                    className={`flex h-4 w-4 items-center justify-center rounded-full border ${
-                      filterShift === "กะเช้า" || filterShift === "All"
-                        ? "border-sky-500 dark:border-cyan-400 bg-sky-500/15 dark:bg-cyan-500/20 shadow-[0_0_8px_rgba(14,165,233,0.4)]"
-                        : "border-slate-400 dark:border-slate-500 bg-transparent"
-                    }`}
-                  >
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        filterShift === "กะเช้า" || filterShift === "All"
-                          ? "bg-sky-600 dark:bg-cyan-400"
-                          : "bg-slate-400 dark:bg-slate-500"
-                      }`}
-                    />
-                  </span>
+                  <Sun size={14} />
                   <span className="tabular-nums">
-                    กะเช้า <strong className="font-mono text-slate-900 dark:text-white">{shiftCounts["กะเช้า"] || 0}</strong> คน
+                    กะเช้า ({shiftCounts["กะเช้า"] || 0} คน)
                   </span>
                 </button>
 
@@ -854,36 +858,26 @@ export function DailyDutyAssignmentPanel({
                   onClick={() =>
                     setFilterShift((prev) => (prev === "กะดึก" ? "All" : "กะดึก"))
                   }
-                  className="group inline-flex items-center gap-2 text-slate-700 dark:text-slate-200 transition hover:text-sky-700 dark:hover:text-white"
+                  className={filterShift === "กะดึก" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                   title="คลิกเพื่อกรองตารางเฉพาะกะดึก"
                 >
-                  <span
-                    className={`flex h-4 w-4 items-center justify-center rounded-full border ${
-                      filterShift === "กะดึก"
-                        ? "border-sky-500 dark:border-cyan-400 bg-sky-500/15 dark:bg-cyan-500/20 shadow-[0_0_8px_rgba(14,165,233,0.4)]"
-                        : "border-slate-400 bg-transparent"
-                    }`}
-                  >
-                    {filterShift === "กะดึก" && (
-                      <span className="h-2 w-2 rounded-full bg-sky-600 dark:bg-cyan-400" />
-                    )}
-                  </span>
+                  <Moon size={14} />
                   <span className="tabular-nums">
-                    กะดึก <strong className="font-mono text-slate-900 dark:text-white">{shiftCounts["กะดึก"] || 0}</strong> คน
+                    กะดึก ({shiftCounts["กะดึก"] || 0} คน)
                   </span>
                 </button>
               </div>
             </div>
 
             {/* Right Action Buttons: Open Operation Report, Copy Previous Day & Refresh */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsOperationReportOpen(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-amber-400/70 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-500 px-3.5 text-xs font-extrabold text-white whitespace-nowrap shrink-0 shadow-sm dark:shadow-[0_0_18px_rgba(245,158,11,0.35)] transition hover:brightness-110 active:scale-[0.98]"
+                className={FIORI_BTN_PRIMARY}
                 title="เปิดหน้ารายงานการปฏิบัติงานรถยกและรถลาก (Dashboard / Sheet พร้อมพิมพ์ PDF)"
               >
-                <FileText size={15} className="text-white" />
+                <FileText size={14} />
                 <span>รายงานการปฏิบัติงานรถยกและรถลาก</span>
               </button>
 
@@ -896,12 +890,12 @@ export function DailyDutyAssignmentPanel({
                     ? `คัดลอกข้อมูลจากวันที่ ${previousCopySource.date} (${previousCopySource.rows.length} คน)`
                     : "ยังไม่มีข้อมูลวันก่อนหน้าให้คัดลอก"
                 }
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-sky-300 dark:border-sky-400/40 bg-sky-50 dark:bg-gradient-to-r dark:from-[#0c2759] dark:to-[#0f3473] px-3.5 text-xs font-bold text-sky-800 dark:text-sky-100 whitespace-nowrap shrink-0 shadow-xs dark:shadow-[0_0_15px_rgba(14,165,233,0.2)] transition hover:border-sky-500 hover:bg-sky-100 dark:hover:border-cyan-300 dark:hover:from-[#103370] dark:hover:to-[#15428f] disabled:cursor-not-allowed disabled:opacity-45"
+                className={FIORI_BTN_SECONDARY}
               >
-                <Copy size={14} className="text-sky-600 dark:text-cyan-300" />
+                <Copy size={14} />
                 <span>คัดลอกวันก่อนหน้า</span>
                 {previousCopySource && (
-                  <span className="font-mono text-[11px] text-sky-700/80 dark:text-sky-200/80 tabular-nums">
+                  <span className="font-mono text-[12px] opacity-80 tabular-nums">
                     ({previousCopySource.date})
                   </span>
                 )}
@@ -911,9 +905,9 @@ export function DailyDutyAssignmentPanel({
                 type="button"
                 onClick={handleRefreshCloud}
                 disabled={isRefreshing}
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-300 dark:border-sky-400/40 bg-white dark:bg-[#0b214d] px-3.5 text-xs font-bold text-slate-700 dark:text-sky-100 whitespace-nowrap shrink-0 transition hover:border-sky-500 hover:bg-slate-50 dark:hover:border-cyan-300 dark:hover:bg-[#11306b] disabled:opacity-50"
+                className={FIORI_BTN_SECONDARY}
               >
-                <RefreshCw size={14} className={`text-sky-600 dark:text-cyan-300 ${isRefreshing ? "animate-spin" : ""}`} />
+                <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
                 <span>รีเฟรช</span>
               </button>
             </div>
@@ -1145,63 +1139,47 @@ export function DailyDutyAssignmentPanel({
                   type="button"
                   onClick={handleAssignAllUnassigned}
                   disabled={isSaving}
-                  className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-lg border border-sky-500/40 dark:border-cyan-300/50 bg-gradient-to-r from-[#0284c7] to-[#2563eb] px-2.5 text-[11px] font-bold text-white shadow-sm transition hover:brightness-110 disabled:opacity-50"
+                  className={`ml-1 ${FIORI_BTN_PRIMARY}`}
                   title="กดเพื่อบันทึกมอบหมายงานตามค่าเริ่มต้นให้พนักงานที่ยังไม่ได้จัดทีมทั้งหมดทันที"
                 >
-                  <Check size={12} strokeWidth={3} />
+                  <Check size={14} />
                   <span>มอบหมายทั้งหมด ({unassignedCount} คน)</span>
                 </button>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* Status Filter Segmented Control */}
-              <div className="inline-flex h-[35px] items-center rounded-lg border border-slate-300 dark:border-sky-400/30 bg-slate-100 dark:bg-[#041029] p-0.5">
+              {/* Status Filter Buttons */}
+              <div className="inline-flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setFilterStatus("all")}
-                  className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
-                    filterStatus === "all"
-                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                  }`}
+                  className={filterStatus === "all" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                 >
                   ทั้งหมด ({totalEmployeeCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFilterStatus("assigned")}
-                  className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
-                    filterStatus === "assigned"
-                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                  }`}
+                  className={filterStatus === "assigned" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                 >
                   มอบหมายแล้ว ({assignedCount})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFilterStatus("unassigned")}
-                  className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
-                    filterStatus === "unassigned"
-                      ? "bg-amber-500 text-slate-950 shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                  }`}
+                  className={filterStatus === "unassigned" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                 >
                   ยังไม่จัดทีม ({unassignedCount})
                 </button>
               </div>
 
-              {/* Segmented Team Filter */}
-              <div className="inline-flex h-[35px] items-center rounded-lg border border-slate-300 dark:border-sky-400/30 bg-slate-100 dark:bg-[#041029] p-0.5">
+              {/* Team Filter Buttons */}
+              <div className="inline-flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setFilterTeam("All")}
-                  className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
-                    filterTeam === "All"
-                      ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
-                      : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                  }`}
+                  className={filterTeam === "All" ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                 >
                   ทุกทีม
                 </button>
@@ -1210,11 +1188,7 @@ export function DailyDutyAssignmentPanel({
                     key={`flt-${tOpt}`}
                     type="button"
                     onClick={() => setFilterTeam(tOpt)}
-                    className={`h-[29px] rounded-md px-2.5 text-xs font-bold whitespace-nowrap transition ${
-                      filterTeam === tOpt
-                        ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs"
-                        : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                    }`}
+                    className={filterTeam === tOpt ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                   >
                     {tOpt}
                   </button>
@@ -1273,16 +1247,16 @@ export function DailyDutyAssignmentPanel({
                   <button
                     type="button"
                     onClick={handleRestoreDefaultWorkAreas}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-300 dark:border-sky-400/30 bg-white dark:bg-[#081d47] px-2.5 text-[11px] font-bold text-sky-700 dark:text-sky-200 transition hover:border-sky-500 dark:hover:border-cyan-300 dark:hover:text-white"
+                    className={FIORI_BTN_SECONDARY}
                     title="คืนค่ารายการพื้นที่เริ่มต้น"
                   >
-                    <RotateCcw size={11} />
+                    <RotateCcw size={14} />
                     <span>คืนค่าเริ่มต้น</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setIsManageWorkAreasOpen(false)}
-                    className="inline-flex h-7 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600/60 bg-white dark:bg-slate-800/70 px-2 text-[11px] font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                    className={FIORI_BTN_SECONDARY}
                   >
                     ปิด
                   </button>
@@ -1293,17 +1267,17 @@ export function DailyDutyAssignmentPanel({
                 {workAreaOptions.map((area) => (
                   <span
                     key={`mgr-area-${area}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 dark:border-sky-400/35 bg-white dark:bg-[#09204f] px-2.5 py-1 text-xs font-bold text-slate-800 dark:text-white shadow-2xs"
+                    className="inline-flex min-h-[34px] items-center gap-1.5 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#09204f] px-2.5 py-1 text-[12px] font-semibold text-slate-800 dark:text-white shadow-2xs"
                   >
                     <span>{area}</span>
                     <button
                       type="button"
                       onClick={() => void handleDeleteWorkAreaOption(area)}
-                      className="rounded p-0.5 text-rose-500 dark:text-rose-300 transition hover:bg-rose-100 dark:hover:bg-rose-500/25 dark:hover:text-rose-100"
+                      className="rounded-[4px] p-0.5 text-[#b91c1c] dark:text-[#fca5a5] transition-colors hover:bg-[#fee2e2] dark:hover:bg-[#3b121b]"
                       title={`ลบพื้นที่ "${area}"`}
                       aria-label={`ลบพื้นที่ ${area}`}
                     >
-                      <X size={12} />
+                      <X size={13} />
                     </button>
                   </span>
                 ))}
@@ -1320,14 +1294,14 @@ export function DailyDutyAssignmentPanel({
                       }
                     }}
                     placeholder="พิมพ์ชื่อพื้นที่ใหม่..."
-                    className="h-7 w-40 rounded-lg border border-sky-300 dark:border-cyan-400/40 bg-white dark:bg-[#041029] px-2.5 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-sky-500 dark:focus:border-cyan-300 focus:outline-none"
+                    className="h-[34px] w-44 rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] px-2.5 text-[12px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => void handleAddWorkAreaOption(headerNewWorkAreaText)}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg bg-sky-600 dark:bg-cyan-500 px-2.5 text-[11px] font-extrabold text-white dark:text-slate-950 transition hover:bg-sky-500 dark:hover:bg-cyan-400"
+                    className={FIORI_BTN_PRIMARY}
                   >
-                    <Plus size={12} strokeWidth={3} />
+                    <Plus size={14} />
                     <span>เพิ่มพื้นที่</span>
                   </button>
                 </div>
@@ -1349,10 +1323,10 @@ export function DailyDutyAssignmentPanel({
                       <button
                         type="button"
                         onClick={() => setIsManageWorkAreasOpen((prev) => !prev)}
-                        className="inline-flex items-center gap-1 rounded-md border border-sky-300 dark:border-cyan-400/40 bg-sky-100 dark:bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-bold text-sky-700 dark:text-cyan-200 transition hover:bg-sky-200 dark:hover:bg-cyan-500/30 dark:hover:text-white"
+                        className={isManageWorkAreasOpen ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                         title="เพิ่มหรือลบรายการพื้นที่รับผิดชอบ"
                       >
-                        <Plus size={10} strokeWidth={3} />
+                        <Plus size={14} />
                         <span>เพิ่ม/ลบ</span>
                       </button>
                     </div>
@@ -1413,7 +1387,7 @@ export function DailyDutyAssignmentPanel({
 
                           {/* 1. กะทำงาน */}
                           <td className="px-4 py-2.5">
-                            <div className="inline-flex rounded-lg border border-slate-300 dark:border-sky-400/25 bg-slate-100 dark:bg-[#041029] p-0.5">
+                            <div className="inline-flex items-center gap-1.5">
                               {MH_SHIFTS.map((sOpt) => {
                                 const isMorning = sOpt === "กะเช้า";
                                 const active = row.isAssigned && row.shift === sOpt;
@@ -1427,13 +1401,9 @@ export function DailyDutyAssignmentPanel({
                                         endTime: normalizeEndTimeForShift(sOpt, row.endTime),
                                       })
                                     }
-                                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-bold whitespace-nowrap transition ${
-                                      active
-                                        ? "bg-gradient-to-r from-[#0ea5e9] to-[#2563eb] text-white shadow-xs dark:shadow-[0_0_10px_rgba(14,165,233,0.4)]"
-                                        : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                                    }`}
+                                    className={active ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                                   >
-                                    {isMorning ? <Sun size={11} /> : <Moon size={11} />}
+                                    {isMorning ? <Sun size={14} /> : <Moon size={14} />}
                                     <span>{sOpt}</span>
                                   </button>
                                 );
@@ -1483,15 +1453,15 @@ export function DailyDutyAssignmentPanel({
                                   }}
                                   placeholder="ระบุพื้นที่ใหม่..."
                                   autoFocus
-                                  className="h-8 w-32 rounded-lg border border-sky-500 dark:border-cyan-400 bg-white dark:bg-[#041029] px-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                                  className="h-[34px] w-32 rounded-[4px] border border-[#087eaf] dark:border-[#38bdf8] bg-white dark:bg-[#041029] px-2 text-[12px] text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                                 />
                                 <button
                                   type="button"
                                   onClick={() => void handleAddWorkAreaOption(newWorkAreaText, row)}
-                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 dark:bg-cyan-500 text-white dark:text-slate-950 transition hover:bg-sky-500 dark:hover:bg-cyan-400"
+                                  className={FIORI_BTN_ICON_PRIMARY}
                                   title="บันทึกพื้นที่ใหม่"
                                 >
-                                  <Check size={13} strokeWidth={3} />
+                                  <Check size={14} />
                                 </button>
                                 <button
                                   type="button"
@@ -1499,21 +1469,21 @@ export function DailyDutyAssignmentPanel({
                                     setAddingWorkAreaForRow(null);
                                     setNewWorkAreaText("");
                                   }}
-                                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 transition hover:text-slate-900 dark:hover:text-white"
+                                  className={FIORI_BTN_ICON_SECONDARY}
                                   title="ยกเลิก"
                                 >
-                                  <X size={13} />
+                                  <X size={14} />
                                 </button>
                               </div>
                             ) : (
-                              <div className="inline-flex items-center gap-1">
+                              <div className="inline-flex items-center gap-1.5">
                                 <select
                                   value={row.workArea}
                                   onChange={(e) =>
                                     handleUpsertRosterRow(row, { workArea: e.target.value })
                                   }
                                   aria-label={`พื้นที่รับผิดชอบของ ${row.employeeName}`}
-                                  className={`h-8 rounded-lg border bg-white dark:bg-[#041029] px-2.5 text-xs font-semibold focus:border-sky-500 dark:focus:border-cyan-400 focus:outline-none ${
+                                  className={`h-[34px] rounded-[4px] border bg-white dark:bg-[#041029] px-2.5 text-[12px] font-semibold focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none ${
                                     row.isAssigned
                                       ? "border-sky-300 dark:border-sky-400/40 text-slate-900 dark:text-white"
                                       : "border-slate-300 dark:border-sky-400/25 text-slate-600 dark:text-slate-300"
@@ -1538,11 +1508,11 @@ export function DailyDutyAssignmentPanel({
                                     setAddingWorkAreaForRow(row.rowKey);
                                     setNewWorkAreaText("");
                                   }}
-                                  className="inline-flex h-8 w-7 shrink-0 items-center justify-center rounded-lg border border-sky-300 dark:border-cyan-400/35 bg-sky-100 dark:bg-cyan-500/15 text-sky-700 dark:text-cyan-200 transition hover:border-sky-500 hover:bg-sky-200 dark:hover:border-cyan-300 dark:hover:bg-cyan-500/30 dark:hover:text-white"
+                                  className={FIORI_BTN_ICON_SECONDARY}
                                   title="เพิ่มพื้นที่รับผิดชอบใหม่"
                                   aria-label={`เพิ่มพื้นที่รับผิดชอบใหม่ให้ ${row.employeeName}`}
                                 >
-                                  <Plus size={13} strokeWidth={2.5} />
+                                  <Plus size={14} />
                                 </button>
 
                                 {row.workArea && row.workArea !== "-" && (
@@ -1551,11 +1521,11 @@ export function DailyDutyAssignmentPanel({
                                     onClick={() =>
                                       void handleDeleteWorkAreaOption(row.workArea, row)
                                     }
-                                    className="inline-flex h-8 w-7 shrink-0 items-center justify-center rounded-lg border border-rose-300 dark:border-rose-500/35 bg-rose-50 dark:bg-[#041029] text-rose-600 dark:text-rose-400 transition hover:bg-rose-100 dark:hover:bg-rose-500/20 dark:hover:text-rose-200"
+                                    className={FIORI_BTN_ICON_DANGER}
                                     title={`ลบพื้นที่ "${row.workArea}"`}
                                     aria-label={`ลบพื้นที่ ${row.workArea}`}
                                   >
-                                    <Trash2 size={12} />
+                                    <Trash2 size={14} />
                                   </button>
                                 )}
                               </div>
@@ -1564,23 +1534,15 @@ export function DailyDutyAssignmentPanel({
 
                           {/* 4. ทีม A / B / C */}
                           <td className="px-4 py-2.5">
-                            <div className="inline-flex rounded-lg border border-slate-300 dark:border-sky-400/25 bg-slate-100 dark:bg-[#041029] p-0.5">
+                            <div className="inline-flex items-center gap-1.5">
                               {MH_TEAMS.map((tOpt) => {
                                 const active = row.isAssigned && row.team === tOpt;
-                                const badgeColor =
-                                  tOpt === "ทีม A"
-                                    ? "bg-sky-500 text-white shadow-xs dark:shadow-[0_0_10px_rgba(14,165,233,0.4)]"
-                                    : tOpt === "ทีม B"
-                                    ? "bg-purple-600 text-white shadow-xs dark:shadow-[0_0_10px_rgba(147,51,234,0.4)]"
-                                    : "bg-emerald-600 text-white shadow-xs dark:shadow-[0_0_10px_rgba(5,150,105,0.4)]";
                                 return (
                                   <button
                                     key={`${row.rowKey}-${tOpt}`}
                                     type="button"
                                     onClick={() => handleUpsertRosterRow(row, { team: tOpt })}
-                                    className={`rounded-md px-2.5 py-1 text-[11px] font-bold whitespace-nowrap transition ${
-                                      active ? badgeColor : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-                                    }`}
+                                    className={active ? FIORI_BTN_PRIMARY : FIORI_BTN_SECONDARY}
                                   >
                                     {tOpt}
                                   </button>
@@ -1656,8 +1618,8 @@ export function DailyDutyAssignmentPanel({
                           <td className="px-4 py-2.5 text-right whitespace-nowrap">
                             {row.isAssigned ? (
                               <div className="inline-flex items-center gap-1.5">
-                                <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-300 dark:border-emerald-400/40 bg-emerald-50 dark:bg-emerald-500/15 px-2 text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
-                                  <Check size={12} strokeWidth={2.5} />
+                                <span className="inline-flex min-h-[34px] items-center gap-1.5 rounded-[4px] border border-emerald-300 dark:border-emerald-400/40 bg-emerald-50 dark:bg-emerald-500/15 px-3 py-1.5 text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
+                                  <Check size={14} />
                                   <span>จัดทีมแล้ว</span>
                                 </span>
 
@@ -1665,7 +1627,7 @@ export function DailyDutyAssignmentPanel({
                                   <button
                                     type="button"
                                     onClick={() => handleDeleteDuty(row.dutyId)}
-                                    className="h-7 rounded-lg bg-rose-600 px-2.5 text-[11px] font-bold text-white hover:bg-rose-500"
+                                    className={FIORI_BTN_DANGER_SOLID}
                                   >
                                     ยืนยันยกเลิก
                                   </button>
@@ -1673,11 +1635,11 @@ export function DailyDutyAssignmentPanel({
                                   <button
                                     type="button"
                                     onClick={() => setConfirmDeleteId(row.dutyId)}
-                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-300 dark:border-rose-500/35 bg-rose-50 dark:bg-[#041029] text-rose-600 dark:text-rose-400 transition hover:bg-rose-100 dark:hover:bg-rose-500/20 dark:hover:text-rose-200"
+                                    className={FIORI_BTN_ICON_DANGER}
                                     title="ยกเลิกการมอบหมายงานของพนักงานคนนี้"
                                     aria-label={`ยกเลิกงานของ ${row.employeeName}`}
                                   >
-                                    <Trash2 size={12} />
+                                    <Trash2 size={14} />
                                   </button>
                                 )}
                               </div>
@@ -1685,10 +1647,10 @@ export function DailyDutyAssignmentPanel({
                               <button
                                 type="button"
                                 onClick={() => handleUpsertRosterRow(row, {})}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-300 dark:border-cyan-400/45 bg-sky-100 dark:bg-cyan-500/15 px-2.5 text-[11px] font-bold text-sky-700 dark:text-cyan-200 transition hover:bg-sky-200 dark:hover:bg-cyan-500/30 dark:hover:text-white"
+                                className={FIORI_BTN_PRIMARY}
                                 title="กดเพื่อยืนยันการมอบหมายงานตามค่าในแถวนี้"
                               >
-                                <Check size={12} strokeWidth={2.5} />
+                                <Check size={14} />
                                 <span>มอบหมาย</span>
                               </button>
                             )}

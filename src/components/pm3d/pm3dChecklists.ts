@@ -573,6 +573,7 @@ export function inferPm3dModelType(
     combined.includes("หาง") ||
     combined.includes("เทลเลอร์") ||
     combined.includes("เทรลเลอร์") ||
+    /\bttl[-_\s]?\d/i.test(combined) ||
     /\btr[-_\s]?\d/i.test(combined) ||
     /\btl[-_\s]?\d/i.test(combined)
   ) {

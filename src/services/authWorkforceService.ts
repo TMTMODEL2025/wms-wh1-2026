@@ -328,6 +328,31 @@ export async function saveWmsVehicleToCloud(vehicle: Vehicle): Promise<void> {
   }
 }
 
+export async function deleteWmsVehicleFromCloud(vehicle: Vehicle): Promise<void> {
+  const normalizedVehicleId = String(vehicle.vehicleId || vehicle.number || vehicle.id || "")
+    .trim()
+    .toUpperCase();
+  const candidateDocIds = new Set<string>();
+  if (normalizedVehicleId) {
+    candidateDocIds.add(sanitizeDocId(normalizedVehicleId));
+  }
+  const rawId = String(vehicle.id || "").trim();
+  if (rawId && /^[a-zA-Z0-9_\-]+$/.test(rawId) && rawId.length <= 128) {
+    candidateDocIds.add(rawId);
+  }
+  if (rawId) {
+    candidateDocIds.add(sanitizeDocId(rawId));
+  }
+
+  for (const docId of candidateDocIds) {
+    try {
+      await deleteDoc(doc(db, WMS_VEHICLES_COLLECTION, docId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${WMS_VEHICLES_COLLECTION}/${docId}`);
+    }
+  }
+}
+
 export async function syncVehicleFleetDiffToCloud(
   prevList: Vehicle[],
   nextList: Vehicle[]

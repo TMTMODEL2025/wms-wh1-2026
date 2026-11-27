@@ -167,17 +167,52 @@ export function Pm3dInteractiveWorkspace({
   const effectiveVehicleId =
     activeSchedule?.vehicleId || activeVehicle?.vehicleId || standaloneVehicleId || "DEMO-MH-01";
 
-  // 3D Viewport States
-  const [modelType, setModelType] = useState<MhPm3dModelType>(() =>
+  const getVehicleModelType = (v: Vehicle): MhPm3dModelType =>
     inferPm3dModelType(
-      activeSchedule?.vehicleType || activeVehicle?.vehicleType,
-      activeSchedule?.vehicleDescription || activeVehicle?.description,
-      effectiveVehicleId
-    )
-  );
+      v.vehicleType || v.type,
+      v.description,
+      v.vehicleId || v.number || v.registrationNumber
+    );
+
+  const getScheduleModelType = (sch: MhPmScheduleRecord): MhPm3dModelType => {
+    const matchedVeh = vehicles.find(
+      (v) => v.vehicleId.trim().toUpperCase() === String(sch.vehicleId || "").trim().toUpperCase()
+    );
+    return inferPm3dModelType(
+      sch.vehicleType || matchedVeh?.vehicleType || matchedVeh?.type,
+      sch.vehicleDescription || matchedVeh?.description,
+      sch.vehicleId || matchedVeh?.vehicleId || matchedVeh?.number
+    );
+  };
+
+  // 3D Viewport States
+  const [modelType, setModelType] = useState<MhPm3dModelType>(() => {
+    if (activeSchedule) return getScheduleModelType(activeSchedule);
+    if (activeVehicle) return getVehicleModelType(activeVehicle);
+    return inferPm3dModelType(undefined, undefined, effectiveVehicleId);
+  });
   const [attachTrailer, setAttachTrailer] = useState<boolean>(false);
   const [isHoodOpen, setIsHoodOpen] = useState<boolean>(false);
   const [activeZoneId, setActiveZoneId] = useState<string | null>(null);
+
+  // Filter schedules & fleet vehicles to match ONLY the currently selected 3D model
+  const filteredSchedulesForModel = useMemo(
+    () => schedules.filter((sch) => getScheduleModelType(sch) === modelType),
+    [schedules, vehicles, modelType]
+  );
+
+  const filteredVehiclesForModel = useMemo(
+    () =>
+      vehicles
+        .filter((v) => getVehicleModelType(v) === modelType)
+        .sort((a, b) =>
+          (a.vehicleId || "").localeCompare(b.vehicleId || "", undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
+        ),
+    [vehicles, modelType]
+  );
 
   const shortVehicleCode = useMemo(
     () =>
@@ -224,14 +259,16 @@ export function Pm3dInteractiveWorkspace({
 
   // Sync inferred model type & mileage/hours when selected schedule/vehicle changes
   useEffect(() => {
-    const inferred = inferPm3dModelType(
-      activeSchedule?.vehicleType || activeVehicle?.vehicleType,
-      activeSchedule?.vehicleDescription || activeVehicle?.description,
-      activeSchedule?.vehicleId || activeVehicle?.vehicleId || ""
-    );
-    setModelType(inferred);
-    if (!PM3D_MODELS[inferred].supportsTrailerCoupling) {
-      setAttachTrailer(false);
+    if (activeSchedule || activeVehicle) {
+      const inferred = activeSchedule
+        ? getScheduleModelType(activeSchedule)
+        : activeVehicle
+        ? getVehicleModelType(activeVehicle)
+        : modelType;
+      setModelType(inferred);
+      if (!PM3D_MODELS[inferred].supportsTrailerCoupling) {
+        setAttachTrailer(false);
+      }
     }
     setActiveZoneId(null);
     setZoneSessions({});
@@ -252,6 +289,13 @@ export function Pm3dInteractiveWorkspace({
         "ทีมช่างซ่อมบำรุง"
     );
   }, [selectedScheduleId, standaloneVehicleId]);
+
+  // If vehicles load asynchronously and no target is selected yet, pick the first matching vehicle for the active model
+  useEffect(() => {
+    if (!activeSchedule && !standaloneVehicleId && filteredVehiclesForModel.length > 0) {
+      setStandaloneVehicleId(filteredVehiclesForModel[0].vehicleId);
+    }
+  }, [activeSchedule, standaloneVehicleId, filteredVehiclesForModel]);
 
   // Active zones list (Primary vehicle + coupled trailer zones if coupled!)
   const activeZones = useMemo<Pm3dRenderZone[]>(() => {
@@ -370,6 +414,35 @@ export function Pm3dInteractiveWorkspace({
       setIsHoodOpen(false);
     }
     setActiveZoneId(null);
+
+    // Ensure the selected schedule/vehicle belongs to the chosen 3D model
+    const currentMatchesNext = activeSchedule
+      ? getScheduleModelType(activeSchedule) === nextType
+      : activeVehicle
+      ? getVehicleModelType(activeVehicle) === nextType
+      : false;
+
+    if (!currentMatchesNext) {
+      const nextSchedules = schedules.filter((sch) => getScheduleModelType(sch) === nextType);
+      const nextVehicles = vehicles
+        .filter((v) => getVehicleModelType(v) === nextType)
+        .sort((a, b) =>
+          (a.vehicleId || "").localeCompare(b.vehicleId || "", undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
+        );
+
+      if (nextSchedules.length > 0) {
+        onSelectScheduleId(nextSchedules[0].id);
+      } else if (nextVehicles.length > 0) {
+        onSelectScheduleId(null);
+        setStandaloneVehicleId(nextVehicles[0].vehicleId);
+      } else {
+        onSelectScheduleId(null);
+        setStandaloneVehicleId("");
+      }
+    }
   };
 
   // Checklist Item Status Mutation
@@ -798,12 +871,19 @@ export function Pm3dInteractiveWorkspace({
       {/* COMPACT TOP CONTEXT & PROGRESS BAR */}
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-[#1e3a5f]">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
-          {/* Schedule / Vehicle Selector */}
+          {/* Schedule / Vehicle Selector (Filtered to selected 3D vehicle model only) */}
           <div className="flex items-center gap-2">
             <select
-              value={activeSchedule ? `sch:${activeSchedule.id}` : `veh:${standaloneVehicleId}`}
+              value={
+                activeSchedule && filteredSchedulesForModel.some((s) => s.id === activeSchedule.id)
+                  ? `sch:${activeSchedule.id}`
+                  : filteredVehiclesForModel.some((v) => v.vehicleId === standaloneVehicleId)
+                  ? `veh:${standaloneVehicleId}`
+                  : ""
+              }
               onChange={(e) => {
                 const val = e.target.value;
+                if (!val) return;
                 if (val.startsWith("sch:")) {
                   onSelectScheduleId(val.slice(4));
                 } else {
@@ -815,9 +895,16 @@ export function Pm3dInteractiveWorkspace({
               style={CONTROL_STYLE}
               aria-label="เลือกกำหนดการ PM หรือรถที่ต้องการตรวจ"
             >
-              {schedules.length > 0 && (
-                <optgroup label="กำหนดการ PM ในระบบ">
-                  {schedules.map((sch) => (
+              {filteredSchedulesForModel.length === 0 && filteredVehiclesForModel.length === 0 && (
+                <option value="">
+                  -- ไม่พบรถประเภท {PM3D_MODELS[modelType].shortLabel} ในระบบ --
+                </option>
+              )}
+              {filteredSchedulesForModel.length > 0 && (
+                <optgroup
+                  label={`กำหนดการ PM ในระบบ — ${PM3D_MODELS[modelType].shortLabel} (${filteredSchedulesForModel.length})`}
+                >
+                  {filteredSchedulesForModel.map((sch) => (
                     <option key={sch.id} value={`sch:${sch.id}`}>
                       {sch.pmNo ? `${sch.pmNo} · ` : ""}
                       {sch.vehicleId} ({sch.pmCategory})
@@ -825,11 +912,14 @@ export function Pm3dInteractiveWorkspace({
                   ))}
                 </optgroup>
               )}
-              {vehicles.length > 0 && (
-                <optgroup label="รถในฟลีท (สร้างกำหนดการ PM ใหม่อัตโนมัติ)">
-                  {vehicles.map((v) => (
+              {filteredVehiclesForModel.length > 0 && (
+                <optgroup
+                  label={`รถในฟลีท — ${PM3D_MODELS[modelType].shortLabel} (${filteredVehiclesForModel.length} คัน)`}
+                >
+                  {filteredVehiclesForModel.map((v) => (
                     <option key={v.id} value={`veh:${v.vehicleId}`}>
-                      {v.vehicleId} · {getVehicleTypeDisplayLabel(v.vehicleType, v)} {v.description ? `(${v.description})` : ""}
+                      {v.vehicleId} · {getVehicleTypeDisplayLabel(v.vehicleType, v)}{" "}
+                      {v.description ? `(${v.description})` : ""}
                     </option>
                   ))}
                 </optgroup>

@@ -385,7 +385,7 @@ export function PmScheduleManagement({ vehicles, employees = [] }: PmScheduleMan
   );
 
   // Navigation & Filters
-  const [activeTab, setActiveTab] = useState<PmTabMode>("table");
+  const [activeTab, setActiveTab] = useState<PmTabMode>("pm3d");
   const [pm3dScheduleId, setPm3dScheduleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [vehicleTypeFilter, setVehicleTypeFilter] = useState<string>("All");

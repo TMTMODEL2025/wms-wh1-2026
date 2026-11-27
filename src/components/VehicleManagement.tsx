@@ -19,7 +19,9 @@ import {
   Table2,
   Wrench,
   FileText,
+  Trash2,
 } from "lucide-react";
+import Swal from "sweetalert2";
 import {
   Vehicle,
   VehicleType,
@@ -49,6 +51,7 @@ import {
   isMaintenanceRecordOpen,
   resolveOpenRepairMeta,
 } from "./fleet3d/VehicleParkingYard3D";
+import { deleteWmsVehicleFromCloud } from "../services/authWorkforceService";
 
 interface VehicleManagementProps {
   vehicles: Vehicle[];
@@ -111,6 +114,7 @@ export function VehicleManagement({
 
   // In-place confirmation state for Deactivation
   const [confirmingDeactivateId, setConfirmingDeactivateId] = useState<string | null>(null);
+  const [deletingVehicleId, setDeletingVehicleId] = useState<string | null>(null);
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
@@ -433,6 +437,74 @@ export function VehicleManagement({
     );
 
     setConfirmingDeactivateId(null);
+  };
+
+  // HANDLER: DELETE VEHICLE (with SweetAlert2 confirmation & Firestore sync)
+  const handleDeleteVehicle = async (targetVehicle: Vehicle) => {
+    if (deletingVehicleId) return;
+
+    const isDarkMode =
+      typeof document !== "undefined" &&
+      (document.documentElement.classList.contains("dark") ||
+        Boolean(document.querySelector(".theme-dark")));
+
+    const vehicleLabel = [
+      targetVehicle.vehicleId,
+      targetVehicle.description?.trim() ? `(${targetVehicle.description.trim()})` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    const confirmResult = await Swal.fire({
+      icon: "warning",
+      title: "ยืนยันการลบข้อมูลรถ?",
+      text: `ต้องการลบข้อมูลรถ ${vehicleLabel} ออกจากระบบใช่หรือไม่ การดำเนินการนี้ไม่สามารถย้อนกลับได้`,
+      showCancelButton: true,
+      confirmButtonText: "ยืนยันลบ",
+      cancelButtonText: "ยกเลิก",
+      confirmButtonColor: "#dc2626",
+      cancelButtonColor: isDarkMode ? "#334155" : "#64748b",
+      reverseButtons: true,
+      focusCancel: true,
+      background: isDarkMode ? "#0f172a" : "#ffffff",
+      color: isDarkMode ? "#f1f5f9" : "#1e293b",
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
+    setDeletingVehicleId(targetVehicle.id);
+    try {
+      await deleteWmsVehicleFromCloud(targetVehicle);
+
+      const updatedList = vehicles.filter(
+        (v) =>
+          v.id !== targetVehicle.id &&
+          v.vehicleId.trim().toUpperCase() !== targetVehicle.vehicleId.trim().toUpperCase()
+      );
+      onUpdateVehicles(updatedList);
+
+      if (viewingVehicle && viewingVehicle.id === targetVehicle.id) {
+        setViewingVehicle(null);
+      }
+      if (editingVehicle && editingVehicle.id === targetVehicle.id) {
+        setEditingVehicle(null);
+      }
+      if (confirmingDeactivateId === targetVehicle.id) {
+        setConfirmingDeactivateId(null);
+      }
+
+      showToast(`ลบข้อมูลรถ ${targetVehicle.vehicleId} ออกจากระบบเรียบร้อยแล้ว`);
+      onLogTransaction?.(
+        `Deleted vehicle ${targetVehicle.vehicleId} (${getVehicleTypeDisplayLabel(targetVehicle.vehicleType, targetVehicle)})`,
+        targetVehicle.vehicleId,
+        "Completed"
+      );
+    } catch (err) {
+      console.error("Failed to delete vehicle from Firestore:", err);
+      showToast(`ไม่สามารถลบข้อมูลรถ ${targetVehicle.vehicleId} ได้ กรุณาลองใหม่อีกครั้ง`, "error");
+    } finally {
+      setDeletingVehicleId(null);
+    }
   };
 
   return (
@@ -921,6 +993,18 @@ export function VehicleManagement({
                             : isConfirming
                             ? "Confirm Deactivation?"
                             : "Deactivate"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteVehicle(vehicle)}
+                          disabled={deletingVehicleId === vehicle.id}
+                          className="inline-flex items-center justify-center gap-[6px] rounded-[4px] border border-[#fca5a5] bg-white px-[8px] py-[5px] text-[11px] font-bold leading-normal text-[#b91c1c] whitespace-nowrap shrink-0 transition-colors cursor-pointer hover:bg-[#fee2e2] hover:border-[#ef4444] dark:border-[#7f1d1d] dark:bg-[#0d1b33] dark:text-[#fca5a5] dark:hover:bg-[#3b121b] dark:hover:border-[#ef4444] disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={`ลบข้อมูลรถ ${vehicle.vehicleId}`}
+                          aria-label={`ลบข้อมูลรถ ${vehicle.vehicleId}`}
+                        >
+                          <Trash2 size={12} />
+                          <span>ลบ</span>
                         </button>
                       </div>
                     </td>
