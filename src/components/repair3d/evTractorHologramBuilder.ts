@@ -2109,8 +2109,13 @@ export function buildBydEvTractorModel(
     });
   };
 
+  let lastAppliedLabel = (initialVehicleId || (isDiesel ? "TT-01" : "TTEV-19")).trim();
+
   const setVehicleLabel = (vehicleId: string) => {
-    const nextTex = createSideBadgeTexture(vehicleId, maxAnisotropy, variant);
+    const cleanLabel = (vehicleId || (isDiesel ? "TT-01" : "TTEV-19")).trim();
+    if (cleanLabel === lastAppliedLabel) return;
+    lastAppliedLabel = cleanLabel;
+    const nextTex = createSideBadgeTexture(cleanLabel, maxAnisotropy, variant);
     sideDecalMat.map = nextTex;
     sideDecalMat.needsUpdate = true;
     sideBadgeTex.dispose();

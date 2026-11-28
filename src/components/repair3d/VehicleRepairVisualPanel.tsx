@@ -9,7 +9,6 @@ import { Vehicle } from "../../types/officer";
 import {
   getVehicleTypeDisplayLabel,
   isClampTruckVehicle,
-  isElectricTractorVehicle,
   isStandardTractorVehicle,
   isTrailerVehicle,
   resolveVehicleType,
@@ -222,7 +221,7 @@ const NonEvBlueprintSilhouette: React.FC<{
   );
 };
 
-export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> = ({
+export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> = React.memo(({
   vehicleId,
   vehicle,
   repairType,
@@ -237,7 +236,10 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
   onAppendSymptom,
 }) => {
   const cleanVehicleId = (vehicleId || "").trim();
-  const candidate = vehicle || (cleanVehicleId ? { vehicleId: cleanVehicleId } : undefined);
+  const candidate = useMemo(
+    () => vehicle || (cleanVehicleId ? { vehicleId: cleanVehicleId } : undefined),
+    [vehicle, cleanVehicleId]
+  );
 
   const modelKind = useMemo(
     () => (candidate ? resolveRepair3dModelKind(candidate) : null),
@@ -535,4 +537,4 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
       </div>
     </div>
   );
-};
+});

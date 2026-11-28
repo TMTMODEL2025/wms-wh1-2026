@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -77,6 +77,7 @@ const _secondaryVecPool = [
   new THREE.Vector3(),
   new THREE.Vector3(),
 ];
+const _secList: THREE.Vector3[] = [];
 
 function detectSoftwareWebGL(): boolean {
   try {
@@ -104,8 +105,8 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
   fillHeight = false,
   onSelectZone,
 }) => {
-  const cameraPresets = getCameraPresetsForModel(modelKind);
-  const modelTitle = getModelDisplayTitle(modelKind);
+  const cameraPresets = useMemo(() => getCameraPresetsForModel(modelKind), [modelKind]);
+  const modelTitle = useMemo(() => getModelDisplayTitle(modelKind), [modelKind]);
 
   const canvasMountRef = useRef<HTMLDivElement | null>(null);
   const calloutOverlayRef = useRef<HTMLDivElement | null>(null);
@@ -123,14 +124,30 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
   const [webglUnavailable, setWebglUnavailable] = useState<boolean>(false);
 
   const cleanRepairType = (repairType || "").trim();
-  const validHistoryCount = sameCategoryHistory.filter((h) => h.statusTone !== "rejected").length;
-  const totalHistoryCost = sameCategoryHistory
-    .filter((h) => h.statusTone !== "rejected")
-    .reduce((sum, h) => sum + (h.totalCost || 0), 0);
-  const latestHistory = sameCategoryHistory[0] || null;
+  const { validHistoryCount, totalHistoryCost, latestHistory } = useMemo(() => {
+    let validCount = 0;
+    let totalCost = 0;
+    for (let i = 0; i < sameCategoryHistory.length; i++) {
+      const h = sameCategoryHistory[i];
+      if (h.statusTone !== "rejected") {
+        validCount++;
+        totalCost += h.totalCost || 0;
+      }
+    }
+    return {
+      validHistoryCount: validCount,
+      totalHistoryCost: totalCost,
+      latestHistory: sameCategoryHistory[0] || null,
+    };
+  }, [sameCategoryHistory]);
+
+  useEffect(() => {
+    setExpandedHistoryId(null);
+  }, [vehicleId, cleanRepairType]);
 
   // Refs synced to animation loop so React UI state updates NEVER tear down WebGL
   const activeZoneRef = useRef<EvRepairZoneSpec>(activeZone);
+  activeZoneRef.current = activeZone;
   const hoveredZoneIdRef = useRef<EvRepairZoneId | null>(null);
   const isXrayRef = useRef<boolean>(isXrayMode);
   const autoSpinRef = useRef<boolean>(autoSpin);
@@ -148,13 +165,13 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
   });
 
   useEffect(() => {
-    activeZoneRef.current = activeZone;
+    const zone = activeZoneRef.current;
     // Glide camera smoothly toward the newly chosen zone
-    camTransitionRef.current.pos.set(...activeZone.cameraPos);
-    camTransitionRef.current.target.set(...activeZone.cameraTarget);
+    camTransitionRef.current.pos.set(...zone.cameraPos);
+    camTransitionRef.current.target.set(...zone.cameraTarget);
     camTransitionRef.current.active = true;
     setCameraPreset("focus");
-  }, [activeZone]);
+  }, [activeZone.id, modelKind]);
 
   useEffect(() => {
     isXrayRef.current = isXrayMode;
@@ -448,7 +465,7 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
     };
 
     const tick = () => {
-      if (isDisposed) return;
+      if (isDisposed || document.hidden) return;
 
       const delta = Math.min(0.08, clock.getDelta());
       const elapsed = clock.getElapsedTime();
@@ -477,13 +494,14 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       controls.autoRotateSpeed = 1.4;
       controls.update();
 
-      // Update active hotspot + secondary beacons
+      // Update active hotspot + secondary beacons (zero per-frame array allocations)
       _activeHotspotVec.set(...zone.hotspotPos);
-      const secList: THREE.Vector3[] = [];
+      _secList.length = 0;
       if (zone.secondaryHotspots) {
-        for (let i = 0; i < Math.min(4, zone.secondaryHotspots.length); i++) {
+        const count = Math.min(4, zone.secondaryHotspots.length);
+        for (let i = 0; i < count; i++) {
           _secondaryVecPool[i].set(...zone.secondaryHotspots[i]);
-          secList.push(_secondaryVecPool[i]);
+          _secList.push(_secondaryVecPool[i]);
         }
       }
 
@@ -494,7 +512,7 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
         hoveredZoneId: hoveredZoneIdRef.current,
         isXrayMode: isXrayRef.current,
         activeHotspotPos: _activeHotspotVec,
-        secondaryHotspotPositions: secList,
+        secondaryHotspotPositions: _secList,
       });
 
       // Dynamic Blue Glow PointLight tracks active hotspot & breathes softly
@@ -528,10 +546,26 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       }
     };
 
-    tick();
+    // Pause WebGL render loop automatically when browser tab is hidden to save GPU/battery
+    const handleVisibilityChange = () => {
+      if (isDisposed) return;
+      if (document.hidden) {
+        window.cancelAnimationFrame(frameId);
+        window.clearTimeout(frameId);
+      } else {
+        clock.getDelta();
+        tick();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    if (!document.hidden) {
+      tick();
+    }
 
     return () => {
       isDisposed = true;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.cancelAnimationFrame(frameId);
       window.clearTimeout(frameId);
       resizeObserver.disconnect();

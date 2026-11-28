@@ -73,6 +73,7 @@ import {
   RmStockRecord,
 } from "./services/rmDataService";
 import { unsubscribeAllForkliftFirestoreListeners } from "./services/forkliftDataService";
+import { unsubscribeAllFirestoreListeners as unsubscribeAllSlitFirestoreListeners } from "./services/slitDataService";
 import {
   subscribeToWmsEmployees,
   syncEmployeeRosterDiffToCloud,
@@ -5354,8 +5355,11 @@ function WmsApp({
     }
   }, [currentUser, active, canAccessMenu, getDefaultMenu]);
 
-  // Strict Read-Quota Guard: immediately unsubscribe all Coil, RM & Forklift Firestore listeners when leaving their respective pages
+  // Strict Read-Quota Guard: immediately unsubscribe all Slit, Coil, RM & Forklift Firestore listeners when leaving their respective pages
   useEffect(() => {
+    if (active !== "slit") {
+      unsubscribeAllSlitFirestoreListeners();
+    }
     if (active !== "coil") {
       unsubscribeAllCoilFirestoreListeners();
     }

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Swal from "sweetalert2";
 import {
@@ -1346,54 +1346,59 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     });
   };
 
-  // Counts for KPI and 3-Stage Tabs
-  const pendingSupervisorNewCount = useMemo(
-    () => records.filter((r) => inferMhWorkflowStage(r) === "Submitted").length,
-    [records]
-  );
-  const pendingSupervisorInfoCount = useMemo(
-    () =>
-      records.filter(
-        (r) =>
-          inferMhWorkflowStage(r) === "SupervisorChecked" &&
-          r.managerStatus === "More Info Requested"
-      ).length,
-    [records]
-  );
-  const pendingSupervisorCount = pendingSupervisorNewCount + pendingSupervisorInfoCount;
+  // Counts for KPI and 3-Stage Tabs (Single O(n) pass instead of 7 separate array scans)
+  const {
+    pendingSupervisorNewCount,
+    pendingSupervisorInfoCount,
+    pendingSupervisorCount,
+    pendingManagerCount,
+    inWorkshopCount,
+    inRepairCount,
+    completedCount,
+    totalApprovedCost,
+  } = useMemo(() => {
+    let supNew = 0;
+    let supInfo = 0;
+    let mgrPending = 0;
+    let workshop = 0;
+    let repairing = 0;
+    let completed = 0;
+    let approvedCost = 0;
 
-  const pendingManagerCount = useMemo(
-    () =>
-      records.filter(
-        (r) =>
-          inferMhWorkflowStage(r) === "SupervisorChecked" &&
-          r.managerStatus !== "More Info Requested" &&
-          r.managerStatus !== "Rejected"
-      ).length,
-    [records]
-  );
-  const inWorkshopCount = useMemo(
-    () => records.filter((r) => inferMhWorkflowStage(r) === "ManagerApproved").length,
-    [records]
-  );
-  const inRepairCount = useMemo(
-    () => records.filter((r) => inferMhWorkflowStage(r) === "InRepair").length,
-    [records]
-  );
-  const completedCount = useMemo(
-    () => records.filter((r) => inferMhWorkflowStage(r) === "Completed").length,
-    [records]
-  );
-  const totalApprovedCost = useMemo(
-    () =>
-      records
-        .filter((r) => {
-          const s = inferMhWorkflowStage(r);
-          return s === "ManagerApproved" || s === "InRepair" || s === "Completed";
-        })
-        .reduce((sum, r) => sum + (Number(r.estimatedCost) || 0), 0),
-    [records]
-  );
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      const stage = inferMhWorkflowStage(r);
+      if (stage === "Submitted") {
+        supNew++;
+      } else if (stage === "SupervisorChecked") {
+        if (r.managerStatus === "More Info Requested") {
+          supInfo++;
+        } else if (r.managerStatus !== "Rejected") {
+          mgrPending++;
+        }
+      } else if (stage === "ManagerApproved") {
+        workshop++;
+        approvedCost += Number(r.estimatedCost) || 0;
+      } else if (stage === "InRepair") {
+        repairing++;
+        approvedCost += Number(r.estimatedCost) || 0;
+      } else if (stage === "Completed") {
+        completed++;
+        approvedCost += Number(r.estimatedCost) || 0;
+      }
+    }
+
+    return {
+      pendingSupervisorNewCount: supNew,
+      pendingSupervisorInfoCount: supInfo,
+      pendingSupervisorCount: supNew + supInfo,
+      pendingManagerCount: mgrPending,
+      inWorkshopCount: workshop,
+      inRepairCount: repairing,
+      completedCount: completed,
+      totalApprovedCost: approvedCost,
+    };
+  }, [records]);
 
   // Filtered work orders per active tab & toolbar filters
   const filteredRecords = useMemo(() => {
@@ -1633,15 +1638,15 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     setReqSelectedEvZone(null);
   };
 
-  const handleSelect3dEvZone = (zone: EvRepairZoneSpec) => {
+  const handleSelect3dEvZone = useCallback((zone: EvRepairZoneSpec) => {
     setReqSelectedEvZone(zone);
     if (zone.primaryRepairCategory) {
       setReqRepairType(zone.primaryRepairCategory);
     }
     setReqRepairDescription((prev) => upsertRepairPartTagInDescription(prev, zone.nameTh));
-  };
+  }, []);
 
-  const handleAppendEvSymptom = (symptom: string) => {
+  const handleAppendEvSymptom = useCallback((symptom: string) => {
     const clean = symptom.trim();
     if (!clean) return;
     setReqRepairDescription((prev) => {
@@ -1651,7 +1656,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
       if (trimmed.endsWith("]")) return `${trimmed} ${clean}`;
       return `${trimmed}, ${clean}`;
     });
-  };
+  }, []);
 
   const isSupervisorOrManager =
     currentUser?.role === "Supervisor" ||
