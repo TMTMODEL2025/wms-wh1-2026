@@ -513,25 +513,41 @@ export function TmtRecheckDailyReport({
     setExpandedVehicleIds({});
   };
 
+  // SAP Fiori Design Tokens
+  const FIORI_BTN_BASE =
+    "inline-flex min-h-[34px] items-center justify-center gap-[6px] rounded-[4px] border px-[14px] py-[7px] !text-[14px] font-semibold leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-45";
+  const FIORI_BTN_PRIMARY = `${FIORI_BTN_BASE} border-[#087eaf] bg-[#087eaf] text-white hover:bg-[#075985] hover:border-[#075985]`;
+  const FIORI_BTN_SECONDARY = `${FIORI_BTN_BASE} border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8]`;
+  const FIORI_BTN_CRITICAL = `${FIORI_BTN_BASE} border-[#b45309] bg-[#b45309] text-white hover:bg-[#92400e] hover:border-[#92400e] dark:border-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-700 dark:hover:border-amber-700`;
+  const FIORI_BTN_LINE = `${FIORI_BTN_BASE} border-[#06C755] bg-[#06C755] text-white hover:bg-[#05b34c] hover:border-[#05b34c]`;
+  const FIORI_BTN_COMPACT_SECONDARY =
+    "inline-flex min-h-[28px] items-center justify-center gap-1 rounded-[4px] border border-[#b9c9d2] bg-white px-2.5 py-1 !text-[12.5px] font-semibold text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8] leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer";
+  const FIORI_BTN_COMPACT_CRITICAL =
+    "inline-flex min-h-[28px] items-center justify-center gap-1 rounded-[4px] border border-[#f59e0b]/70 bg-[#fffbeb] px-2.5 py-1 !text-[12.5px] font-semibold text-[#b45309] hover:bg-[#fef3c7] hover:border-[#d97706] dark:border-amber-700/70 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/60 leading-tight whitespace-nowrap shrink-0 transition-colors cursor-pointer";
+  const FIORI_BTN_ICON_SECONDARY =
+    "inline-flex h-[32px] w-[32px] shrink-0 items-center justify-center rounded-[4px] border border-[#b9c9d2] bg-white text-[#075985] hover:bg-[#edf7fb] hover:border-[#087eaf] dark:border-[#1e3a5f] dark:bg-[#0d1b33] dark:text-[#38bdf8] dark:hover:bg-[#152b4f] dark:hover:border-[#38bdf8] transition-colors cursor-pointer";
+  const FIORI_CONTROL_INPUT =
+    "!h-[36px] !min-h-[36px] !rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] !text-[14px] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:border-[#087eaf] dark:focus:border-[#38bdf8] focus:outline-none transition-colors";
+
   return (
     <div className="space-y-3 w-full max-w-none">
-      {/* Executive Header Card */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4 shadow-xs">
+      {/* Executive Header Card (SAP Fiori) */}
+      <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] p-3.5 sm:p-4 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+              <h3 className="text-[16px] sm:text-[17px] font-bold text-[#1d2d3e] dark:text-white tracking-tight">
                 รายงานสรุป TMT Recheck ประจำวัน
               </h3>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-slate-500 dark:text-slate-400">
               <span>สรุปยอดตรวจปล่อยรถขึ้นสินค้าเข้ากลุ่ม LINE สำหรับผู้จัดการ</span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums">
                 ช่วงข้อมูล: {reportDateFilter ? formatThaiDateLabel(reportDateFilter) : "ทุกวันทั้งหมด"}
               </span>
               <span aria-hidden="true">·</span>
-              <span className="font-mono tabular-nums">
+              <span className="font-mono tabular-nums font-semibold text-[#075985] dark:text-[#38bdf8]">
                 {analytics.totalVehicles} คัน · {analytics.totalWeightTon} ตัน
               </span>
             </div>
@@ -541,8 +557,7 @@ export function TmtRecheckDailyReport({
             <button
               type="button"
               onClick={handleOpenLineModal}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer whitespace-nowrap"
-              style={{ backgroundColor: "#06C755" }}
+              className={FIORI_BTN_LINE}
             >
               <MessageCircle size={15} />
               <span>แชร์เข้ากลุ่ม LINE</span>
@@ -551,79 +566,76 @@ export function TmtRecheckDailyReport({
             <button
               type="button"
               onClick={handleExportSummaryPng}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 dark:border-slate-700 transition-colors whitespace-nowrap cursor-pointer"
+              className={FIORI_BTN_SECONDARY}
               title="บันทึกเป็นรูปภาพเพื่อส่งลงกลุ่ม LINE"
             >
-              <Download size={14} />
+              <Download size={15} />
               <span>บันทึกรูปส่ง LINE</span>
             </button>
 
             <button
               type="button"
               onClick={() => onOpenWeightTicket()}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 dark:text-amber-200 dark:border-amber-800 transition-colors whitespace-nowrap cursor-pointer"
+              className={`hidden sm:inline-flex ${FIORI_BTN_CRITICAL}`}
             >
-              <Scale size={14} />
+              <Scale size={15} />
               <span>พิมพ์บัตรชั่ง</span>
             </button>
 
             <button
               type="button"
               onClick={() => window.print()}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 transition-colors whitespace-nowrap cursor-pointer"
+              className={`hidden sm:inline-flex ${FIORI_BTN_SECONDARY}`}
             >
-              <Printer size={14} />
+              <Printer size={15} />
               <span>พิมพ์</span>
             </button>
           </div>
         </div>
 
         {pngStatus && (
-          <div className="mt-3 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200 text-xs flex items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5">
-              <CheckCircle2 size={14} />
+          <div className="mt-3 px-3 py-2 rounded-[4px] bg-[#ecfdf5] border border-[#a7f3d0] text-[#107e3e] dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-200 text-[13px] flex items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-1.5 font-medium">
+              <CheckCircle2 size={15} />
               {pngStatus}
             </span>
-            <button type="button" onClick={() => setPngStatus(null)} className="opacity-70 hover:opacity-100">
-              <X size={14} />
+            <button
+              type="button"
+              onClick={() => setPngStatus(null)}
+              aria-label="ปิดการแจ้งเตือน"
+              className="opacity-70 hover:opacity-100 cursor-pointer"
+            >
+              <X size={15} />
             </button>
           </div>
         )}
       </div>
 
-      {/* Filter Bar (Strict 35px / 12px / borderRadius 6px standard) */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 sm:px-[18px] sm:py-3 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          <div className="relative flex-1 min-w-[200px]">
+      {/* Filter Bar (SAP Fiori 36px / 14px / rounded-[4px]) */}
+      <div className="bg-[#f5f8fa] dark:bg-[#0c1930] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] px-3.5 py-2.5 sm:px-4 sm:py-3 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          <div className="relative flex-1 min-w-[210px]">
             <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              size={15}
             />
             <input
               type="text"
               value={reportSearchQuery}
               onChange={(e) => setReportSearchQuery(e.target.value)}
               placeholder="ค้นหาทะเบียนรถ, ชื่อลูกค้า, DO, SO หรือ Batch..."
-              className="field w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-normal focus:outline-none focus:border-cyan-500"
-              style={{
-                width: "100%",
-                height: 35,
-                minHeight: 35,
-                padding: "7px 10px 7px 32px",
-                borderRadius: 6,
-                fontSize: 12,
-              }}
+              className={`${FIORI_CONTROL_INPUT} w-full pl-9 pr-3`}
             />
           </div>
 
-          <div className="inline-flex items-center rounded-md border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 p-0.5 shrink-0">
+          <div className="inline-flex items-center rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] p-0.5 shrink-0 h-[36px]">
             <button
               type="button"
               onClick={() => setReportDateFilter(todayYmd)}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-full px-3 rounded-[3px] !text-[13px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 reportDateFilter === todayYmd
-                  ? "bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-[#087eaf] text-white"
+                  : "text-[#075985] dark:text-[#38bdf8] hover:bg-[#edf7fb] dark:hover:bg-[#152b4f]"
               }`}
             >
               วันนี้
@@ -631,10 +643,10 @@ export function TmtRecheckDailyReport({
             <button
               type="button"
               onClick={() => setReportDateFilter(yesterdayYmd)}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-full px-3 rounded-[3px] !text-[13px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 reportDateFilter === yesterdayYmd
-                  ? "bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-[#087eaf] text-white"
+                  : "text-[#075985] dark:text-[#38bdf8] hover:bg-[#edf7fb] dark:hover:bg-[#152b4f]"
               }`}
             >
               เมื่อวาน
@@ -642,10 +654,10 @@ export function TmtRecheckDailyReport({
             <button
               type="button"
               onClick={() => setReportDateFilter("")}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-full px-3 rounded-[3px] !text-[13px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 reportDateFilter === ""
-                  ? "bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-[#087eaf] text-white"
+                  : "text-[#075985] dark:text-[#38bdf8] hover:bg-[#edf7fb] dark:hover:bg-[#152b4f]"
               }`}
             >
               ทั้งหมด
@@ -656,26 +668,19 @@ export function TmtRecheckDailyReport({
             type="date"
             value={reportDateFilter}
             onChange={(e) => setReportDateFilter(e.target.value)}
-            className="field bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 font-normal dark:[color-scheme:dark] focus:outline-none focus:border-cyan-500"
-            style={{
-              height: 35,
-              minHeight: 35,
-              padding: "6px 8px",
-              borderRadius: 6,
-              fontSize: 12,
-            }}
+            className={`${FIORI_CONTROL_INPUT} px-2.5 dark:[color-scheme:dark]`}
           />
         </div>
 
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <div className="inline-flex items-center rounded-md border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-950 p-0.5">
+          <div className="inline-flex items-center rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] p-0.5 h-[36px]">
             <button
               type="button"
               onClick={() => setSectionView("executive")}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-full px-3 rounded-[3px] !text-[13px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 sectionView === "executive"
-                  ? "bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-[#087eaf] text-white"
+                  : "text-[#075985] dark:text-[#38bdf8] hover:bg-[#edf7fb] dark:hover:bg-[#152b4f]"
               }`}
             >
               สรุปผู้จัดการ
@@ -683,10 +688,10 @@ export function TmtRecheckDailyReport({
             <button
               type="button"
               onClick={() => setSectionView("details")}
-              className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+              className={`h-full px-3 rounded-[3px] !text-[13px] font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                 sectionView === "details"
-                  ? "bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 shadow-xs"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  ? "bg-[#087eaf] text-white"
+                  : "text-[#075985] dark:text-[#38bdf8] hover:bg-[#edf7fb] dark:hover:bg-[#152b4f]"
               }`}
             >
               รายละเอียดราย Batch
@@ -696,80 +701,80 @@ export function TmtRecheckDailyReport({
           <button
             type="button"
             onClick={expandAllVehicles}
-            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-cyan-300 dark:border-slate-700 rounded-md text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap cursor-pointer"
+            className={`${FIORI_BTN_SECONDARY} h-[36px] px-3 !text-[13px]`}
           >
-            <ChevronDown size={13} />
+            <ChevronDown size={14} />
             <span>ขยายทั้งหมด</span>
           </button>
           <button
             type="button"
             onClick={collapseAllVehicles}
-            className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 dark:border-slate-700 rounded-md text-xs font-semibold inline-flex items-center gap-1 whitespace-nowrap cursor-pointer"
+            className={`${FIORI_BTN_SECONDARY} h-[36px] px-3 !text-[13px]`}
           >
-            <ChevronUp size={13} />
+            <ChevronUp size={14} />
             <span>ย่อทั้งหมด</span>
           </button>
         </div>
       </div>
 
-      {/* 4-Column Executive KPI Strip */}
+      {/* 4-Column Executive KPI Strip (SAP Fiori Cards) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+        <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] p-3.5 sm:p-4 shadow-xs">
+          <div className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
             รถที่ตรวจปล่อยแล้ว
           </div>
-          <div className="mt-1 text-2xl font-extrabold font-mono tabular-nums text-sky-700 dark:text-cyan-300">
+          <div className="mt-1 text-2xl font-extrabold font-mono tabular-nums text-[#087eaf] dark:text-[#38bdf8]">
             {analytics.totalVehicles}{" "}
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">คัน</span>
+            <span className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">คัน</span>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+          <div className="mt-1 text-[11.5px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             {analytics.totalDoCount} DO · ลูกค้า {analytics.customers.length} ราย
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+        <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] p-3.5 sm:p-4 shadow-xs">
+          <div className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
             น้ำหนักรวมสุทธิ
           </div>
-          <div className="mt-1 text-2xl font-extrabold font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+          <div className="mt-1 text-2xl font-extrabold font-mono tabular-nums text-[#107e3e] dark:text-emerald-400">
             {analytics.totalWeightTon}{" "}
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">ตัน</span>
+            <span className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">ตัน</span>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+          <div className="mt-1 text-[11.5px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             {analytics.totalWeightKg.toLocaleString()} กก.
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+        <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] p-3.5 sm:p-4 shadow-xs">
+          <div className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
             ปริมาณม้วน / รูปหลักฐาน
           </div>
-          <div className="mt-1 text-2xl font-extrabold font-mono tabular-nums text-slate-900 dark:text-white">
+          <div className="mt-1 text-2xl font-extrabold font-mono tabular-nums text-[#1d2d3e] dark:text-white">
             {analytics.totalScannedCoils}{" "}
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
               ม้วนสแกน
             </span>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+          <div className="mt-1 text-[11.5px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             รวม {analytics.totalItems} รายการ · รูป {analytics.totalPhotos} รูป
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 sm:p-4">
-          <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+        <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] p-3.5 sm:p-4 shadow-xs">
+          <div className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">
             คิวรอตรวจคงเหลือ (หน้างาน)
           </div>
           <div
             className={`mt-1 text-2xl font-extrabold font-mono tabular-nums ${
               activeVehicles.length > 0
-                ? "text-amber-600 dark:text-amber-400"
+                ? "text-[#b45309] dark:text-amber-400"
                 : "text-slate-700 dark:text-slate-300"
             }`}
           >
             {activeVehicles.length}{" "}
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">คัน</span>
+            <span className="text-[12.5px] font-semibold text-slate-500 dark:text-slate-400">คัน</span>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+          <div className="mt-1 text-[11.5px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
             น้ำหนักค้างคิว {analytics.pendingWeightKg.toLocaleString()} กก.
           </div>
         </div>
@@ -777,32 +782,32 @@ export function TmtRecheckDailyReport({
 
       {/* Executive Summary Tables (2-Column Balanced Split) */}
       {sectionView === "executive" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
           {/* Left: Manager Dispatch Summary Table */}
-          <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
+          <div className="lg:col-span-7 bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] overflow-hidden shadow-xs">
+            <div className="bg-[#f5f8fa] dark:bg-[#0c1930] px-4 py-2.5 border-b border-[#d9e2e8] dark:border-[#1e3a5f] flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet size={15} className="text-sky-600 dark:text-cyan-400" />
-                <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                <FileSpreadsheet size={16} className="text-[#087eaf] dark:text-[#38bdf8]" />
+                <h4 className="text-[14px] font-bold text-[#1d2d3e] dark:text-white">
                   สรุปรถที่ตรวจสอบเสร็จสิ้น ({filteredCompletedReports.length} คัน)
                 </h4>
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
+              <span className="text-[12px] text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                 {reportDateFilter ? formatThaiDateLabel(reportDateFilter) : "ทุกวัน"}
               </span>
             </div>
 
             {filteredCompletedReports.length === 0 ? (
-              <div className="p-8 text-center space-y-2">
+              <div className="p-8 text-center space-y-2.5">
                 <FileText size={32} className="mx-auto text-slate-400 dark:text-slate-600" />
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-[13px] text-slate-500 dark:text-slate-400">
                   ไม่พบรถที่ตรวจขึ้นสินค้าเสร็จสิ้นในช่วงที่เลือก
                 </p>
                 {reportDateFilter !== "" && completedReports.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setReportDateFilter("")}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 dark:bg-cyan-950/60 dark:text-cyan-300 dark:border-cyan-800 cursor-pointer"
+                    className={FIORI_BTN_SECONDARY}
                   >
                     แสดงรายงานทั้งหมด ({completedReports.length} คัน)
                   </button>
@@ -810,9 +815,9 @@ export function TmtRecheckDailyReport({
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs text-left border-collapse">
+                <table className="w-full text-[13px] text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-800 whitespace-nowrap">
+                    <tr className="bg-[#f5f8fa] dark:bg-[#0c1930] text-[#475569] dark:text-slate-300 font-semibold text-[12px] border-b border-[#d9e2e8] dark:border-[#1e3a5f] whitespace-nowrap">
                       <th className="py-2.5 px-3 text-center">#</th>
                       <th className="py-2.5 px-3">ทะเบียนรถ</th>
                       <th className="py-2.5 px-3">ลูกค้า</th>
@@ -823,7 +828,7 @@ export function TmtRecheckDailyReport({
                       <th className="py-2.5 px-3 text-right">หลักฐาน</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800/80">
+                  <tbody className="divide-y divide-[#e5edf2] dark:divide-[#1e3a5f]/70">
                     {filteredCompletedReports.map((v, idx) => {
                       const scanned = v.items.filter((i) => i.requiresScan && i.scanned).length;
                       return (
@@ -833,15 +838,15 @@ export function TmtRecheckDailyReport({
                             setSectionView("details");
                             setExpandedVehicleIds((prev) => ({ ...prev, [v.vehicleId]: true }));
                           }}
-                          className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer"
+                          className="hover:bg-[#f5f8fa] dark:hover:bg-[#0d1f3c] transition-colors cursor-pointer"
                         >
                           <td className="py-2.5 px-3 text-center font-mono tabular-nums text-slate-400">
                             {idx + 1}
                           </td>
-                          <td className="py-2.5 px-3 font-mono font-bold text-sky-700 dark:text-cyan-300 whitespace-nowrap">
+                          <td className="py-2.5 px-3 font-mono tabular-nums font-bold text-[#075985] dark:text-[#38bdf8] whitespace-nowrap">
                             {v.vehicleId}
                           </td>
-                          <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-slate-100 max-w-[180px] truncate">
+                          <td className="py-2.5 px-3 font-medium text-[#1d2d3e] dark:text-slate-100 max-w-[180px] truncate">
                             {v.customerNames.join(", ") || "-"}
                           </td>
                           <td className="py-2.5 px-3 font-mono tabular-nums text-slate-600 dark:text-slate-400 whitespace-nowrap">
@@ -850,7 +855,7 @@ export function TmtRecheckDailyReport({
                           <td className="py-2.5 px-3 text-center font-mono tabular-nums text-slate-700 dark:text-slate-200 whitespace-nowrap">
                             {scanned > 0 ? `${scanned} ม้วน` : `${v.items.length} รายการ`}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-white whitespace-nowrap">
+                          <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-[#1d2d3e] dark:text-white whitespace-nowrap">
                             {v.totalGrossWeight.toLocaleString()}
                           </td>
                           <td className="py-2.5 px-3 text-center font-mono tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
@@ -864,10 +869,10 @@ export function TmtRecheckDailyReport({
                                   e.stopPropagation();
                                   onViewPhotos(v);
                                 }}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:text-sky-900 dark:text-cyan-400 dark:hover:text-cyan-300 underline cursor-pointer"
+                                className={FIORI_BTN_COMPACT_SECONDARY}
                               >
-                                <ImageIcon size={12} />
-                                {v.photos.length} รูป
+                                <ImageIcon size={13} />
+                                <span>{v.photos.length} รูป</span>
                               </button>
                             )}
                           </td>
@@ -876,17 +881,17 @@ export function TmtRecheckDailyReport({
                     })}
                   </tbody>
                   <tfoot>
-                    <tr className="bg-slate-50 dark:bg-slate-950 font-bold border-t border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white">
+                    <tr className="bg-[#f5f8fa] dark:bg-[#0c1930] font-bold border-t border-[#d9e2e8] dark:border-[#1e3a5f] text-[#1d2d3e] dark:text-white">
                       <td colSpan={4} className="py-2.5 px-3">
                         รวมทั้งหมด ({analytics.totalVehicles} คัน)
                       </td>
                       <td className="py-2.5 px-3 text-center font-mono tabular-nums">
                         {analytics.totalItems} รายการ
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-emerald-700 dark:text-emerald-400">
+                      <td className="py-2.5 px-3 text-right font-mono tabular-nums text-[#107e3e] dark:text-emerald-400">
                         {analytics.totalWeightKg.toLocaleString()} กก.
                       </td>
-                      <td colSpan={2} className="py-2.5 px-3 text-right font-mono tabular-nums text-xs text-slate-500 dark:text-slate-400">
+                      <td colSpan={2} className="py-2.5 px-3 text-right font-mono tabular-nums text-[12px] text-slate-500 dark:text-slate-400">
                         ({analytics.totalWeightTon} ตัน)
                       </td>
                     </tr>
@@ -897,115 +902,119 @@ export function TmtRecheckDailyReport({
           </div>
 
           {/* Right: Customer Breakdown & Pending Queue */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className="lg:col-span-5 space-y-3.5">
             {/* Customer Summary Card */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+            <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] overflow-hidden shadow-xs">
+              <div className="bg-[#f5f8fa] dark:bg-[#0c1930] px-4 py-2.5 border-b border-[#d9e2e8] dark:border-[#1e3a5f] flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Building2 size={15} className="text-emerald-600 dark:text-emerald-400" />
-                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  <Building2 size={16} className="text-[#107e3e] dark:text-emerald-400" />
+                  <h4 className="text-[14px] font-bold text-[#1d2d3e] dark:text-white">
                     สรุปยอดส่งแยกลูกค้า ({analytics.customers.length} ราย)
                   </h4>
                 </div>
               </div>
 
-              {analytics.customers.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 py-3 text-center">
-                  ยังไม่มีข้อมูลลูกค้าในช่วงวันที่เลือก
-                </p>
-              ) : (
-                <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
-                  {analytics.customers.map((c) => {
-                    const pct =
-                      analytics.totalWeightKg > 0
-                        ? Math.round((c.weightKg / analytics.totalWeightKg) * 100)
-                        : 0;
-                    return (
-                      <div key={c.customerName} className="space-y-1">
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                            {c.customerName}
-                          </span>
-                          <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-white shrink-0">
-                            {c.weightKg.toLocaleString()} กก.
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-emerald-500"
-                              style={{ width: `${Math.min(100, Math.max(4, pct))}%` }}
-                            />
+              <div className="p-4">
+                {analytics.customers.length === 0 ? (
+                  <p className="text-[13px] text-slate-500 dark:text-slate-400 py-3 text-center">
+                    ยังไม่มีข้อมูลลูกค้าในช่วงวันที่เลือก
+                  </p>
+                ) : (
+                  <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                    {analytics.customers.map((c) => {
+                      const pct =
+                        analytics.totalWeightKg > 0
+                          ? Math.round((c.weightKg / analytics.totalWeightKg) * 100)
+                          : 0;
+                      return (
+                        <div key={c.customerName} className="space-y-1">
+                          <div className="flex items-center justify-between gap-2 text-[13px]">
+                            <span className="font-semibold text-[#1d2d3e] dark:text-slate-100 truncate">
+                              {c.customerName}
+                            </span>
+                            <span className="font-mono tabular-nums font-bold text-[#1d2d3e] dark:text-white shrink-0">
+                              {c.weightKg.toLocaleString()} กก.
+                            </span>
                           </div>
-                          <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 shrink-0">
-                            {c.vehicleCount} คัน · {pct}%
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1.5 rounded-[2px] bg-[#e5edf2] dark:bg-[#1e3a5f] overflow-hidden">
+                              <div
+                                className="h-full rounded-[2px] bg-[#107e3e] dark:bg-emerald-500"
+                                style={{ width: `${Math.min(100, Math.max(4, pct))}%` }}
+                              />
+                            </div>
+                            <span className="text-[11.5px] font-mono tabular-nums text-slate-500 dark:text-slate-400 shrink-0">
+                              {c.vehicleCount} คัน · {pct}%
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Active / Pending Queue Card */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 space-y-3">
-              <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-200 dark:border-slate-800">
+            <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] overflow-hidden shadow-xs">
+              <div className="bg-[#f5f8fa] dark:bg-[#0c1930] px-4 py-2.5 border-b border-[#d9e2e8] dark:border-[#1e3a5f] flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Clock size={15} className="text-amber-600 dark:text-amber-400" />
-                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                  <Clock size={16} className="text-[#b45309] dark:text-amber-400" />
+                  <h4 className="text-[14px] font-bold text-[#1d2d3e] dark:text-white">
                     คิวรถรอตรวจหน้างานปัจจุบัน ({activeVehicles.length} คัน)
                   </h4>
                 </div>
               </div>
 
-              {activeVehicles.length === 0 ? (
-                <div className="py-3 text-center text-xs text-emerald-700 dark:text-emerald-400 font-medium">
-                  ไม่มีรถค้างรอตรวจในคิวหน้างาน
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                  {activeVehicles.map((v) => {
-                    const req = v.items.filter((i) => i.requiresScan).length;
-                    const scanned = v.items.filter((i) => i.requiresScan && i.scanned).length;
-                    return (
-                      <div
-                        key={v.vehicleId}
-                        className="flex items-center justify-between gap-2 py-2 px-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/60"
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="font-mono font-bold text-sky-700 dark:text-cyan-300">
-                              {v.vehicleId}
-                            </span>
-                            <span className="text-slate-500 dark:text-slate-400">·</span>
-                            <span className="text-slate-700 dark:text-slate-200 truncate">
-                              {v.customerNames.join(", ")}
-                            </span>
+              <div className="p-3.5">
+                {activeVehicles.length === 0 ? (
+                  <div className="py-3 text-center text-[13px] text-[#107e3e] dark:text-emerald-400 font-medium">
+                    ไม่มีรถค้างรอตรวจในคิวหน้างาน
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {activeVehicles.map((v) => {
+                      const req = v.items.filter((i) => i.requiresScan).length;
+                      const scanned = v.items.filter((i) => i.requiresScan && i.scanned).length;
+                      return (
+                        <div
+                          key={v.vehicleId}
+                          className="flex items-center justify-between gap-2 py-2 px-3 rounded-[4px] border border-[#d9e2e8] dark:border-[#1e3a5f] bg-[#f8fafc] dark:bg-[#0c1930]"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-[13px]">
+                              <span className="font-mono tabular-nums font-bold text-[#075985] dark:text-[#38bdf8]">
+                                {v.vehicleId}
+                              </span>
+                              <span className="text-slate-400">·</span>
+                              <span className="text-[#1d2d3e] dark:text-slate-200 truncate">
+                                {v.customerNames.join(", ")}
+                              </span>
+                            </div>
+                            <div className="text-[11.5px] font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-0.5">
+                              {v.totalGrossWeight.toLocaleString()} กก. · สแกน {scanned}/{req} ·{" "}
+                              {v.status === "ready_to_inspect"
+                                ? "พร้อมตรวจสอบ"
+                                : v.status === "scanning"
+                                ? "กำลังสแกน"
+                                : "รอตรวจสอบ"}
+                            </div>
                           </div>
-                          <div className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-slate-400 mt-0.5">
-                            {v.totalGrossWeight.toLocaleString()} กก. · สแกน {scanned}/{req} ·{" "}
-                            {v.status === "ready_to_inspect"
-                              ? "พร้อมตรวจสอบ"
-                              : v.status === "scanning"
-                              ? "กำลังสแกน"
-                              : "รอตรวจสอบ"}
-                          </div>
+                          {onNavigateToInspector && (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateToInspector(v.vehicleId)}
+                              className={FIORI_BTN_COMPACT_SECONDARY}
+                            >
+                              ตรวจคันนี้
+                            </button>
+                          )}
                         </div>
-                        {onNavigateToInspector && (
-                          <button
-                            type="button"
-                            onClick={() => onNavigateToInspector(v.vehicleId)}
-                            className="shrink-0 px-2.5 py-1 rounded text-[11px] font-semibold bg-white hover:bg-slate-100 text-sky-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-cyan-300 dark:border-slate-700 cursor-pointer"
-                          >
-                            ตรวจคันนี้
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1014,15 +1023,15 @@ export function TmtRecheckDailyReport({
       {/* Detailed Vehicle & Batch Accordions */}
       <div className="space-y-2.5">
         <div className="flex items-center justify-between px-1">
-          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300">
+          <h4 className="text-[13.5px] font-bold text-[#1d2d3e] dark:text-slate-200">
             รายละเอียดรายการ Batch รายคัน ({filteredCompletedReports.length} คัน)
           </h4>
         </div>
 
         {filteredCompletedReports.length === 0 ? (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-8 text-center space-y-2">
+          <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] p-8 text-center space-y-2">
             <FileText size={32} className="mx-auto text-slate-400 dark:text-slate-600" />
-            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            <p className="text-[13px] font-medium text-slate-600 dark:text-slate-300">
               ยังไม่มีรายงานการขึ้นสินค้าที่ตรวจสอบเสร็จสิ้นในช่วงที่เลือก
             </p>
           </div>
@@ -1035,24 +1044,24 @@ export function TmtRecheckDailyReport({
             return (
               <div
                 key={`${v.vehicleId}-${v.completedAt || vIdx}`}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs"
+                className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] overflow-hidden shadow-xs"
               >
                 <div
                   onClick={() => toggleExpandVehicle(v.vehicleId)}
-                  className="bg-slate-50/80 dark:bg-slate-950 p-2.5 sm:px-4 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-xs cursor-pointer hover:bg-slate-100/80 dark:hover:bg-slate-900/90 transition-colors select-none"
+                  className="bg-[#f5f8fa] dark:bg-[#0c1930] px-3.5 py-2.5 sm:px-4 border-b border-[#d9e2e8] dark:border-[#1e3a5f] flex flex-wrap items-center justify-between gap-x-3 gap-y-2 text-[13px] cursor-pointer hover:bg-[#edf7fb] dark:hover:bg-[#112442] transition-colors select-none"
                 >
                   <div className="flex flex-wrap items-center gap-2 min-w-0">
-                    <div className="w-5 h-5 rounded bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center justify-center text-sky-700 dark:text-cyan-400 shrink-0">
-                      {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    <div className="w-7 h-7 rounded-[4px] bg-white dark:bg-[#08152d] border border-[#b9c9d2] dark:border-[#1e3a5f] flex items-center justify-center text-[#075985] dark:text-[#38bdf8] shrink-0">
+                      {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                     </div>
-                    <span className="font-mono tabular-nums text-slate-600 dark:text-cyan-300 font-semibold text-xs inline-flex items-center gap-1">
-                      <Calendar size={12} className="text-sky-600 dark:text-cyan-400" />
+                    <span className="font-mono tabular-nums text-slate-600 dark:text-[#38bdf8] font-semibold text-[12.5px] inline-flex items-center gap-1">
+                      <Calendar size={13} className="text-[#087eaf] dark:text-[#38bdf8]" />
                       {dateStr}
                     </span>
                     <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">
                       ·
                     </span>
-                    <span className="font-mono font-extrabold text-slate-900 dark:text-white text-sm">
+                    <span className="font-mono tabular-nums font-extrabold text-[#1d2d3e] dark:text-white text-[14px]">
                       {v.vehicleId}
                     </span>
                     <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">
@@ -1063,9 +1072,9 @@ export function TmtRecheckDailyReport({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 font-mono tabular-nums text-[11px] shrink-0">
-                    <span className="text-emerald-700 dark:text-emerald-400 font-bold inline-flex items-center gap-1 font-sans">
-                      <CheckCircle2 size={12} />
+                  <div className="flex flex-wrap items-center gap-2 font-mono tabular-nums text-[12px] shrink-0">
+                    <span className="text-[#107e3e] dark:text-emerald-400 font-semibold inline-flex items-center gap-1 font-sans">
+                      <CheckCircle2 size={13} />
                       ตรวจเสร็จสิ้น ({formatTimeHm(v.completedAt)})
                     </span>
 
@@ -1075,10 +1084,10 @@ export function TmtRecheckDailyReport({
                         e.stopPropagation();
                         onOpenWeightTicket(v.vehicleId);
                       }}
-                      className="hidden sm:inline-flex text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 items-center gap-1 font-sans text-xs underline font-semibold cursor-pointer whitespace-nowrap"
+                      className={`hidden sm:inline-flex ${FIORI_BTN_COMPACT_CRITICAL}`}
                     >
                       <Scale size={13} />
-                      บัตรชั่ง
+                      <span>บัตรชั่ง</span>
                     </button>
 
                     {v.photos.length > 0 && (
@@ -1088,14 +1097,14 @@ export function TmtRecheckDailyReport({
                           e.stopPropagation();
                           onViewPhotos(v);
                         }}
-                        className="text-sky-700 hover:text-sky-900 dark:text-cyan-400 dark:hover:text-cyan-300 flex items-center gap-1 font-sans text-xs underline font-semibold cursor-pointer"
+                        className={FIORI_BTN_COMPACT_SECONDARY}
                       >
                         <ImageIcon size={13} />
-                        รูปหลักฐาน ({v.photos.length})
+                        <span>รูปหลักฐาน ({v.photos.length})</span>
                       </button>
                     )}
 
-                    <strong className="text-slate-900 dark:text-slate-100 font-extrabold text-xs">
+                    <strong className="text-[#1d2d3e] dark:text-slate-100 font-extrabold text-[13px] pl-1">
                       {v.totalGrossWeight.toLocaleString()} kg
                     </strong>
                   </div>
@@ -1103,39 +1112,39 @@ export function TmtRecheckDailyReport({
 
                 {isExpanded && (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[11px] text-left text-slate-700 dark:text-slate-300">
-                      <thead className="bg-slate-50 dark:bg-slate-900/90 text-slate-600 dark:text-slate-400 font-bold uppercase text-[10px] border-b border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-[12.5px] text-left text-slate-700 dark:text-slate-300 border-collapse">
+                      <thead className="bg-[#f8fafc] dark:bg-[#0c1930]/80 text-[#475569] dark:text-slate-300 font-semibold text-[11.5px] border-b border-[#d9e2e8] dark:border-[#1e3a5f]">
                         <tr>
-                          <th className="py-2 px-3 font-mono">BATCH</th>
-                          <th className="py-2 px-3">DESCRIPTION</th>
-                          <th className="py-2 px-3 text-right font-mono">น้ำหนัก (KG)</th>
-                          <th className="py-2 px-3 font-mono">SO</th>
-                          <th className="py-2 px-3 font-mono">DO</th>
+                          <th className="py-2 px-3.5 font-mono">Batch</th>
+                          <th className="py-2 px-3.5">Description</th>
+                          <th className="py-2 px-3.5 text-right font-mono">น้ำหนัก (kg)</th>
+                          <th className="py-2 px-3.5 font-mono">SO</th>
+                          <th className="py-2 px-3.5 font-mono">DO</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 bg-white dark:bg-slate-950/30">
+                      <tbody className="divide-y divide-[#e5edf2] dark:divide-[#1e3a5f]/70 bg-white dark:bg-[#08152d]">
                         {v.items.map((item, idx) => (
                           <tr
                             key={item.id || idx}
-                            className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                            className="hover:bg-[#f5f8fa] dark:hover:bg-[#0d1f3c] transition-colors"
                           >
-                            <td className="py-2 px-3 font-mono font-bold text-sky-700 dark:text-cyan-300 whitespace-nowrap">
+                            <td className="py-2 px-3.5 font-mono tabular-nums font-bold text-[#075985] dark:text-[#38bdf8] whitespace-nowrap">
                               {item.batch || (
-                                <span className="text-amber-600 dark:text-amber-400 text-[10px] font-sans">
+                                <span className="text-[#b45309] dark:text-amber-400 text-[11px] font-sans">
                                   (เศษ)
                                 </span>
                               )}
                             </td>
-                            <td className="py-2 px-3 text-slate-800 dark:text-slate-200">
+                            <td className="py-2 px-3.5 text-[#1d2d3e] dark:text-slate-200">
                               {item.description}
                             </td>
-                            <td className="py-2 px-3 text-right font-mono tabular-nums font-bold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+                            <td className="py-2 px-3.5 text-right font-mono tabular-nums font-bold text-[#1d2d3e] dark:text-slate-100 whitespace-nowrap">
                               {item.grossWeight.toLocaleString()}
                             </td>
-                            <td className="py-2 px-3 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            <td className="py-2 px-3.5 font-mono tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                               {item.soNo}
                             </td>
-                            <td className="py-2 px-3 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                            <td className="py-2 px-3.5 font-mono tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
                               {item.doNo}
                             </td>
                           </tr>
@@ -1150,24 +1159,21 @@ export function TmtRecheckDailyReport({
         )}
       </div>
 
-      {/* LINE GROUP SHARE MODAL */}
+      {/* LINE GROUP SHARE MODAL (SAP Fiori Dialog) */}
       {isLineModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-white dark:bg-[#08152d] border border-[#d9e2e8] dark:border-[#1e3a5f] rounded-[6px] max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+            <div className="bg-[#f5f8fa] dark:bg-[#0c1930] px-5 py-3.5 border-b border-[#d9e2e8] dark:border-[#1e3a5f] flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0"
-                  style={{ backgroundColor: "#06C755" }}
-                >
-                  <MessageCircle size={18} />
+                <div className="w-8 h-8 rounded-[4px] bg-[#06C755] flex items-center justify-center text-white shrink-0">
+                  <MessageCircle size={17} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  <h3 className="text-[15px] font-bold text-[#1d2d3e] dark:text-white">
                     แชร์รายงาน TMT Recheck ประจำวันเข้ากลุ่ม LINE
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  <p className="text-[12px] text-slate-500 dark:text-slate-400">
                     ตรวจสอบหรือปรับแก้ข้อความสรุปก่อนส่งให้ผู้จัดการในกลุ่ม LINE
                   </p>
                 </div>
@@ -1175,9 +1181,10 @@ export function TmtRecheckDailyReport({
               <button
                 type="button"
                 onClick={() => setIsLineModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1"
+                aria-label="ปิดหน้าต่าง"
+                className={FIORI_BTN_ICON_SECONDARY}
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
@@ -1186,7 +1193,7 @@ export function TmtRecheckDailyReport({
               {/* Summary Toggle Controls */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-[13px] font-semibold text-[#1d2d3e] dark:text-slate-200 mb-1">
                     ผู้สรุปรายงาน
                   </label>
                   <input
@@ -1196,19 +1203,11 @@ export function TmtRecheckDailyReport({
                       setReporterName(e.target.value);
                       setIsTextManuallyEdited(false);
                     }}
-                    className="field w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    style={{
-                      height: 35,
-                      minHeight: 35,
-                      padding: "7px 10px",
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 400,
-                    }}
+                    className={`${FIORI_CONTROL_INPUT} w-full px-3`}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  <label className="block text-[13px] font-semibold text-[#1d2d3e] dark:text-slate-200 mb-1">
                     หมายเหตุถึงผู้จัดการ (ถ้ามี)
                   </label>
                   <input
@@ -1219,20 +1218,12 @@ export function TmtRecheckDailyReport({
                       setIsTextManuallyEdited(false);
                     }}
                     placeholder="เช่น ตรวจปล่อยรอบเช้าครบเรียบร้อย / รอบบ่ายรอเข้า 2 คัน"
-                    className="field w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100"
-                    style={{
-                      height: 35,
-                      minHeight: 35,
-                      padding: "7px 10px",
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontWeight: 400,
-                    }}
+                    className={`${FIORI_CONTROL_INPUT} w-full px-3`}
                   />
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-4 text-xs text-slate-700 dark:text-slate-300">
+              <div className="flex flex-wrap items-center gap-4 text-[13px] text-slate-700 dark:text-slate-300">
                 <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1241,7 +1232,7 @@ export function TmtRecheckDailyReport({
                       setIncludeCustomerSummary(e.target.checked);
                       setIsTextManuallyEdited(false);
                     }}
-                    className="rounded border-slate-300 text-emerald-600"
+                    className="w-4 h-4 rounded-[3px] border-[#b9c9d2] text-[#087eaf] cursor-pointer"
                   />
                   <span>รวมสรุปตามลูกค้า</span>
                 </label>
@@ -1253,7 +1244,7 @@ export function TmtRecheckDailyReport({
                       setIncludeVehicleDetails(e.target.checked);
                       setIsTextManuallyEdited(false);
                     }}
-                    className="rounded border-slate-300 text-emerald-600"
+                    className="w-4 h-4 rounded-[3px] border-[#b9c9d2] text-[#087eaf] cursor-pointer"
                   />
                   <span>รวมรายละเอียดรถรายคัน</span>
                 </label>
@@ -1265,7 +1256,7 @@ export function TmtRecheckDailyReport({
                       setIncludePendingQueue(e.target.checked);
                       setIsTextManuallyEdited(false);
                     }}
-                    className="rounded border-slate-300 text-emerald-600"
+                    className="w-4 h-4 rounded-[3px] border-[#b9c9d2] text-[#087eaf] cursor-pointer"
                   />
                   <span>รวมคิวรถค้างรอตรวจ ({activeVehicles.length} คัน)</span>
                 </label>
@@ -1273,8 +1264,8 @@ export function TmtRecheckDailyReport({
 
               {/* Editable Preview */}
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                <div className="flex items-center justify-between text-[13px]">
+                  <span className="font-semibold text-[#1d2d3e] dark:text-slate-200">
                     ตัวอย่างข้อความที่จะส่งเข้ากลุ่ม LINE
                   </span>
                   {isTextManuallyEdited && (
@@ -1284,7 +1275,7 @@ export function TmtRecheckDailyReport({
                         setIsTextManuallyEdited(false);
                         setCustomLineText(generatedLineMessage);
                       }}
-                      className="text-sky-700 dark:text-cyan-400 underline text-[11px] cursor-pointer"
+                      className={FIORI_BTN_COMPACT_SECONDARY}
                     >
                       รีเซ็ตข้อความอัตโนมัติ
                     </button>
@@ -1297,32 +1288,32 @@ export function TmtRecheckDailyReport({
                     setCustomLineText(e.target.value);
                     setIsTextManuallyEdited(true);
                   }}
-                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-3 text-xs text-slate-900 dark:text-slate-100 leading-relaxed focus:outline-none focus:border-emerald-500"
+                  className="w-full rounded-[4px] border border-[#b9c9d2] dark:border-[#1e3a5f] bg-white dark:bg-[#041029] p-3 !text-[13px] text-slate-900 dark:text-slate-100 leading-relaxed focus:outline-none focus:border-[#087eaf] dark:focus:border-[#38bdf8]"
                 />
               </div>
 
               {copyStatus === "copied" && (
-                <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-200 text-xs flex items-center gap-2 font-medium">
-                  <Check size={14} />
+                <div className="px-3 py-2 rounded-[4px] bg-[#ecfdf5] border border-[#a7f3d0] text-[#107e3e] dark:bg-emerald-950/50 dark:border-emerald-800 dark:text-emerald-200 text-[13px] flex items-center gap-2 font-medium">
+                  <Check size={15} />
                   คัดลอกข้อความสำเร็จ! สามารถกดวาง (Paste) ในกลุ่ม LINE ผู้จัดการได้เลย
                 </div>
               )}
               {copyStatus === "error" && (
-                <div className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200 text-xs">
+                <div className="px-3 py-2 rounded-[4px] bg-[#fffbeb] border border-[#fde68a] text-[#b45309] dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-200 text-[13px]">
                   เบราว์เซอร์จำกัดการคัดลอกอัตโนมัติ กรุณากดเลือกข้อความด้านบนแล้วคัดลอกด้วยตนเอง (Ctrl+C)
                 </div>
               )}
             </div>
 
             {/* Footer Action Buttons */}
-            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="px-5 py-3 border-t border-[#d9e2e8] dark:border-[#1e3a5f] bg-[#f5f8fa] dark:bg-[#0c1930] flex flex-wrap items-center justify-between gap-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleExportSummaryPng}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 cursor-pointer"
+                  className={FIORI_BTN_SECONDARY}
                 >
-                  <Download size={14} />
+                  <Download size={15} />
                   <span>โหลดรูปภาพสรุป (.PNG)</span>
                 </button>
 
@@ -1330,9 +1321,9 @@ export function TmtRecheckDailyReport({
                   <button
                     type="button"
                     onClick={handleNativeShare}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 cursor-pointer"
+                    className={FIORI_BTN_SECONDARY}
                   >
-                    <Share2 size={14} />
+                    <Share2 size={15} />
                     <span>แชร์ผ่านแอป</span>
                   </button>
                 )}
@@ -1342,9 +1333,9 @@ export function TmtRecheckDailyReport({
                 <button
                   type="button"
                   onClick={handleCopyForLine}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white dark:bg-slate-700 dark:hover:bg-slate-600 cursor-pointer"
+                  className={FIORI_BTN_PRIMARY}
                 >
-                  {copyStatus === "copied" ? <Check size={14} /> : <Copy size={14} />}
+                  {copyStatus === "copied" ? <Check size={15} /> : <Copy size={15} />}
                   <span>{copyStatus === "copied" ? "คัดลอกแล้ว" : "คัดลอกข้อความ"}</span>
                 </button>
 
@@ -1352,12 +1343,11 @@ export function TmtRecheckDailyReport({
                   href={lineShareHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white shadow-xs transition-opacity hover:opacity-95"
-                  style={{ backgroundColor: "#06C755" }}
+                  className={FIORI_BTN_LINE}
                 >
-                  <MessageCircle size={14} />
+                  <MessageCircle size={15} />
                   <span>เปิด LINE แชร์เข้ากลุ่ม</span>
-                  <ExternalLink size={12} />
+                  <ExternalLink size={13} />
                 </a>
               </div>
             </div>
