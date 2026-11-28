@@ -51,6 +51,10 @@ import {
   ForkliftWheelPositionDiagram,
   getWheelPositionOptionsForVehicle,
 } from "./ForkliftWheelPositionDiagram";
+import {
+  TireRepairPointViewer,
+  SelectedOutboundTirePreviewItem,
+} from "./TireRepairPointViewer";
 
 interface TireStockManagementProps {
   vehicles: Vehicle[];
@@ -857,6 +861,49 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
     }
     return outboundHistoryRecords[0] || null;
   }, [outboundHistoryRecords, tireVehicleId]);
+
+  const latestWheelOutboundRecord = useMemo(() => {
+    if (!tireVehicleId || !tireWheelPosition) return null;
+    const normalizedTarget = tireWheelPosition.trim().toLowerCase();
+    return (
+      outboundHistoryRecords.find(
+        (tr) =>
+          tr.vehicleId === tireVehicleId &&
+          (tr.wheelPosition || "").trim().toLowerCase() === normalizedTarget
+      ) || null
+    );
+  }, [outboundHistoryRecords, tireVehicleId, tireWheelPosition]);
+
+  const selectedOutboundTirePreviewItems = useMemo<SelectedOutboundTirePreviewItem[]>(() => {
+    const catalogMap = new Map<string, StockTireCatalogItem>(
+      stockTireCatalog.map((item) => [item.key, item])
+    );
+    const items: SelectedOutboundTirePreviewItem[] = [];
+    Object.entries(outboundSelections).forEach(([key, sel]) => {
+      const item = catalogMap.get(key);
+      if (!item) return;
+      let itemQty = 0;
+      const typeParts: string[] = [];
+      TIRE_TYPE_QTY_FIELDS.forEach((f) => {
+        if (!sel.selectedTypes.includes(f.type)) return;
+        const n = Number(sel.qtyByType[f.key]);
+        const safeQ = sel.qtyByType[f.key] !== "" && !isNaN(n) && n > 0 ? Math.floor(n) : 0;
+        if (safeQ > 0) {
+          itemQty += safeQ;
+          typeParts.push(`${f.type} ×${safeQ}`);
+        }
+      });
+      if (itemQty > 0) {
+        items.push({
+          tireSize: item.tireSize,
+          brand: item.brand,
+          typesSummary: typeParts.join(", "),
+          qty: itemQty,
+        });
+      }
+    });
+    return items;
+  }, [outboundSelections, stockTireCatalog]);
 
   const cloudOutboundNotesOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -3145,6 +3192,20 @@ export function TireStockManagement({ vehicles }: TireStockManagementProps) {
                             ))}
                           </select>
                         </div>
+
+                        <TireRepairPointViewer
+                          vehicleId={tireVehicleId}
+                          vehicle={selectedOutboundVehicle}
+                          selectedPosition={tireWheelPosition}
+                          onSelectPosition={setTireWheelPosition}
+                          tireNotes={tireNotes}
+                          onChangeNotes={setTireNotes}
+                          operatingHours={tireOperatingHours}
+                          technicianName={tireTechnicianName}
+                          selectedTireItems={selectedOutboundTirePreviewItems}
+                          latestVehicleRecord={latestOutboundRecord}
+                          latestWheelRecord={latestWheelOutboundRecord}
+                        />
 
                         <div>
                           <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">

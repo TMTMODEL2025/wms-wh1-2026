@@ -301,3 +301,124 @@ table.ts-stats-table tbody td.ts-wrap {
   }
 }
 
+/* ============================================================================ */
+/* Repair Point Animation: Pulsing Repair Hotspot with Expanding Glow Ring      */
+/* GPU-composited (transform + opacity only) for smooth 60 FPS on Desktop/Mobile*/
+/* ============================================================================ */
+@keyframes repairHotspotEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.25);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.14);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes repairHotspotCorePulse {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.9;
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+    filter: brightness(1.22);
+  }
+}
+
+@keyframes repairHotspotHaloBreathe {
+  0%,
+  100% {
+    transform: scale(0.86);
+    opacity: 0.34;
+  }
+  50% {
+    transform: scale(1.48);
+    opacity: 0.74;
+  }
+}
+
+@keyframes repairHotspotRadarRing {
+  0% {
+    transform: scale(0.38);
+    opacity: 0.92;
+  }
+  45% {
+    transform: scale(1.55);
+    opacity: 0.52;
+  }
+  100% {
+    transform: scale(2.9);
+    opacity: 0;
+  }
+}
+
+@keyframes repairHotspotDetailPop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.repair-hotspot-enter {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation: repairHotspotEnter 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.repair-hotspot-core {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+  animation: repairHotspotCorePulse 1.85s ease-in-out infinite;
+}
+
+.repair-hotspot-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation: repairHotspotHaloBreathe 1.85s ease-in-out infinite;
+}
+
+.repair-hotspot-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation: repairHotspotRadarRing 2.25s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.repair-hotspot-ring-delay-1 {
+  animation-delay: 0.75s;
+}
+
+.repair-hotspot-ring-delay-2 {
+  animation-delay: 1.5s;
+}
+
+.repair-hotspot-detail-pop {
+  will-change: transform, opacity;
+  animation: repairHotspotDetailPop 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .repair-hotspot-core,
+  .repair-hotspot-halo,
+  .repair-hotspot-ring {
+    animation-duration: 4.5s;
+  }
+}
+
+

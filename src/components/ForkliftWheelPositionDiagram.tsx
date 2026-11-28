@@ -72,7 +72,7 @@ export interface ForkliftWheelCallout {
   fontSize?: number;
 }
 
-interface WheelDiagramProfile {
+export interface WheelDiagramProfile {
   key: VehicleWheelProfileKey;
   title: string;
   specBadge: string;
@@ -1005,16 +1005,23 @@ export function resolveWheelProfileForVehicle(
   return "default_8w";
 }
 
+export function getWheelProfileForVehicle(
+  vehicleId?: string,
+  vehicle?: VehicleTypeCandidate
+): WheelDiagramProfile {
+  const profileKey = resolveWheelProfileForVehicle(vehicleId, vehicle);
+  return WHEEL_DIAGRAM_PROFILES[profileKey];
+}
+
 export function getWheelPositionOptionsForVehicle(
   vehicleId?: string,
   vehicle?: VehicleTypeCandidate
 ): string[] {
-  const profileKey = resolveWheelProfileForVehicle(vehicleId, vehicle);
-  const profile = WHEEL_DIAGRAM_PROFILES[profileKey];
+  const profile = getWheelProfileForVehicle(vehicleId, vehicle);
   return [...profile.callouts.map((c) => c.label), ...profile.extraGroupOptions];
 }
 
-function isCalloutHighlighted(
+export function isCalloutHighlighted(
   code: WheelCalloutCode,
   selectedPosition: string
 ): boolean {
@@ -1163,28 +1170,68 @@ export function ForkliftWheelPositionDiagram({
                   strokeLinejoin="round"
                 />
 
-                {/* Circular target dot on the tire */}
-                {active && (
-                  <circle
-                    cx={item.dotX}
-                    cy={item.dotY}
-                    r={16}
-                    fill="#087eaf"
-                    opacity={0.28}
-                  />
+                {/* Pulsing Repair Hotspot with Expanding Glow Ring on active tire */}
+                {active ? (
+                  <g key={`${item.code}-${selectedPosition}`} className="repair-hotspot-enter">
+                    {/* 3 staggered expanding radar rings */}
+                    <circle
+                      cx={item.dotX}
+                      cy={item.dotY}
+                      r={18}
+                      fill="none"
+                      stroke="#f97316"
+                      strokeWidth={4}
+                      className="repair-hotspot-ring"
+                    />
+                    <circle
+                      cx={item.dotX}
+                      cy={item.dotY}
+                      r={18}
+                      fill="none"
+                      stroke="#fb923c"
+                      strokeWidth={3}
+                      className="repair-hotspot-ring repair-hotspot-ring-delay-1"
+                    />
+                    <circle
+                      cx={item.dotX}
+                      cy={item.dotY}
+                      r={18}
+                      fill="none"
+                      stroke="#38bdf8"
+                      strokeWidth={2.5}
+                      className="repair-hotspot-ring repair-hotspot-ring-delay-2"
+                    />
+                    {/* Soft breathing glow halo */}
+                    <circle
+                      cx={item.dotX}
+                      cy={item.dotY}
+                      r={20}
+                      fill="#f97316"
+                      className="repair-hotspot-halo"
+                    />
+                    {/* Pulsing core beacon */}
+                    <g className="repair-hotspot-core">
+                      <circle cx={item.dotX} cy={item.dotY} r={12} fill="#ffffff" />
+                      <circle cx={item.dotX} cy={item.dotY} r={8.5} fill="#ea580c" />
+                      <circle cx={item.dotX} cy={item.dotY} r={3.5} fill="#fff7ed" />
+                    </g>
+                  </g>
+                ) : (
+                  <>
+                    <circle
+                      cx={item.dotX}
+                      cy={item.dotY}
+                      r={8.5}
+                      fill="#ffffff"
+                    />
+                    <circle
+                      cx={item.dotX}
+                      cy={item.dotY}
+                      r={5.8}
+                      fill={strokeColor}
+                    />
+                  </>
                 )}
-                <circle
-                  cx={item.dotX}
-                  cy={item.dotY}
-                  r={active ? 10.5 : 8.5}
-                  fill="#ffffff"
-                />
-                <circle
-                  cx={item.dotX}
-                  cy={item.dotY}
-                  r={active ? 7.5 : 5.8}
-                  fill={strokeColor}
-                />
 
                 {/* Label badge box */}
                 <rect
