@@ -10,28 +10,52 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Crosshair,
   Eye,
+  History,
   Layers,
   RotateCcw,
   RotateCw,
 } from "lucide-react";
 import {
-  EV_REPAIR_ZONES,
   EvRepairZoneId,
   EvRepairZoneSpec,
+  RepairVehicleModelKind,
+  getCameraPresetsForModel,
+  getModelDisplayTitle,
+  getZoneByIdForModel,
 } from "./evRepairZones";
-import {
-  BuiltEvHologramModel,
-  buildBydEvTractorModel,
-} from "./evTractorHologramBuilder";
+import { BuiltEvHologramModel } from "./evTractorHologramBuilder";
+import { buildRepairHologramModel } from "./mhVehicleHologramBuilder";
 
 export type EvCameraPreset = "focus" | "iso" | "side" | "front" | "rear" | "top";
 
+export interface RepairHistorySnapshotItem {
+  id: string;
+  workOrderNo: string;
+  workingDate: string;
+  workingDateDisplay: string;
+  daysAgoLabel?: string;
+  repairType: string;
+  repairDescription: string;
+  statusLabel: string;
+  statusTone: "completed" | "in_progress" | "pending" | "rejected";
+  operatingHours?: number;
+  totalCost?: number;
+  technicianOrVendor?: string;
+  sparePartsSummary?: string;
+}
+
 interface EvRepairHologramViewportProps {
   vehicleId: string;
+  modelKind?: RepairVehicleModelKind;
   activeZone: EvRepairZoneSpec;
+  /** Currently selected repair category (used for side-panel same-category repair history HUD) */
+  repairType?: string;
+  /** Past maintenance records for this same vehicle and repair category (newest first) */
+  sameCategoryHistory?: RepairHistorySnapshotItem[];
   /** Allow clicking 3D zones to change repair category & auto-fill form */
   interactive?: boolean;
   /** Compact height & simplified controls for Supervisor/Manager inspection modal */
@@ -54,17 +78,6 @@ const _secondaryVecPool = [
   new THREE.Vector3(),
 ];
 
-const CAMERA_PRESETS: Record<
-  Exclude<EvCameraPreset, "focus">,
-  { pos: [number, number, number]; target: [number, number, number]; label: string }
-> = {
-  iso: { pos: [3.25, 1.85, 3.05], target: [0, 0.8, 0], label: "เฉียง" },
-  side: { pos: [3.95, 1.15, 0.05], target: [0, 0.82, 0], label: "ข้าง" },
-  front: { pos: [0.05, 1.25, 3.85], target: [0, 0.8, 0.15], label: "หน้า" },
-  rear: { pos: [0.05, 1.3, -3.85], target: [0, 0.8, -0.15], label: "หลัง" },
-  top: { pos: [0.02, 4.45, 0.75], target: [0, 0.5, 0], label: "บน" },
-};
-
 function detectSoftwareWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
@@ -82,12 +95,18 @@ function detectSoftwareWebGL(): boolean {
 
 export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> = ({
   vehicleId,
+  modelKind = "ev_tractor",
   activeZone,
+  repairType = "",
+  sameCategoryHistory = [],
   interactive = true,
   compact = false,
   fillHeight = false,
   onSelectZone,
 }) => {
+  const cameraPresets = getCameraPresetsForModel(modelKind);
+  const modelTitle = getModelDisplayTitle(modelKind);
+
   const canvasMountRef = useRef<HTMLDivElement | null>(null);
   const calloutOverlayRef = useRef<HTMLDivElement | null>(null);
 
@@ -95,8 +114,20 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
   const [autoSpin, setAutoSpin] = useState<boolean>(false);
   const [cameraPreset, setCameraPreset] = useState<EvCameraPreset>("focus");
   const [isDockCollapsed, setIsDockCollapsed] = useState<boolean>(compact);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(() => {
+    if (compact) return false;
+    return typeof window !== "undefined" ? window.innerWidth >= 640 : true;
+  });
+  const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
   const [hoveredZone, setHoveredZone] = useState<EvRepairZoneSpec | null>(null);
   const [webglUnavailable, setWebglUnavailable] = useState<boolean>(false);
+
+  const cleanRepairType = (repairType || "").trim();
+  const validHistoryCount = sameCategoryHistory.filter((h) => h.statusTone !== "rejected").length;
+  const totalHistoryCost = sameCategoryHistory
+    .filter((h) => h.statusTone !== "rejected")
+    .reduce((sum, h) => sum + (h.totalCost || 0), 0);
+  const latestHistory = sameCategoryHistory[0] || null;
 
   // Refs synced to animation loop so React UI state updates NEVER tear down WebGL
   const activeZoneRef = useRef<EvRepairZoneSpec>(activeZone);
@@ -154,7 +185,7 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       camTransitionRef.current.pos.set(...activeZoneRef.current.cameraPos);
       camTransitionRef.current.target.set(...activeZoneRef.current.cameraTarget);
     } else {
-      const cfg = CAMERA_PRESETS[preset];
+      const cfg = cameraPresets[preset];
       camTransitionRef.current.pos.set(...cfg.pos);
       camTransitionRef.current.target.set(...cfg.target);
     }
@@ -226,15 +257,17 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
 
     const keyLight = new THREE.DirectionalLight(0xfff6eb, 1.85);
     keyLight.position.set(4.6, 6.4, 4.4);
+    const isWideModel = modelKind === "clamp_truck" || modelKind === "trailer";
+    const shadowExtent = isWideModel ? 4.8 : 3.4;
     if (!isSoftwareGl) {
       keyLight.castShadow = true;
       keyLight.shadow.mapSize.set(1024, 1024);
       keyLight.shadow.camera.near = 1;
-      keyLight.shadow.camera.far = 16;
-      keyLight.shadow.camera.left = -3.2;
-      keyLight.shadow.camera.right = 3.2;
-      keyLight.shadow.camera.top = 3.2;
-      keyLight.shadow.camera.bottom = -3.2;
+      keyLight.shadow.camera.far = 18;
+      keyLight.shadow.camera.left = -shadowExtent;
+      keyLight.shadow.camera.right = shadowExtent;
+      keyLight.shadow.camera.top = shadowExtent;
+      keyLight.shadow.camera.bottom = -shadowExtent;
       keyLight.shadow.bias = -0.0005;
       keyLight.shadow.normalBias = 0.02;
     }
@@ -261,13 +294,13 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       scene.add(sideCyanStrip);
     }
 
-    const hotspotPointLight = new THREE.PointLight(0x00e5ff, 2.35, 3.4, 1.65);
+    const hotspotPointLight = new THREE.PointLight(0x00e5ff, 2.35, 3.8, 1.65);
     hotspotPointLight.position.set(...activeZoneRef.current.hotspotPos);
     scene.add(hotspotPointLight);
 
-    // Build Procedural BYD EV Tow Tractor 3D Hologram Model
+    // Build Procedural 3D Hologram Vehicle Model (EV / TT Diesel / FL Forklift / SC Clamp Truck / TTL Trailer)
     const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-    const evModel = buildBydEvTractorModel(maxAnisotropy, vehicleId || "TTEV-19");
+    const evModel = buildRepairHologramModel(modelKind, maxAnisotropy, vehicleId);
     scene.add(evModel.root);
     modelRef.current = evModel;
 
@@ -276,8 +309,8 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
     controls.enableDamping = !isSoftwareGl;
     controls.dampingFactor = 0.065;
     controls.enablePan = false;
-    controls.minDistance = 2.05;
-    controls.maxDistance = 6.8;
+    controls.minDistance = isWideModel ? 2.4 : 2.05;
+    controls.maxDistance = isWideModel ? 9.8 : 7.4;
     controls.minPolarAngle = 0.14;
     controls.maxPolarAngle = Math.PI / 2 - 0.04;
     controls.target.set(...activeZoneRef.current.cameraTarget);
@@ -314,7 +347,7 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       const hits = raycaster.intersectObjects(clickTargets, false);
       for (const hit of hits) {
         const zId = hit.object.userData?.zoneId as EvRepairZoneId | undefined;
-        if (zId && EV_REPAIR_ZONES[zId]) {
+        if (zId && getZoneByIdForModel(modelKind, zId)) {
           return zId;
         }
       }
@@ -334,8 +367,9 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       if (distSq > 36) return; // User was orbiting/dragging, not clicking
 
       const zId = getRaycastZoneId(e.clientX, e.clientY);
-      if (zId && EV_REPAIR_ZONES[zId]) {
-        onSelectZoneRef.current?.(EV_REPAIR_ZONES[zId]);
+      const spec = zId ? getZoneByIdForModel(modelKind, zId) : null;
+      if (spec) {
+        onSelectZoneRef.current?.(spec);
       }
     };
 
@@ -348,7 +382,7 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       const zId = getRaycastZoneId(e.clientX, e.clientY);
       if (zId !== hoveredZoneIdRef.current) {
         hoveredZoneIdRef.current = zId;
-        setHoveredZone(zId ? EV_REPAIR_ZONES[zId] : null);
+        setHoveredZone(zId ? getZoneByIdForModel(modelKind, zId) : null);
         renderer.domElement.style.cursor = zId ? "pointer" : "grab";
       }
     };
@@ -514,7 +548,7 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       renderer.dispose();
       modelRef.current = null;
     };
-  }, []);
+  }, [modelKind]);
 
   const viewportHeightClass = compact
     ? "h-[260px] sm:h-[290px]"
@@ -555,11 +589,15 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
       <div ref={canvasMountRef} className="absolute inset-0 w-full h-full" />
 
       {/* Top-Left Clean Unboxed Metadata Overlay (Zero-Pill Discipline) */}
-      <div className="pointer-events-none absolute top-3 left-3.5 right-3.5 z-10 flex items-start justify-between gap-2">
+      <div
+        className={`pointer-events-none absolute top-3 left-3.5 z-10 flex items-start justify-between gap-2 ${
+          isHistoryOpen ? "right-[264px] sm:right-[286px]" : "right-40"
+        }`}
+      >
         <div className="min-w-0">
           <div className="text-xs font-bold tracking-wide text-sky-100 truncate">
-            {vehicleId || "TTEV"} <span className="text-sky-400/70 mx-1">·</span>
-            <span className="font-medium text-sky-300">หัวลากไฟฟ้า EV (360° Hologram)</span>
+            {vehicleId || "MH-Fleet"} <span className="text-sky-400/70 mx-1">·</span>
+            <span className="font-medium text-sky-300">{modelTitle}</span>
           </div>
           <div className="text-[11px] text-slate-300/90 mt-0.5 truncate">
             {activeZone.nameTh}
@@ -568,6 +606,199 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
           </div>
         </div>
       </div>
+
+      {/* Right-Edge Collapsible Same-Category Repair History HUD (Inside 3D Hologram Window) */}
+      {!isHistoryOpen ? (
+        <button
+          type="button"
+          onClick={() => setIsHistoryOpen(true)}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute top-2.5 right-2.5 z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#061529]/92 hover:bg-[#0a213d] backdrop-blur-md border border-sky-400/45 text-[11px] font-semibold text-sky-100 shadow-[0_6px_20px_rgba(0,0,0,0.45)] transition-colors whitespace-nowrap"
+          title="แสดงประวัติที่รถคันนี้เคยซ่อมในประเภทเดียวกัน"
+        >
+          <History size={13} className="text-sky-400 shrink-0" />
+          <span>ประวัติซ่อมหมวดนี้</span>
+          {cleanRepairType ? (
+            <span
+              className={`tabular-nums font-bold ${
+                sameCategoryHistory.length > 0 ? "text-amber-300" : "text-sky-300/80"
+              }`}
+            >
+              ({sameCategoryHistory.length})
+            </span>
+          ) : null}
+        </button>
+      ) : (
+        <aside
+          onWheel={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onTouchStart={(e) => e.stopPropagation()}
+          className={`absolute top-2.5 right-2.5 z-20 w-[248px] sm:w-[272px] max-w-[calc(100%-20px)] flex flex-col rounded-lg bg-[#051224]/90 backdrop-blur-md border border-sky-400/35 shadow-[0_12px_32px_rgba(0,0,0,0.62)] overflow-hidden ${
+            compact ? "bottom-11" : "bottom-14"
+          }`}
+        >
+          {/* HUD Header */}
+          <div className="shrink-0 px-2.5 py-2 border-b border-sky-500/25 bg-[#081c36]/92 flex items-center justify-between gap-2">
+            <div className="min-w-0 flex items-center gap-1.5">
+              <History size={13} className="text-sky-400 shrink-0" />
+              <span className="text-[11px] font-bold text-sky-100 truncate">
+                ประวัติซ่อมหมวดเดียวกัน
+              </span>
+              {cleanRepairType && (
+                <span
+                  className={`text-[11px] font-bold tabular-nums shrink-0 ${
+                    sameCategoryHistory.length > 0 ? "text-amber-300" : "text-slate-400"
+                  }`}
+                >
+                  ({sameCategoryHistory.length})
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen(false)}
+              className="inline-flex items-center justify-center p-0.5 rounded text-slate-400 hover:text-white hover:bg-sky-500/20 transition-colors shrink-0"
+              title="ซ่อนแถบประวัติซ่อม"
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {/* Active Vehicle & Category Sub-Bar */}
+          <div className="shrink-0 px-2.5 py-1.5 bg-[#040d1a]/75 border-b border-sky-900/55 text-[10px]">
+            <div className="flex items-center justify-between gap-1.5 text-slate-300">
+              <span className="font-semibold text-sky-300 truncate">{vehicleId || "-"}</span>
+              <span className="text-slate-500">·</span>
+              <span className="truncate text-slate-200 font-medium">
+                {cleanRepairType || "รอเลือกประเภทการซ่อม"}
+              </span>
+            </div>
+
+            {cleanRepairType && sameCategoryHistory.length > 0 && (
+              <div className="mt-1.5 pt-1.5 border-t border-sky-900/45 grid grid-cols-2 gap-1.5 text-[10px]">
+                <div className="min-w-0">
+                  <div className="text-slate-400 leading-tight">ซ่อมล่าสุด</div>
+                  <div className="font-semibold text-sky-100 tabular-nums truncate mt-0.5">
+                    {latestHistory?.workingDateDisplay || "-"}
+                  </div>
+                  {latestHistory?.daysAgoLabel && (
+                    <div className="text-[9.5px] text-amber-300/90 truncate">
+                      {latestHistory.daysAgoLabel}
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 text-right">
+                  <div className="text-slate-400 leading-tight">
+                    {totalHistoryCost > 0 ? "ยอดซ่อมสะสม" : "จำนวนครั้ง"}
+                  </div>
+                  <div className="font-semibold text-emerald-300 tabular-nums truncate mt-0.5">
+                    {totalHistoryCost > 0
+                      ? `฿${totalHistoryCost.toLocaleString("th-TH")}`
+                      : `${validHistoryCount} ครั้ง`}
+                  </div>
+                  {totalHistoryCost > 0 && validHistoryCount > 0 && (
+                    <div className="text-[9.5px] text-slate-400 tabular-nums truncate">
+                      เฉลี่ย ฿{Math.round(totalHistoryCost / validHistoryCount).toLocaleString("th-TH")}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Scrollable Same-Category Repair History Feed */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1.5 [scrollbar-width:thin] [scrollbar-color:#1e3a5f_transparent]">
+            {!cleanRepairType ? (
+              <div className="h-full flex flex-col items-center justify-center text-center px-2 py-4 text-[11px] text-slate-400 leading-relaxed">
+                <History size={18} className="text-sky-500/60 mb-1.5" />
+                <div>
+                  เลือก <span className="text-sky-200 font-semibold">ประเภทการซ่อม</span> หรือคลิกจุดบนโมเดล 3D
+                  เพื่อดูประวัติการซ่อมหมวดเดียวกันของรถคันนี้
+                </div>
+              </div>
+            ) : sameCategoryHistory.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center px-2 py-4 text-[11px] text-slate-400 leading-relaxed">
+                <div className="font-semibold text-sky-200 mb-1">ยังไม่เคยซ่อมหมวดนี้</div>
+                <div>
+                  รถ <strong className="text-white">{vehicleId}</strong> ยังไม่พบประวัติการซ่อมในหมวด{" "}
+                  <span className="text-sky-300">&ldquo;{cleanRepairType}&rdquo;</span>
+                </div>
+              </div>
+            ) : (
+              sameCategoryHistory.map((item) => {
+                const isExpanded = expandedHistoryId === item.id;
+                const statusColor =
+                  item.statusTone === "completed"
+                    ? "text-emerald-300"
+                    : item.statusTone === "in_progress"
+                      ? "text-amber-300"
+                      : item.statusTone === "rejected"
+                        ? "text-rose-300"
+                        : "text-sky-300";
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setExpandedHistoryId(isExpanded ? null : item.id)}
+                    className="w-full text-left rounded-md bg-[#091c34]/85 hover:bg-[#0d2647]/95 border border-sky-800/55 hover:border-sky-500/55 p-2 transition-colors space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-1.5 text-[10px]">
+                      <span className="font-bold text-sky-100 tabular-nums shrink-0">
+                        {item.workingDateDisplay}
+                      </span>
+                      <span className="text-slate-400 tabular-nums truncate">
+                        {item.workOrderNo}
+                      </span>
+                      <span className={`font-semibold shrink-0 ${statusColor}`}>
+                        {item.statusLabel}
+                      </span>
+                    </div>
+
+                    <p
+                      className={`text-[11px] text-slate-200 leading-snug break-words ${
+                        isExpanded ? "" : "line-clamp-2"
+                      }`}
+                    >
+                      {item.repairDescription || "-"}
+                    </p>
+
+                    <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-[10px] text-slate-400 pt-0.5 border-t border-sky-900/45">
+                      <span className="tabular-nums">
+                        {item.operatingHours && item.operatingHours > 0
+                          ? `${item.operatingHours.toLocaleString("th-TH")} ชม.`
+                          : "ไม่ระบุ ชม."}
+                      </span>
+                      {item.totalCost && item.totalCost > 0 ? (
+                        <span className="font-semibold text-emerald-300 tabular-nums">
+                          ฿{item.totalCost.toLocaleString("th-TH")}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </div>
+
+                    {(item.sparePartsSummary || (isExpanded && item.technicianOrVendor)) && (
+                      <div className="text-[10px] text-sky-300/85 leading-snug pt-0.5 space-y-0.5">
+                        {item.sparePartsSummary && (
+                          <div className={isExpanded ? "" : "truncate"}>
+                            อะไหล่: {item.sparePartsSummary}
+                          </div>
+                        )}
+                        {isExpanded && item.technicianOrVendor && (
+                          <div className="text-slate-400 truncate">
+                            ช่าง/ผู้ให้บริการ: {item.technicianOrVendor}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </aside>
+      )}
 
       {/* 3D-Projected Floating Callout Tag (Locked to Active Hotspot Coordinates) */}
       <div
@@ -651,9 +882,9 @@ export const EvRepairHologramViewport: React.FC<EvRepairHologramViewportProps> =
                     ? "bg-[#087eaf] text-white"
                     : "text-slate-300 hover:bg-[#0d243f] hover:text-white"
                 }`}
-                title={`มุมมอง${CAMERA_PRESETS[presetKey].label}`}
+                title={`มุมมอง${cameraPresets[presetKey].label}`}
               >
-                {CAMERA_PRESETS[presetKey].label}
+                {cameraPresets[presetKey].label}
               </button>
             ))}
 

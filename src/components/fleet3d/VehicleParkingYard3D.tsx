@@ -315,7 +315,7 @@ const _tmpSize = new THREE.Vector3();
  * Built with distinct primary silhouette, secondary mechanical read, and accent details.
  * Grounded flush at y = 0 facing +Z.
  */
-function buildClampTruckRoot(textures: Pm3dTexturePack): THREE.Group {
+export function buildClampTruckRoot(textures: Pm3dTexturePack): THREE.Group {
   const root = new THREE.Group();
 
   const yellowPaintMat = new THREE.MeshStandardMaterial({

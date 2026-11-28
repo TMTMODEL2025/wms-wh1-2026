@@ -248,7 +248,8 @@ function createFrontGrilleTexture(maxAnisotropy: number): {
 
 function createSideBadgeTexture(
   vehicleId: string,
-  maxAnisotropy: number
+  maxAnisotropy: number,
+  variant: "ev" | "diesel" = "ev"
 ): THREE.CanvasTexture {
   const c = document.createElement("canvas");
   c.width = 512;
@@ -256,8 +257,9 @@ function createSideBadgeTexture(
   const ctx = c.getContext("2d")!;
   ctx.clearRect(0, 0, 512, 192);
 
-  // Authentic BYD T80 / EV white-silver stylized emblem outline seen on side hood in photo
-  ctx.strokeStyle = "rgba(241, 245, 249, 0.94)";
+  const isDiesel = variant === "diesel";
+  // Stylized emblem outline seen on side hood
+  ctx.strokeStyle = isDiesel ? "rgba(15, 23, 42, 0.85)" : "rgba(241, 245, 249, 0.94)";
   ctx.lineWidth = 6.5;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -268,20 +270,24 @@ function createSideBadgeTexture(
   ctx.lineTo(222, 34);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(186, 230, 253, 0.85)";
+  ctx.strokeStyle = isDiesel ? "rgba(8, 126, 175, 0.9)" : "rgba(186, 230, 253, 0.85)";
   ctx.lineWidth = 4.5;
   ctx.beginPath();
   ctx.moveTo(46, 134);
   ctx.lineTo(472, 134);
   ctx.stroke();
 
-  ctx.fillStyle = "#f8fafc";
+  ctx.fillStyle = isDiesel ? "#0f172a" : "#f8fafc";
   ctx.font = "800 48px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
-  ctx.fillText(vehicleId || "TTEV-19", 68, 114);
+  ctx.fillText(vehicleId || (isDiesel ? "TT-01" : "TTEV-19"), 68, 114);
 
-  ctx.fillStyle = "#bae6fd";
+  ctx.fillStyle = isDiesel ? "#0369a1" : "#bae6fd";
   ctx.font = "700 21px 'Plus Jakarta Sans', 'Segoe UI', sans-serif";
-  ctx.fillText("EV TOW TRACTOR · T-SERIES", 68, 166);
+  ctx.fillText(
+    isDiesel ? "DIESEL TOW TRACTOR · TT-SERIES" : "EV TOW TRACTOR · T-SERIES",
+    68,
+    166
+  );
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -426,7 +432,7 @@ function createRadiatorFinTexture(maxAnisotropy: number): THREE.CanvasTexture {
 /**
  * Create a high-precision 3D Blue Glow + Expanding Ring hotspot beacon anchored in world space.
  */
-function createHotspotBeacon(
+export function createHotspotBeacon(
   scaleMultiplier = 1,
   disposables: { geometries: THREE.BufferGeometry[]; materials: THREE.Material[] }
 ): THREE.Group {
@@ -560,15 +566,57 @@ function createLathedRimGeometry(radius: number, width: number): THREE.LatheGeom
 }
 
 /**
- * Build the automotive-grade procedural 3D Hologram BYD Electric Tow Tractor matching
- * the real BYD EV photo (EV_37dc6f83.jpg) and dark Blue Glow X-Ray showcase (Screenshot_2_a7f5b6d5.jpg).
+ * Smooth 60 FPS Pulsing Core + 3 Staggered Expanding Glow Rings + Vertical Scanner Ring animator.
+ */
+export function animateHotspotBeacon(
+  group: THREE.Group,
+  elapsed: number,
+  phaseShift: number,
+  isPrimary: boolean
+): void {
+  const pulse = 0.5 + 0.5 * Math.sin(elapsed * 3.8 + phaseShift);
+  const core = group.getObjectByName("beaconCore") as THREE.Mesh | undefined;
+  const halo = group.getObjectByName("beaconHalo") as THREE.Mesh | undefined;
+  const vertRing = group.getObjectByName("verticalPulseRing") as THREE.Mesh | undefined;
+
+  if (core) core.scale.setScalar(0.88 + pulse * 0.28);
+  if (halo) {
+    halo.scale.setScalar(0.92 + pulse * 0.55);
+    (halo.material as THREE.MeshBasicMaterial).opacity = 0.2 + pulse * 0.28;
+  }
+  if (vertRing) {
+    vertRing.rotation.y = elapsed * (isPrimary ? 1.15 : 0.85) + phaseShift;
+    const vCycle = (elapsed * 0.82 + phaseShift) % 1;
+    vertRing.scale.setScalar(1.0 + vCycle * 1.9);
+    (vertRing.material as THREE.MeshBasicMaterial).opacity = (1 - vCycle) * 0.65;
+  }
+
+  for (let i = 0; i < 3; i++) {
+    const ring = group.getObjectByName(`expandingRing_${i}`) as THREE.Mesh | undefined;
+    if (!ring) continue;
+    const offset = (ring.userData.phaseOffset as number) || 0;
+    const cycle = (elapsed * 0.66 + offset + phaseShift * 0.15) % 1;
+    const eased = 1 - Math.pow(1 - cycle, 2.2);
+    ring.scale.setScalar(0.65 + eased * (isPrimary ? 3.25 : 2.25));
+    const mat = ring.material as THREE.MeshBasicMaterial;
+    const fadeIn = Math.min(1, cycle * 5.5);
+    const fadeOut = Math.pow(1 - cycle, 1.55);
+    mat.opacity = fadeIn * fadeOut * (isPrimary ? 0.92 : 0.68);
+  }
+}
+
+/**
+ * Build the automotive-grade procedural 3D Hologram Tow Tractor (BYD EV or TT Diesel variant).
+ * TT Diesel Tractor reuses the exact same sculpted 3D model with industrial white livery & diesel badge.
  */
 export function buildBydEvTractorModel(
   maxAnisotropy: number,
-  initialVehicleId = "TTEV-19"
+  initialVehicleId = "TTEV-19",
+  variant: "ev" | "diesel" = "ev"
 ): BuiltEvHologramModel {
+  const isDiesel = variant === "diesel";
   const root = new THREE.Group();
-  root.name = "BYD_EV_Tow_Tractor_Realistic";
+  root.name = isDiesel ? "TT_Diesel_Tow_Tractor_Realistic" : "BYD_EV_Tow_Tractor_Realistic";
 
   const geometries: THREE.BufferGeometry[] = [];
   const materials: THREE.Material[] = [];
@@ -589,7 +637,7 @@ export function buildBydEvTractorModel(
   const dashTex = createDashboardClusterTexture(maxAnisotropy);
   const radTex = createRadiatorFinTexture(maxAnisotropy);
   const contactShadowTex = createContactShadowTexture();
-  let sideBadgeTex = createSideBadgeTexture(initialVehicleId, maxAnisotropy);
+  let sideBadgeTex = createSideBadgeTexture(initialVehicleId, maxAnisotropy, variant);
 
   textures.push(
     tireTex.colorMap,
@@ -647,16 +695,19 @@ export function buildBydEvTractorModel(
   // ============================================================================
   // 1. AUTOMOTIVE PBR SHELL MATERIALS (Smooth Solid <-> X-Ray Hologram Morph)
   // ============================================================================
+  const primarySolidColor = isDiesel ? 0xe6edf5 : 0x0b87de;
+  const primaryXrayColor = isDiesel ? 0x2b6cb0 : 0x1674b8;
+
   const bydBluePaintMat = trackMat(
     new THREE.MeshPhysicalMaterial({
-      color: 0x0b87de,
+      color: primarySolidColor,
       roughness: 0.22,
-      metalness: 0.28,
+      metalness: isDiesel ? 0.18 : 0.28,
       clearcoat: 0.92,
       clearcoatRoughness: 0.12,
       reflectivity: 0.9,
       emissive: 0x021a30,
-      emissiveIntensity: 0.14,
+      emissiveIntensity: 0.12,
       transparent: true,
       opacity: 0.98,
       depthWrite: true,
@@ -666,11 +717,11 @@ export function buildBydEvTractorModel(
     material: bydBluePaintMat,
     solidOpacity: 0.99,
     xrayOpacity: 0.24,
-    solidColor: new THREE.Color(0x0b87de),
-    xrayColor: new THREE.Color(0x1674b8),
+    solidColor: new THREE.Color(primarySolidColor),
+    xrayColor: new THREE.Color(primaryXrayColor),
     solidEmissive: new THREE.Color(0x021a30),
     xrayEmissive: new THREE.Color(0x06578c),
-    solidEmissiveIntensity: 0.12,
+    solidEmissiveIntensity: 0.1,
     xrayEmissiveIntensity: 0.56,
   });
 
@@ -1953,42 +2004,7 @@ export function buildBydEvTractorModel(
   let xrayBlend = 1;
   const smoothedFocusPos = new THREE.Vector3(0, 0.72, 0.72);
 
-  const animateBeacon = (
-    group: THREE.Group,
-    elapsed: number,
-    phaseShift: number,
-    isPrimary: boolean
-  ) => {
-    const pulse = 0.5 + 0.5 * Math.sin(elapsed * 3.8 + phaseShift);
-    const core = group.getObjectByName("beaconCore") as THREE.Mesh | undefined;
-    const halo = group.getObjectByName("beaconHalo") as THREE.Mesh | undefined;
-    const vertRing = group.getObjectByName("verticalPulseRing") as THREE.Mesh | undefined;
-
-    if (core) core.scale.setScalar(0.88 + pulse * 0.28);
-    if (halo) {
-      halo.scale.setScalar(0.92 + pulse * 0.55);
-      (halo.material as THREE.MeshBasicMaterial).opacity = 0.2 + pulse * 0.28;
-    }
-    if (vertRing) {
-      vertRing.rotation.y = elapsed * (isPrimary ? 1.15 : 0.85) + phaseShift;
-      const vCycle = (elapsed * 0.82 + phaseShift) % 1;
-      vertRing.scale.setScalar(1.0 + vCycle * 1.9);
-      (vertRing.material as THREE.MeshBasicMaterial).opacity = (1 - vCycle) * 0.65;
-    }
-
-    for (let i = 0; i < 3; i++) {
-      const ring = group.getObjectByName(`expandingRing_${i}`) as THREE.Mesh | undefined;
-      if (!ring) continue;
-      const offset = (ring.userData.phaseOffset as number) || 0;
-      const cycle = (elapsed * 0.66 + offset + phaseShift * 0.15) % 1;
-      const eased = 1 - Math.pow(1 - cycle, 2.2);
-      ring.scale.setScalar(0.65 + eased * (isPrimary ? 3.25 : 2.25));
-      const mat = ring.material as THREE.MeshBasicMaterial;
-      const fadeIn = Math.min(1, cycle * 5.5);
-      const fadeOut = Math.pow(1 - cycle, 1.55);
-      mat.opacity = fadeIn * fadeOut * (isPrimary ? 0.92 : 0.68);
-    }
-  };
+  const animateBeacon = animateHotspotBeacon;
 
   const updateFrame: BuiltEvHologramModel["updateFrame"] = ({
     elapsed,
@@ -2024,11 +2040,16 @@ export function buildBydEvTractorModel(
       xrayBlend
     );
 
-    // Highlight active & hovered 3D EV components with smooth Electric Blue Glow
+    // Highlight active & hovered 3D components with smooth Electric Blue Glow
     const glowPulse = 0.5 + 0.5 * Math.sin(elapsed * 4.1);
     zoneMeshes.forEach((meshes, zoneId) => {
+      const effectiveZoneMatch = isDiesel
+        ? (activeZoneId === "motor" && zoneId === "battery") ||
+          (activeZoneId === "battery" && zoneId === "motor") ||
+          zoneId === activeZoneId
+        : zoneId === activeZoneId;
       const isActive =
-        zoneId === activeZoneId ||
+        effectiveZoneMatch ||
         (activeZoneId === "overview" && (zoneId === "battery" || zoneId === "motor"));
       const isHovered = zoneId === hoveredZoneId && !isActive;
 
@@ -2089,7 +2110,7 @@ export function buildBydEvTractorModel(
   };
 
   const setVehicleLabel = (vehicleId: string) => {
-    const nextTex = createSideBadgeTexture(vehicleId, maxAnisotropy);
+    const nextTex = createSideBadgeTexture(vehicleId, maxAnisotropy, variant);
     sideDecalMat.map = nextTex;
     sideDecalMat.needsUpdate = true;
     sideBadgeTex.dispose();

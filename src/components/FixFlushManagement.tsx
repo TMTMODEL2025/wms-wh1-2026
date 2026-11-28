@@ -54,6 +54,8 @@ import { VehicleRepairVisualPanel } from "./repair3d/VehicleRepairVisualPanel";
 import {
   EvRepairZoneSpec,
   getGroupedRepairCategoriesForVehicle,
+  getModelShortName,
+  resolveRepair3dModelKind,
   upsertRepairPartTagInDescription,
 } from "./repair3d/evRepairZones";
 import {
@@ -1610,6 +1612,12 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     return false;
   }, [selectedVehicleObj, reqVehicleId]);
 
+  const reqRepair3dModelKind = useMemo(() => {
+    if (selectedVehicleObj) return resolveRepair3dModelKind(selectedVehicleObj);
+    if (reqVehicleId.trim()) return resolveRepair3dModelKind({ vehicleId: reqVehicleId.trim() });
+    return null;
+  }, [selectedVehicleObj, reqVehicleId]);
+
   const reqRepairCategoryGroups = useMemo(
     () => getGroupedRepairCategoriesForVehicle(isReqVehicleEv),
     [isReqVehicleEv]
@@ -2380,6 +2388,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   vehicle={selectedVehicleObj}
                   repairType={reqRepairType}
                   repairDescription={reqRepairDescription}
+                  allMaintenanceRecords={records}
                   selectedZoneOverride={reqSelectedEvZone}
                   interactive
                   fillHeight
@@ -2442,11 +2451,11 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                         <span>ทะเบียน: {selectedVehicleObj.registrationNumber || "-"}</span>
                         <span aria-hidden="true">·</span>
                         <span>สถานะ: {selectedVehicleObj.operationalStatus}</span>
-                        {isReqVehicleEv && (
+                        {reqRepair3dModelKind && (
                           <>
                             <span aria-hidden="true">·</span>
                             <span className="font-semibold text-[#087eaf] dark:text-sky-400">
-                              รองรับโมเดล 3D โฮโลแกรม EV
+                              รองรับโมเดล 3D โฮโลแกรม ({getModelShortName(reqRepair3dModelKind)})
                             </span>
                           </>
                         )}
@@ -2458,7 +2467,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                   <div>
                     <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
                       2. ประเภทการซ่อม *{" "}
-                      {isReqVehicleEv && (
+                      {reqRepair3dModelKind && (
                         <span className="font-normal text-[11px] text-[#087eaf] dark:text-sky-400">
                           (เชื่อมกับจุดเรืองแสงบนโมเดล 3D ด้านซ้าย)
                         </span>
@@ -2919,14 +2928,14 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                     const recordVehicleObj = vehicles.find(
                       (v) => v.vehicleId === selectedRecord.vehicleId
                     );
-                    const isRecordEv = isElectricTractorVehicle(
+                    const recordModelKind = resolveRepair3dModelKind(
                       recordVehicleObj || {
                         vehicleId: selectedRecord.vehicleId,
                         vehicleType: selectedRecord.vehicleType,
                         description: selectedRecord.vehicleDescription,
                       }
                     );
-                    if (!isRecordEv) return null;
+                    if (!recordModelKind) return null;
                     return (
                       <div className="space-y-1.5 pt-1">
                         <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -2946,6 +2955,8 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                               ? supRepairDescription
                               : selectedRecord.repairDescription
                           }
+                          allMaintenanceRecords={records}
+                          excludeRecordId={selectedRecord.id}
                           interactive={false}
                           compact
                         />

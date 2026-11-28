@@ -15,18 +15,31 @@ import {
   resolveVehicleType,
 } from "../../utils/vehicleHelpers";
 import {
-  EV_INTERACTIVE_ZONE_LIST,
+  MhMaintenanceRecord,
+  inferMhWorkflowStage,
+} from "../../services/forkliftDataService";
+import {
   EvRepairZoneSpec,
-  extractEvZoneFromDescription,
-  getEvZoneForRepairCategory,
+  extractZoneFromDescriptionByModel,
+  getInteractiveZoneListForModel,
+  getModelShortName,
+  getZoneForRepairCategoryByModel,
+  resolveRepair3dModelKind,
 } from "./evRepairZones";
-import { EvRepairHologramViewport } from "./EvRepairHologramViewport";
+import {
+  EvRepairHologramViewport,
+  RepairHistorySnapshotItem,
+} from "./EvRepairHologramViewport";
 
 interface VehicleRepairVisualPanelProps {
   vehicleId: string;
   vehicle?: Vehicle;
   repairType: string;
   repairDescription?: string;
+  /** All Material Handling maintenance records used to filter same-vehicle, same-category history */
+  allMaintenanceRecords?: MhMaintenanceRecord[];
+  /** Optional record ID to exclude (e.g., current record in Supervisor/Manager detail view) */
+  excludeRecordId?: string;
   /** Explicitly selected zone (e.g., when user clicked a specific 3D part in Stage 1) */
   selectedZoneOverride?: EvRepairZoneSpec | null;
   interactive?: boolean;
@@ -34,6 +47,30 @@ interface VehicleRepairVisualPanelProps {
   fillHeight?: boolean;
   onSelectZone?: (zone: EvRepairZoneSpec) => void;
   onAppendSymptom?: (symptom: string) => void;
+}
+
+function formatYmdShortDisplay(ymd?: string): string {
+  if (!ymd) return "-";
+  const clean = ymd.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+  const [y, m, d] = clean.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function computeDaysAgoLabel(ymd?: string): string | undefined {
+  if (!ymd) return undefined;
+  const clean = ymd.trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean)) return undefined;
+  const [y, m, d] = clean.split("-").map(Number);
+  if (!y || !m || !d) return undefined;
+  const targetMs = new Date(y, m - 1, d).getTime();
+  const now = new Date();
+  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diffDays = Math.round((todayMs - targetMs) / 86400000);
+  if (diffDays < 0) return undefined;
+  if (diffDays === 0) return "วันนี้";
+  if (diffDays === 1) return "เมื่อวาน";
+  return `${diffDays} วันที่แล้ว`;
 }
 
 /**
@@ -190,6 +227,8 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
   vehicle,
   repairType,
   repairDescription,
+  allMaintenanceRecords = [],
+  excludeRecordId,
   selectedZoneOverride,
   interactive = true,
   compact = false,
@@ -200,10 +239,88 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
   const cleanVehicleId = (vehicleId || "").trim();
   const candidate = vehicle || (cleanVehicleId ? { vehicleId: cleanVehicleId } : undefined);
 
-  const isEv = useMemo(
-    () => (candidate ? isElectricTractorVehicle(candidate) : false),
+  const modelKind = useMemo(
+    () => (candidate ? resolveRepair3dModelKind(candidate) : null),
     [candidate]
   );
+
+  // Filter historical repair records for THIS vehicle & THIS repair category (newest first)
+  const sameCategoryHistory = useMemo<RepairHistorySnapshotItem[]>(() => {
+    const vKey = cleanVehicleId.toUpperCase();
+    const typeKey = (repairType || "").trim().toLowerCase();
+    if (!vKey || !typeKey || !allMaintenanceRecords.length) return [];
+
+    return allMaintenanceRecords
+      .filter((r) => {
+        if (excludeRecordId && r.id === excludeRecordId) return false;
+        const rVehicle = (r.vehicleId || r.vehicleNumber || "").trim().toUpperCase();
+        const rType = (r.repairType || "").trim().toLowerCase();
+        return rVehicle === vKey && rType === typeKey;
+      })
+      .sort((a, b) => {
+        const dCmp = (b.workingDate || "").localeCompare(a.workingDate || "");
+        if (dCmp !== 0) return dCmp;
+        return (b.createdAt || "").localeCompare(a.createdAt || "");
+      })
+      .map((r): RepairHistorySnapshotItem => {
+        const stage = inferMhWorkflowStage(r);
+        let statusLabel = "รอดำเนินการ";
+        let statusTone: RepairHistorySnapshotItem["statusTone"] = "pending";
+        if (stage === "Completed") {
+          statusLabel = "ซ่อมเสร็จ";
+          statusTone = "completed";
+        } else if (stage === "InRepair" || stage === "ManagerApproved") {
+          statusLabel = stage === "InRepair" ? "กำลังซ่อม" : "รอคิวซ่อม";
+          statusTone = "in_progress";
+        } else if (stage === "Rejected") {
+          statusLabel = "ไม่อนุมัติ";
+          statusTone = "rejected";
+        } else if (stage === "SupervisorChecked") {
+          statusLabel = "รออนุมัติ";
+          statusTone = "pending";
+        } else {
+          statusLabel = "รอตรวจสอบ";
+          statusTone = "pending";
+        }
+
+        const est = Number(r.estimatedCost) || 0;
+        const actual = Number(r.actualCost) || 0;
+        const partsPlusLabor = (Number(r.partsCost) || 0) + (Number(r.laborCost) || 0);
+        const totalCost = actual > 0 ? actual : est > 0 ? est : partsPlusLabor;
+
+        const sparePartsSummary =
+          Array.isArray(r.spareParts) && r.spareParts.length > 0
+            ? r.spareParts
+                .map((p) => {
+                  const qty = Number(p.qty) || 1;
+                  return qty > 1 ? `${p.partName} x${qty}` : p.partName;
+                })
+                .filter(Boolean)
+                .join(", ")
+            : undefined;
+
+        const technicianOrVendor = [r.vendorName, r.technicianName]
+          .map((v) => (v || "").trim())
+          .filter(Boolean)
+          .join(" / ");
+
+        return {
+          id: r.id,
+          workOrderNo: r.workOrderNo || "-",
+          workingDate: r.workingDate || "",
+          workingDateDisplay: formatYmdShortDisplay(r.workingDate),
+          daysAgoLabel: computeDaysAgoLabel(r.workingDate),
+          repairType: r.repairType || "",
+          repairDescription: (r.repairDescription || "").trim(),
+          statusLabel,
+          statusTone,
+          operatingHours: Number(r.operatingHours) || 0,
+          totalCost,
+          technicianOrVendor: technicianOrVendor || undefined,
+          sparePartsSummary,
+        };
+      });
+  }, [allMaintenanceRecords, cleanVehicleId, repairType, excludeRecordId]);
 
   const nonEvKind = useMemo<"forklift" | "tractor" | "trailer" | "clamp">(() => {
     if (!candidate) return "forklift";
@@ -219,14 +336,23 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
     return getVehicleTypeDisplayLabel(resolved, candidate);
   }, [candidate]);
 
-  const activeZone = useMemo<EvRepairZoneSpec>(() => {
-    if (selectedZoneOverride) return selectedZoneOverride;
-    const fromDesc = extractEvZoneFromDescription(repairDescription);
+  const interactiveZoneList = useMemo(
+    () => (modelKind ? getInteractiveZoneListForModel(modelKind) : []),
+    [modelKind]
+  );
+
+  const activeZone = useMemo<EvRepairZoneSpec | null>(() => {
+    if (!modelKind) return null;
+    if (selectedZoneOverride) {
+      const validForModel = interactiveZoneList.find((z) => z.id === selectedZoneOverride.id);
+      if (validForModel) return validForModel;
+    }
+    const fromDesc = extractZoneFromDescriptionByModel(modelKind, repairDescription);
     if (fromDesc && fromDesc.matchedCategories.includes((repairType || "").trim())) {
       return fromDesc;
     }
-    return getEvZoneForRepairCategory(repairType);
-  }, [selectedZoneOverride, repairDescription, repairType]);
+    return getZoneForRepairCategoryByModel(modelKind, repairType);
+  }, [modelKind, selectedZoneOverride, interactiveZoneList, repairDescription, repairType]);
 
   // Zero-state when no vehicle has been chosen yet
   if (!cleanVehicleId) {
@@ -264,13 +390,18 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
     );
   }
 
-  // EV Electric Tractor -> Full 360° 3D Hologram Interactive Viewer!
-  if (isEv) {
+  // Supported 3D Hologram Fleet Classes (EV Tractor / Diesel TT / Forklift FL / Clamp Truck SC)
+  if (modelKind && activeZone) {
+    const modelShortLabel = getModelShortName(modelKind);
     return (
       <div className={`flex flex-col gap-3 ${fillHeight ? "flex-1 h-full min-h-0" : "h-full"}`}>
         <EvRepairHologramViewport
+          key={modelKind}
+          modelKind={modelKind}
           vehicleId={cleanVehicleId}
           activeZone={activeZone}
+          repairType={repairType}
+          sameCategoryHistory={sameCategoryHistory}
           interactive={interactive}
           compact={compact}
           fillHeight={fillHeight}
@@ -325,10 +456,12 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
               <div className="space-y-1.5 pt-2 border-t border-sky-900/50">
                 <div className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
                   <MousePointerClick size={12} className="text-sky-400" />
-                  <span>คลิกเลือกจุดชิ้นส่วนบนตัวรถ EV (เชื่อมกับประเภทการซ่อมอัตโนมัติ):</span>
+                  <span>
+                    คลิกเลือกจุดชิ้นส่วนบนตัวรถ {modelShortLabel} (เชื่อมกับประเภทการซ่อมอัตโนมัติ):
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                  {EV_INTERACTIVE_ZONE_LIST.map((zone) => {
+                  {interactiveZoneList.map((zone) => {
                     const isSelected = activeZone.id === zone.id;
                     return (
                       <button
@@ -394,9 +527,10 @@ export const VehicleRepairVisualPanel: React.FC<VehicleRepairVisualPanelProps> =
             สถานะโมเดล 3 มิติโฮโลแกรม:
           </span>{" "}
           ขณะนี้เปิดใช้งานโมเดล 3D โฮโลแกรมเต็มรูปแบบสำหรับ{" "}
-          <strong className="text-white">รถหัวลากไฟฟ้า EV (TTEV-*)</strong>{" "}
-          ก่อน และรองรับการต่อยอดสำหรับรถประเภท {vehicleTypeLabel || "อื่น ๆ"} ในเฟสถัดไป
-          คุณสามารถเลือกประเภทการซ่อมและส่งใบแจ้งซ่อมได้ตามปกติ
+          <strong className="text-white">
+            รถหัวลากไฟฟ้า EV (TTEV-*), หัวลากดีเซล (TT-*), รถโฟล์คลิฟท์ (FL-*), รถคีบ (SC-01) และหางลาก (TTL-*)
+          </strong>{" "}
+          ครบทุกประเภทแล้ว สำหรับรถประเภท {vehicleTypeLabel || "อื่นๆ"} คุณสามารถเลือกประเภทการซ่อมและส่งใบแจ้งซ่อมได้ตามปกติ
         </div>
       </div>
     </div>
