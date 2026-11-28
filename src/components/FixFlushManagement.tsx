@@ -47,8 +47,15 @@ import { Employee, Vehicle } from "../types/officer";
 import {
   getVehicleSearchableText,
   getVehicleTypeDisplayLabel,
+  isElectricTractorVehicle,
   resolveVehicleType,
 } from "../utils/vehicleHelpers";
+import { VehicleRepairVisualPanel } from "./repair3d/VehicleRepairVisualPanel";
+import {
+  EvRepairZoneSpec,
+  getGroupedRepairCategoriesForVehicle,
+  upsertRepairPartTagInDescription,
+} from "./repair3d/evRepairZones";
 import {
   MH_REPAIR_CATEGORIES,
   MhMaintenanceRecord,
@@ -514,6 +521,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
   });
   const [reqVehicleId, setReqVehicleId] = useState(vehicles[0]?.vehicleId || "");
   const [reqRepairType, setReqRepairType] = useState<string>(MH_REPAIR_CATEGORIES[0]);
+  const [reqSelectedEvZone, setReqSelectedEvZone] = useState<EvRepairZoneSpec | null>(null);
   const [reqRepairDescription, setReqRepairDescription] = useState("");
   const [reqOperatingHours, setReqOperatingHours] = useState<number>(0);
   const [reqNotes, setReqNotes] = useState("");
@@ -765,6 +773,7 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
 
       setRecords((prev) => [newRecord, ...prev]);
       setIsRequestModalOpen(false);
+      setReqSelectedEvZone(null);
       setReqRepairDescription("");
       setReqNotes("");
       setReqPhotos([]);
@@ -1595,6 +1604,47 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
     [vehicles, reqVehicleId]
   );
 
+  const isReqVehicleEv = useMemo(() => {
+    if (selectedVehicleObj) return isElectricTractorVehicle(selectedVehicleObj);
+    if (reqVehicleId.trim()) return isElectricTractorVehicle({ vehicleId: reqVehicleId.trim() });
+    return false;
+  }, [selectedVehicleObj, reqVehicleId]);
+
+  const reqRepairCategoryGroups = useMemo(
+    () => getGroupedRepairCategoriesForVehicle(isReqVehicleEv),
+    [isReqVehicleEv]
+  );
+
+  const handleReqVehicleChange = (nextVehicleId: string) => {
+    setReqVehicleId(nextVehicleId);
+    setReqSelectedEvZone(null);
+  };
+
+  const handleReqRepairTypeChange = (nextCategory: string) => {
+    setReqRepairType(nextCategory);
+    setReqSelectedEvZone(null);
+  };
+
+  const handleSelect3dEvZone = (zone: EvRepairZoneSpec) => {
+    setReqSelectedEvZone(zone);
+    if (zone.primaryRepairCategory) {
+      setReqRepairType(zone.primaryRepairCategory);
+    }
+    setReqRepairDescription((prev) => upsertRepairPartTagInDescription(prev, zone.nameTh));
+  };
+
+  const handleAppendEvSymptom = (symptom: string) => {
+    const clean = symptom.trim();
+    if (!clean) return;
+    setReqRepairDescription((prev) => {
+      if (prev.includes(clean)) return prev;
+      const trimmed = prev.trimEnd();
+      if (!trimmed) return clean;
+      if (trimmed.endsWith("]")) return `${trimmed} ${clean}`;
+      return `${trimmed}, ${clean}`;
+    });
+  };
+
   const isSupervisorOrManager =
     currentUser?.role === "Supervisor" ||
     currentUser?.role === "Assistant Manager" ||
@@ -2291,283 +2341,341 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
         </section>
 
       {/* ========================================================================
-          MODAL 1: Stage 1 - New Repair Request (พนักงานแจ้งซ่อม)
+          MODAL 1: Stage 1 - New Repair Request (พนักงานแจ้งซ่อม) — Full-Screen 2-Column 3D Workspace
           ======================================================================== */}
-      {isRequestModalOpen && (
-        <div className="fixed inset-0 z-[1000] bg-slate-950/60 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#111e38] border border-slate-200 dark:border-[#1e3a5f] rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+      {isRequestModalOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[1000] w-screen h-[100dvh] bg-white dark:bg-[#111e38] flex flex-col overflow-hidden">
+            {/* Full-Screen Compact Top Bar */}
+            <div className="shrink-0 px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 truncate">
                   แบบฟอร์มแจ้งซ่อมรถ Material Handling (ช่วงที่ 1: พนักงานแจ้งซ่อม)
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  ระบุข้อมูลรถ อาการที่พบ และแนบรูปถ่ายสูงสุด 9 รูป · หัวหน้างานจะตรวจสอบและประเมินค่าใช้จ่ายในขั้นถัดไป
+                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                  1. เลือกเบอร์รถ · 2. เลือกประเภทการซ่อมหรือคลิกจุดบนโมเดล 3D · 3. กรอกรายละเอียดและแนบรูปถ่าย
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsRequestModalOpen(false)}
-                className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-[#162744] shrink-0 transition-colors"
+                title="ปิดหน้าต่างแจ้งซ่อม"
               >
-                <X size={20} />
+                <X size={16} />
+                <span>ปิด</span>
               </button>
             </div>
 
+            {/* Full-Screen Split Workspace: Left 3D Hologram + Right Scrollable Form */}
             <form
               onSubmit={handleCreateRepairRequest}
-              className="p-6 overflow-y-auto flex-1 space-y-4 text-xs"
+              className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden text-xs"
             >
-              {/* Auto-generated Running Number & Working Date */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    เลขที่ขอซ่อม (รันอัตโนมัติ TMT-ปี-เดือน-ลำดับ)
-                  </label>
-                  <div className="px-3 py-2.5 rounded-md bg-sky-50 dark:bg-[#091322] border border-sky-200 dark:border-[#1e3a5f] text-[#087eaf] dark:text-sky-400 font-bold text-sm tabular-nums flex items-center justify-between">
-                    <span>{previewRequestNo}</span>
-                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      อัตโนมัติ
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    วันที่แจ้งซ่อม *
-                  </label>
-                  <input
-                    type="date"
-                    value={reqWorkingDate}
-                    onChange={(e) => setReqWorkingDate(e.target.value)}
-                    required
-                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
-                  />
-                </div>
-              </div>
-
-              {/* Requester Name & Vehicle Number */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    ชื่อผู้แจ้งซ่อม *
-                  </label>
-                  <input
-                    type="text"
-                    list="mh-repair-employees-list"
-                    value={reqRequesterName}
-                    onChange={(e) => setReqRequesterName(e.target.value)}
-                    placeholder="ระบุชื่อ-นามสกุลผู้แจ้งซ่อม"
-                    required
-                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
-                  />
-                  <datalist id="mh-repair-employees-list">
-                    {activeEmployeeNames.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    เบอร์รถ *
-                  </label>
-                  <select
-                    value={reqVehicleId}
-                    onChange={(e) => setReqVehicleId(e.target.value)}
-                    required
-                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
-                  >
-                    <option value="">-- เลือกเบอร์รถ --</option>
-                    {vehicles.map((v) => (
-                      <option key={v.id} value={v.vehicleId}>
-                        {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)} ({v.description || "Fleet"})
-                      </option>
-                    ))}
-                  </select>
-                  {selectedVehicleObj && (
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                      ทะเบียน: {selectedVehicleObj.registrationNumber || "-"} · สถานะ:{" "}
-                      {selectedVehicleObj.operationalStatus}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Repair Category & Operating Hours */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    ประเภทการซ่อม *
-                  </label>
-                  <select
-                    value={reqRepairType}
-                    onChange={(e) => setReqRepairType(e.target.value)}
-                    required
-                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
-                  >
-                    {MH_REPAIR_CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                    เลขไมล์ / ชั่วโมงการทำงานรถ (ชม.)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={reqOperatingHours}
-                    onChange={(e) => setReqOperatingHours(Number(e.target.value))}
-                    placeholder="0"
-                    className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 tabular-nums focus:outline-none focus:border-[#087eaf]"
-                  />
-                </div>
-              </div>
-
-              {/* Symptoms / Repair Details */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  อาการ / รายละเอียดที่ต้องการซ่อม *
-                </label>
-                <textarea
-                  value={reqRepairDescription}
-                  onChange={(e) => setReqRepairDescription(e.target.value)}
-                  rows={3}
-                  required
-                  placeholder="อธิบายอาการเสีย เสียงผิดปกติ จุดรั่วซึม หรือส่วนที่ชำรุด..."
-                  className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+              {/* LEFT COLUMN: Full-Height 360° 3D Hologram Vehicle Model (EV) / Blueprint Status Card (Non-EV) */}
+              <div className="lg:w-[56%] xl:w-[58%] lg:h-full bg-[#050b14] p-3.5 sm:p-4 lg:p-5 flex flex-col shrink-0 lg:shrink lg:min-h-0">
+                <VehicleRepairVisualPanel
+                  vehicleId={reqVehicleId}
+                  vehicle={selectedVehicleObj}
+                  repairType={reqRepairType}
+                  repairDescription={reqRepairDescription}
+                  selectedZoneOverride={reqSelectedEvZone}
+                  interactive
+                  fillHeight
+                  onSelectZone={handleSelect3dEvZone}
+                  onAppendSymptom={handleAppendEvSymptom}
                 />
               </div>
 
-              {/* Photo Attachment (Max 9 Photos) */}
-              <div className="p-4 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33]">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              {/* RIGHT COLUMN: Existing Repair Request Form (Independently Scrollable + Sticky Submit Footer) */}
+              <div className="lg:w-[44%] xl:w-[42%] lg:h-full flex flex-col bg-white dark:bg-[#111e38] border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-[#1e3a5f] lg:min-h-0">
+                <div className="flex-1 lg:overflow-y-auto p-4 sm:p-6 space-y-4">
+                  {/* Auto-generated Running Number & Working Date */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        เลขที่ขอซ่อม (รันอัตโนมัติ)
+                      </label>
+                      <div className="px-3 py-2.5 rounded-md bg-sky-50 dark:bg-[#091322] border border-sky-200 dark:border-[#1e3a5f] text-[#087eaf] dark:text-sky-400 font-bold text-sm tabular-nums flex items-center justify-between">
+                        <span>{previewRequestNo}</span>
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          อัตโนมัติ
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        วันที่แจ้งซ่อม *
+                      </label>
+                      <input
+                        type="date"
+                        value={reqWorkingDate}
+                        onChange={(e) => setReqWorkingDate(e.target.value)}
+                        required
+                        className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* STEP 1: Vehicle Number (First priority — displays side model immediately) */}
                   <div>
-                    <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <Camera size={14} className="text-[#087eaf]" />
-                      <span>แนบรูปถ่ายประกอบการแจ้งซ่อม (สูงสุด {MAX_REPAIR_PHOTOS} รูป)</span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
-                      แนบแล้ว {reqPhotos.length} / {MAX_REPAIR_PHOTOS} รูป · ย่อขนาดอัตโนมัติ (
-                      {Math.round(
-                        reqPhotos.reduce((s, p) => s + p.dataUrl.length, 0) / 1024
-                      )}{" "}
-                      KB)
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      ref={photoInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={(e) => handlePhotoFilesSelected(e.target.files)}
-                      className="hidden"
-                    />
-                    <button
-                      type="button"
-                      disabled={reqPhotos.length >= MAX_REPAIR_PHOTOS || isCompressingPhotos}
-                      onClick={() => photoInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162744] disabled:opacity-50"
+                    <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                      1. เลือกเบอร์รถ *
+                    </label>
+                    <select
+                      value={reqVehicleId}
+                      onChange={(e) => handleReqVehicleChange(e.target.value)}
+                      required
+                      className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-[#087eaf]"
                     >
-                      <ImagePlus size={14} />
-                      <span>
-                        {isCompressingPhotos ? "กำลังย่อรูป..." : "+ เลือกรูปถ่าย"}
-                      </span>
-                    </button>
+                      <option value="">-- เลือกเบอร์รถ --</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.vehicleId}>
+                          {v.vehicleId} - {getVehicleTypeDisplayLabel(v.vehicleType, v)} ({v.description || "Fleet"})
+                        </option>
+                      ))}
+                    </select>
+                    {selectedVehicleObj && (
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-2">
+                        <span>ทะเบียน: {selectedVehicleObj.registrationNumber || "-"}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>สถานะ: {selectedVehicleObj.operationalStatus}</span>
+                        {isReqVehicleEv && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-semibold text-[#087eaf] dark:text-sky-400">
+                              รองรับโมเดล 3D โฮโลแกรม EV
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                {photoError && (
-                  <div className="mb-3 px-3 py-2 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px]">
-                    {photoError}
+                  {/* STEP 2: Repair Category (Second priority — highlights 3D zone with Blue Glow + Expanding Ring) */}
+                  <div>
+                    <label className="block font-semibold text-slate-800 dark:text-slate-200 mb-1.5">
+                      2. ประเภทการซ่อม *{" "}
+                      {isReqVehicleEv && (
+                        <span className="font-normal text-[11px] text-[#087eaf] dark:text-sky-400">
+                          (เชื่อมกับจุดเรืองแสงบนโมเดล 3D ด้านซ้าย)
+                        </span>
+                      )}
+                    </label>
+                    <select
+                      value={reqRepairType}
+                      onChange={(e) => handleReqRepairTypeChange(e.target.value)}
+                      required
+                      className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:border-[#087eaf]"
+                    >
+                      {reqRepairCategoryGroups.secondaryGroupLabel ? (
+                        <>
+                          <optgroup label={reqRepairCategoryGroups.primaryGroupLabel}>
+                            {reqRepairCategoryGroups.primaryCategories.map((category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </optgroup>
+                          <optgroup label={reqRepairCategoryGroups.secondaryGroupLabel}>
+                            {reqRepairCategoryGroups.secondaryCategories.map((category) => (
+                              <option key={category} value={category}>
+                                {category}
+                              </option>
+                            ))}
+                          </optgroup>
+                        </>
+                      ) : (
+                        reqRepairCategoryGroups.primaryCategories.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
-                )}
 
-                {reqPhotos.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => photoInputRef.current?.click()}
-                    className="w-full py-6 border border-dashed border-slate-300 dark:border-[#1e3a5f] rounded-lg text-center text-slate-500 dark:text-slate-400 hover:border-[#087eaf] hover:text-[#087eaf] transition-colors"
-                  >
-                    คลิกเพื่อเลือกรูปถ่ายหรือถ่ายภาพหน้างาน (รองรับหลายรูปพร้อมกัน สูงสุด 9 รูป)
-                  </button>
-                ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
-                    {reqPhotos.map((ph, idx) => (
-                      <div
-                        key={ph.id}
-                        className="relative group rounded-md overflow-hidden border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#091322] aspect-square"
-                      >
-                        <img
-                          src={ph.dataUrl}
-                          alt={ph.name}
-                          onClick={() => openLightbox(reqPhotos, idx)}
-                          className="w-full h-full object-cover cursor-pointer"
-                        />
-                        <div className="absolute bottom-0 inset-x-0 bg-slate-950/70 text-white text-[10px] px-1.5 py-0.5 flex justify-between items-center tabular-nums">
-                          <span>รูปที่ {idx + 1}</span>
-                          <span>{Math.round(ph.dataUrl.length / 1024)}KB</span>
+                  {/* STEP 3: Requester Name & Operating Hours */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        ชื่อผู้แจ้งซ่อม *
+                      </label>
+                      <input
+                        type="text"
+                        list="mh-repair-employees-list"
+                        value={reqRequesterName}
+                        onChange={(e) => setReqRequesterName(e.target.value)}
+                        placeholder="ระบุชื่อ-นามสกุลผู้แจ้งซ่อม"
+                        required
+                        className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                      />
+                      <datalist id="mh-repair-employees-list">
+                        {activeEmployeeNames.map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                        เลขไมล์ / ชั่วโมงการทำงานรถ (ชม.)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={reqOperatingHours}
+                        onChange={(e) => setReqOperatingHours(Number(e.target.value))}
+                        placeholder="0"
+                        className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 tabular-nums focus:outline-none focus:border-[#087eaf]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Symptoms / Repair Details (Auto-filled with [จุดซ่อม: ...] when clicking 3D part) */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      อาการ / รายละเอียดที่ต้องการซ่อม *
+                    </label>
+                    <textarea
+                      value={reqRepairDescription}
+                      onChange={(e) => setReqRepairDescription(e.target.value)}
+                      rows={3}
+                      required
+                      placeholder="อธิบายอาการเสีย เสียงผิดปกติ จุดรั่วซึม หรือคลิกชิ้นส่วนบนโมเดล 3D เพื่อเติมตำแหน่งอัตโนมัติ..."
+                      className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                    />
+                  </div>
+
+                  {/* Photo Attachment (Max 9 Photos) */}
+                  <div className="p-4 rounded-lg border border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33]">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <div>
+                        <div className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                          <Camera size={14} className="text-[#087eaf]" />
+                          <span>แนบรูปถ่ายประกอบการแจ้งซ่อม (สูงสุด {MAX_REPAIR_PHOTOS} รูป)</span>
                         </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 tabular-nums">
+                          แนบแล้ว {reqPhotos.length} / {MAX_REPAIR_PHOTOS} รูป · ย่อขนาดอัตโนมัติ (
+                          {Math.round(
+                            reqPhotos.reduce((s, p) => s + p.dataUrl.length, 0) / 1024
+                          )}{" "}
+                          KB)
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={photoInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => handlePhotoFilesSelected(e.target.files)}
+                          className="hidden"
+                        />
                         <button
                           type="button"
-                          onClick={() => handleRemoveReqPhoto(ph.id)}
-                          className="absolute top-1 right-1 p-1 rounded-full bg-slate-950/75 text-white hover:bg-rose-600 transition-colors"
-                          title="ลบรูปนี้"
+                          disabled={reqPhotos.length >= MAX_REPAIR_PHOTOS || isCompressingPhotos}
+                          onClick={() => photoInputRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-white dark:bg-[#111e38] border border-slate-300 dark:border-[#1e3a5f] text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162744] disabled:opacity-50"
                         >
-                          <X size={12} />
+                          <ImagePlus size={14} />
+                          <span>
+                            {isCompressingPhotos ? "กำลังย่อรูป..." : "+ เลือกรูปถ่าย"}
+                          </span>
                         </button>
                       </div>
-                    ))}
+                    </div>
+
+                    {photoError && (
+                      <div className="mb-3 px-3 py-2 rounded bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px]">
+                        {photoError}
+                      </div>
+                    )}
+
+                    {reqPhotos.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="w-full py-6 border border-dashed border-slate-300 dark:border-[#1e3a5f] rounded-lg text-center text-slate-500 dark:text-slate-400 hover:border-[#087eaf] hover:text-[#087eaf] transition-colors"
+                      >
+                        คลิกเพื่อเลือกรูปถ่ายหรือถ่ายภาพหน้างาน (รองรับหลายรูปพร้อมกัน สูงสุด 9 รูป)
+                      </button>
+                    ) : (
+                      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+                        {reqPhotos.map((ph, idx) => (
+                          <div
+                            key={ph.id}
+                            className="relative group rounded-md overflow-hidden border border-slate-200 dark:border-[#1e3a5f] bg-white dark:bg-[#091322] aspect-square"
+                          >
+                            <img
+                              src={ph.dataUrl}
+                              alt={ph.name}
+                              onClick={() => openLightbox(reqPhotos, idx)}
+                              className="w-full h-full object-cover cursor-pointer"
+                            />
+                            <div className="absolute bottom-0 inset-x-0 bg-slate-950/70 text-white text-[10px] px-1.5 py-0.5 flex justify-between items-center tabular-nums">
+                              <span>รูปที่ {idx + 1}</span>
+                              <span>{Math.round(ph.dataUrl.length / 1024)}KB</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveReqPhoto(ph.id)}
+                              className="absolute top-1 right-1 p-1 rounded-full bg-slate-950/75 text-white hover:bg-rose-600 transition-colors"
+                              title="ลบรูปนี้"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              {/* Additional Notes */}
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  หมายเหตุเพิ่มเติม
-                </label>
-                <textarea
-                  value={reqNotes}
-                  onChange={(e) => setReqNotes(e.target.value)}
-                  rows={2}
-                  placeholder="ตำแหน่งรถที่จอดอยู่ ความเร่งด่วน หรือหมายเหตุเพิ่มเติม..."
-                  className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
-                />
-              </div>
+                  {/* Additional Notes */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                      หมายเหตุเพิ่มเติม
+                    </label>
+                    <textarea
+                      value={reqNotes}
+                      onChange={(e) => setReqNotes(e.target.value)}
+                      rows={2}
+                      placeholder="ตำแหน่งรถที่จอดอยู่ ความเร่งด่วน หรือหมายเหตุเพิ่มเติม..."
+                      className="w-full px-3 py-2.5 rounded-md bg-white dark:bg-[#0c1930] border border-slate-300 dark:border-[#1e3a5f] text-slate-900 dark:text-slate-100 focus:outline-none focus:border-[#087eaf]"
+                    />
+                  </div>
+                </div>
 
-              <div className="pt-2 border-t border-slate-200 dark:border-[#1e3a5f] flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsRequestModalOpen(false)}
-                  className="px-4 py-2 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#0d1b33] text-slate-700 dark:text-slate-200 hover:bg-slate-50"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingRequest || isCompressingPhotos}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white disabled:opacity-60"
-                >
-                  <Send size={13} />
-                  <span>
-                    {isSubmittingRequest
-                      ? "กำลังบันทึก..."
-                      : "ส่งใบแจ้งซ่อมให้หัวหน้างานตรวจสอบ"}
-                  </span>
-                </button>
+                {/* Pinned Bottom Action Bar */}
+                <div className="shrink-0 px-4 sm:px-6 py-3.5 border-t border-slate-200 dark:border-[#1e3a5f] bg-slate-50 dark:bg-[#0d1b33] flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsRequestModalOpen(false)}
+                    className="px-4 py-2 rounded-md text-xs font-semibold border border-slate-300 dark:border-[#1e3a5f] bg-white dark:bg-[#111e38] text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#162744] transition-colors"
+                  >
+                    ยกเลิก
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingRequest || isCompressingPhotos}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-md text-xs font-bold bg-[#087eaf] hover:bg-[#075985] text-white disabled:opacity-60 transition-colors"
+                  >
+                    <Send size={13} />
+                    <span>
+                      {isSubmittingRequest
+                        ? "กำลังบันทึก..."
+                        : "ส่งใบแจ้งซ่อมให้หัวหน้างานตรวจสอบ"}
+                    </span>
+                  </button>
+                </div>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ========================================================================
           MODAL 2: 3-Stage Detail, Supervisor Inspection & Manager Approval
@@ -2805,6 +2913,45 @@ export function FixFlushManagement({ vehicles, employees = [] }: FixFlushManagem
                       </div>
                     </div>
                   </div>
+
+                  {/* Interactive 3D Hologram Repair Location Preview for Supervisor & Manager (EV Vehicles) */}
+                  {(() => {
+                    const recordVehicleObj = vehicles.find(
+                      (v) => v.vehicleId === selectedRecord.vehicleId
+                    );
+                    const isRecordEv = isElectricTractorVehicle(
+                      recordVehicleObj || {
+                        vehicleId: selectedRecord.vehicleId,
+                        vehicleType: selectedRecord.vehicleType,
+                        description: selectedRecord.vehicleDescription,
+                      }
+                    );
+                    if (!isRecordEv) return null;
+                    return (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="font-semibold text-slate-700 dark:text-slate-200">
+                            พรีวิวตำแหน่งจุดซ่อมบนโมเดล 3D โฮโลแกรม (หมุนดูได้ 360°)
+                          </span>
+                          <span className="text-slate-500 dark:text-slate-400">
+                            Blue Glow + Expanding Ring · {selectedRecord.repairType}
+                          </span>
+                        </div>
+                        <VehicleRepairVisualPanel
+                          vehicleId={selectedRecord.vehicleId}
+                          vehicle={recordVehicleObj}
+                          repairType={selectedRecord.repairType}
+                          repairDescription={
+                            canSupervisorEdit
+                              ? supRepairDescription
+                              : selectedRecord.repairDescription
+                          }
+                          interactive={false}
+                          compact
+                        />
+                      </div>
+                    );
+                  })()}
 
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
